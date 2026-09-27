@@ -113,16 +113,25 @@ function makeValueNoise(rng) {
 
   const smooth = (t) => t * t * (3 - 2 * t); // smoothstep
 
-  return function valueNoise(x, y) {
+  // valueNoise(x, y, periodX?) — if periodX is a positive integer, the integer
+  // lattice x is wrapped modulo periodX, making the field seamless in x with
+  // that period (used for cylindrical maps). y is never wrapped.
+  return function valueNoise(x, y, periodX) {
     const x0 = Math.floor(x);
     const y0 = Math.floor(y);
     const fx = smooth(x - x0);
     const fy = smooth(y - y0);
 
-    const v00 = lattice(x0, y0);
-    const v10 = lattice(x0 + 1, y0);
-    const v01 = lattice(x0, y0 + 1);
-    const v11 = lattice(x0 + 1, y0 + 1);
+    let xa = x0, xb = x0 + 1;
+    if (periodX && periodX > 0) {
+      xa = ((x0 % periodX) + periodX) % periodX;
+      xb = ((x0 + 1) % periodX + periodX) % periodX;
+    }
+
+    const v00 = lattice(xa, y0);
+    const v10 = lattice(xb, y0);
+    const v01 = lattice(xa, y0 + 1);
+    const v11 = lattice(xb, y0 + 1);
 
     const top = v00 + (v10 - v00) * fx;
     const bot = v01 + (v11 - v01) * fx;
@@ -130,23 +139,34 @@ function makeValueNoise(rng) {
   };
 }
 
-function fbm(width, height, rng, octaves, persistence) {
+function fbm(width, height, rng, octaves, persistence, wrap) {
   const noise = makeValueNoise(rng);
   const out = [];
   const baseScale = 4 / Math.max(1, Math.min(width, height));
+  // For a seamless cylinder, the base number of lattice cells across the map
+  // must be an integer; each octave doubles it. We then sample noise at
+  // x * (period / width) so x=0 and x=width hit the same lattice point.
+  const basePeriod = Math.max(2, Math.round(width * baseScale));
 
   for (let y = 0; y < height; y++) {
     const row = new Float64Array(width);
     for (let x = 0; x < width; x++) {
       let amplitude = 1;
       let frequency = baseScale;
+      let period = basePeriod;
       let sum = 0;
       let norm = 0;
       for (let o = 0; o < octaves; o++) {
-        sum += noise(x * frequency, y * frequency) * amplitude;
+        if (wrap) {
+          // x in noise units scaled so one map width == `period` lattice cells.
+          sum += noise(x * (period / width), y * frequency, period) * amplitude;
+        } else {
+          sum += noise(x * frequency, y * frequency) * amplitude;
+        }
         norm += amplitude;
         amplitude *= persistence;
         frequency *= 2;
+        period *= 2;
       }
       row[x] = sum / norm;
     }
@@ -177,8 +197,23 @@ function normalize(map, width, height) {
   }
 }
 
-function applyIslandFalloff(map, width, height, strength) {
+function applyIslandFalloff(map, width, height, strength, wrap) {
   if (strength <= 0) return;
+  if (wrap) {
+    // Cylindrical maps have no east/west edge to push toward water, so the
+    // falloff depends only on LATITUDE (distance from the vertical center).
+    // This keeps land in a horizontal band and leaves the seam continuous.
+    const cy = (height - 1) / 2;
+    const maxLat = cy || 1;
+    for (let y = 0; y < height; y++) {
+      const dy = (y - cy) / maxLat; // 0 at equator, ~1 at top/bottom edge
+      const falloff = 1 - dy * dy;  // 1 at center, 0 at poles
+      for (let x = 0; x < width; x++) {
+        map[y][x] = map[y][x] * (1 - strength) + map[y][x] * falloff * strength;
+      }
+    }
+    return;
+  }
   const cx = (width - 1) / 2;
   const cy = (height - 1) / 2;
   const maxDist = Math.sqrt(cx * cx + cy * cy) || 1;
@@ -280,22 +315,32 @@ function quantize(map, width, height, waterFraction) {
 // Biome assignment (elevation tier x moisture x latitude)
 // ---------------------------------------------------------------------------
 
-function buildMoisture(width, height, rng) {
+function buildMoisture(width, height, rng, wrap) {
   const noise = makeValueNoise(rng);
   const out = [];
   const baseScale = 2.5 / Math.max(1, Math.min(width, height));
   const octaves = 4;
   const persistence = 0.6;
+  const basePeriod = Math.max(2, Math.round(width * baseScale));
+  // A constant offset (in whole lattice periods) keeps moisture decorrelated
+  // from elevation without breaking periodicity.
+  const offsetPeriods = basePeriod; // integer => preserves seamless wrap
   let min = Infinity, max = -Infinity;
   for (let y = 0; y < height; y++) {
     const row = new Float64Array(width);
     for (let x = 0; x < width; x++) {
-      let amp = 1, freq = baseScale, sum = 0, norm = 0;
+      let amp = 1, freq = baseScale, period = basePeriod, sum = 0, norm = 0;
       for (let o = 0; o < octaves; o++) {
-        sum += noise(x * freq + 1000, y * freq + 1000) * amp;
+        if (wrap) {
+          const nx = x * (period / width) + offsetPeriods;
+          sum += noise(nx, y * freq + 1000, period) * amp;
+        } else {
+          sum += noise(x * freq + 1000, y * freq + 1000) * amp;
+        }
         norm += amp;
         amp *= persistence;
         freq *= 2;
+        period *= 2;
       }
       const v = sum / norm;
       row[x] = v;
@@ -310,8 +355,8 @@ function buildMoisture(width, height, rng) {
   return out;
 }
 
-function assignBiomes(tiers, width, height, rng, polar) {
-  const moisture = buildMoisture(width, height, rng);
+function assignBiomes(tiers, width, height, rng, polar, wrap) {
+  const moisture = buildMoisture(width, height, rng, wrap);
   const cy = (height - 1) / 2;
   const maxLat = cy || 1;
 
@@ -366,10 +411,19 @@ function assignBiomes(tiers, width, height, rng, polar) {
 // ---------------------------------------------------------------------------
 
 // Neighbor offsets for odd-q offset hexes. Even and odd columns differ.
-function hexNeighbors(x, y) {
+// Wrap an x coordinate into [0, width) for cylindrical (east-west) maps.
+function wrapX(x, width) {
+  return ((x % width) + width) % width;
+}
+
+// Neighbor offsets for odd-q offset hexes. Even and odd columns differ.
+// When `wrap` is true the map is a horizontal cylinder: x wraps modulo width
+// (left/right edges meet). y never wraps (poles are hard edges).
+function hexNeighbors(x, y, width, wrap) {
   const odd = (x & 1) === 1;
+  let list;
   if (odd) {
-    return [
+    list = [
       { x: x,     y: y - 1 }, // N
       { x: x,     y: y + 1 }, // S
       { x: x + 1, y: y },     // NE
@@ -377,21 +431,31 @@ function hexNeighbors(x, y) {
       { x: x - 1, y: y },     // NW
       { x: x - 1, y: y + 1 }  // SW
     ];
+  } else {
+    list = [
+      { x: x,     y: y - 1 }, // N
+      { x: x,     y: y + 1 }, // S
+      { x: x + 1, y: y - 1 }, // NE
+      { x: x + 1, y: y },     // SE
+      { x: x - 1, y: y - 1 }, // NW
+      { x: x - 1, y: y }      // SW
+    ];
   }
-  return [
-    { x: x,     y: y - 1 }, // N
-    { x: x,     y: y + 1 }, // S
-    { x: x + 1, y: y - 1 }, // NE
-    { x: x + 1, y: y },     // SE
-    { x: x - 1, y: y - 1 }, // NW
-    { x: x - 1, y: y }      // SW
-  ];
+  if (wrap && width) {
+    for (const n of list) n.x = wrapX(n.x, width);
+  }
+  return list;
 }
 
 function generateRivers(elevation, terrain, width, height, rng, options) {
-  const inBounds = (x, y) => x >= 0 && y >= 0 && x < width && y < height;
+  const wrap = !!options.wrap;
+  // With horizontal wrap, x is always valid (it wraps); only y is bounded.
+  const inBounds = wrap
+    ? (x, y) => y >= 0 && y < height
+    : (x, y) => x >= 0 && y >= 0 && x < width && y < height;
   const isWater = (x, y) => terrain[y][x] === 1; // sea tile
   const key = (x, y) => y * width + x;
+  const neighbors = (x, y) => hexNeighbors(x, y, width, wrap);
 
   // -------------------------------------------------------------------------
   // 1) Priority-flood drainage (Barnes 2014). Fill local minima so every land
@@ -452,7 +516,7 @@ function generateRivers(elevation, terrain, width, height, rng, options) {
     const idx = heapPop();
     const cx = idx % width;
     const cy = (idx - cx) / width;
-    for (const n of hexNeighbors(cx, cy)) {
+    for (const n of neighbors(cx, cy)) {
       if (!inBounds(n.x, n.y)) continue;
       const nidx = key(n.x, n.y);
       if (processed[nidx]) continue;
@@ -516,7 +580,7 @@ function generateRivers(elevation, terrain, width, height, rng, options) {
       while (stack.length) {
         const c = stack.pop();
         cells.push(c);
-        for (const n of hexNeighbors(c.x, c.y)) {
+        for (const n of neighbors(c.x, c.y)) {
           if (!inBounds(n.x, n.y)) continue;
           const ni = key(n.x, n.y);
           if (regionId[ni] !== -1) continue;
@@ -607,7 +671,7 @@ function generateRivers(elevation, terrain, width, height, rng, options) {
     if (!launchedSecond) {
       // Rank the first cell's downhill neighbors by how opposed they are to d1.
       const alt = [];
-      for (const n of hexNeighbors(first.x, first.y)) {
+      for (const n of neighbors(first.x, first.y)) {
         if (!inBounds(n.x, n.y)) continue;
         if (elevation[n.y][n.x] > elevation[first.y][first.x]) continue; // downhill only
         const dx = n.x - first.x, dy = n.y - first.y;
@@ -676,7 +740,7 @@ function generateRivers(elevation, terrain, width, height, rng, options) {
       for (const path of rivers) {
         for (const c of path) {
           nearRiver[key(c.x, c.y)] = 1;
-          for (const n of hexNeighbors(c.x, c.y)) {
+          for (const n of neighbors(c.x, c.y)) {
             if (inBounds(n.x, n.y)) nearRiver[key(n.x, n.y)] = 1;
           }
         }
@@ -700,7 +764,7 @@ function generateRivers(elevation, terrain, width, height, rng, options) {
             size++;
             const e = elevation[cc.y][cc.x];
             if (!highest || e > highest.e) highest = { x: cc.x, y: cc.y, e };
-            for (const n of hexNeighbors(cc.x, cc.y)) {
+            for (const n of neighbors(cc.x, cc.y)) {
               if (!inBounds(n.x, n.y)) continue;
               const ni = key(n.x, n.y);
               if (seen[ni]) continue;
@@ -734,14 +798,16 @@ function generateRivers(elevation, terrain, width, height, rng, options) {
 }
 
 // Convert desert (tile 6) cells adjacent to (or on) any river into grassland (2).
-function desertsNearRiversToGrassland(terrain, rivers, width, height) {
-  const inBounds = (x, y) => x >= 0 && y >= 0 && x < width && y < height;
+function desertsNearRiversToGrassland(terrain, rivers, width, height, wrap) {
+  const inBounds = wrap
+    ? (x, y) => y >= 0 && y < height
+    : (x, y) => x >= 0 && y >= 0 && x < width && y < height;
   const key = (x, y) => y * width + x;
   const nearRiver = new Set();
   for (const path of rivers) {
     for (const c of path) {
       nearRiver.add(key(c.x, c.y));
-      for (const n of hexNeighbors(c.x, c.y)) {
+      for (const n of hexNeighbors(c.x, c.y, width, wrap)) {
         if (inBounds(n.x, n.y)) nearRiver.add(key(n.x, n.y));
       }
     }
@@ -777,8 +843,11 @@ const DEFAULTS = {
   maxRivers: 40,         // hard cap on number of rivers
   cellsPerRiver: 400,    // ~1 river per this many cells (before cap)
   minRiverLength: 3,     // discard rivers shorter than this many cells
-  largestAreaWithoutRiver: 0.15 // add rivers until no river-less land area
-                                //  is >= this fraction of the whole map (0 = off)
+  largestAreaWithoutRiver: 0.15, // add rivers until no river-less land area
+                                 //  is >= this fraction of the whole map (0 = off)
+  wrap: true             // horizontal (east-west) cylindrical wrapping. When
+                         //  on, generation uses fBm (only algo that can be
+                         //  made seamless) and width is forced even.
 };
 
 /**
@@ -789,9 +858,16 @@ const DEFAULTS = {
 function generateMap(opts = {}) {
   const o = { ...DEFAULTS, ...opts };
 
-  const width = Math.max(1, parseInt(o.width, 10) || DEFAULTS.width);
+  const wrap = o.wrap === true || o.wrap === 'true' || o.wrap === 1;
+
+  let width = Math.max(1, parseInt(o.width, 10) || DEFAULTS.width);
   const height = Math.max(1, parseInt(o.height, 10) || DEFAULTS.height);
-  const algo = String(o.algo || 'diamond').toLowerCase();
+  // Cylindrical maps need an EVEN width so the odd-q offset columns tessellate
+  // across the seam (column 0 and column width-1 must have opposite parity).
+  if (wrap && (width & 1)) width += 1;
+
+  // When wrapping, only fBm can be made seamless in x, so force it.
+  const algo = wrap ? 'fbm' : String(o.algo || 'diamond').toLowerCase();
   const seed = (o.seed !== undefined && o.seed !== null && o.seed !== '')
     ? (parseInt(o.seed, 10) >>> 0)
     : ((Math.random() * 0xffffffff) >>> 0);
@@ -814,13 +890,13 @@ function generateMap(opts = {}) {
 
   let map;
   if (algo === 'fbm') {
-    map = fbm(width, height, rng, octaves, roughness);
+    map = fbm(width, height, rng, octaves, roughness, wrap);
   } else {
     map = diamondSquare(width, height, rng, roughness);
   }
 
   normalize(map, width, height);
-  applyIslandFalloff(map, width, height, island);
+  applyIslandFalloff(map, width, height, island, wrap);
   normalize(map, width, height);
   if (erode > 0) {
     thermalErosion(map, width, height, erode, talus);
@@ -839,7 +915,7 @@ function generateMap(opts = {}) {
   let grid = quantize(map, width, height, waterFraction);
 
   if (biome) {
-    grid = assignBiomes(grid, width, height, rng, polar);
+    grid = assignBiomes(grid, width, height, rng, polar, wrap);
   }
 
   // Rivers require sea cells (tile === 1) to flow into, which exist after
@@ -848,10 +924,10 @@ function generateMap(opts = {}) {
   if (doRivers) {
     rivers = generateRivers(elevation, grid, width, height, rng, {
       springElevation, maxRivers, cellsPerRiver, minLength: minRiverLength,
-      largestAreaWithoutRiver
+      largestAreaWithoutRiver, wrap
     });
     // Rivers make adjacent deserts bloom into grassland.
-    desertsNearRiversToGrassland(grid, rivers, width, height);
+    desertsNearRiversToGrassland(grid, rivers, width, height, wrap);
   }
 
   return {
@@ -862,7 +938,7 @@ function generateMap(opts = {}) {
       width, height, algo, seed, island, water: waterFraction, octaves,
       roughness, erode, talus, biome, polar,
       rivers: doRivers, springElevation, maxRivers, cellsPerRiver, minRiverLength,
-      largestAreaWithoutRiver
+      largestAreaWithoutRiver, wrap
     }
   };
 }
@@ -877,4 +953,4 @@ function clamp01(v) {
   return v;
 }
 
-module.exports = { generateMap, DEFAULTS, hexNeighbors };
+module.exports = { generateMap, DEFAULTS, hexNeighbors, wrapX };

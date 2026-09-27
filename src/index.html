@@ -123,6 +123,7 @@
         terrain,
         elevation: map.elevation || null,
         rivers: map.rivers || [],
+        wrap: !!(map.meta && map.meta.wrap),
         resourcePath: "resources/terrain"
       });
       hexMap.start();

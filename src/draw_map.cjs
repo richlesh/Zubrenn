@@ -103,7 +103,10 @@ const HEX_SCALE = { x: 1.15470053837925, y: 0.86602540378444 };
 
 function getHexCenter(x, y, cellSpacing) {
   const xp = (0.5 + x * 0.75) * cellSpacing.x;
-  const yp = (0.5 + (y + (x % 2) / 2)) * cellSpacing.y;
+  // Use a non-negative parity so negative x (drawn past the seam when wrapping)
+  // gets the same vertical offset as its wrapped-positive column.
+  const parity = ((x % 2) + 2) % 2;
+  const yp = (0.5 + (y + parity / 2)) * cellSpacing.y;
   return { x: xp, y: yp };
 }
 
@@ -145,6 +148,11 @@ function dist2(a, b) {
   return dx * dx + dy * dy;
 }
 
+// Wrap an x coordinate into [0, width) for cylindrical (east-west) maps.
+function wrapX(x, width) {
+  return ((x % width) + width) % width;
+}
+
 // Return the shared edge between two adjacent cells as the two common vertices,
 // or null if they are not edge-adjacent. Uses rounded-vertex matching.
 function sharedEdge(ax, ay, bx, by, spacing) {
@@ -168,7 +176,9 @@ class HexMap {
     this.terrain = opts.terrain;
     this.elevation = opts.elevation || null; // 0..1 field, or null
     this.rivers = opts.rivers || [];         // array of paths [{x,y},...]
+    this.wrap = !!opts.wrap;                  // horizontal cylindrical wrap
     this.tooltipEl = opts.tooltip || null;   // floating hover tooltip element
+    this.tooltipDelayMs = opts.tooltipDelayMs != null ? opts.tooltipDelayMs : 2000;
     this.resourcePath = opts.resourcePath || 'resources/terrain';
     this.typeface = opts.typeface || 'Calibri, sans-serif';
     this.defaultScale = opts.defaultScale || 15; // vertical hexes shown
@@ -371,6 +381,19 @@ class HexMap {
     const vp = this.viewport;
     x = Math.floor(x);
     y = Math.floor(y);
+    if (this.wrap) {
+      // Horizontal cylinder: x wraps freely; keep the even-parity step so
+      // odd/even columns stay aligned. Only y is clamped (poles).
+      x = x - (x % 2);
+      x = wrapX(x, this.worldSize.x);
+      if (y > this.worldSize.y - vp.hSize.y) y = this.worldSize.y - vp.hSize.y;
+      if (y < 0) y = 0;
+      vp.hOrigin = { x, y };
+      const origin = getHexCenter(0, 0, vp.wCellSpacing);
+      const offset = getHexCenter(x, y, vp.wCellSpacing);
+      vp.wOrigin = { x: offset.x - origin.x, y: offset.y - origin.y };
+      return;
+    }
     if (x > this.worldSize.x - vp.hSize.x + 1) x = this.worldSize.x - vp.hSize.x + 1;
     if (y > this.worldSize.y - vp.hSize.y) y = this.worldSize.y - vp.hSize.y;
     x = x - (x % 2);
@@ -415,13 +438,21 @@ class HexMap {
     let y0 = Math.max(vp.hOrigin.y - 1, 0);
     let xMax = Math.min(vp.hOrigin.x + vp.hSize.x + 1, this.worldSize.x);
     let yMax = Math.min(vp.hOrigin.y + vp.hSize.y + 1, this.worldSize.y);
+    if (this.wrap) {
+      // Draw a contiguous run of columns starting one before the origin; look
+      // up terrain with wrapX so columns past the seam show the far side.
+      x0 = vp.hOrigin.x - 1;
+      xMax = vp.hOrigin.x + vp.hSize.x + 1;
+    }
 
+    const W = this.worldSize.x;
     const lineW = Math.max(1, Math.floor(spacing.y / 20));
     for (let x = x0; x < xMax; x++) {
+      const tx = this.wrap ? wrapX(x, W) : x;
       for (let y = y0; y < yMax; y++) {
         const c = getHexCenter(x, y, spacing);
         drawHexPath(ctx, c.x, c.y, spacing);
-        const type = this.terrain[y][x];
+        const type = this.terrain[y][tx];
         if (this.useTextures && this.tilePatterns[type]) {
           ctx.fillStyle = this.tilePatterns[type];
         } else {
@@ -454,13 +485,21 @@ class HexMap {
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
 
+    // One full horizontal wrap spans this many pixels in the (translated)
+    // hex coordinate space. Drawing each river at offsets -W, 0, +W ensures
+    // it appears on whichever wrapped copy is currently in view.
+    const wrapPx = this.worldSize.x * 0.75 * spacing.x;
+    const offsets = this.wrap ? [-wrapPx, 0, wrapPx] : [0];
+
     for (const path of this.rivers) {
       const poly = this._riverPolyline(path, spacing);
       if (!poly || poly.length < 2) continue;
-      ctx.beginPath();
-      ctx.moveTo(poly[0].x, poly[0].y);
-      for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
-      ctx.stroke();
+      for (const ox of offsets) {
+        ctx.beginPath();
+        ctx.moveTo(poly[0].x + ox, poly[0].y);
+        for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x + ox, poly[i].y);
+        ctx.stroke();
+      }
     }
     ctx.restore();
   }
@@ -471,6 +510,24 @@ class HexMap {
   // perimeter (the shorter vertex arc) from its entry edge to its exit edge.
   _riverPolyline(path, spacing) {
     if (!path || path.length < 2) return null;
+
+    // For wrapped maps, unwrap the path's x into a CONTINUOUS sequence so a
+    // seam crossing (x jumping ~width) becomes a single step to x = -1 or
+    // width, and the shared-edge/perimeter geometry stays local. getHexCenter
+    // and hexVertices tolerate out-of-range x (even width preserves parity).
+    if (this.wrap) {
+      const W = this.worldSize.x;
+      const cont = [{ x: path[0].x, y: path[0].y }];
+      for (let i = 1; i < path.length; i++) {
+        const prevX = cont[i - 1].x;
+        let x = path[i].x;
+        // Shift x by whole widths to be nearest to prevX.
+        while (x - prevX > W / 2) x -= W;
+        while (x - prevX < -W / 2) x += W;
+        cont.push({ x, y: path[i].y });
+      }
+      path = cont;
+    }
 
     // The shared edges between consecutive cells, each as [v0, v1] vertices.
     const edges = [];
@@ -552,13 +609,29 @@ class HexMap {
 
     // Viewport rectangle overlay (fraction of the world currently shown).
     const vp = this.viewport;
-    const fx = vp.hOrigin.x / this.worldSize.x;
     const fy = vp.hOrigin.y / this.worldSize.y;
     const fw = Math.min(1, vp.hSize.x / this.worldSize.x);
     const fh = Math.min(1, vp.hSize.y / this.worldSize.y);
     bctx.strokeStyle = 'red';
     bctx.lineWidth = 1;
-    bctx.strokeRect(dx + fx * dw, dy + fy * dh, fw * dw, fh * dh);
+    const ry = dy + fy * dh;
+    const rh = fh * dh;
+    if (this.wrap) {
+      // The rect may straddle the seam; split into two pieces if it wraps.
+      const fx = (vp.hOrigin.x / this.worldSize.x) % 1;
+      const startPx = dx + fx * dw;
+      const widthPx = fw * dw;
+      if (startPx + widthPx <= dx + dw) {
+        bctx.strokeRect(startPx, ry, widthPx, rh);
+      } else {
+        const firstW = (dx + dw) - startPx;
+        bctx.strokeRect(startPx, ry, firstW, rh);
+        bctx.strokeRect(dx, ry, widthPx - firstW, rh);
+      }
+    } else {
+      const fx = vp.hOrigin.x / this.worldSize.x;
+      bctx.strokeRect(dx + fx * dw, ry, fw * dw, rh);
+    }
   }
 
   // ---- events -------------------------------------------------------------
@@ -649,6 +722,7 @@ class HexMap {
     }
     if (handled) {
       e.preventDefault();
+      this._hideTooltip();
       this._draw();
       this._renderBirdseye();
     }
@@ -680,27 +754,38 @@ class HexMap {
         `Location: ${hex.x},${hex.y}  Terrain: ${name}  Elevation: ${elevText}`;
     }
 
-    // Floating tooltip near the cursor.
+    // Tooltip only appears after a 2-second dwell. Any mouse movement hides it
+    // and restarts the timer, so it shows only when the cursor stays still.
     if (this.tooltipEl) {
-      this.tooltipEl.innerHTML =
-        `(${hex.x}, ${hex.y})<br>${name}<br>elev ${elevText}`;
-      this.tooltipEl.style.display = 'block';
-      // Position relative to the page; offset a little from the cursor.
-      const pad = 14;
-      let left = e.clientX + pad;
-      let top = e.clientY + pad;
-      const tw = this.tooltipEl.offsetWidth;
-      const th = this.tooltipEl.offsetHeight;
-      if (typeof window !== 'undefined') {
-        if (left + tw > window.innerWidth) left = e.clientX - tw - pad;
-        if (top + th > window.innerHeight) top = e.clientY - th - pad;
-      }
-      this.tooltipEl.style.left = left + 'px';
-      this.tooltipEl.style.top = top + 'px';
+      this.tooltipEl.style.display = 'none';
+      if (this._dwellTimer) clearTimeout(this._dwellTimer);
+      const html = `(${hex.x}, ${hex.y})<br>${name}<br>elev ${elevText}`;
+      const cx = e.clientX, cy = e.clientY;
+      this._dwellTimer = setTimeout(() => {
+        this._showTooltip(html, cx, cy);
+      }, this.tooltipDelayMs || 2000);
     }
   }
 
+  _showTooltip(html, clientX, clientY) {
+    if (!this.tooltipEl) return;
+    this.tooltipEl.innerHTML = html;
+    this.tooltipEl.style.display = 'block';
+    const pad = 14;
+    let left = clientX + pad;
+    let top = clientY + pad;
+    const tw = this.tooltipEl.offsetWidth;
+    const th = this.tooltipEl.offsetHeight;
+    if (typeof window !== 'undefined') {
+      if (left + tw > window.innerWidth) left = clientX - tw - pad;
+      if (top + th > window.innerHeight) top = clientY - th - pad;
+    }
+    this.tooltipEl.style.left = left + 'px';
+    this.tooltipEl.style.top = top + 'px';
+  }
+
   _hideTooltip() {
+    if (this._dwellTimer) { clearTimeout(this._dwellTimer); this._dwellTimer = null; }
     if (this.tooltipEl) this.tooltipEl.style.display = 'none';
   }
 
@@ -709,6 +794,7 @@ class HexMap {
   // they exceed one cell, so panning feels smooth on both wheels and trackpads.
   _onWheel(e) {
     e.preventDefault();
+    this._hideTooltip();
     const vp = this.viewport;
     if (!vp.wCellSpacing.x || !vp.wCellSpacing.y) return;
 
@@ -736,8 +822,9 @@ class HexMap {
   _hexFromCanvas(e) {
     const vp = this.viewport;
     const c = this._relCoords(this.canvas, e);
-    const x = vp.hOrigin.x + Math.floor(c.x / vp.wCellSpacing.x / 0.75);
-    const y = vp.hOrigin.y + Math.floor(c.y / vp.wCellSpacing.y - (x % 2) / 2);
+    let x = vp.hOrigin.x + Math.floor(c.x / vp.wCellSpacing.x / 0.75);
+    const y = vp.hOrigin.y + Math.floor(c.y / vp.wCellSpacing.y - (((x % 2) + 2) % 2) / 2);
+    if (this.wrap) x = wrapX(x, this.worldSize.x);
     return { x, y };
   }
 

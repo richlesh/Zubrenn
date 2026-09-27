@@ -69,6 +69,12 @@
     </div>
   </div>
 
+  <div class="checkrow">
+    <input id="wrap" type="checkbox" checked>
+    <label for="wrap">Wrap map East&ndash;West (cylinder)</label>
+  </div>
+  <div class="hint" id="wrap-note">When on, the map uses fBm and width is rounded to an even number so the seam is continuous. Top/bottom remain hard edges.</div>
+
   <div class="section-title">Generation</div>
   <div class="grid2">
     <div class="field">
@@ -185,6 +191,27 @@
     algo.addEventListener("change", syncAlgo);
     syncAlgo();
 
+    // Wrap: when on, force fBm (only seamless algorithm) and snap width even.
+    const wrap = document.getElementById("wrap");
+    const widthInput = document.getElementById("width");
+    function snapWidthEven() {
+      let w = parseInt(widthInput.value, 10);
+      if (Number.isFinite(w) && (w & 1)) widthInput.value = String(w + 1);
+    }
+    function syncWrap() {
+      if (wrap.checked) {
+        algo.value = "fbm";
+        algo.disabled = true;   // fBm is required for a seamless cylinder
+        syncAlgo();
+        snapWidthEven();
+      } else {
+        algo.disabled = false;
+      }
+    }
+    wrap.addEventListener("change", syncWrap);
+    widthInput.addEventListener("change", () => { if (wrap.checked) snapWidthEven(); });
+    syncWrap();
+
     const biome = document.getElementById("biome");
     const polarField = document.getElementById("polar-field");
     function syncBiome() {
@@ -229,6 +256,7 @@
         height: parseInt(document.getElementById("height").value, 10),
         algo: document.getElementById("algo").value,
         seed: seedRaw === "" ? undefined : parseInt(seedRaw, 10),
+        wrap: document.getElementById("wrap").checked,
         water: parseFloat(document.getElementById("water").value),
         island: parseFloat(document.getElementById("island").value),
         roughness: parseFloat(document.getElementById("roughness").value),
