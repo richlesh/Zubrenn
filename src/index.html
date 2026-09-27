@@ -89,12 +89,17 @@
         console.error("[index] showMap: no terrain data");
         return;
       }
+      // Sea level (normalized 0..1) may be top-level (new game) or in meta (load).
+      const seaLevel = (map.seaLevel != null)
+        ? map.seaLevel
+        : (map.meta && map.meta.seaLevel != null ? map.meta.seaLevel : 0);
       gameState = {
         map: {
           meta: map.meta || null,
           terrain: terrain,
           elevation: map.elevation || null,
-          rivers: map.rivers || []
+          rivers: map.rivers || [],
+          seaLevel: seaLevel
         },
         improvements: (extra && extra.improvements) || [],
         pieces: (extra && extra.pieces) || []
@@ -123,6 +128,7 @@
         terrain,
         elevation: map.elevation || null,
         rivers: map.rivers || [],
+        seaLevel: seaLevel,
         wrap: !!(map.meta && map.meta.wrap),
         resourcePath: "resources/terrain"
       });

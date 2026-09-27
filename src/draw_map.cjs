@@ -175,6 +175,7 @@ class HexMap {
     this.statusEl = opts.status || null;
     this.terrain = opts.terrain;
     this.elevation = opts.elevation || null; // 0..1 field, or null
+    this.seaLevel = (opts.seaLevel != null) ? opts.seaLevel : 0; // normalized 0..1
     this.rivers = opts.rivers || [];         // array of paths [{x,y},...]
     this.wrap = !!opts.wrap;                  // horizontal cylindrical wrap
     this.tooltipEl = opts.tooltip || null;   // floating hover tooltip element
@@ -744,14 +745,17 @@ class HexMap {
     }
 
     const name = TERRAIN_NAMES[this.terrain[hex.y][hex.x]] || 'unknown';
-    // Elevation is stored normalized 0..1; display in meters where 1.0 = 10,000 m.
-    const elevText = this.elevation
-      ? Math.round(this.elevation[hex.y][hex.x] * 10000).toLocaleString() + ' m'
-      : 'n/a';
+    // Elevation is stored normalized 0..1. Report it relative to sea level:
+    // (elevation - seaLevel) * 10000 m, so ocean is negative and land positive.
+    let elevText = 'n/a';
+    if (this.elevation) {
+      const meters = Math.round((this.elevation[hex.y][hex.x] - this.seaLevel) * 10000);
+      elevText = (meters > 0 ? '+' : '') + meters.toLocaleString() + ' m';
+    }
 
     if (this.statusEl) {
       this.statusEl.textContent =
-        `Location: ${hex.x},${hex.y}  Terrain: ${name}  Elevation: ${elevText}`;
+        `Location: ${hex.x},${hex.y}  Terrain: ${name}  Elevation above Sea Level: ${elevText}`;
     }
 
     // Tooltip only appears after a 2-second dwell. Any mouse movement hides it
@@ -759,7 +763,7 @@ class HexMap {
     if (this.tooltipEl) {
       this.tooltipEl.style.display = 'none';
       if (this._dwellTimer) clearTimeout(this._dwellTimer);
-      const html = `(${hex.x}, ${hex.y})<br>${name}<br>elev ${elevText}`;
+      const html = `(${hex.x}, ${hex.y})<br>${name}<br>${elevText} above sea level`;
       const cx = e.clientX, cy = e.clientY;
       this._dwellTimer = setTimeout(() => {
         this._showTooltip(html, cx, cy);

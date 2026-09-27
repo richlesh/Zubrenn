@@ -282,6 +282,8 @@ function thermalErosion(map, width, height, iterations, talus) {
 }
 
 // Quantize the 0..1 heightmap into integer elevation tiers 1..9.
+// Returns { grid, seaLevel } — seaLevel is the normalized elevation at/below
+// which cells are water; used to report elevation relative to sea level.
 function quantize(map, width, height, waterFraction) {
   const flat = [];
   for (let y = 0; y < height; y++)
@@ -308,7 +310,7 @@ function quantize(map, width, height, waterFraction) {
     }
     grid.push(row);
   }
-  return grid;
+  return { grid, seaLevel };
 }
 
 // ---------------------------------------------------------------------------
@@ -821,6 +823,31 @@ function desertsNearRiversToGrassland(terrain, rivers, width, height, wrap) {
   }
 }
 
+// Convert desert (tile 6) cells that share an edge with a sea cell (tile 1)
+// into grassland (2) — coastal deserts become fertile shoreline. Edge-adjacency
+// is exactly the hex neighbor set.
+function coastalDesertsToGrassland(terrain, width, height, wrap) {
+  const inBounds = wrap
+    ? (x, y) => y >= 0 && y < height
+    : (x, y) => x >= 0 && y >= 0 && x < width && y < height;
+  // Collect first, then apply, so newly-created grassland doesn't chain-convert
+  // neighboring deserts within a single pass.
+  const toConvert = [];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (terrain[y][x] !== 6) continue;
+      for (const n of hexNeighbors(x, y, width, wrap)) {
+        if (!inBounds(n.x, n.y)) continue;
+        if (terrain[n.y][n.x] === 1) { // sea
+          toConvert.push([x, y]);
+          break;
+        }
+      }
+    }
+  }
+  for (const [x, y] of toConvert) terrain[y][x] = 2; // desert -> grassland
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -912,7 +939,9 @@ function generateMap(opts = {}) {
     elevation.push(row);
   }
 
-  let grid = quantize(map, width, height, waterFraction);
+  const quantized = quantize(map, width, height, waterFraction);
+  let grid = quantized.grid;
+  const seaLevel = quantized.seaLevel;
 
   if (biome) {
     grid = assignBiomes(grid, width, height, rng, polar, wrap);
@@ -930,15 +959,21 @@ function generateMap(opts = {}) {
     desertsNearRiversToGrassland(grid, rivers, width, height, wrap);
   }
 
+  // Coastal deserts (touching the sea) become grassland shoreline.
+  if (biome) {
+    coastalDesertsToGrassland(grid, width, height, wrap);
+  }
+
   return {
     terrain: grid,
     elevation,
     rivers,
+    seaLevel,
     meta: {
       width, height, algo, seed, island, water: waterFraction, octaves,
       roughness, erode, talus, biome, polar,
       rivers: doRivers, springElevation, maxRivers, cellsPerRiver, minRiverLength,
-      largestAreaWithoutRiver, wrap
+      largestAreaWithoutRiver, wrap, seaLevel
     }
   };
 }
