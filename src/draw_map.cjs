@@ -1,0 +1,760 @@
+'use strict';
+
+/*
+ * draw_map.cjs
+ * ------------
+ * Self-contained hex-map renderer for Zubrenn, adapted from the prototype
+ * ../../JavaScript/game/hexgrid5.html. The prototype relied on the Prototype.js
+ * framework and a custom OffscreenCanvas package; this module re-implements the
+ * same behaviour using plain DOM + the browser-native canvas so it can run
+ * inside an Electron renderer with no extra dependencies.
+ *
+ * Features preserved from hexgrid5.html:
+ *   - Flat-topped hex grid, odd columns offset vertically
+ *   - Full-map offscreen render, then a viewport blits a scaled region
+ *   - Right-panel birdseye/minimap with a viewport rectangle
+ *   - Status bar showing hovered hex coords + terrain name
+ *   - Keyboard nav (i/j/k/l = 2 hexes, shift = 1 screen), +/- zoom,
+ *     spacebar to center, t to toggle textured terrain
+ *   - Click the minimap to jump the viewport
+ *   - Resizes to fill its container (map expands with the window)
+ *
+ * Usage (renderer/browser context):
+ *   const { HexMap } = require("./draw_map.cjs");
+ *   const map = new HexMap({
+ *     canvas, birdseye, status,      // DOM elements
+ *     terrain,                        // 2D array terrain[y][x] of tile ids 1..9
+ *     resourcePath: "resources/terrain" // where the tile PNGs live
+ *   });
+ *   map.start();
+ */
+
+// --- Color model (matches hexgrid5.html terrain_colors) --------------------
+
+function rgb(r, g, b) {
+  r = Math.min(255, Math.floor(r * 256));
+  g = Math.min(255, Math.floor(g * 256));
+  b = Math.min(255, Math.floor(b * 256));
+  return `rgb(${r},${g},${b})`;
+}
+
+function rgba(r, g, b, a) {
+  r = Math.min(255, Math.floor(r * 256));
+  g = Math.min(255, Math.floor(g * 256));
+  b = Math.min(255, Math.floor(b * 256));
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// HSV -> css rgb string (h[0,360) s[0,1] v[0,1])
+function hsv(h, s, v) {
+  let r, g, b;
+  const f = h / 60 - Math.floor(h / 60);
+  h = Math.floor(h / 60) % 6;
+  const p = v * (1 - s);
+  const q = v * (1 - f * s);
+  const t = v * (1 - (1 - f) * s);
+  switch (h) {
+    case 0: r = v; g = t; b = p; break;
+    case 1: r = q; g = v; b = p; break;
+    case 2: r = p; g = v; b = t; break;
+    case 3: r = p; g = q; b = v; break;
+    case 4: r = t; g = p; b = v; break;
+    case 5: r = v; g = p; b = q; break;
+  }
+  return rgb(r, g, b);
+}
+
+// Parallel arrays indexed by terrain tile id (0 unused). Mirrors hexgrid5.html.
+const TERRAIN_COLORS = [
+  hsv(0, 0, 0),       // 0 undefined
+  hsv(240, 1, 0.5),   // 1 sea
+  hsv(120, 0.8, 1),   // 2 grassland
+  hsv(90, 0.7, 0.8),  // 3 hills
+  hsv(120, 1, 0.6),   // 4 forest
+  hsv(120, 1, 0.3),   // 5 jungle
+  hsv(60, 0.75, 0.75),// 6 desert
+  hsv(120, 0.9, 0.5), // 7 mountain-low
+  hsv(30, 0.5, 0.3),  // 8 mountain-high
+  hsv(0, 0, 1),       // 9 frozen
+  hsv(240, 1, 1)      // 10 river
+];
+
+const TERRAIN_NAMES = [
+  'undefined', 'sea', 'grassland', 'hills', 'forest', 'jungle',
+  'desert', 'mountain-low', 'mountain-high', 'frozen', 'river'
+];
+
+const TERRAIN_IMAGES = [
+  'Lava Bowl.png',              // 0 undefined
+  'Port of Taganrog.png',       // 1 sea
+  'Open Square Path Grass.png', // 2 grassland
+  'Just Add Bison.png',         // 3 hills
+  'Shrub Cover.png',            // 4 forest
+  'Deep Forest.png',            // 5 jungle
+  'Slush.png',                  // 6 desert
+  'Dense Pine Forest.png',      // 7 mountain-low
+  'Age of the Canyon.png',      // 8 mountain-high
+  'Polar Zone.png',             // 9 frozen
+  'Azure Waters.png'            // 10 river
+];
+
+// Hex geometry: 4 sub-cells wide/tall. y stretched by sqrt(3)/2 so sides match.
+const HEX_SCALE = { x: 1.15470053837925, y: 0.86602540378444 };
+
+function getHexCenter(x, y, cellSpacing) {
+  const xp = (0.5 + x * 0.75) * cellSpacing.x;
+  const yp = (0.5 + (y + (x % 2) / 2)) * cellSpacing.y;
+  return { x: xp, y: yp };
+}
+
+function drawHexPath(ctx, x, y, cellSpacing) {
+  const r = cellSpacing.x / 2;
+  const r2 = r / 2;
+  const yr = cellSpacing.y / 2;
+  ctx.beginPath();
+  ctx.moveTo(x - r2, y - yr);
+  ctx.lineTo(x + r2, y - yr);
+  ctx.lineTo(x + r, y);
+  ctx.lineTo(x + r2, y + yr);
+  ctx.lineTo(x - r2, y + yr);
+  ctx.lineTo(x - r, y);
+  ctx.closePath();
+}
+
+// The 6 vertices (corners) of a flat-topped hex, in clockwise order starting
+// at the top-left. Coordinates are rounded so a corner shared by adjacent
+// hexes has identical values in both, letting us match shared edges exactly.
+function hexVertices(x, y, spacing) {
+  const c = getHexCenter(x, y, spacing);
+  const r = spacing.x / 2;
+  const r2 = r / 2;
+  const yr = spacing.y / 2;
+  const snap = (v) => Math.round(v * 100) / 100;
+  return [
+    { x: snap(c.x - r2), y: snap(c.y - yr) }, // 0 top-left
+    { x: snap(c.x + r2), y: snap(c.y - yr) }, // 1 top-right
+    { x: snap(c.x + r),  y: snap(c.y) },      // 2 right
+    { x: snap(c.x + r2), y: snap(c.y + yr) }, // 3 bottom-right
+    { x: snap(c.x - r2), y: snap(c.y + yr) }, // 4 bottom-left
+    { x: snap(c.x - r),  y: snap(c.y) }       // 5 left
+  ];
+}
+
+function dist2(a, b) {
+  const dx = a.x - b.x, dy = a.y - b.y;
+  return dx * dx + dy * dy;
+}
+
+// Return the shared edge between two adjacent cells as the two common vertices,
+// or null if they are not edge-adjacent. Uses rounded-vertex matching.
+function sharedEdge(ax, ay, bx, by, spacing) {
+  const va = hexVertices(ax, ay, spacing);
+  const vb = hexVertices(bx, by, spacing);
+  const vkey = (p) => p.x + '|' + p.y;
+  const bset = new Map(vb.map((p) => [vkey(p), p]));
+  const shared = [];
+  for (const p of va) {
+    const m = bset.get(vkey(p));
+    if (m) shared.push(p);
+  }
+  return shared.length === 2 ? shared : null;
+}
+
+class HexMap {
+  constructor(opts) {
+    this.canvas = opts.canvas;
+    this.birdseye = opts.birdseye || null;
+    this.statusEl = opts.status || null;
+    this.terrain = opts.terrain;
+    this.elevation = opts.elevation || null; // 0..1 field, or null
+    this.rivers = opts.rivers || [];         // array of paths [{x,y},...]
+    this.tooltipEl = opts.tooltip || null;   // floating hover tooltip element
+    this.resourcePath = opts.resourcePath || 'resources/terrain';
+    this.typeface = opts.typeface || 'Calibri, sans-serif';
+    this.defaultScale = opts.defaultScale || 15; // vertical hexes shown
+
+    this.worldSize = {
+      x: this.terrain[0].length,
+      y: this.terrain.length
+    };
+
+    this.useTextures = false;
+    this.showCoords = false;
+    this.scaleFactor = 0;
+
+    this.ctx = this.canvas.getContext('2d');
+
+    // Offscreen full-map render buffer.
+    this.offscreen = null;
+    this.offCtx = null;
+    this.offscreenCellSize = 16;
+    this.offscreenCellSpacing = { x: 0, y: 0 };
+
+    // Loaded tile images + patterns.
+    this.tileImages = [];
+    this.tilePatterns = [];
+
+    // Viewport state (in hexes + pixels).
+    this.viewport = {
+      hSize: { x: 20, y: 20 },
+      hOrigin: { x: 0, y: 0 },
+      wSize: { x: 0, y: 0 },
+      wOrigin: { x: 0, y: 0 },
+      wCellSpacing: { x: 0, y: 0 }
+    };
+
+    this._bound = {};
+  }
+
+  // ---- lifecycle ----------------------------------------------------------
+
+  start() {
+    this._attachEvents();
+    // Draw now, and again shortly after, so we cover both "layout already
+    // done" and "layout settles a beat later" without relying solely on rAF
+    // (which can be throttled for background/hidden windows).
+    const render = () => {
+      this._resizeCanvasToContainer();
+      this.setSize(this.canvas.width, this.canvas.height, this.defaultScale);
+      this.centerViewport();
+      this._draw();
+      try {
+        this._buildOffscreen();
+        this._renderBirdseye();
+      } catch (e) {
+        console.error("[HexMap] birdseye build failed (map still shown):", e);
+      }
+    };
+    render();
+    setTimeout(render, 50);
+    setTimeout(render, 250);
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => requestAnimationFrame(render));
+    }
+    // Load textures in the background; re-render if user has them enabled.
+    this._loadTiles().then(() => {
+      if (this.useTextures) {
+        try { this._renderMapFull(); } catch (e) {}
+        this._draw();
+        try { this._renderBirdseye(); } catch (e) {}
+      }
+    });
+  }
+
+  destroy() {
+    this._detachEvents();
+  }
+
+  setTerrain(terrain) {
+    this.terrain = terrain;
+    this.worldSize = { x: terrain[0].length, y: terrain.length };
+    this._buildOffscreen();
+    this.setSize(this.canvas.width, this.canvas.height, this.defaultScale);
+    this.centerViewport();
+    this._draw();
+    this._renderBirdseye();
+  }
+
+  // ---- tile loading -------------------------------------------------------
+
+  _loadTiles() {
+    const promises = [];
+    for (let i = 0; i < TERRAIN_IMAGES.length; i++) {
+      const img = new Image();
+      const idx = i;
+      const p = new Promise((resolve) => {
+        img.onload = () => {
+          try {
+            this.tilePatterns[idx] = this.ctx.createPattern(img, 'repeat');
+          } catch (e) { /* ignore */ }
+          resolve();
+        };
+        img.onerror = () => resolve(); // don't block on a missing tile
+      });
+      img.src = `${this.resourcePath}/${TERRAIN_IMAGES[i]}`;
+      this.tileImages[i] = img;
+      promises.push(p);
+    }
+    return Promise.all(promises);
+  }
+
+  // ---- offscreen full-map render -----------------------------------------
+
+  _buildOffscreen() {
+    // The offscreen buffer now only feeds the small birdseye/minimap, so a
+    // modest budget is plenty and avoids giant-canvas GPU issues.
+    this.offscreenCellSize = Math.max(
+      2,
+      Math.round(2048 / Math.max(this.worldSize.x, this.worldSize.y))
+    );
+    this.offscreenCellSpacing = {
+      x: this.offscreenCellSize * HEX_SCALE.x,
+      y: this.offscreenCellSize
+    };
+
+    const w = Math.round((this.worldSize.x + 1 / 3) * this.offscreenCellSpacing.x * 0.75);
+    const h = Math.round((this.worldSize.y + 0.5) * this.offscreenCellSpacing.y);
+
+    this.offscreen = document.createElement('canvas');
+    this.offscreen.width = w;
+    this.offscreen.height = h;
+    this.offCtx = this.offscreen.getContext('2d');
+
+    this._renderMapFull();
+  }
+
+  // Render the entire map to the offscreen buffer at offscreen cell spacing.
+  _renderMapFull() {
+    const ctx = this.offCtx;
+    const spacing = this.offscreenCellSpacing;
+    ctx.save();
+    ctx.clearRect(0, 0, this.offscreen.width, this.offscreen.height);
+    // Shift so hex (0,0) center lands at (spacing/2).
+    const c0 = getHexCenter(0, 0, spacing);
+    ctx.translate(-c0.x + spacing.x / 2, -c0.y + spacing.y / 2);
+
+    for (let x = 0; x < this.worldSize.x; x++) {
+      for (let y = 0; y < this.worldSize.y; y++) {
+        const c = getHexCenter(x, y, spacing);
+        drawHexPath(ctx, c.x, c.y, spacing);
+        const type = this.terrain[y][x];
+        if (this.useTextures && this.tilePatterns[type]) {
+          ctx.fillStyle = this.tilePatterns[type];
+        } else {
+          ctx.fillStyle = TERRAIN_COLORS[type] || TERRAIN_COLORS[0];
+        }
+        ctx.fill();
+        ctx.strokeStyle = rgba(0.5, 0.5, 0.5, 1.0);
+        ctx.lineWidth = Math.max(1, Math.floor(spacing.y / 20));
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  // ---- viewport -----------------------------------------------------------
+
+  setSize(wPx, hPx, numHex) {
+    this.viewport.wSize = { x: wPx, y: hPx };
+    this.setScale(numHex);
+    this.setOrigin(this.viewport.hOrigin.x, this.viewport.hOrigin.y);
+  }
+
+  setScale(numHex) {
+    const vp = this.viewport;
+    // Clamp the requested vertical hex count into a sane range instead of
+    // bailing out (bailing left wCellSpacing at 0 and drew nothing).
+    numHex = Math.min(numHex, this.worldSize.y);
+    numHex = Math.max(4, Math.min(1000, numHex));
+    if (!vp.wSize.y || vp.wSize.y < 1) return; // no canvas size yet
+    const wCellSpacingY = Math.max(2, vp.wSize.y / (numHex + 0.5));
+
+    const centerHex = {
+      x: vp.hOrigin.x + vp.hSize.x / 2,
+      y: vp.hOrigin.y + vp.hSize.y / 2
+    };
+    vp.hSize = {
+      x: Math.round(numHex / 0.75 / HEX_SCALE.x * vp.wSize.x / vp.wSize.y) + 1,
+      y: numHex
+    };
+    vp.wCellSpacing = {
+      x: wCellSpacingY * HEX_SCALE.x,
+      y: wCellSpacingY
+    };
+    this.setOrigin(
+      Math.round(centerHex.x - vp.hSize.x / 2),
+      Math.round(centerHex.y - vp.hSize.y / 2)
+    );
+  }
+
+  setOrigin(x, y) {
+    const vp = this.viewport;
+    x = Math.floor(x);
+    y = Math.floor(y);
+    if (x > this.worldSize.x - vp.hSize.x + 1) x = this.worldSize.x - vp.hSize.x + 1;
+    if (y > this.worldSize.y - vp.hSize.y) y = this.worldSize.y - vp.hSize.y;
+    x = x - (x % 2);
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    vp.hOrigin = { x, y };
+
+    const origin = getHexCenter(0, 0, vp.wCellSpacing);
+    const offset = getHexCenter(x, y, vp.wCellSpacing);
+    vp.wOrigin = { x: offset.x - origin.x, y: offset.y - origin.y };
+  }
+
+  shiftOrigin(dx, dy) {
+    this.setOrigin(this.viewport.hOrigin.x + dx, this.viewport.hOrigin.y + dy);
+  }
+
+  centerViewport() {
+    const vp = this.viewport;
+    this.setOrigin(
+      (this.worldSize.x - vp.hSize.x) / 2,
+      (this.worldSize.y - vp.hSize.y) / 2
+    );
+  }
+
+  // ---- drawing the visible viewport --------------------------------------
+
+  _draw() {
+    const vp = this.viewport;
+    const ctx = this.ctx;
+    if (!vp.wCellSpacing.x || !vp.wCellSpacing.y) return;
+
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    const spacing = vp.wCellSpacing;
+    ctx.save();
+    // Translate so the top-left hex of the viewport maps to the canvas origin.
+    ctx.translate(-vp.wOrigin.x + spacing.x / 2, -vp.wOrigin.y + spacing.y / 2);
+    const c0 = getHexCenter(0, 0, spacing);
+    ctx.translate(-c0.x, -c0.y);
+
+    let x0 = Math.max(vp.hOrigin.x - 1, 0);
+    let y0 = Math.max(vp.hOrigin.y - 1, 0);
+    let xMax = Math.min(vp.hOrigin.x + vp.hSize.x + 1, this.worldSize.x);
+    let yMax = Math.min(vp.hOrigin.y + vp.hSize.y + 1, this.worldSize.y);
+
+    const lineW = Math.max(1, Math.floor(spacing.y / 20));
+    for (let x = x0; x < xMax; x++) {
+      for (let y = y0; y < yMax; y++) {
+        const c = getHexCenter(x, y, spacing);
+        drawHexPath(ctx, c.x, c.y, spacing);
+        const type = this.terrain[y][x];
+        if (this.useTextures && this.tilePatterns[type]) {
+          ctx.fillStyle = this.tilePatterns[type];
+        } else {
+          ctx.fillStyle = TERRAIN_COLORS[type] || TERRAIN_COLORS[0];
+        }
+        ctx.fill();
+        ctx.strokeStyle = rgba(0.5, 0.5, 0.5, 1.0);
+        ctx.lineWidth = lineW;
+        ctx.stroke();
+      }
+    }
+
+    this._drawRivers(ctx, spacing);
+
+    ctx.restore();
+  }
+
+  // Draw rivers as thick blue lines running along the borders between hexes.
+  // For each river path we connect the midpoints of the shared edges between
+  // consecutive cells (a shared edge's midpoint is the midpoint of the two
+  // cell centers), so the water sits on cell boundaries rather than centers.
+  _drawRivers(ctx, spacing) {
+    if (!this.rivers || !this.rivers.length) return;
+    const riverColor = TERRAIN_COLORS[10] || 'rgb(0,80,255)';
+    const width = Math.max(2, spacing.y / 6);
+
+    ctx.save();
+    ctx.strokeStyle = riverColor;
+    ctx.lineWidth = width;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    for (const path of this.rivers) {
+      const poly = this._riverPolyline(path, spacing);
+      if (!poly || poly.length < 2) continue;
+      ctx.beginPath();
+      ctx.moveTo(poly[0].x, poly[0].y);
+      for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Build a polyline that runs strictly along hex BORDERS (never crossing a
+  // cell interior). The river visits, in order, the shared edges between
+  // consecutive cells of the path; within each cell we route along that cell's
+  // perimeter (the shorter vertex arc) from its entry edge to its exit edge.
+  _riverPolyline(path, spacing) {
+    if (!path || path.length < 2) return null;
+
+    // The shared edges between consecutive cells, each as [v0, v1] vertices.
+    const edges = [];
+    for (let i = 0; i < path.length - 1; i++) {
+      const e = sharedEdge(path[i].x, path[i].y, path[i + 1].x, path[i + 1].y, spacing);
+      if (e) edges.push(e);
+    }
+    if (edges.length === 0) return null;
+
+    const vkey = (p) => p.x + '|' + p.y;
+    const pts = [];
+    const pushPt = (p) => {
+      if (!pts.length || vkey(pts[pts.length - 1]) !== vkey(p)) pts.push(p);
+    };
+
+    // Start at the endpoint of the first edge that is farther from the next
+    // edge, so we head "into" the path cleanly. Simpler: start at edge[0][0].
+    pushPt(edges[0][0]);
+    pushPt(edges[0][1]);
+
+    // For each subsequent edge, connect from the current last point to the
+    // nearest endpoint of that edge along cell path[i]'s perimeter. Because
+    // consecutive shared edges of a hex share a vertex OR are one vertex apart,
+    // routing to the nearest endpoint keeps the line on the border.
+    for (let i = 1; i < edges.length; i++) {
+      const prevPt = pts[pts.length - 1];
+      const [a, b] = edges[i];
+      // Choose ordering so we append the endpoint closest to prevPt first.
+      const da = dist2(prevPt, a);
+      const db = dist2(prevPt, b);
+      // Route along the shared cell's perimeter between prevPt and the chosen
+      // near endpoint, walking intermediate vertices of cell path[i].
+      const cell = path[i];
+      const near = da <= db ? a : b;
+      const far = da <= db ? b : a;
+      this._appendPerimeterArc(pts, prevPt, near, cell, spacing, pushPt);
+      pushPt(near);
+      pushPt(far);
+    }
+    return pts;
+  }
+
+  // Walk along cell `cell`'s perimeter from vertex `from` to vertex `to`,
+  // appending intermediate corner vertices (exclusive of endpoints) via the
+  // shorter direction. Keeps the river exactly on the hex border.
+  _appendPerimeterArc(pts, from, to, cell, spacing, pushPt) {
+    const verts = hexVertices(cell.x, cell.y, spacing);
+    const vkey = (p) => p.x + '|' + p.y;
+    const fi = verts.findIndex((v) => vkey(v) === vkey(from));
+    const ti = verts.findIndex((v) => vkey(v) === vkey(to));
+    if (fi === -1 || ti === -1) return; // not both on this cell; skip arc
+    // Two directions around the 6-vertex ring; choose the shorter.
+    const fwd = (ti - fi + 6) % 6;
+    const bwd = (fi - ti + 6) % 6;
+    if (fwd <= bwd) {
+      for (let k = 1; k < fwd; k++) pushPt(verts[(fi + k) % 6]);
+    } else {
+      for (let k = 1; k < bwd; k++) pushPt(verts[(fi - k + 6) % 6]);
+    }
+  }
+
+  _renderBirdseye() {
+    if (!this.birdseye || !this.offscreen) return;
+    const bctx = this.birdseye.getContext('2d');
+    const bw = this.birdseye.width;
+    const bh = this.birdseye.height;
+    bctx.clearRect(0, 0, bw, bh);
+    // Fit the whole offscreen map into the birdseye canvas (letterboxed).
+    const mapAspect = this.offscreen.width / this.offscreen.height;
+    const boxAspect = bw / bh;
+    let dw, dh, dx, dy;
+    if (mapAspect > boxAspect) {
+      dw = bw; dh = bw / mapAspect; dx = 0; dy = (bh - dh) / 2;
+    } else {
+      dh = bh; dw = bh * mapAspect; dy = 0; dx = (bw - dw) / 2;
+    }
+    this._birdseyeRect = { dx, dy, dw, dh };
+    bctx.drawImage(this.offscreen, 0, 0, this.offscreen.width, this.offscreen.height, dx, dy, dw, dh);
+
+    // Viewport rectangle overlay (fraction of the world currently shown).
+    const vp = this.viewport;
+    const fx = vp.hOrigin.x / this.worldSize.x;
+    const fy = vp.hOrigin.y / this.worldSize.y;
+    const fw = Math.min(1, vp.hSize.x / this.worldSize.x);
+    const fh = Math.min(1, vp.hSize.y / this.worldSize.y);
+    bctx.strokeStyle = 'red';
+    bctx.lineWidth = 1;
+    bctx.strokeRect(dx + fx * dw, dy + fy * dh, fw * dw, fh * dh);
+  }
+
+  // ---- events -------------------------------------------------------------
+
+  _attachEvents() {
+    this._bound.key = (e) => this._onKey(e);
+    this._bound.move = (e) => this._onMouseMove(e);
+    this._bound.leave = () => this._hideTooltip();
+    this._bound.wheel = (e) => this._onWheel(e);
+    this._bound.birdseyeClick = (e) => this._onBirdseyeClick(e);
+    this._bound.resize = () => this._onResize();
+
+    document.addEventListener('keydown', this._bound.key);
+    this.canvas.addEventListener('mousemove', this._bound.move);
+    this.canvas.addEventListener('mouseleave', this._bound.leave);
+    this.canvas.addEventListener('wheel', this._bound.wheel, { passive: false });
+    if (this.birdseye) this.birdseye.addEventListener('click', this._bound.birdseyeClick);
+    window.addEventListener('resize', this._bound.resize);
+  }
+
+  _detachEvents() {
+    document.removeEventListener('keydown', this._bound.key);
+    this.canvas.removeEventListener('mousemove', this._bound.move);
+    this.canvas.removeEventListener('mouseleave', this._bound.leave);
+    this.canvas.removeEventListener('wheel', this._bound.wheel);
+    if (this.birdseye) this.birdseye.removeEventListener('click', this._bound.birdseyeClick);
+    window.removeEventListener('resize', this._bound.resize);
+    this._hideTooltip();
+  }
+
+  _resizeCanvasToContainer() {
+    const parent = this.canvas.parentElement;
+    // Prefer the canvas' own rendered box (absolute-positioned to fill the
+    // frame); fall back to the parent's client box.
+    let w = this.canvas.clientWidth;
+    let h = this.canvas.clientHeight;
+    if ((!w || !h) && parent) {
+      w = parent.clientWidth;
+      h = parent.clientHeight;
+    }
+    w = Math.max(100, Math.floor(w || 0));
+    h = Math.max(100, Math.floor(h || 0));
+    // Match backing store to displayed size (1:1) so drawings aren't scaled
+    // away to nothing by a size mismatch.
+    this.canvas.width = w;
+    this.canvas.height = h;
+  }
+
+  _onResize() {
+    this._resizeCanvasToContainer();
+    // Re-fit the viewport to the new pixel size, preserving zoom level.
+    const numHex = Math.max(4, Math.round(this.defaultScale / Math.pow(1.5, this.scaleFactor)));
+    this.setSize(this.canvas.width, this.canvas.height, numHex);
+    this._draw();
+    this._renderBirdseye();
+  }
+
+  _onKey(e) {
+    const code = e.keyCode;
+    const shift = e.shiftKey;
+    const vp = this.viewport;
+    let handled = true;
+    switch (code) {
+      case 73: case 38: // I / up
+        shift ? this.shiftOrigin(0, -vp.hSize.y) : this.shiftOrigin(0, -2); break;
+      case 74: case 37: // J / left
+        shift ? this.shiftOrigin(-vp.hSize.x, 0) : this.shiftOrigin(-2, 0); break;
+      case 75: case 40: // K / down
+        shift ? this.shiftOrigin(0, vp.hSize.y) : this.shiftOrigin(0, 2); break;
+      case 76: case 39: // L / right
+        shift ? this.shiftOrigin(vp.hSize.x, 0) : this.shiftOrigin(2, 0); break;
+      case 84: // T toggle textures
+        this.useTextures = !this.useTextures;
+        this._renderMapFull();
+        break;
+      case 187: case 61: case 107: case 43: // + zoom in
+        this.scaleFactor = Math.min(4, this.scaleFactor + 1);
+        this.setScale(Math.max(4, Math.round(this.defaultScale / Math.pow(1.5, this.scaleFactor))));
+        break;
+      case 189: case 173: case 109: case 45: // - zoom out
+        this.scaleFactor = Math.max(-5, this.scaleFactor - 1);
+        this.setScale(Math.max(4, Math.round(this.defaultScale / Math.pow(1.5, this.scaleFactor))));
+        break;
+      case 32: // space center
+        this.centerViewport(); break;
+      default:
+        handled = false;
+    }
+    if (handled) {
+      e.preventDefault();
+      this._draw();
+      this._renderBirdseye();
+    }
+  }
+
+  _relCoords(el, e) {
+    const rect = el.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  _onMouseMove(e) {
+    const hex = this._hexFromCanvas(e);
+    const off = (hex.x < 0 || hex.y < 0 || hex.x >= this.worldSize.x || hex.y >= this.worldSize.y);
+
+    if (off) {
+      if (this.statusEl) this.statusEl.textContent = 'Location: —  Terrain: —';
+      this._hideTooltip();
+      return;
+    }
+
+    const name = TERRAIN_NAMES[this.terrain[hex.y][hex.x]] || 'unknown';
+    // Elevation is stored normalized 0..1; display in meters where 1.0 = 10,000 m.
+    const elevText = this.elevation
+      ? Math.round(this.elevation[hex.y][hex.x] * 10000).toLocaleString() + ' m'
+      : 'n/a';
+
+    if (this.statusEl) {
+      this.statusEl.textContent =
+        `Location: ${hex.x},${hex.y}  Terrain: ${name}  Elevation: ${elevText}`;
+    }
+
+    // Floating tooltip near the cursor.
+    if (this.tooltipEl) {
+      this.tooltipEl.innerHTML =
+        `(${hex.x}, ${hex.y})<br>${name}<br>elev ${elevText}`;
+      this.tooltipEl.style.display = 'block';
+      // Position relative to the page; offset a little from the cursor.
+      const pad = 14;
+      let left = e.clientX + pad;
+      let top = e.clientY + pad;
+      const tw = this.tooltipEl.offsetWidth;
+      const th = this.tooltipEl.offsetHeight;
+      if (typeof window !== 'undefined') {
+        if (left + tw > window.innerWidth) left = e.clientX - tw - pad;
+        if (top + th > window.innerHeight) top = e.clientY - th - pad;
+      }
+      this.tooltipEl.style.left = left + 'px';
+      this.tooltipEl.style.top = top + 'px';
+    }
+  }
+
+  _hideTooltip() {
+    if (this.tooltipEl) this.tooltipEl.style.display = 'none';
+  }
+
+  // Mouse wheel / trackpad: pan the map left-right (deltaX) and up-down
+  // (deltaY). We accumulate pixel deltas and convert to whole-hex shifts once
+  // they exceed one cell, so panning feels smooth on both wheels and trackpads.
+  _onWheel(e) {
+    e.preventDefault();
+    const vp = this.viewport;
+    if (!vp.wCellSpacing.x || !vp.wCellSpacing.y) return;
+
+    this._wheelAccX = (this._wheelAccX || 0) + e.deltaX;
+    this._wheelAccY = (this._wheelAccY || 0) + e.deltaY;
+
+    // One hex column ~ 0.75 * cellSpacing.x apart; one row ~ cellSpacing.y.
+    const stepX = vp.wCellSpacing.x * 0.75;
+    const stepY = vp.wCellSpacing.y;
+
+    let dHexX = 0, dHexY = 0;
+    while (this._wheelAccX >= stepX) { dHexX += 1; this._wheelAccX -= stepX; }
+    while (this._wheelAccX <= -stepX) { dHexX -= 1; this._wheelAccX += stepX; }
+    while (this._wheelAccY >= stepY) { dHexY += 1; this._wheelAccY -= stepY; }
+    while (this._wheelAccY <= -stepY) { dHexY -= 1; this._wheelAccY += stepY; }
+
+    if (dHexX !== 0 || dHexY !== 0) {
+      // Columns must move in steps of 2 to preserve the odd/even offset.
+      this.shiftOrigin(dHexX * 2, dHexY);
+      this._draw();
+      this._renderBirdseye();
+    }
+  }
+
+  _hexFromCanvas(e) {
+    const vp = this.viewport;
+    const c = this._relCoords(this.canvas, e);
+    const x = vp.hOrigin.x + Math.floor(c.x / vp.wCellSpacing.x / 0.75);
+    const y = vp.hOrigin.y + Math.floor(c.y / vp.wCellSpacing.y - (x % 2) / 2);
+    return { x, y };
+  }
+
+  _onBirdseyeClick(e) {
+    if (!this._birdseyeRect) return;
+    const c = this._relCoords(this.birdseye, e);
+    const { dx, dy, dw, dh } = this._birdseyeRect;
+    const fx = (c.x - dx) / dw;
+    const fy = (c.y - dy) / dh;
+    if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return;
+    const vp = this.viewport;
+    const x = Math.round(fx * this.worldSize.x - vp.hSize.x / 2);
+    const y = Math.round(fy * this.worldSize.y - vp.hSize.y / 2);
+    this.setOrigin(x, y);
+    this._draw();
+    this._renderBirdseye();
+  }
+}
+
+module.exports = { HexMap, TERRAIN_COLORS, TERRAIN_NAMES, TERRAIN_IMAGES };

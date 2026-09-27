@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Settings</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, sans-serif;
+      background: #f5f5f5;
+      color: #1e1e1e;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 100vh;
+    }
+    body.dark { background: #1e1e1e; color: #e0e0e0; }
+    h1 { font-size: 16px; font-weight: 600; }
+    .section-title {
+      font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 0.5px;
+      margin-top: 8px; padding-top: 10px; border-top: 1px solid #ddd;
+    }
+    body.dark .section-title { color: #777; border-top-color: #3a3a3c; }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    label { font-size: 14px; color: #666; }
+    body.dark label { color: #aaa; }
+    select, input {
+      width: 100%;
+      background: #fff;
+      color: #1e1e1e;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 14px;
+      outline: none;
+    }
+    body.dark select, body.dark input { background: #3a3a3c; color: #e0e0e0; border-color: #555; }
+    select:focus, input:focus { border-color: #0a84ff; }
+    .row { display: flex; gap: 10px; justify-content: flex-end; margin-top: auto; padding-top: 12px; }
+    button { padding: 8px 20px; border-radius: 8px; border: none; font-size: 14px; cursor: pointer; }
+    #cancel-btn { background: #ddd; color: #1e1e1e; }
+    body.dark #cancel-btn { background: #3a3a3c; color: #e0e0e0; }
+    #save-btn { background: #0a84ff; color: #fff; }
+    .api-key-link { font-size: 13px; color: #0a84ff; text-decoration: none; margin-top: 4px; display: inline-block; }
+    body.dark .api-key-link { color: #4da3ff; }
+    .api-key-link:hover { text-decoration: underline; }
+    .field + .field { margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Settings</h1>
+
+  <div class="field">
+    <label for="theme">Theme</label>
+    <select id="theme">
+      <option value="light">Light</option>
+      <option value="dark">Dark</option>
+    </select>
+  </div>
+
+  <div class="section-title">AI Assistant</div>
+  <div class="field">
+    <label>Vendor</label>
+    <select id="vendor"></select>
+  </div>
+  <div class="field">
+    <label>Model</label>
+    <select id="model"></select>
+  </div>
+
+  <!-- Standard single API-key vendors -->
+  <div class="field" id="api-key-section">
+    <label>API Key</label>
+    <input id="apiKey" type="password" placeholder="Enter API key…">
+    <a id="api-key-link" class="api-key-link" href="#" target="_blank">Get API key…</a>
+  </div>
+
+  <!-- Microsoft / Azure -->
+  <div id="microsoft-section" style="display:none;">
+    <div class="field"><label>API Key</label><input id="microsoft-api-key" type="password" placeholder="Enter Azure OpenAI API key…"></div>
+    <div class="field"><label>Endpoint URL</label><input id="microsoft-endpoint" type="text" placeholder="https://your-resource.openai.azure.com"></div>
+    <a id="microsoft-key-link" class="api-key-link" href="#" target="_blank">Get Azure OpenAI credentials…</a>
+  </div>
+
+  <!-- Amazon -->
+  <div id="amazon-section" style="display:none;">
+    <div class="field"><label>AWS Access Key ID</label><input id="amazon-access-key" type="password" placeholder="Enter AWS Access Key ID…"></div>
+    <div class="field"><label>AWS Secret Access Key</label><input id="amazon-secret-key" type="password" placeholder="Enter AWS Secret Access Key…"></div>
+    <div class="field"><label>AWS Region</label><input id="amazon-region" type="text" placeholder="us-east-1"></div>
+    <a id="amazon-key-link" class="api-key-link" href="#" target="_blank">Get AWS credentials…</a>
+  </div>
+
+  <!-- IBM -->
+  <div id="ibm-section" style="display:none;">
+    <div class="field"><label>IBM Cloud API Key</label><input id="ibm-api-key" type="password" placeholder="Enter IBM Cloud API key…"></div>
+    <div class="field"><label>Endpoint URL</label><input id="ibm-endpoint" type="text" placeholder="https://us-south.ml.cloud.ibm.com"></div>
+    <div class="field"><label>Project ID</label><input id="ibm-project-id" type="text" placeholder="Enter project ID…"></div>
+    <a id="ibm-key-link" class="api-key-link" href="#" target="_blank">Get IBM Cloud API key…</a>
+  </div>
+
+  <!-- Generic (OpenAI-compatible) -->
+  <div id="generic-section" style="display:none;">
+    <div class="field"><label>API Key</label><input id="generic-api-key" type="password" placeholder="Enter API key…"></div>
+    <div class="field"><label>Endpoint URL</label><input id="generic-endpoint" type="text" placeholder="https://api.example.com/v1"></div>
+  </div>
+
+  <!-- Generic (YAML) -->
+  <div id="generic-yaml-section" style="display:none;">
+    <div class="field"><label>API Key / Token</label><input id="generic-yaml-api-key" type="password" placeholder="Enter API key or token…"></div>
+  </div>
+
+  <div class="row">
+    <button id="cancel-btn">Cancel</button>
+    <button id="save-btn">Save</button>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require("electron");
+
+    const themeSel = document.getElementById("theme");
+    const vendorSel = document.getElementById("vendor");
+    const modelSel = document.getElementById("model");
+    const apiKeyIn = document.getElementById("apiKey");
+    const apiKeyLink = document.getElementById("api-key-link");
+
+    let vendors, current;
+
+    function credentialSections() {
+      return ["api-key-section","microsoft-section","amazon-section","ibm-section","generic-section","generic-yaml-section"];
+    }
+
+    function updateVendorUI(vendor) {
+      credentialSections().forEach((id) => { document.getElementById(id).style.display = "none"; });
+      if (vendor === "amazon") {
+        document.getElementById("amazon-section").style.display = "";
+        document.getElementById("amazon-access-key").value = current.apiKeys.amazonAccessKey || "";
+        document.getElementById("amazon-secret-key").value = current.apiKeys.amazonSecretKey || "";
+        document.getElementById("amazon-region").value = current.apiKeys.amazonRegion || "us-east-1";
+        document.getElementById("amazon-key-link").href = vendors[vendor].apiKeyUrl || "#";
+      } else if (vendor === "microsoft") {
+        document.getElementById("microsoft-section").style.display = "";
+        document.getElementById("microsoft-api-key").value = current.apiKeys.microsoftApiKey || "";
+        document.getElementById("microsoft-endpoint").value = current.apiKeys.microsoftEndpoint || "";
+        document.getElementById("microsoft-key-link").href = vendors[vendor].apiKeyUrl || "#";
+      } else if (vendor === "ibm") {
+        document.getElementById("ibm-section").style.display = "";
+        document.getElementById("ibm-api-key").value = current.apiKeys.ibmApiKey || "";
+        document.getElementById("ibm-endpoint").value = current.apiKeys.ibmEndpoint || "";
+        document.getElementById("ibm-project-id").value = current.apiKeys.ibmProjectId || "";
+        document.getElementById("ibm-key-link").href = vendors[vendor].apiKeyUrl || "#";
+      } else if (vendor === "generic") {
+        document.getElementById("generic-yaml-section").style.display = "";
+        document.getElementById("generic-yaml-api-key").value = current.apiKeys.genericYamlApiKey || "";
+      } else if (vendor.startsWith("generic")) {
+        document.getElementById("generic-section").style.display = "";
+        document.getElementById("generic-api-key").value = current.apiKeys[vendor + "ApiKey"] || "";
+        document.getElementById("generic-endpoint").value = current.apiKeys[vendor + "Endpoint"] || "";
+      } else {
+        document.getElementById("api-key-section").style.display = "";
+        apiKeyIn.value = current.apiKeys[vendor] || "";
+        apiKeyLink.href = vendors[vendor].apiKeyUrl || "#";
+      }
+    }
+
+    // Populate the model dropdown. For a minimal app this resolves to the
+    // bundled static list from ai-vendors.json via the main process.
+    async function populateModels(vendor, savedModel) {
+      modelSel.innerHTML = "<option disabled>Loading…</option>";
+      let models = null;
+      try {
+        models = await ipcRenderer.invoke("get-models-for-vendor", vendor);
+      } catch { /* fall through */ }
+      if (!models || models.length === 0) models = (vendors[vendor] && vendors[vendor].models) || [];
+      modelSel.innerHTML = "";
+      const empty = document.createElement("option");
+      empty.value = ""; empty.textContent = models.length ? "Select a model…" : "(no models — enter credentials)";
+      modelSel.appendChild(empty);
+      [...models].sort((a, b) => a.localeCompare(b)).forEach((m) => {
+        const opt = document.createElement("option");
+        opt.value = m; opt.textContent = m;
+        modelSel.appendChild(opt);
+      });
+      modelSel.value = savedModel && models.includes(savedModel) ? savedModel : "";
+    }
+
+    function persistCurrentVendorCredentials(vendor) {
+      if (vendor === "amazon") {
+        current.apiKeys.amazonAccessKey = document.getElementById("amazon-access-key").value;
+        current.apiKeys.amazonSecretKey = document.getElementById("amazon-secret-key").value;
+        current.apiKeys.amazonRegion = document.getElementById("amazon-region").value || "us-east-1";
+      } else if (vendor === "microsoft") {
+        current.apiKeys.microsoftApiKey = document.getElementById("microsoft-api-key").value;
+        current.apiKeys.microsoftEndpoint = document.getElementById("microsoft-endpoint").value;
+      } else if (vendor === "ibm") {
+        current.apiKeys.ibmApiKey = document.getElementById("ibm-api-key").value;
+        current.apiKeys.ibmEndpoint = document.getElementById("ibm-endpoint").value;
+        current.apiKeys.ibmProjectId = document.getElementById("ibm-project-id").value;
+      } else if (vendor === "generic") {
+        current.apiKeys.genericYamlApiKey = document.getElementById("generic-yaml-api-key").value;
+      } else if (vendor.startsWith("generic")) {
+        current.apiKeys[vendor + "ApiKey"] = document.getElementById("generic-api-key").value;
+        current.apiKeys[vendor + "Endpoint"] = document.getElementById("generic-endpoint").value;
+      } else {
+        current.apiKeys[vendor] = apiKeyIn.value;
+      }
+    }
+
+    ipcRenderer.invoke("settings-get-data").then(async ({ settings, VENDORS }) => {
+      vendors = VENDORS;
+      current = settings;
+      if (!current.apiKeys) current.apiKeys = {};
+      if (!current.defaultModels) current.defaultModels = {};
+
+      themeSel.value = current.theme || "dark";
+      if (themeSel.value === "dark") document.body.classList.add("dark");
+
+      // Vendor dropdown (sorted by label).
+      for (const [key, v] of Object.entries(vendors).sort((a, b) => a[1].label.localeCompare(b[1].label))) {
+        const opt = document.createElement("option");
+        opt.value = key; opt.textContent = v.label;
+        vendorSel.appendChild(opt);
+      }
+      vendorSel.value = current.vendor || "openai";
+      if (!vendors[vendorSel.value]) vendorSel.value = Object.keys(vendors)[0];
+      vendorSel.dataset.prev = vendorSel.value;
+      updateVendorUI(vendorSel.value);
+      await populateModels(vendorSel.value, current.defaultModels[vendorSel.value] || current.model);
+    });
+
+    themeSel.addEventListener("change", () => {
+      document.body.classList.toggle("dark", themeSel.value === "dark");
+    });
+
+    vendorSel.addEventListener("change", async () => {
+      const prev = vendorSel.dataset.prev;
+      current.defaultModels[prev] = modelSel.value;
+      persistCurrentVendorCredentials(prev);
+      updateVendorUI(vendorSel.value);
+      vendorSel.dataset.prev = vendorSel.value;
+      await populateModels(vendorSel.value, current.defaultModels[vendorSel.value]);
+    });
+    modelSel.addEventListener("change", () => {
+      current.defaultModels[vendorSel.value] = modelSel.value;
+    });
+
+    apiKeyIn.addEventListener("input", () => { current.apiKeys[vendorSel.value] = apiKeyIn.value; });
+    document.getElementById("microsoft-api-key").addEventListener("input", () => { current.apiKeys.microsoftApiKey = document.getElementById("microsoft-api-key").value; });
+    document.getElementById("microsoft-endpoint").addEventListener("input", () => { current.apiKeys.microsoftEndpoint = document.getElementById("microsoft-endpoint").value; });
+    document.getElementById("ibm-api-key").addEventListener("input", () => { current.apiKeys.ibmApiKey = document.getElementById("ibm-api-key").value; });
+    document.getElementById("ibm-endpoint").addEventListener("input", () => { current.apiKeys.ibmEndpoint = document.getElementById("ibm-endpoint").value; });
+    document.getElementById("ibm-project-id").addEventListener("input", () => { current.apiKeys.ibmProjectId = document.getElementById("ibm-project-id").value; });
+    document.getElementById("amazon-access-key").addEventListener("input", () => { current.apiKeys.amazonAccessKey = document.getElementById("amazon-access-key").value; });
+    document.getElementById("amazon-secret-key").addEventListener("input", () => { current.apiKeys.amazonSecretKey = document.getElementById("amazon-secret-key").value; });
+    document.getElementById("amazon-region").addEventListener("input", () => { current.apiKeys.amazonRegion = document.getElementById("amazon-region").value; });
+    document.getElementById("generic-api-key").addEventListener("input", () => { current.apiKeys[vendorSel.value + "ApiKey"] = document.getElementById("generic-api-key").value; });
+    document.getElementById("generic-endpoint").addEventListener("input", () => { current.apiKeys[vendorSel.value + "Endpoint"] = document.getElementById("generic-endpoint").value; });
+    document.getElementById("generic-yaml-api-key").addEventListener("input", () => { current.apiKeys.genericYamlApiKey = document.getElementById("generic-yaml-api-key").value; });
+
+    apiKeyLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (apiKeyLink.href && apiKeyLink.href !== "#") ipcRenderer.invoke("open-external", apiKeyLink.href);
+    });
+    ["microsoft-key-link","amazon-key-link","ibm-key-link"].forEach((id) => {
+      document.getElementById(id).addEventListener("click", (e) => {
+        e.preventDefault();
+        const href = document.getElementById(id).href;
+        if (href && href !== "#") ipcRenderer.invoke("open-external", href);
+      });
+    });
+
+    document.getElementById("save-btn").addEventListener("click", () => {
+      persistCurrentVendorCredentials(vendorSel.value);
+      current.defaultModels[vendorSel.value] = modelSel.value;
+      ipcRenderer.invoke("settings-save", {
+        theme: themeSel.value,
+        vendor: vendorSel.value,
+        model: modelSel.value,
+        apiKeys: current.apiKeys,
+        defaultModels: current.defaultModels,
+      });
+    });
+
+    document.getElementById("cancel-btn").addEventListener("click", () => ipcRenderer.invoke("settings-close"));
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") ipcRenderer.invoke("settings-close");
+    });
+  </script>
+</body>
+</html>

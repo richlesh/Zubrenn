@@ -1,0 +1,76 @@
+{
+  "name": "zubrenn",
+  "productName": "Zubrenn",
+  "version": "1.0.0",
+  "description": "Zubrenn - Electron app",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:mac:x64": "electron-builder --mac   --x64",
+    "dist:mac:arm64": "electron-builder --mac   --arm64",
+    "dist:win:x64": "electron-builder --win   --x64",
+    "dist:win:arm64": "electron-builder --win   --arm64",
+    "dist:linux:x64": "electron-builder --linux --x64",
+    "dist:linux:arm64": "electron-builder --linux --arm64",
+    "dist:all": "npm run dist:mac:x64 && npm run dist:mac:arm64 && npm run dist:win:x64 && npm run dist:win:arm64 && npm run dist:linux:x64 && npm run dist:linux:arm64"
+  },
+  "build": {
+    "appId": "com.richardlesh.zubrenn",
+    "productName": "Zubrenn",
+    "icon": "src/resources/app_icon",
+    "artifactName": "Zubrenn-${version}-${arch}.${ext}",
+    "files": [
+      "src/**/*",
+      "*.js",
+      "*.json",
+      "node_modules/**"
+    ],
+    "mac": {
+      "category": "public.app-category.games",
+      "target": "dmg",
+      "identity": "RICHARD A LESH (MMZ3Y97NTP)",
+      "notarize": true,
+      "entitlements": "entitlements.plist",
+      "entitlementsInherit": "entitlements.plist"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "icon": "src/resources/app_icon_256.png",
+      "category": "Game",
+      "target": [
+        {
+          "target": "deb",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "rpm",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    }
+  },
+  "keywords": [],
+  "homepage": "https://glowingcat.com/Zubrenn.html",
+  "author": {
+    "name": "Richard Lesh",
+    "email": "richlesh@github.com"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1"
+  },
+  "dependencies": {},
+  "allowScripts": {
+    "electron@41.10.7": true
+  }
+}

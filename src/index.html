@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Zubrenn</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Welcome screen shown until a map is generated. -->
+  <main id="welcome">
+    <h1>Zubrenn</h1>
+    <p>Explore the continent. Build your cities. Battle for resources.</p>
+    <p class="hint">Choose <strong>File &rsaquo; New Game…</strong> to generate a world.</p>
+    <p class="hint">Open <strong>Zubrenn &rsaquo; Settings…</strong> to configure your AI assistant.</p>
+  </main>
+
+  <!-- Game view: left = hex map (fills window), right = minimap + instructions. -->
+  <div id="game" class="no-select" hidden>
+    <div id="left_panel">
+      <div id="hexboard_frame">
+        <canvas id="hexboard" width="800" height="500"></canvas>
+      </div>
+      <div id="status">Location: —  Terrain: —</div>
+    </div>
+    <div id="right_panel">
+      <canvas id="birdseye" width="180" height="200"></canvas>
+      <div id="instructions">
+        <ul>
+          <li>Use <b>i,j,k,l</b> to navigate by 2 hexes</li>
+          <li>Use <b>Shift+I,J,K,L</b> to navigate by 1 screen</li>
+          <li>Arrow keys also pan the map</li>
+          <li>Use <b>t</b> to toggle textured terrain</li>
+          <li>Use <b>spacebar</b> to center</li>
+          <li>Use <b>+,-</b> to zoom</li>
+          <li>Click the minimap to jump the view</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating hover tooltip: coordinates, terrain, elevation. -->
+  <div id="tooltip"></div>
+
+  <script>
+    const { ipcRenderer } = require("electron");
+
+    // Load the hex renderer. Resolve by absolute path first for robustness.
+    let HexMap = null;
+    (function loadHexMap() {
+      const candidates = [];
+      try {
+        const path = require("path");
+        candidates.push(path.join(__dirname, "draw_map.cjs"));
+      } catch (e) {}
+      candidates.push("./draw_map.cjs");
+      for (const c of candidates) {
+        try { HexMap = require(c).HexMap; if (HexMap) break; } catch (e) {}
+      }
+      if (!HexMap) console.error("[index] could not load draw_map.cjs");
+    })();
+
+    // Apply saved theme.
+    function applyTheme(settings) {
+      document.body.classList.toggle("dark", (settings.theme || "dark") === "dark");
+    }
+    ipcRenderer.invoke("settings-get").then(applyTheme).catch(() => {});
+    ipcRenderer.on("settings-updated", () =>
+      ipcRenderer.invoke("settings-get").then(applyTheme).catch(() => {}));
+
+    let hexMap = null;
+    // Current game state held in the renderer. Extend this as tile
+    // improvements and pieces are added; saves will include them automatically.
+    let gameState = { map: null, improvements: [], pieces: [] };
+
+    // Exposed for the main process (Save Game) to read the current state.
+    window.getGameState = function () {
+      if (!gameState.map || !gameState.map.terrain) return null;
+      return {
+        map: gameState.map,
+        improvements: gameState.improvements || [],
+        pieces: gameState.pieces || []
+      };
+    };
+
+    // Render a terrain map and switch to the game view.
+    function showMap(map, extra) {
+      const terrain = map && map.terrain;
+      if (!terrain || !terrain.length) {
+        console.error("[index] showMap: no terrain data");
+        return;
+      }
+      gameState = {
+        map: {
+          meta: map.meta || null,
+          terrain: terrain,
+          elevation: map.elevation || null,
+          rivers: map.rivers || []
+        },
+        improvements: (extra && extra.improvements) || [],
+        pieces: (extra && extra.pieces) || []
+      };
+
+      document.getElementById("welcome").hidden = true;
+      document.getElementById("game").hidden = false;
+
+      if (!HexMap) {
+        document.getElementById("status").textContent =
+          "Renderer error: map module failed to load (see console).";
+        return;
+      }
+
+      const canvas = document.getElementById("hexboard");
+      const birdseye = document.getElementById("birdseye");
+      const status = document.getElementById("status");
+      const tooltip = document.getElementById("tooltip");
+
+      if (hexMap) { try { hexMap.destroy(); } catch (e) {} }
+      hexMap = new HexMap({
+        canvas,
+        birdseye,
+        status,
+        tooltip,
+        terrain,
+        elevation: map.elevation || null,
+        rivers: map.rivers || [],
+        resourcePath: "resources/terrain"
+      });
+      hexMap.start();
+    }
+
+    // New Game: main sends the generated map ({ terrain, elevation, rivers, meta }).
+    ipcRenderer.on("new-map", (_e, result) => {
+      try {
+        showMap(result, null);
+      } catch (err) {
+        console.error("[index] failed to render new map:", err && err.stack || err);
+      }
+    });
+
+    // Load Game: main sends { meta, terrain, elevation, rivers, improvements, pieces }.
+    ipcRenderer.on("load-game", (_e, payload) => {
+      try {
+        showMap(
+          {
+            meta: payload.meta,
+            terrain: payload.terrain,
+            elevation: payload.elevation || null,
+            rivers: payload.rivers || []
+          },
+          { improvements: payload.improvements, pieces: payload.pieces }
+        );
+      } catch (err) {
+        console.error("[index] failed to load game:", err && err.stack || err);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>New Game</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, sans-serif;
+      background: #f5f5f5;
+      color: #1e1e1e;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 100vh;
+    }
+    body.dark { background: #1e1e1e; color: #e0e0e0; }
+    h1 { font-size: 16px; font-weight: 600; }
+    .section-title {
+      font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 0.5px;
+      margin-top: 4px; padding-top: 8px; border-top: 1px solid #ddd;
+    }
+    body.dark .section-title { color: #777; border-top-color: #3a3a3c; }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    label { font-size: 13px; color: #666; }
+    body.dark label { color: #aaa; }
+    .rangeval { font-size: 12px; color: #0a84ff; font-variant-numeric: tabular-nums; }
+    select, input[type="number"], input[type="text"] {
+      width: 100%;
+      background: #fff;
+      color: #1e1e1e;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 7px 10px;
+      font-size: 14px;
+      outline: none;
+    }
+    input[type="range"] { width: 100%; }
+    body.dark select, body.dark input[type="number"], body.dark input[type="text"] {
+      background: #3a3a3c; color: #e0e0e0; border-color: #555;
+    }
+    select:focus, input:focus { border-color: #0a84ff; }
+    .checkrow { display: flex; align-items: center; gap: 8px; }
+    .checkrow input { width: auto; }
+    .row { display: flex; gap: 10px; justify-content: flex-end; margin-top: auto; padding-top: 14px; }
+    button { padding: 8px 20px; border-radius: 8px; border: none; font-size: 14px; cursor: pointer; }
+    #cancel-btn { background: #ddd; color: #1e1e1e; }
+    body.dark #cancel-btn { background: #3a3a3c; color: #e0e0e0; }
+    #create-btn { background: #0a84ff; color: #fff; }
+    .hint { font-size: 11px; color: #999; }
+    body.dark .hint { color: #777; }
+    .labelrow { display: flex; justify-content: space-between; align-items: baseline; }
+  </style>
+</head>
+<body>
+  <h1>New Game</h1>
+
+  <div class="section-title">Map Size</div>
+  <div class="grid2">
+    <div class="field">
+      <label for="width">Width (hexes)</label>
+      <input id="width" type="number" min="8" max="1000" step="1" value="120">
+    </div>
+    <div class="field">
+      <label for="height">Height (hexes)</label>
+      <input id="height" type="number" min="8" max="1000" step="1" value="80">
+    </div>
+  </div>
+
+  <div class="section-title">Generation</div>
+  <div class="grid2">
+    <div class="field">
+      <label for="algo">Algorithm</label>
+      <select id="algo">
+        <option value="diamond">Diamond-Square</option>
+        <option value="fbm">Fractal Brownian (fBm)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="seed">Seed (blank = random)</label>
+      <input id="seed" type="text" placeholder="random" value="">
+    </div>
+  </div>
+
+  <div class="field">
+    <div class="labelrow"><label for="water">Water fraction</label><span class="rangeval" id="water-val">0.35</span></div>
+    <input id="water" type="range" min="0" max="1" step="0.01" value="0.35">
+  </div>
+  <div class="field">
+    <div class="labelrow"><label for="island">Island falloff</label><span class="rangeval" id="island-val">0.50</span></div>
+    <input id="island" type="range" min="0" max="1" step="0.01" value="0.5">
+  </div>
+  <div class="field">
+    <div class="labelrow"><label for="roughness">Roughness / persistence</label><span class="rangeval" id="roughness-val">0.55</span></div>
+    <input id="roughness" type="range" min="0" max="1" step="0.01" value="0.55">
+  </div>
+
+  <div class="grid2">
+    <div class="field" id="octaves-field">
+      <label for="octaves">fBm octaves</label>
+      <input id="octaves" type="number" min="1" max="12" step="1" value="6">
+    </div>
+    <div class="field">
+      <label for="erode">Erosion iterations</label>
+      <input id="erode" type="number" min="0" max="100" step="1" value="0">
+    </div>
+  </div>
+
+  <div class="field">
+    <div class="labelrow"><label for="talus">Erosion slope threshold (talus)</label><span class="rangeval" id="talus-val">0.06</span></div>
+    <input id="talus" type="range" min="0" max="1" step="0.01" value="0.06">
+  </div>
+
+  <div class="section-title">Biomes</div>
+  <div class="checkrow">
+    <input id="biome" type="checkbox" checked>
+    <label for="biome">Map elevation tiers to realistic biome tiles</label>
+  </div>
+  <div class="field" id="polar-field">
+    <div class="labelrow"><label for="polar">Polar latitude (freeze lowlands beyond)</label><span class="rangeval" id="polar-val">0.82</span></div>
+    <input id="polar" type="range" min="0" max="1" step="0.01" value="0.82">
+  </div>
+
+  <div class="section-title">Rivers</div>
+  <div class="checkrow">
+    <input id="rivers" type="checkbox" checked>
+    <label for="rivers">Generate rivers flowing from mountains to the sea</label>
+  </div>
+  <div class="field" id="springElevation-field">
+    <div class="labelrow"><label for="springElevation">Spring elevation (mountain threshold)</label><span class="rangeval" id="springElevation-val">0.70</span></div>
+    <input id="springElevation" type="range" min="0.3" max="0.95" step="0.01" value="0.7">
+  </div>
+  <div class="grid2" id="rivers-nums">
+    <div class="field">
+      <label for="maxRivers">Max rivers</label>
+      <input id="maxRivers" type="number" min="1" max="500" step="1" value="40">
+    </div>
+    <div class="field">
+      <label for="cellsPerRiver">Cells per river</label>
+      <input id="cellsPerRiver" type="number" min="20" max="5000" step="10" value="400">
+    </div>
+  </div>
+  <div class="field" id="minRiverLength-field">
+    <label for="minRiverLength">Minimum river length (cells)</label>
+    <input id="minRiverLength" type="number" min="2" max="100" step="1" value="3">
+  </div>
+  <div class="field" id="largestAreaWithoutRiver-field">
+    <div class="labelrow"><label for="largestAreaWithoutRiver">Largest area without river (% of map)</label><span class="rangeval" id="largestAreaWithoutRiver-val">15%</span></div>
+    <input id="largestAreaWithoutRiver" type="range" min="0" max="0.5" step="0.01" value="0.15">
+    <div class="hint">Adds rivers until no river-free land region is this large (0 = off).</div>
+  </div>
+
+  <div class="row">
+    <button id="cancel-btn">Cancel</button>
+    <button id="create-btn">Create Map</button>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require("electron");
+
+    // Apply saved theme.
+    ipcRenderer.invoke("settings-get").then((settings) => {
+      document.body.classList.toggle("dark", (settings.theme || "dark") === "dark");
+    });
+
+    // Live-update range value labels.
+    const ranges = ["water", "island", "roughness", "talus", "polar", "springElevation"];
+    ranges.forEach((id) => {
+      const input = document.getElementById(id);
+      const out = document.getElementById(id + "-val");
+      const sync = () => { out.textContent = parseFloat(input.value).toFixed(2); };
+      input.addEventListener("input", sync);
+      sync();
+    });
+
+    // Enable/disable algorithm- and biome-specific fields.
+    const algo = document.getElementById("algo");
+    const octavesField = document.getElementById("octaves-field");
+    function syncAlgo() {
+      octavesField.style.opacity = algo.value === "fbm" ? "1" : "0.4";
+      document.getElementById("octaves").disabled = algo.value !== "fbm";
+    }
+    algo.addEventListener("change", syncAlgo);
+    syncAlgo();
+
+    const biome = document.getElementById("biome");
+    const polarField = document.getElementById("polar-field");
+    function syncBiome() {
+      polarField.style.opacity = biome.checked ? "1" : "0.4";
+      document.getElementById("polar").disabled = !biome.checked;
+    }
+    biome.addEventListener("change", syncBiome);
+    syncBiome();
+
+    // Enable/disable river-specific fields.
+    const rivers = document.getElementById("rivers");
+    const riverFields = ["springElevation-field", "rivers-nums", "minRiverLength-field", "largestAreaWithoutRiver-field"];
+    const riverInputs = ["springElevation", "maxRivers", "cellsPerRiver", "minRiverLength", "largestAreaWithoutRiver"];
+    function syncRivers() {
+      const on = rivers.checked;
+      riverFields.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.style.opacity = on ? "1" : "0.4";
+      });
+      riverInputs.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !on;
+      });
+    }
+    rivers.addEventListener("change", syncRivers);
+    syncRivers();
+
+    // Percent label for the "largest area without river" slider.
+    const lawr = document.getElementById("largestAreaWithoutRiver");
+    const lawrVal = document.getElementById("largestAreaWithoutRiver-val");
+    const syncLawr = () => {
+      const pct = Math.round(parseFloat(lawr.value) * 100);
+      lawrVal.textContent = pct === 0 ? "off" : pct + "%";
+    };
+    lawr.addEventListener("input", syncLawr);
+    syncLawr();
+
+    function readOptions() {
+      const seedRaw = document.getElementById("seed").value.trim();
+      return {
+        width: parseInt(document.getElementById("width").value, 10),
+        height: parseInt(document.getElementById("height").value, 10),
+        algo: document.getElementById("algo").value,
+        seed: seedRaw === "" ? undefined : parseInt(seedRaw, 10),
+        water: parseFloat(document.getElementById("water").value),
+        island: parseFloat(document.getElementById("island").value),
+        roughness: parseFloat(document.getElementById("roughness").value),
+        octaves: parseInt(document.getElementById("octaves").value, 10),
+        erode: parseInt(document.getElementById("erode").value, 10),
+        talus: parseFloat(document.getElementById("talus").value),
+        biome: document.getElementById("biome").checked,
+        polar: parseFloat(document.getElementById("polar").value),
+        rivers: document.getElementById("rivers").checked,
+        springElevation: parseFloat(document.getElementById("springElevation").value),
+        maxRivers: parseInt(document.getElementById("maxRivers").value, 10),
+        cellsPerRiver: parseInt(document.getElementById("cellsPerRiver").value, 10),
+        minRiverLength: parseInt(document.getElementById("minRiverLength").value, 10),
+        largestAreaWithoutRiver: parseFloat(document.getElementById("largestAreaWithoutRiver").value)
+      };
+    }
+
+    const createBtn = document.getElementById("create-btn");
+    createBtn.addEventListener("click", async () => {
+      let opts;
+      try {
+        opts = readOptions();
+      } catch (err) {
+        console.error("Failed to read New Game options:", err);
+        alert("Could not read map settings: " + err.message);
+        return;
+      }
+      createBtn.disabled = true;
+      createBtn.textContent = "Generating…";
+      try {
+        await ipcRenderer.invoke("newgame-create", opts);
+      } catch (err) {
+        console.error("New Game generation failed:", err);
+        alert("Map generation failed: " + err.message);
+        createBtn.disabled = false;
+        createBtn.textContent = "Create Map";
+      }
+    });
+    document.getElementById("cancel-btn").addEventListener("click", () => {
+      ipcRenderer.invoke("newgame-cancel");
+    });
+  </script>
+</body>
+</html>
