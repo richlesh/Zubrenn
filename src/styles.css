@@ -180,6 +180,9 @@ body.dark #work-stats .stat-row > span:first-child { color: #aaa; }
 #work-stats .stat-pos { color: #1a9c4c; }
 #work-stats .stat-neg { color: #d0342c; }
 #work-stats .stat-note { margin-top: 10px; font-size: 11px; color: #888; line-height: 1.4; }
+#work-stats .bldg-row { align-items: baseline; }
+#work-stats .bldg-row > span:last-child { text-align: right; font-size: 11px; color: #555; max-width: 150px; }
+body.dark #work-stats .bldg-row > span:last-child { color: #bbb; }
 #work-grid { display: grid; gap: 4px; }
 .work-cell {
   border: 1px solid #bbb; border-radius: 6px; padding: 6px 4px; min-width: 54px;
@@ -297,6 +300,31 @@ body.dark #notify-dialog { background: #0a84ff; color: #fff; }
 }
 #notify-dialog a.coord-link:hover { color: #ffe14d; }
 
+/* Start-of-turn dialog (new year + optional auto-end notice with a button). */
+#turnstart-overlay {
+  position: fixed; z-index: 10006; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.35); pointer-events: none;
+}
+#turnstart-dialog {
+  pointer-events: auto;
+  background: #f5f5f5; color: #1e1e1e;
+  font: 15px/1.5 -apple-system, sans-serif;
+  padding: 20px 26px; border-radius: 12px; text-align: center;
+  box-shadow: 0 10px 36px rgba(0,0,0,0.5); min-width: 300px; max-width: 70%;
+  animation: notifyIn 0.18s ease-out;
+}
+body.dark #turnstart-dialog { background: #2c2c2e; color: #e0e0e0; }
+#turnstart-text { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+#turnstart-sub { font-size: 13px; color: #666; }
+body.dark #turnstart-sub { color: #aaa; }
+.turnstart-row { margin-top: 14px; min-height: 0; }
+#turnstart-handle {
+  padding: 8px 18px; border-radius: 8px; border: none; font-size: 14px;
+  background: #0a84ff; color: #fff; cursor: pointer;
+}
+#turnstart-handle:hover { background: #0060df; }
+
 /* Floating hover tooltip (coords / terrain / elevation). */
 #tooltip {
   position: fixed;
@@ -311,3 +339,18 @@ body.dark #notify-dialog { background: #0a84ff; color: #fff; }
   white-space: nowrap;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
+/* Dedicated tooltip for transport build planning (cost + ETA). Uses the
+   [hidden] attribute for visibility so the map's hover tooltip can't hide it. */
+#build-tooltip {
+  position: fixed;
+  z-index: 10007;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  font: 12px/1.4 Calibri, sans-serif;
+  padding: 6px 9px;
+  border-radius: 6px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+#build-tooltip[hidden] { display: none; }

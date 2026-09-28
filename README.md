@@ -17,9 +17,24 @@ with alien AI opponents for resources.
 - **Rivers** — flow downhill to the sea, follow cell borders, and give adjacent
   land extra food. Every mountain region gets at least two rivers.
 - **Colonies & buildings** — found colonies (Biodomes) and build Farms, Solar
-  Panels, and Factories within your zone of control.
-- **Economy** — colonies work surrounding tiles to produce Food, Material,
-  Energy, and Wealth; population grows or starves based on food and happiness.
+  Panels, Factories, and **Docks** within your zone of control. A Dock sits on a
+  shallow-sea tile, opens the colony's shallow-sea tiles to being worked, and
+  lets colony-launch paths cross shallow sea (to reach islands and cross straits).
+- **Economy** — each colony works surrounding tiles to produce Food, Material,
+  Energy, and Wealth, and keeps its **own stored resources**. Buildings only
+  produce (and only pay upkeep) when their cell is **worked**. Every year the
+  colony's excess production is stored (up to its buildings' storage caps) and
+  any shortfall is drawn from storage; if a resource runs out, buildings must be
+  **idled** (their cells deselected) to fit the budget.
+- **Happiness & growth** — each colony accumulates **stored happiness** from its
+  food balance; positive happiness grows the population and negative happiness
+  shrinks it.
+- **Prerequisites** — some buildings require others first (e.g. a Factory needs
+  a Solar Panel in the colony).
+- **Found new colonies** — a colony above a population threshold can launch a
+  new biodome to a distant land cell; the materials travel overland (time based
+  on terrain movement cost and river crossings), transferring colonists and
+  paying the biodome cost from the host colony.
 - **AI opponents** — configurable number of alien species establish and grow
   their own colonies.
 - **Area-of-Control view**, minimap, hover tooltips, save/load, and a
@@ -58,15 +73,37 @@ npm run dist:all         # everything
    start with one colony module.
 3. **Double-click your biodome** to open the colony view: a hex map of your
    zone of control showing each cell's Food / Material / Energy / Happiness
-   (as `base+bonus`). Click cells to assign workers (worked cells turn red).
-   The biodome cell is always worked; you can work up to
-   `floor(population / 1000)` additional cells.
+   (as `base+bonus`), plus a **statistics panel** with population, growth rate,
+   each resource as **stored / cap · rate**, and a **Buildings** list showing
+   each building's per-year bonuses (and whether it's idle). Click cells to
+   assign workers (worked cells turn red). The biodome cell is always worked;
+   you can work up to `floor(population / 1000)` additional cells. **A building
+   only produces while its cell is worked** — deselect a building's cell to
+   idle it and drop its upkeep.
 4. **Build** Farms, Solar Panels, and Factories by right-clicking a cell in your
-   zone of control (each costs Material and Wealth). New buildings appear grayed
-   out until construction finishes.
-5. Watch **Year**, **Population**, and **Resources** in the right-hand panels.
+   zone of control. Each costs Material/Energy/Wealth (paid from that colony's
+   storage), adds storage and per-year upkeep, and may require **prerequisite
+   buildings** (e.g. a Factory needs a Solar Panel). Disabled build options show
+   why (insufficient resources, missing prerequisite, or outside your zone).
+   To tear a building down, right-click its cell and choose **Remove
+   Improvement** (costs Energy + Food from the colony and takes a couple of
+   turns to complete).
+5. **Found new colonies** once a colony grows past the population threshold
+   (3,000): right-click that biodome and choose **Found New Colony**, then click
+   a distant land cell to plant it. A green line (color configurable via
+   `launchPathColor`) previews the overland path; the
+   new biodome costs the host colony a Biodome's resources plus 1,000 colonists
+   and arrives after its build time plus travel time (based on terrain movement
+   cost and river crossings). You'll be asked to name the new colony.
+6. **End your turn** with the **End Turn** menu item (or Cmd/Ctrl + Return). The
+   game never auto-advances while you still have an action available (a worker to
+   assign, a building to construct, or a colony to launch). When you're out of
+   actions, the **Auto turn end** setting decides what happens: if on (default)
+   your turn ends automatically; if off, you always end it yourself with End Turn.
+7. Watch **Year**, **Population**, and **Resources** in the right-hand panels.
    The AIs take their turns automatically; a new colony or a new year raises a
-   notification.
+   notification. **The goal is to build the largest civilization you can** —
+   grow your total population across as many colonies as possible.
 
 ### Controls
 | Action | Key / Input |
@@ -107,16 +144,43 @@ Zubrenn/
 Almost all rules and content live in `config.json`, so the game can be tuned
 without code changes:
 
-- `terrainTypes` — per terrain code: display name, tile icon, and HSV color.
-- `terrainProduction` — Food/Material each terrain yields per 1,000 workers.
-- `buildingTypes` — costs, production/consumption, growth effects, and build
-  time for the Biodome, Farm, Solar Panel, and Factory.
+- `terrainTypes` — per terrain code: display name, tile icon, HSV color, a
+  `base` Food/Material yield (per 1,000 workers), and a `movement` cost array
+  `[unimproved, road, sea (or river), monorail, air]` — the movement-point cost
+  to enter that tile by each transport mode, used for overland travel (e.g. when
+  founding a colony). Lower is cheaper/faster; only the `unimproved` cost is used
+  today (road/sea/monorail/air are reserved for future transport infrastructure).
+- `buildingTypes` — for the Biodome, Farm, Solar Panel, and Factory:
+  - `buildCost` — one-time Material/Energy/Wealth cost to construct.
+  - `buildTurns` — turns until the building becomes operational.
+  - `costPerYear` — per-year upkeep (Material/Energy/Wealth) subtracted from output.
+  - `bonus` — per-year production: `food`, `material`, `energy`, `wealth`, and
+    `growth` (growth-rate modifier). Only applied when the building's cell is worked.
+  - `storage` — how much Food/Material/Energy/Wealth/Happiness this building can
+    hold; a colony's cap for each is the **sum** of its buildings' storage.
+  - `prerequisiteBuildings` — building types that must already exist in the
+    colony before this type can be built (e.g. the Factory requires a Solar Panel).
 - `zoneOfControlSize` — population thresholds that expand a colony's control
   radius.
-- Economy constants: `foodPerColonistUnit`, `happinessGrowthPerUnit`,
-  `starvationRatePerUnit`, `riverAdjacentFoodBonus`.
+- Economy constants: `foodPerColonistUnit` (food eaten per 1,000 colonists),
+  `happinessGrowthPerUnit` and `maxHappinessGrowthBonus` (how food-driven
+  happiness converts to growth, capped), and `riverAdjacentFoodBonus`.
+- `removeImprovementCost` / `removeImprovementTurns` — the Energy/Food cost and
+  number of turns to remove a building via **Remove Improvement**.
+- Founding new colonies: `foundColonyMinPopulation` (population needed to launch),
+  `foundColonyPopulationTransfer` (colonists moved to the new colony),
+  `biodomeMovementPerYear` (overland movement points per year),
+  `riverCrossingMovementCost`, and `impassableFrozenAltitude` /
+  `maxAltitudeMeters` (frozen cells above the altitude limit are impassable).
 - Game setup: `startingYear`, `maxAIs`, `minStartDistance`,
   `aiPlacementMinTurns`/`aiPlacementMaxTurns`, and 100 alien `names`.
+
+**Population growth:** each colony builds up **stored happiness** from its food
+balance (`netFood` = food produced − colonists' consumption), clamped to
+**±(sum of building happiness storage)**. While stored happiness is positive the
+colony grows; when negative it shrinks. The per-year growth rate is the Biodome
+`growthRate` plus a happiness term (`happinessRate × happinessGrowthPerUnit`,
+capped at `maxHappinessGrowthBonus`) plus building `bonus.growth` modifiers.
 
 A plain-language summary of these rules is generated in
 [`src/resources/system_prompt.md`](src/resources/system_prompt.md), which is

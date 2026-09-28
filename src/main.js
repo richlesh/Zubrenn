@@ -506,7 +506,9 @@ function buildSaveObject(gameState) {
     currentPlayer: (gameState && gameState.currentPlayer) != null ? gameState.currentPlayer : 0,
     resources: (gameState && gameState.resources) || { material: 0, food: 0, energy: 0, wealth: 0 },
     rates: (gameState && gameState.rates) || { food: 0, material: 0, energy: 0, happiness: 0 },
-    playerName: (gameState && gameState.playerName) || "Human"
+    playerName: (gameState && gameState.playerName) || "Human",
+    // Transport network (roads/monorails/canals/bridges/airports + build plans).
+    transport: (gameState && gameState.transport) || null
   };
 }
 
@@ -679,7 +681,8 @@ async function loadGame() {
     currentPlayer: parsed.currentPlayer != null ? parsed.currentPlayer : 0,
     resources: parsed.resources || { material: 0, food: 0, energy: 0, wealth: 0 },
     rates: parsed.rates || { food: 0, material: 0, energy: 0, happiness: 0 },
-    playerName: parsed.playerName || "Human"
+    playerName: parsed.playerName || "Human",
+    transport: parsed.transport || null
   };
   const send = () => {
     if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send("load-game", payload);

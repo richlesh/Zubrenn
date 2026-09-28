@@ -11,6 +11,7 @@ const DEFAULTS = {
   apiKeys: {},
   defaultModels: {},
   useBuiltinAI: true,
+  autoTurnEnd: true,
 };
 
 function load() {

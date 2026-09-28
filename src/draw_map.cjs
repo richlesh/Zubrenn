@@ -139,6 +139,18 @@ function drawHexPath(ctx, x, y, cellSpacing) {
 // The 6 vertices (corners) of a flat-topped hex, in clockwise order starting
 // at the top-left. Coordinates are rounded so a corner shared by adjacent
 // hexes has identical values in both, letting us match shared edges exactly.
+// Shortest distance from point p to line segment a-b (all {x,y} in the same
+// coordinate space). Used to detect clicks that land on a hex border edge.
+function distPointToSegment(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+  let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const qx = a.x + t * dx, qy = a.y + t * dy;
+  return Math.hypot(p.x - qx, p.y - qy);
+}
+
 function hexVertices(x, y, spacing) {
   const c = getHexCenter(x, y, spacing);
   const r = spacing.x / 2;
@@ -205,6 +217,7 @@ class HexMap {
     this.buildings = opts.buildings || [];   // [{ x, y, type, owner, name }]
     this.buildingTypes = opts.buildingTypes || null; // config building-type map
     this.terrainTypes = opts.terrainTypes || null;   // config terrain-type map (name+icon)
+    this.bridgeColor = opts.bridgeColor || "#e0322c"; // bridge line color
     this.buildingIcons = {};                  // type -> loaded Image
     this.aiCount = opts.aiCount || 0;         // number of AI players (for control colors)
     this.controlMode = false;                 // Area-of-Control view toggle
@@ -311,6 +324,67 @@ class HexMap {
     if (hex.y < 0 || hex.y >= this.worldSize.y) return null;
     if (!this.wrap && (hex.x < 0 || hex.x >= this.worldSize.x)) return null;
     return hex;
+  }
+
+  // Public: the nearest hex CORNER under a mouse event, as
+  // { cell:{x,y}, cornerIndex } (cornerIndex 0..5 matching hexVertices order),
+  // or null if off-map. Used for canal (vertex/edge) building.
+  cornerAtEvent(e) {
+    const hex = this.hexAtEvent(e);
+    if (!hex) return null;
+    const vp = this.viewport;
+    const spacing = vp.wCellSpacing;
+    const c0 = getHexCenter(0, 0, spacing);
+    const c = this._relCoords(this.canvas, e);
+    // Invert the _draw translate: screen = world - wOrigin + spacing/2 - c0.
+    const toScreen = (p) => ({
+      x: p.x - vp.wOrigin.x + spacing.x / 2 - c0.x,
+      y: p.y - vp.wOrigin.y + spacing.y / 2 - c0.y,
+    });
+    const verts = hexVertices(hex.x, hex.y, spacing); // 6 corners in world space
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < verts.length; i++) {
+      const s = toScreen(verts[i]);
+      const d = (s.x - c.x) * (s.x - c.x) + (s.y - c.y) * (s.y - c.y);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return { cell: { x: hex.x, y: hex.y }, cornerIndex: best };
+  }
+
+  // Public: how close a mouse event is to the nearest VERTEX and nearest EDGE
+  // (border) of the hex under the cursor, all in screen pixels. Also returns
+  // the hex "radius" (half the wider cell spacing) so callers can express an
+  // exclusion margin as a fraction of the cell size. Returns null if off-map.
+  //   { cell:{x,y}, vertexDist, edgeDist, radius }
+  // Used to suppress the cell right-click menu when a click lands on/near a
+  // vertex or edge rather than in the cell interior.
+  borderProximityAtEvent(e) {
+    const hex = this.hexAtEvent(e);
+    if (!hex) return null;
+    const vp = this.viewport;
+    const spacing = vp.wCellSpacing;
+    const c0 = getHexCenter(0, 0, spacing);
+    const c = this._relCoords(this.canvas, e);
+    const toScreen = (p) => ({
+      x: p.x - vp.wOrigin.x + spacing.x / 2 - c0.x,
+      y: p.y - vp.wOrigin.y + spacing.y / 2 - c0.y,
+    });
+    const verts = hexVertices(hex.x, hex.y, spacing).map(toScreen); // screen-space corners
+    // Nearest vertex distance.
+    let vertexDist = Infinity;
+    for (const v of verts) {
+      const d = Math.hypot(v.x - c.x, v.y - c.y);
+      if (d < vertexDist) vertexDist = d;
+    }
+    // Nearest edge distance: min distance from the point to each of the 6
+    // border segments (consecutive vertices).
+    let edgeDist = Infinity;
+    for (let i = 0; i < verts.length; i++) {
+      const a = verts[i], b = verts[(i + 1) % verts.length];
+      edgeDist = Math.min(edgeDist, distPointToSegment(c, a, b));
+    }
+    const radius = spacing.x / 2;
+    return { cell: { x: hex.x, y: hex.y }, vertexDist, edgeDist, radius };
   }
 
   // Public: replace the buildings list and redraw. In Area-of-Control mode the
@@ -674,9 +748,120 @@ class HexMap {
     }
 
     this._drawRivers(ctx, spacing);
+    this._drawTransport(ctx, spacing);
     this._drawBuildings(ctx, spacing);
 
+    // Optional overlay (e.g. colony-launch path preview), drawn in the same
+    // translated space so it can use getHexCenter(x, y, spacing) directly.
+    if (typeof this.onOverlay === 'function') {
+      try { this.onOverlay(ctx, spacing, (x, y) => getHexCenter(x, y, spacing)); } catch (e) {}
+    }
+
     ctx.restore();
+  }
+
+  // Public: set the transport network state ({roads,monorails,canals,bridges}
+  // as Sets of "x,y" cell keys / "x,y|x,y" edge keys) and redraw.
+  setTransport(tr) {
+    this.transport = tr || null;
+    this._draw();
+  }
+
+  // Draw roads (brown) and monorails (silver) as lines between adjacent cell
+  // centers; when a cell has both, the two lines are drawn side-by-side.
+  // Canals (blue) are drawn along shared cell edges. Bridges are drawn as a
+  // thicker span over the crossing.
+  _drawTransport(ctx, spacing) {
+    const tr = this.transport;
+    if (!tr) return;
+    const W = this.worldSize.x;
+    const wrapPx = W * 0.75 * spacing.x;
+    const offsets = this.wrap ? [-wrapPx, 0, wrapPx] : [0];
+    const lineW = Math.max(1.5, spacing.y / 10);
+    const parseCell = (k) => { const p = k.split(","); return { x: +p[0], y: +p[1] }; };
+    // Neighbor offsets for odd-q layout are handled via getHexCenter directly.
+    const roadsSet = tr.roads instanceof Set ? tr.roads : new Set(tr.roads || []);
+    const monoSet = tr.monorails instanceof Set ? tr.monorails : new Set(tr.monorails || []);
+    const canalSet = tr.canals instanceof Set ? tr.canals : new Set(tr.canals || []);
+    const bridgeSet = tr.bridges instanceof Set ? tr.bridges : new Set(tr.bridges || []);
+
+    // Helper: draw a line between two cell centers (exact center to center).
+    const drawLink = (a, b, color, w) => {
+      const ca = getHexCenter(a.x, a.y, spacing), cb = getHexCenter(b.x, b.y, spacing);
+      ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = "round";
+      for (const ox of offsets) {
+        ctx.beginPath();
+        ctx.moveTo(ca.x + ox, ca.y);
+        ctx.lineTo(cb.x + ox, cb.y);
+        ctx.stroke();
+      }
+    };
+    // For each road/monorail cell, connect to adjacent road/monorail cells.
+    // All segments of a kind use one uniform width.
+    const linkKind = (cellSet, color, w) => {
+      const seenEdge = new Set();
+      for (const k of cellSet) {
+        const a = parseCell(k);
+        for (const n of hexNeighborsDraw(a.x, a.y)) {
+          const nx = this.wrap ? wrapX(n.x, W) : n.x, ny = n.y;
+          if (ny < 0 || ny >= this.worldSize.y) continue;
+          const nk = nx + "," + ny;
+          if (!cellSet.has(nk)) continue;
+          const ek = (k < nk) ? (k + "|" + nk) : (nk + "|" + k);
+          if (seenEdge.has(ek)) continue; seenEdge.add(ek);
+          drawLink(a, { x: nx, y: ny }, color, w);
+        }
+      }
+    };
+    // Roads brown, monorails silver — center-to-center, uniform width. A cell
+    // never carries both (a monorail replaces a road on that cell).
+    linkKind(roadsSet, "#8a5a2b", lineW);   // road (brown)
+    linkKind(monoSet, "#c8cdd6", lineW);    // monorail (silver)
+
+    // Canals drawn along the shared edge, in the same blue as rivers.
+    ctx.strokeStyle = (typeof TERRAIN_COLORS !== 'undefined' && TERRAIN_COLORS[10]) || 'rgb(0,80,255)';
+    ctx.lineWidth = Math.max(2, lineW); ctx.lineCap = "round";
+    for (const ek of canalSet) {
+      const [ka, kb] = ek.split("|"); const a = parseCell(ka), b = parseCell(kb);
+      const edge = sharedEdge(a.x, a.y, b.x, b.y, spacing);
+      for (const ox of offsets) {
+        ctx.beginPath();
+        if (edge && edge.length === 2) {
+          ctx.moveTo(edge[0].x + ox, edge[0].y);
+          ctx.lineTo(edge[1].x + ox, edge[1].y);
+        } else {
+          // Fallback: short mark at the midpoint of the two centers.
+          const ca = getHexCenter(a.x, a.y, spacing), cb = getHexCenter(b.x, b.y, spacing);
+          ctx.moveTo((ca.x + cb.x) / 2 + ox, (ca.y + cb.y) / 2);
+          ctx.lineTo((ca.x + cb.x) / 2 + ox, (ca.y + cb.y) / 2 + 1);
+        }
+        ctx.stroke();
+      }
+    }
+
+    // Bridges (red): a road/monorail edge crossing a river or sea. Drawn as a
+    // red line between the two cell centers, on top of the road/monorail.
+    if (bridgeSet.size) {
+      ctx.strokeStyle = this.bridgeColor || "#e0322c";
+      ctx.lineWidth = lineW; ctx.lineCap = "round";
+      for (const ek of bridgeSet) {
+        const [ka, kb] = ek.split("|"); const a = parseCell(ka), b = parseCell(kb);
+        const ca = getHexCenter(a.x, a.y, spacing), cb = getHexCenter(b.x, b.y, spacing);
+        for (const ox of offsets) {
+          ctx.beginPath();
+          ctx.moveTo(ca.x + ox, ca.y);
+          ctx.lineTo(cb.x + ox, cb.y);
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
+  // Public: set/clear an overlay draw callback and redraw. The callback is
+  // invoked as onOverlay(ctx, spacing, hexCenter) inside the map's transform.
+  setOverlay(fn) {
+    this.onOverlay = fn || null;
+    this._draw();
   }
 
   // Draw rivers as thick blue lines running along the borders between hexes.
@@ -730,8 +915,10 @@ class HexMap {
       for (const ox of offsets) {
         const cx = c.x + ox, cy = c.y;
         const icon = this.buildingIcons[b.type];
-        // Under construction (not yet operational) -> draw grayed/dimmed.
-        const underConstruction = (b.type !== 1) && (b.turnsRemaining != null) && (b.turnsRemaining > 0);
+        // Under construction / in transit (not yet operational) -> draw dimmed.
+        const underConstruction =
+          (b.inTransit === true) ||
+          ((b.type !== 1) && (b.turnsRemaining != null) && (b.turnsRemaining > 0));
         if (icon) {
           if (underConstruction) {
             ctx.save();

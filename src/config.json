@@ -1,17 +1,100 @@
 {
   "terrainTypes": {
-    "1": { "name": "Sea", "icon": "Port of Taganrog.png", "color": { "h": 240, "s": 1, "v": 0.5 } },
-    "2": { "name": "Grassland", "icon": "Open Square Path Grass.png", "color": { "h": 120, "s": 0.8, "v": 1 } },
-    "3": { "name": "Hills", "icon": "Just Add Bison.png", "color": { "h": 90, "s": 0.7, "v": 0.8 } },
-    "4": { "name": "Forest", "icon": "Shrub Cover.png", "color": { "h": 120, "s": 1, "v": 0.6 } },
-    "5": { "name": "Jungle", "icon": "Deep Forest.png", "color": { "h": 120, "s": 1, "v": 0.3 } },
-    "6": { "name": "Desert", "icon": "Slush.png", "color": { "h": 60, "s": 0.75, "v": 0.75 } },
-    "7": { "name": "Mountain-Low", "icon": "Dense Pine Forest.png", "color": { "h": 120, "s": 0.9, "v": 0.5 } },
-    "8": { "name": "Mountain-High", "icon": "Age of the Canyon.png", "color": { "h": 30, "s": 0.5, "v": 0.3 } },
-    "9": { "name": "Frozen", "icon": "Polar Zone.png", "color": { "h": 0, "s": 0, "v": 1 } }
+    "1": {
+      "name": "Sea",
+      "icon": "Port of Taganrog.png",
+      "color": { "h": 240, "s": 1, "v": 0.5 },
+      "movement": [1000, 1, 0.75, 0.2, 0.1],
+      "base": { "food": 1, "material": 0 },
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+    },
+    "2": {
+      "name": "Grassland",
+      "icon": "Open Square Path Grass.png",
+      "color": { "h": 120, "s": 0.8, "v": 1 },
+      "movement": [2, 1, 0.75, 0.2, 0.1],
+      "base": { "food": 2, "material": 1 },
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+    },
+    "3": {
+      "name": "Hills",
+      "icon": "Just Add Bison.png",
+      "color": { "h": 90, "s": 0.7, "v": 0.8 },
+      "movement": [3, 1, 0.75, 0.2, 0.1],
+      "base": { "food": 1, "material": 2 },
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+    },
+    "4": {
+      "name": "Forest",
+      "icon": "Shrub Cover.png",
+      "color": { "h": 120, "s": 1, "v": 0.6 },
+      "movement": [4, 1, 0.75, 0.2, 0.1],
+      "base": { "food": 1, "material": 2 },
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+    },
+    "5": {
+      "name": "Jungle",
+      "icon": "Deep Forest.png",
+      "color": { "h": 120, "s": 1, "v": 0.3 },
+      "movement": [5, 1, 0.75, 0.2, 0.1],
+      "base": { "food": 1, "material": 2 },
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+    },
+    "6": {
+      "name": "Desert",
+      "icon": "Slush.png",
+      "color": { "h": 60, "s": 0.75, "v": 0.75 },
+      "movement": [2, 1, 0.75, 0.2, 0.1],
+      "base": { "food": 0, "material": 0 },
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+    },
+    "7": {
+      "name": "Mountain-Low",
+      "icon": "Dense Pine Forest.png",
+      "color": { "h": 120, "s": 0.9, "v": 0.5 },
+      "movement": [4, 1, 1000, 0.2, 0.1],
+      "base": { "food": 0, "material": 3 },
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+    },
+    "8": {
+      "name": "Mountain-High",
+      "icon": "Age of the Canyon.png",
+      "color": { "h": 30, "s": 0.5, "v": 0.3 },
+      "movement": [5, 1, 1000, 0.2, 0.1],
+      "base": { "food": 0, "material": 4 },
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+    },
+    "9": {
+      "name": "Frozen",
+      "icon": "Polar Zone.png",
+      "color": { "h": 0, "s": 0, "v": 1 },
+      "movement": [2, 1, 1000, 0.2, 0.1],
+      "base": { "food": 0, "material": 0 },
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+    }
   },
+  "bridgeCost": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
+  "bridgeColor": "#e0322c",
   "maxAIs": 40,
-  "minStartDistance": 20,
+  "minStartDistance": 6,
   "startingYear": 2500,
   "aiPlacementMinTurns": 3,
   "aiPlacementMaxTurns": 200,
@@ -22,50 +105,74 @@
   "starvationRatePerUnit": 0.02,
   "zoneOfControlSize": [0, 10000, 100000, 1000000],
   "riverAdjacentFoodBonus": 1,
+  "riverAdjacentWealthBonus": 1,
+  "removeImprovementCost": { "energy": 5, "food": 2 },
+  "removeImprovementTurns": 2,
+  "foundColonyMinPopulation": 3000,
+  "foundColonyPopulationTransfer": 1000,
+  "biodomeMovementPerYear": 12,
+  "riverCrossingMovementCost": 2,
+  "impassableFrozenAltitude": 1000,
+  "canalDisallowedTerrain": [1, 7, 8, 9],
+  "canalBuildRadius": 5,
+  "cellClickBorderMargin": 0.28,
+  "canalVertexClickPixels": 10,
+  "canalVertexClickFrac": 0.28,
+  "maxAltitudeMeters": 8000,
   "workedCellColor": { "h": 0, "s": 0.6, "v": 1 },
-  "terrainProduction": {
-    "1": { "food": 0, "material": 0 },
-    "2": { "food": 2, "material": 1 },
-    "3": { "food": 1, "material": 2 },
-    "4": { "food": 0, "material": 2 },
-    "5": { "food": 1, "material": 2 },
-    "6": { "food": 0, "material": 0 },
-    "7": { "food": 0, "material": 3 },
-    "8": { "food": 0, "material": 4 },
-    "9": { "food": 0, "material": 0 }
-  },
+  "launchPathColor": { "h": 120, "s": 0.7, "l": 0.45 },
   "buildingTypes": {
-    "1": { "name": "Biodome", "icon": "biodome.png",
-        "startPopulation": 1000, "growthRate": 0.01,
-        "cost": { "material": 3, "wealth": 5}, "buildTurns": 0,
-        "foodBonus": 1, "materialBonus": 1, "energyBonus": 1, "growthRateBonus": 0, "wealthBonus": 1
+    "1": {
+      "name": "Biodome",
+      "icon": "biodome.png",
+      "startPopulation": 1000,
+      "growthRate": 0.01,
+      "prerequisiteBuildings": [],
+      "buildCost": { "material": 3, "wealth": 5 },
+      "buildTurns": 2,
+      "bonus": { "food": 1, "material": 1, "energy": 1, "growth": 0, "wealth": 1 },
+      "storage": { "food": 100, "material": 100, "energy": 100, "wealth": 100, "happiness": 100 }
     },
-    "2": { "name": "Farm", "icon": "farm.png",
-        "cost": { "material": 3, "wealth": 2 }, "buildTurns": 1,
-        "energyUse": 1,
-        "foodBonus": 3, "growthRateBonus": 0.0025, "wealthBonus": 1 },
-    "3": { "name": "Solar Panel", "icon": "solar_panel.png", "cost": { "material": 2, "wealth": 2 },
-           "energyProduced": 5, "growthRateBonus": 0, "buildTurns": 1 },
-    "4": { "name": "Factory", "icon": "factory.png", "cost": { "material": 5, "wealth": 5 },
-           "energyUse": 5, "materialBonus": 2, "growthRateBonus": -0.0025, "buildTurns": 2 }
+    "2": {
+      "name": "Farm",
+      "icon": "farm.png",
+      "prerequisiteBuildings": [1],
+      "buildCost": { "material": 3, "energy": 2, "wealth": 2 },
+      "buildTurns": 1,
+      "costPerYear": { "material": 1, "energy": 1, "wealth": 0.5 },
+      "bonus": { "food": 3, "material": 0, "energy": 0, "growth": 0.0025, "wealth": 1 },
+      "storage": { "food": 500, "material": 0, "energy": 100, "wealth": 0, "happiness": 0 }
+    },
+    "3": {
+      "name": "Solar Panel",
+      "icon": "solar_panel.png",
+      "prerequisiteBuildings": [1],
+      "buildCost": { "material": 2, "energy": 2, "wealth": 2 },
+      "buildTurns": 1,
+      "costPerYear": { "material": 0, "energy": 0, "wealth": 0.5 },
+      "bonus": { "food": 0, "material": 0, "energy": 6, "growth": 0, "wealth": 0 },
+      "storage": { "food": 0, "material": 0, "energy": 500, "wealth": 0, "happiness": 0 }
+    },
+    "4": {
+      "name": "Factory",
+      "icon": "factory.png",
+      "prerequisiteBuildings": [1, 3],
+      "buildCost": { "material": 5, "energy": 5, "wealth": 5 },
+      "buildTurns": 3,
+      "costPerYear": { "material": 2, "energy": 3, "wealth": 1 },
+      "bonus": { "food": 0, "material": 5, "energy": 0, "growth": -0.0025, "wealth": 1 },
+      "storage": { "food": 0, "material": 500, "energy": 200, "wealth": 0, "happiness": 0 }
+    },
+    "5": {
+      "name": "Dock",
+      "icon": "dock.png",
+      "prerequisiteBuildings": [1],
+      "buildCost": { "material": 1, "energy": 1, "wealth": 1 },
+      "buildTurns": 2,
+      "costPerYear": { "material": 0, "energy": 1, "wealth": 1 },
+      "bonus": { "food": 1, "material": 0, "energy": 0, "growth": 0, "wealth": 1 },
+      "storage": { "food": 300, "material": 300, "energy": 0, "wealth": 0, "happiness": 0 }
+    }
   },
-  "names": [
-    "Xel'Thara", "Vorn Kesh", "Zayllux", "Qortham", "Nyssarion", "Braal Vex",
-    "Ithkane", "Ozúmara", "Threxil", "Vandros", "Kla276-Ur", "Sythara",
-    "Draviim", "Uxberos", "Nel'Quoth", "Zaethys", "Morvax", "Illandor",
-    "Kryssoth", "Obrahn", "Tyllvex", "Aznareth", "Woltrim", "Ekshara",
-    "Pravoxi", "Ghorlune", "Yssibel", "Vraektor", "Nomilar", "Quenthaa",
-    "Drommus", "Xibante", "Ulvarion", "Zephkar", "Trelisso", "Marnok",
-    "Ashvenn", "Ryllakor", "Ozzenphar", "Velinth", "Kaebrax", "Junossi",
-    "Thraliun", "Wexmoor", "Sillquith", "Ombrayel", "Draznok", "Yttheris",
-    "Cavornu", "Ezraliim", "Bolthara", "Nivexus", "Qelmarr", "Zundareth",
-    "Praxilon", "Voshkane", "Illurnex", "Krethsibar", "Aomvel", "Struxil",
-    "Tazmuroth", "Welganth", "Nyrreth", "Osvakim", "Dranthel", "Ubelquor",
-    "Zaethmor", "Fylvaris", "Krondaxi", "Ylssuran", "Menthara", "Vraddek",
-    "Oxilune", "Perthaan", "Zunveil", "Chalorix", "Trennoss", "Auvraeth",
-    "Skellivon", "Nymbrak", "Quorlath", "Delvimar", "Ossanther", "Kryllos",
-    "Ythanor", "Vezmara", "Onbrakil", "Zathurex", "Prellun", "Maxothis",
-    "Illveska", "Grondaal", "Ybernith", "Kavaslon", "Threnvox", "Wulmarra",
-    "Ozziketh", "Drava'Nel", "Selquorra", "Nyxathil"
-  ]
+  "names": ["Xel'Thara", "Vorn Kesh", "Zayllux", "Qortham", "Nyssarion", "Braal Vex", "Ithkane", "Ozúmara", "Threxil", "Vandros", "Kla276-Ur", "Sythara", "Draviim", "Uxberos", "Nel'Quoth", "Zaethys", "Morvax", "Illandor", "Kryssoth", "Obrahn", "Tyllvex", "Aznareth", "Woltrim", "Ekshara", "Pravoxi", "Ghorlune", "Yssibel", "Vraektor", "Nomilar", "Quenthaa", "Drommus", "Xibante", "Ulvarion", "Zephkar", "Trelisso", "Marnok", "Ashvenn", "Ryllakor", "Ozzenphar", "Velinth", "Kaebrax", "Junossi", "Thraliun", "Wexmoor", "Sillquith", "Ombrayel", "Draznok", "Yttheris", "Cavornu", "Ezraliim", "Bolthara", "Nivexus", "Qelmarr", "Zundareth", "Praxilon", "Voshkane", "Illurnex", "Krethsibar", "Aomvel", "Struxil", "Tazmuroth", "Welganth", "Nyrreth", "Osvakim", "Dranthel", "Ubelquor", "Zaethmor", "Fylvaris", "Krondaxi", "Ylssuran", "Menthara", "Vraddek", "Oxilune", "Perthaan", "Zunveil", "Chalorix", "Trennoss", "Auvraeth", "Skellivon", "Nymbrak", "Quorlath", "Delvimar", "Ossanther", "Kryllos", "Ythanor", "Vezmara", "Onbrakil", "Zathurex", "Prellun", "Maxothis", "Illveska", "Grondaal", "Ybernith", "Kavaslon", "Threnvox", "Wulmarra", "Ozziketh", "Drava'Nel", "Selquorra", "Nyxathil"]
 }

@@ -54,11 +54,16 @@
 
   <!-- Floating hover tooltip: coordinates, terrain, elevation. -->
   <div id="tooltip"></div>
+  <div id="build-tooltip" hidden></div>
 
   <!-- Right-click context menu (colony actions). -->
   <div id="context-menu" hidden>
     <div class="ctx-item" id="ctx-establish">Establish Colony</div>
     <div id="ctx-build-items"></div>
+    <div class="ctx-item" id="ctx-remove" hidden>Remove Improvement</div>
+    <div class="ctx-item" id="ctx-road" hidden>Build Road</div>
+    <div class="ctx-item" id="ctx-monorail" hidden>Build Monorail</div>
+    <div class="ctx-item" id="ctx-canal" hidden>Build Canal</div>
   </div>
 
   <!-- Name-your-colony modal overlay. -->
@@ -94,6 +99,17 @@
     <div id="notify-dialog"><span id="notify-text"></span></div>
   </div>
 
+  <!-- Start-of-turn dialog: new-year announcement + optional auto-end notice. -->
+  <div id="turnstart-overlay" hidden>
+    <div id="turnstart-dialog">
+      <div id="turnstart-text"></div>
+      <div id="turnstart-sub"></div>
+      <div class="turnstart-row">
+        <button id="turnstart-handle" hidden>Let me handle it</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Work-assignment modal (double-click a biodome). -->
   <div id="work-overlay" hidden>
     <div id="work-dialog">
@@ -126,8 +142,10 @@
     })();
 
     // Apply saved theme.
+    let _autoTurnEnd = true; // whether to auto-end the human turn when idle
     function applyTheme(settings) {
       document.body.classList.toggle("dark", (settings.theme || "dark") === "dark");
+      _autoTurnEnd = settings.autoTurnEnd !== false; // default on
     }
     ipcRenderer.invoke("settings-get").then(applyTheme).catch(() => {});
     ipcRenderer.on("settings-updated", () =>
@@ -137,7 +155,7 @@
     let _roundHadAction = false; // did a player place/act during the current round?
     let CONFIG = { maxAIs: 40, minStartDistance: 20, startingYear: 2500,
                    aiPlacementMinTurns: 3, aiPlacementMaxTurns: 200,
-                   buildingTypes: { "1": { name: "Biodome", startPopulation: 1000, growthRate: 0.01, foodBonus: 1, materialBonus: 1, energyBonus: 2 } },
+                   buildingTypes: { "1": { name: "Biodome", startPopulation: 1000, growthRate: 0.01, buildTurns: 0, bonus: { food: 1, material: 1, energy: 2, growth: 0, wealth: 1 } } },
                    names: [] };
     ipcRenderer.invoke("config-get").then((c) => { if (c) CONFIG = c; }).catch(() => {});
     let SYSTEM_PROMPT = "";
@@ -172,9 +190,35 @@
         currentPlayer: gameState.currentPlayer || 0,
         resources: gameState.resources || { material: 0, food: 0, energy: 0, wealth: 0 },
         rates: gameState.rates || { food: 0, material: 0, energy: 0, happiness: 0 },
-        playerName: gameState.playerName || "Human"
+        playerName: gameState.playerName || "Human",
+        transport: serializeTransport()
       };
     };
+
+    // Serialize the transport network (Sets -> arrays) for saving. Plans are
+    // plain objects already (path arrays), so they serialize directly.
+    function serializeTransport() {
+      const tr = gameState.transport;
+      if (!tr) return null;
+      const arr = (s) => (s instanceof Set ? [...s] : (Array.isArray(s) ? s.slice() : []));
+      return {
+        roads: arr(tr.roads), monorails: arr(tr.monorails),
+        canals: arr(tr.canals), bridges: arr(tr.bridges),
+        airports: arr(tr.airports),
+        plans: (tr.plans || []).map((p) => {
+          const base = { owner: p.owner, kind: p.kind, source: { x: p.source.x, y: p.source.y },
+            accrued: p.accrued, paused: !!p.paused, id: p.id };
+          if (p.edges) {
+            base.edges = p.edges.map((e) => ({ a: { x: e.a.x, y: e.a.y }, b: { x: e.b.x, y: e.b.y } }));
+            base.edgeIndex = p.edgeIndex;
+          } else {
+            base.path = (p.path || []).map((c) => ({ x: c.x, y: c.y }));
+            base.segIndex = p.segIndex;
+          }
+          return base;
+        }),
+      };
+    }
 
     // ---- reusable notification ---------------------------------------------
     // Queued notifications: each message shows for its full duration (5s) or
@@ -384,6 +428,14 @@
         if (n.y < 0 || n.y >= H) continue;
         if (_riverCellSet.has(n.y * W + wrapX(n.x))) return true;
       }
+      // A built canal segment is equivalent to a river: a cell bordering a
+      // canal edge counts as river-adjacent.
+      if (gameState.transport && gameState.transport.canals) {
+        for (const n of hexNeighborsRenderer(x, y)) {
+          if (n.y < 0 || n.y >= H) continue;
+          if (hasCanalEdge(x, y, n.x, n.y)) return true;
+        }
+      }
       return false;
     }
     // True if any edge-adjacent cell is sea (tile 1).
@@ -404,6 +456,870 @@
       }
       return 0;
     }
+    // A land tile with an adjacent river side gains a base wealth bonus.
+    function riverWealthBonus(x, y) {
+      const terr = terrainAt(x, y);
+      if (terr < 2 || terr > 9) return 0;        // land only
+      if (!nearRiver(x, y)) return 0;
+      return (CONFIG.riverAdjacentWealthBonus != null ? CONFIG.riverAdjacentWealthBonus : 1);
+    }
+
+    // ---- transport network (roads / monorails / canals / bridges / airports)
+    // Per-cell and per-edge improvement state plus construction plans. Cells are
+    // keyed "x,y"; edges are keyed by the two cell keys sorted "x1,y1|x2,y2".
+    function ensureTransport() {
+      let tr = gameState.transport;
+      if (!tr) {
+        tr = gameState.transport = {};
+      }
+      tr.roads = tr.roads instanceof Set ? tr.roads : new Set(tr.roads || []);
+      tr.monorails = tr.monorails instanceof Set ? tr.monorails : new Set(tr.monorails || []);
+      tr.canals = tr.canals instanceof Set ? tr.canals : new Set(tr.canals || []);   // edge keys
+      tr.bridges = tr.bridges instanceof Set ? tr.bridges : new Set(tr.bridges || []); // edge keys
+      tr.airports = tr.airports instanceof Set ? tr.airports : new Set(tr.airports || []); // colony cell keys
+      tr.plans = Array.isArray(tr.plans) ? tr.plans : [];
+      return tr;
+    }
+    function edgeKey(x1, y1, x2, y2) {
+      const a = x1 + "," + y1, b = x2 + "," + y2;
+      return (a < b) ? (a + "|" + b) : (b + "|" + a);
+    }
+    function hasRoad(x, y) { return ensureTransport().roads.has(cellKey(x, y)); }
+    function hasMonorail(x, y) { return ensureTransport().monorails.has(cellKey(x, y)); }
+    function hasCanalEdge(x1, y1, x2, y2) { return ensureTransport().canals.has(edgeKey(x1, y1, x2, y2)); }
+    function hasBridgeEdge(x1, y1, x2, y2) { return ensureTransport().bridges.has(edgeKey(x1, y1, x2, y2)); }
+    function colonyHasAirport(col) { return ensureTransport().airports.has(cellKey(col.x, col.y)); }
+
+    // ---- transport build costs ---------------------------------------------
+    // A cost object is { food, material, energy, wealth, buildTurns }. These
+    // helpers read the per-terrain cost blocks from config.
+    const _COST_KEYS = ["food", "material", "energy", "wealth", "buildTurns"];
+    function _emptyCost() { return { food: 0, material: 0, energy: 0, wealth: 0, buildTurns: 0 }; }
+    function _addCost(a, b, scale) {
+      const s = (scale == null) ? 1 : scale;
+      for (const k of _COST_KEYS) a[k] = (a[k] || 0) + (b && b[k] || 0) * s;
+      return a;
+    }
+    function _avgCost(a, b) {
+      const out = _emptyCost();
+      for (const k of _COST_KEYS) out[k] = ((a && a[k] || 0) + (b && b[k] || 0)) / 2;
+      return out;
+    }
+    function roadCostAt(x, y) {
+      const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(x, y))]) || {};
+      return tt.roadCostPerTile || _emptyCost();
+    }
+    function monorailCostAt(x, y) {
+      const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(x, y))]) || {};
+      return tt.monorailCostPerTile || _emptyCost();
+    }
+    function canalCostAt(x, y) {
+      const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(x, y))]) || {};
+      return tt.canalCostPerEdge || tt.canalCostPerTile || _emptyCost();
+    }
+    function bridgeCostVal() { return CONFIG.bridgeCost || _emptyCost(); }
+
+    // Cost to build a ROAD segment between adjacent cells (from)->(to):
+    //   average of the road build cost of FROM and TO. If the shared edge is a
+    //   river, add one bridge cost (a single river-bridge segment).
+    function roadSegmentCost(fx, fy, tx, ty) {
+      const cost = _avgCost(roadCostAt(fx, fy), roadCostAt(tx, ty));
+      // Bridge surcharge only when THIS border is a river/canal (edge-precise).
+      if (borderIsRiverSegment(fx, fy, tx, ty)) _addCost(cost, bridgeCostVal(), 1);
+      return cost;
+    }
+    // Cost to build a MONORAIL segment between adjacent cells (avg of FROM/TO).
+    function monorailSegmentCost(fx, fy, tx, ty) {
+      return _avgCost(monorailCostAt(fx, fy), monorailCostAt(tx, ty));
+    }
+    // Cost to build a CANAL segment on the edge between adjacent cells (avg).
+    function canalSegmentCost(fx, fy, tx, ty) {
+      return _avgCost(canalCostAt(fx, fy), canalCostAt(tx, ty));
+    }
+    // Cost to bridge a ROAD across a SINGLE shallow-sea tile between two land
+    // cells FROM and TO that are both adjacent to the sea cell. This is a DOUBLE
+    // bridge: FROM->sea-center and sea-center->TO. Each span costs
+    //   avg(road cost of its two endpoints) + bridge cost.
+    // Longer sea spans (more than one sea tile) are not possible -> returns null.
+    function seaBridgeCost(fx, fy, sx, sy, tx, ty) {
+      if (terrainAt(sx, sy) !== 1) return null;            // middle must be sea
+      const span1 = _addCost(_avgCost(roadCostAt(fx, fy), roadCostAt(sx, sy)), bridgeCostVal(), 1);
+      const span2 = _addCost(_avgCost(roadCostAt(sx, sy), roadCostAt(tx, ty)), bridgeCostVal(), 1);
+      return _addCost(span1, span2, 1); // total for both spans
+    }
+
+    // True if the edge between two adjacent cells is crossed by a river (the
+    // shared border is a river segment). We approximate: a river crossing exists
+    // if both cells are river-adjacent AND at least one is on a river segment.
+    function edgeCrossesRiver(x1, y1, x2, y2) {
+      const W = gameState.map.terrain[0].length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const wx = (x) => wrap ? ((x % W) + W) % W : x;
+      const rs = riverSegmentSet();
+      if (rs.has(y1 * W + wx(x1)) || rs.has(y2 * W + wx(x2))) return true;
+      // A built canal segment is equivalent to a river segment.
+      if (hasCanalEdge(x1, y1, x2, y2)) return true;
+      return false;
+    }
+
+    // ---- canal vertex/edge geometry ----------------------------------------
+    // Canals run along cell BORDERS, connecting hex VERTICES (corners). We
+    // identify a vertex by its snapped position at a fixed reference spacing so
+    // a corner shared by adjacent hexes yields an identical key regardless of
+    // zoom. A canal SEGMENT is the shared border of two adjacent LAND cells.
+    const CANAL_REF = { x: 1200, y: 1200 * 0.86602540378444 };
+    // The 6 corner points {x,y} of a hex at the reference spacing.
+    function _cellCornerPoints(x, y) {
+      const sp = CANAL_REF;
+      const cx = (0.5 + x * 0.75) * sp.x;
+      const parity = ((x % 2) + 2) % 2;
+      const cy = (0.5 + (y + parity / 2)) * sp.y;
+      const r = sp.x / 2, r2 = r / 2, yr = sp.y / 2;
+      const snap = (v) => Math.round(v * 10) / 10;
+      return [
+        { x: snap(cx - r2), y: snap(cy - yr) }, // top-left
+        { x: snap(cx + r2), y: snap(cy - yr) }, // top-right
+        { x: snap(cx + r),  y: snap(cy) },      // right
+        { x: snap(cx + r2), y: snap(cy + yr) }, // bottom-right
+        { x: snap(cx - r2), y: snap(cy + yr) }, // bottom-left
+        { x: snap(cx - r),  y: snap(cy) },      // left
+      ];
+    }
+    function _vkey(p) { return p.x + "," + p.y; }
+    function cellCornerKeys(x, y) { return _cellCornerPoints(x, y).map(_vkey); }
+    // The two endpoint vertex keys of the shared border between adjacent cells.
+    function edgeVertices(ax, ay, bx, by) {
+      const A = cellCornerKeys(ax, ay), B = new Set(cellCornerKeys(bx, by));
+      return A.filter((k) => B.has(k));
+    }
+    // Map: vertexKey -> {point:{x,y}, cells:[{x,y}...]} for all cells within the
+    // map. Cached per turn/build; rebuilt on demand.
+    let _vertexGraph = null;
+    function vertexGraph() {
+      if (_vertexGraph) return _vertexGraph;
+      const g = new Map();
+      const H = gameState.map.terrain.length, W = gameState.map.terrain[0].length;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const pts = _cellCornerPoints(x, y);
+        for (const p of pts) {
+          const k = _vkey(p);
+          let v = g.get(k);
+          if (!v) { v = { point: p, cells: [] }; g.set(k, v); }
+          v.cells.push({ x, y });
+        }
+      }
+      _vertexGraph = g;
+      return g;
+    }
+    function invalidateVertexGraph() { _vertexGraph = null; }
+    // Cells incident to a vertex (up to 3 on-map).
+    function vertexCells(vkey) { const v = vertexGraph().get(vkey); return v ? v.cells : []; }
+    // A canal SEGMENT (shared border of adjacent cells a,b) is allowed if both
+    // cells are LAND (2-9), the border is NOT a river, and not already a canal.
+    // Whether a cell is within the canal build reach (config.canalBuildRadius,
+    // default 5) of any of `owner`'s colonies.
+    function cellInCanalRange(x, y, owner) {
+      const R = (CONFIG.canalBuildRadius != null) ? CONFIG.canalBuildRadius : 5;
+      for (const b of gameState.buildings) {
+        if (b.type !== 1 || b.owner !== owner || b.inTransit) continue;
+        if (hexDistance(b.x, b.y, x, y) <= R) return true;
+      }
+      return false;
+    }
+    // A canal segment is in build range for `owner` only if BOTH its cells are
+    // within canalBuildRadius of one of the owner's colonies.
+    function canalSegmentInRange(ax, ay, bx, by, owner) {
+      return cellInCanalRange(ax, ay, owner) && cellInCanalRange(bx, by, owner);
+    }
+    function canalSegmentAllowed(ax, ay, bx, by) {
+      const ta = terrainAt(ax, ay), tb = terrainAt(bx, by);
+      if (ta < 2 || ta > 9 || tb < 2 || tb > 9) return false;   // both must be land
+      // Disallow if either adjacent cell is of a config-listed terrain code.
+      const disallowed = CONFIG.canalDisallowedTerrain || [];
+      if (disallowed.includes(ta) || disallowed.includes(tb)) return false;
+      // Not through/adjacent to impassable frozen: neither cell the canal runs
+      // between may be frozen above the altitude limit.
+      if (isImpassableFrozen(ax, ay) || isImpassableFrozen(bx, by)) return false;
+      // Reject only if THIS specific border already carries a river or canal
+      // (edge-precise — a river on a different border of a cell is fine).
+      if (borderIsRiverSegment(ax, ay, bx, by)) return false;
+      if (hasCanalEdge(ax, ay, bx, by)) return false;           // not already a canal
+      return true;
+    }
+    // Whether the specific shared border between adjacent cells is an ORIGINAL
+    // river (both cells were river cells on the source map) or a built canal.
+    // Unlike edgeCrossesRiver (which is true if EITHER cell is a river cell,
+    // used for the canal==river equivalence), this is edge-precise so canals can
+    // still be extended alongside river-marked cells.
+    function borderIsRiverOrCanal(ax, ay, bx, by) {
+      if (hasCanalEdge(ax, ay, bx, by)) return true;
+      const orig = originalRiverCells();
+      const W = gameState.map.terrain[0].length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const wx = (x) => wrap ? ((x % W) + W) % W : x;
+      return orig.has(ay * W + wx(ax)) && orig.has(by * W + wx(bx));
+    }
+    // Whether a vertex is a valid canal START/STOP: it is a corner of a
+    // A legal canal START/STOP vertex has exactly THREE adjacent cells, and:
+    //   • exactly ONE of the three is a sea tile, OR
+    //   • all three are land AND exactly 1 or 2 (not 0, not 3) of the borders
+    //     meeting at this vertex are river/canal segments.
+    // (Canals count as rivers via edgeCrossesRiver.)
+    function vertexConnectable(vkey) {
+      const cells = vertexCells(vkey);
+      if (cells.length !== 3) return false;             // must be an interior vertex
+      const seaCount = cells.filter((c) => terrainAt(c.x, c.y) === 1).length;
+      if (seaCount === 1) return true;                  // exactly one sea tile
+      if (seaCount !== 0) return false;                 // 2+ sea -> not a valid land start
+      // All three land: valid when exactly 1 or 2 river/canal SEGMENTS end AT
+      // this vertex (regardless of other river segments elsewhere in the cells).
+      const n = riverVertexCountMap().get(vkey) || 0;
+      return n === 1 || n === 2;
+    }
+    // The canal edges (allowed borders) incident to a vertex, as
+    // [{a:{x,y}, b:{x,y}, other:otherVertexKey}]. Used for path planning.
+    function canalEdgesAtVertex(vkey) {
+      const cells = vertexCells(vkey);
+      const out = [];
+      for (let i = 0; i < cells.length; i++) for (let j = i + 1; j < cells.length; j++) {
+        const a = cells[i], b = cells[j];
+        if (hexDistance(a.x, a.y, b.x, b.y) !== 1) continue;
+        const vs = edgeVertices(a.x, a.y, b.x, b.y);
+        if (!vs.includes(vkey)) continue;
+        if (!canalSegmentAllowed(a.x, a.y, b.x, b.y)) continue;
+        if (!canalSegmentInRange(a.x, a.y, b.x, b.y, 'human')) continue; // within 5 of a colony
+        const other = vs.find((k) => k !== vkey);
+        if (other) out.push({ a, b, other });
+      }
+      return out;
+    }
+    // The vertex key for corner `cornerIndex` of cell (x,y) (matches
+    // hexVertices / _cellCornerPoints corner order).
+    function cornerVertexKey(x, y, cornerIndex) {
+      const keys = cellCornerKeys(x, y);
+      return keys[cornerIndex] || null;
+    }
+    // Reference-space point {x,y} of a vertex key (for rendering mapping).
+    function vertexPoint(vkey) { const v = vertexGraph().get(vkey); return v ? v.point : null; }
+    // Plan a canal path along cell borders from start vertex to end vertex using
+    // Dijkstra over the vertex graph; each step is one ALLOWED canal segment
+    // (canalEdgesAtVertex), cost = canalSegmentCost. Returns
+    //   { vertices:[vkey...], edges:[{a,b}...], cost } or null if unreachable.
+    function planCanalPath(startVK, endVK) {
+      if (!startVK || !endVK || startVK === endVK) return null;
+      const dist = new Map([[startVK, 0]]);
+      const prev = new Map();          // vkey -> { from, edge:{a,b} }
+      const done = new Set();
+      const pq = [{ k: startVK, d: 0 }];
+      let guard = 0, cap = vertexGraph().size * 6 + 100;
+      while (pq.length && guard++ < cap) {
+        let bi = 0; for (let i = 1; i < pq.length; i++) if (pq[i].d < pq[bi].d) bi = i;
+        const cur = pq.splice(bi, 1)[0];
+        if (done.has(cur.k)) continue; done.add(cur.k);
+        if (cur.k === endVK) break;
+        for (const e of canalEdgesAtVertex(cur.k)) {
+          const nk = e.other;
+          if (done.has(nk)) continue;
+          const seg = canalSegmentCost(e.a.x, e.a.y, e.b.x, e.b.y);
+          const w = (seg.material || 0) + (seg.food || 0) + (seg.energy || 0) + (seg.wealth || 0) + 0.01;
+          const nd = cur.d + w;
+          if (!dist.has(nk) || nd < dist.get(nk)) {
+            dist.set(nk, nd); prev.set(nk, { from: cur.k, edge: { a: e.a, b: e.b } });
+            pq.push({ k: nk, d: nd });
+          }
+        }
+      }
+      if (!dist.has(endVK)) return null;
+      // Reconstruct vertex + edge chain.
+      const vertices = [endVK]; const edges = [];
+      let k = endVK;
+      while (k !== startVK) {
+        const p = prev.get(k); if (!p) return null;
+        edges.unshift(p.edge); vertices.unshift(p.from); k = p.from;
+      }
+      // Total cost = sum of segment costs.
+      const total = _emptyCost();
+      for (const e of edges) _addCost(total, canalSegmentCost(e.a.x, e.a.y, e.b.x, e.b.y), 1);
+      return { vertices, edges, cost: total };
+    }
+
+    // ---- transport construction --------------------------------------------
+    // Whether a road/monorail cell already carries that kind.
+    function _cellHasKind(kind, x, y) {
+      return kind === 'road' ? hasRoad(x, y) : (kind === 'monorail' ? hasMonorail(x, y) : false);
+    }
+    // How much of a segment still needs building, as a fraction 0..1:
+    //   canal: 1 if the edge doesn't exist yet, else 0.
+    //   road/monorail: each endpoint contributes half; a half that already has
+    //   the improvement is not charged/built. Fully existing -> 0.
+    function segmentRemainingFraction(kind, fx, fy, tx, ty) {
+      if (kind === 'canal') return hasCanalEdge(fx, fy, tx, ty) ? 0 : 1;
+      const fromHas = _cellHasKind(kind, fx, fy), toHas = _cellHasKind(kind, tx, ty);
+      return (fromHas ? 0 : 0.5) + (toHas ? 0 : 0.5);
+    }
+    // Cost of one segment of `kind` ('road'|'monorail'|'canal') between adjacent
+    // cells, scaled by how much of it still needs building (existing road/
+    // monorail halves and existing canal edges cost nothing and take no time).
+    function transportSegmentCost(kind, fx, fy, tx, ty) {
+      const frac = segmentRemainingFraction(kind, fx, fy, tx, ty);
+      const base = (kind === 'monorail') ? monorailSegmentCost(fx, fy, tx, ty)
+        : (kind === 'canal') ? canalSegmentCost(fx, fy, tx, ty)
+        : roadSegmentCost(fx, fy, tx, ty);
+      if (frac >= 1) return base;
+      const out = _emptyCost();
+      return _addCost(out, base, frac);
+    }
+    // Total cost of a planned path (sum of segment costs). Path is [{x,y}...].
+    function planTotalCost(kind, path) {
+      const total = _emptyCost();
+      for (let i = 1; i < path.length; i++) {
+        _addCost(total, transportSegmentCost(kind, path[i-1].x, path[i-1].y, path[i].x, path[i].y), 1);
+      }
+      return total;
+    }
+    // Estimated completion time (turns) for a plan: sum of per-segment buildTurns
+    // (does not model resource-shortfall pauses).
+    function planEtaTurns(kind, path) {
+      let turns = 0;
+      for (let i = 1; i < path.length; i++) {
+        turns += transportSegmentCost(kind, path[i-1].x, path[i-1].y, path[i].x, path[i].y).buildTurns || 0;
+      }
+      return Math.max(1, Math.ceil(turns));
+    }
+    // Create + queue a construction plan. `source` is the colony paying for it.
+    function planTransport(owner, kind, source, path) {
+      if (!Array.isArray(path) || path.length < 2) return null;
+      const tr = ensureTransport();
+      const plan = {
+        owner, kind,
+        source: { x: source.x, y: source.y },
+        path: path.map((c) => ({ x: c.x, y: c.y })),
+        segIndex: 1,      // next segment to build connects path[segIndex-1] -> path[segIndex]
+        accrued: 0,       // fractional buildTurns accumulated toward current segment
+        paused: false,
+        id: (gameState._transportPlanSeq = (gameState._transportPlanSeq || 0) + 1),
+      };
+      tr.plans.push(plan);
+      return plan;
+    }
+    // Create a CANAL plan from an explicit list of edges [{a:{x,y},b:{x,y}}...].
+    // Built one edge (border) per turn's worth of buildTurns, paid from source.
+    function planCanalEdges(owner, source, edges) {
+      if (!Array.isArray(edges) || !edges.length) return null;
+      const tr = ensureTransport();
+      const plan = {
+        owner, kind: 'canal',
+        source: { x: source.x, y: source.y },
+        edges: edges.map((e) => ({ a: { x: e.a.x, y: e.a.y }, b: { x: e.b.x, y: e.b.y } })),
+        edgeIndex: 0,     // next edge to build
+        accrued: 0,
+        paused: false,
+        id: (gameState._transportPlanSeq = (gameState._transportPlanSeq || 0) + 1),
+      };
+      tr.plans.push(plan);
+      return plan;
+    }
+    // Mark a cell/edge as built for the given kind.
+    function _applyBuiltSegment(kind, fx, fy, tx, ty) {
+      const tr = ensureTransport();
+      if (kind === 'canal') {
+        tr.canals.add(edgeKey(fx, fy, tx, ty));
+        // A built canal is treated exactly like a river from now on: mark both
+        // adjacent cells as river cells so all river logic/rendering applies.
+        markRiverCell(fx, fy); markRiverCell(tx, ty);
+        _riverVertexCounts = null; // canal endpoints change vertex incidence
+      } else if (kind === 'monorail') {
+        // A monorail replaces any road on these cells (removes the road).
+        tr.monorails.add(cellKey(fx, fy)); tr.monorails.add(cellKey(tx, ty));
+        tr.roads.delete(cellKey(fx, fy)); tr.roads.delete(cellKey(tx, ty));
+      } else { // road (+ bridge over river or sea)
+        tr.roads.add(cellKey(fx, fy)); tr.roads.add(cellKey(tx, ty));
+        // Bridge this segment only if THIS border is a river/canal (edge-
+        // precise, so a road merely running beside a river isn't bridged), or
+        // if the segment spans a sea tile (sea crossing).
+        if (borderIsRiverSegment(fx, fy, tx, ty) || terrainAt(fx, fy) === 1 || terrainAt(tx, ty) === 1) {
+          tr.bridges.add(edgeKey(fx, fy, tx, ty));
+        }
+      }
+    }
+    // Advance all construction plans by one turn. Builds segments from the
+    // source outward, paying each completed segment's cost from the source
+    // colony's stored resources; pauses a plan if resources are insufficient.
+    function advanceTransportConstruction() {
+      const tr = ensureTransport();
+      let changed = false;
+      const remaining = [];
+      for (const plan of tr.plans) {
+        const col = gameState.buildings.find((b) => b.type === 1 && b.owner === plan.owner
+          && b.x === plan.source.x && b.y === plan.source.y && !b.inTransit);
+        if (!col) continue; // source colony gone -> drop plan
+        const pool = ensureStored(col);
+        // One turn's worth of build progress; complete as many segments as the
+        // accrued buildTurns + resources allow.
+        plan.accrued += 1; // one turn of construction effort
+        plan.paused = false;
+        // Canal plans are EDGE-based (explicit list of cell-border edges).
+        if (plan.edges) {
+          let prog = true;
+          while (plan.edgeIndex < plan.edges.length && prog) {
+            prog = false;
+            const e = plan.edges[plan.edgeIndex];
+            if (hasCanalEdge(e.a.x, e.a.y, e.b.x, e.b.y)) { plan.edgeIndex += 1; prog = true; continue; } // already built
+            if (!canalSegmentAllowed(e.a.x, e.a.y, e.b.x, e.b.y)) { plan.edgeIndex += 1; prog = true; continue; }
+            if (!canalSegmentInRange(e.a.x, e.a.y, e.b.x, e.b.y, plan.owner)) { plan.edgeIndex += 1; prog = true; continue; }
+            const seg = canalSegmentCost(e.a.x, e.a.y, e.b.x, e.b.y);
+            const need = Math.max(0.0001, seg.buildTurns || 0);
+            if (plan.accrued + 1e-9 < need) break;
+            const afford = ["food", "material", "energy", "wealth"].every((k) => (pool[k] || 0) >= (seg[k] || 0));
+            if (!afford) { plan.paused = true; break; }
+            for (const k of ["food", "material", "energy", "wealth"]) pool[k] = Math.max(0, (pool[k] || 0) - (seg[k] || 0));
+            _applyBuiltSegment('canal', e.a.x, e.a.y, e.b.x, e.b.y);
+            invalidateVertexGraph();
+            plan.accrued -= need; plan.edgeIndex += 1; prog = true; changed = true;
+          }
+          if (plan.edgeIndex < plan.edges.length) remaining.push(plan);
+          continue;
+        }
+        let progressed = true;
+        while (plan.segIndex < plan.path.length && progressed) {
+          progressed = false;
+          const a = plan.path[plan.segIndex - 1], b = plan.path[plan.segIndex];
+          // Never build road/monorail onto an impassable-frozen cell; canals
+          // onto/adjacent to it are already rejected by canalSegmentAllowed.
+          if (plan.kind !== 'canal' && (isImpassableFrozen(a.x, a.y) || isImpassableFrozen(b.x, b.y))) {
+            plan.segIndex = plan.path.length; break; // stop the plan here
+          }
+          if (plan.kind === 'canal' && !canalSegmentAllowed(a.x, a.y, b.x, b.y)) {
+            plan.segIndex += 1; continue; // skip an illegal canal segment
+          }
+          // Skip a segment that already fully exists (no cost, no time).
+          if (segmentRemainingFraction(plan.kind, a.x, a.y, b.x, b.y) <= 0) {
+            plan.segIndex += 1; progressed = true; continue;
+          }
+          const seg = transportSegmentCost(plan.kind, a.x, a.y, b.x, b.y);
+          const need = Math.max(0.0001, seg.buildTurns || 0);
+          if (plan.accrued + 1e-9 < need) break; // not enough build effort yet this turn
+          // Can we afford the segment's resources?
+          const afford = ["food", "material", "energy", "wealth"].every((k) => (pool[k] || 0) >= (seg[k] || 0));
+          if (!afford) { plan.paused = true; break; }
+          // Pay + build the segment.
+          for (const k of ["food", "material", "energy", "wealth"]) pool[k] = Math.max(0, (pool[k] || 0) - (seg[k] || 0));
+          _applyBuiltSegment(plan.kind, a.x, a.y, b.x, b.y);
+          plan.accrued -= need;
+          plan.segIndex += 1;
+          progressed = true; changed = true;
+        }
+        if (plan.segIndex < plan.path.length) remaining.push(plan); // not finished
+      }
+      tr.plans = remaining;
+      // Drop the planning (green) overlay for any plan that has completed, so the
+      // green line disappears once the road/monorail/canal is fully built.
+      if (typeof _transportPlannedPaths !== 'undefined' && Array.isArray(_transportPlannedPaths)) {
+        const liveIds = new Set(remaining.map((p) => p.id));
+        const before = _transportPlannedPaths.length;
+        _transportPlannedPaths = _transportPlannedPaths.filter((pp) => pp.planId == null || liveIds.has(pp.planId));
+        if (_transportPlannedPaths.length !== before) changed = true;
+        // Also prune completed canal-edge planning overlays.
+        if (typeof _canalPlannedEdges !== 'undefined' && Array.isArray(_canalPlannedEdges)) {
+          const cbefore = _canalPlannedEdges.length;
+          _canalPlannedEdges = _canalPlannedEdges.filter((pp) => pp.planId == null || liveIds.has(pp.planId));
+          if (_canalPlannedEdges.length !== cbefore) changed = true;
+        }
+        const anyPlanned = _transportPlannedPaths.length || (typeof _canalPlannedEdges !== 'undefined' && _canalPlannedEdges.length);
+        const anyMode = _transportMode || (typeof _canalMode !== 'undefined' && _canalMode);
+        if (hexMap && typeof hexMap.setOverlay === 'function') {
+          if (!anyMode && !anyPlanned) hexMap.setOverlay(null);
+          else hexMap.setOverlay(transportOverlayDraw);
+        }
+      }
+      if (changed) {
+        if (hexMap && typeof hexMap.setTransport === 'function') hexMap.setTransport(tr);
+        recomputeHumanResourcePanel && recomputeHumanResourcePanel();
+        updateResourcesPanel && updateResourcesPanel();
+      }
+      return changed;
+    }
+
+    // Movement modes usable to ENTER/traverse a cell, mapping to the terrain
+    // movement[] index: 0 unimproved, 1 road, 2 sea/river, 3 monorail, 4 air.
+    // Returns the set of available mode indices for (x,y) for `owner`.
+    function cellModes(x, y, owner) {
+      const terr = terrainAt(x, y);
+      const modes = new Set();
+      const water = (terr === 1);
+      if (!water) modes.add(0);                 // unimproved land
+      if (hasRoad(x, y)) modes.add(1);          // road
+      if (hasMonorail(x, y)) modes.add(3);      // monorail
+      // Sea/river mode (index 2): shallow-sea (with dock owner), river segment,
+      // or a canal-bearing cell. Frozen / mountains never count for water routes.
+      if (terr !== 7 && terr !== 8 && terr !== 9) {
+        const onRiver = riverSegmentSet().has(y * gameState.map.terrain[0].length +
+          ((gameState.map.meta && gameState.map.meta.wrap) ? ((x % gameState.map.terrain[0].length) + gameState.map.terrain[0].length) % gameState.map.terrain[0].length : x));
+        if (water && isShallowSea(x, y) && (owner == null || ownerHasDock(owner))) modes.add(2);
+        if (onRiver) modes.add(2);
+        // A built canal segment is equivalent to a river: a cell bordering a
+        // canal edge also gets the sea/river mode.
+        if (gameState.transport && gameState.transport.canals) {
+          for (const n of hexNeighborsRenderer(x, y)) {
+            if (hasCanalEdge(x, y, n.x, n.y)) { modes.add(2); break; }
+          }
+        }
+      }
+      return modes;
+    }
+    // The fastest (lowest movement[] cost) mode available in a cell for `owner`.
+    // Returns { mode, cost } or null if the cell has no usable mode.
+    function cellFastest(x, y, owner) {
+      const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(x, y))]) || {};
+      const mv = Array.isArray(tt.movement) ? tt.movement : [1, 1, 1, 1, 1];
+      let best = null;
+      for (const m of cellModes(x, y, owner)) {
+        const c = (mv[m] != null) ? mv[m] : 1;
+        if (best == null || c < best.cost) best = { mode: m, cost: c };
+      }
+      return best;
+    }
+    // Whether a cell is in ANOTHER player's zone of control (impassable for now).
+    function inForeignControl(x, y, owner) {
+      for (const b of gameState.buildings) {
+        if (b.type !== 1 || b.owner === owner) continue;
+        if (hexDistance(b.x, b.y, x, y) <= colonyControlRadius(b)) return true;
+      }
+      return false;
+    }
+
+    // ---- movement / colony-launch pathfinding ------------------------------
+    // Set of cells that are on a river segment (the river path itself).
+    function riverSegmentSet() {
+      if (!_riverCellSet) { nearRiver(-999, -999); } // triggers lazy build in nearRiver
+      return _riverCellSet || new Set();
+    }
+    // Mark a cell as a river cell (used when a canal is built — a canal becomes
+    // a river for all purposes).
+    function markRiverCell(x, y) {
+      const W = gameState.map.terrain[0].length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const wx = wrap ? ((x % W) + W) % W : x;
+      riverSegmentSet().add(y * W + wx);
+    }
+    // The ORIGINAL river cells from the map (independent of canal marking), for
+    // edge-precise river-border checks.
+    let _origRiverCells = null;
+    function originalRiverCells() {
+      if (_origRiverCells) return _origRiverCells;
+      const W = gameState.map.terrain[0].length;
+      _origRiverCells = new Set();
+      for (const path of (gameState.map.rivers || [])) {
+        for (const c of path) _origRiverCells.add(c.y * W + c.x);
+      }
+      return _origRiverCells;
+    }
+    // Set of river BORDER edges (edgeKey of consecutive cells in each river
+    // path) — the precise borders a river runs along. Rebuilt on demand.
+    let _riverEdgeSet = null;
+    function riverEdgeSet() {
+      if (_riverEdgeSet) return _riverEdgeSet;
+      _riverEdgeSet = new Set();
+      for (const path of (gameState.map.rivers || [])) {
+        for (let i = 1; i < path.length; i++) {
+          const a = path[i - 1], b = path[i];
+          if (hexDistance(a.x, a.y, b.x, b.y) === 1) _riverEdgeSet.add(edgeKey(a.x, a.y, b.x, b.y));
+        }
+      }
+      return _riverEdgeSet;
+    }
+    // Whether the specific shared border between adjacent cells is a river or
+    // canal SEGMENT (edge-precise — not merely adjacent to a river cell).
+    function borderIsRiverSegment(ax, ay, bx, by) {
+      return riverEdgeSet().has(edgeKey(ax, ay, bx, by)) || hasCanalEdge(ax, ay, bx, by);
+    }
+    // Count of river/canal SEGMENTS incident to a vertex — i.e. segments that
+    // have this vertex as one of their two endpoints. Covers land-land river
+    // borders, canal edges, AND coastal river ends (a river path whose final
+    // cell is sea ends AT a vertex of the last land->sea edge).
+    let _riverVertexCounts = null;
+    function riverVertexCountMap() {
+      if (_riverVertexCounts) return _riverVertexCounts;
+      // Count DISTINCT river/canal border SEGMENTS incident to each vertex.
+      // A single physical border must be counted ONCE even if more than one
+      // river path runs along it (two rivers can share the same cell border),
+      // otherwise the incidence count is inflated and a legitimate 1-/2-segment
+      // canal start/stop vertex is wrongly rejected. We therefore accumulate a
+      // Set of canonical border-edge keys per vertex and use the set sizes.
+      const segsByVertex = new Map(); // vertexKey -> Set(edgeKey)
+      const addSeg = (ax, ay, bx, by) => {
+        const vs = edgeVertices(ax, ay, bx, by);
+        if (vs.length !== 2) return;
+        const ke = edgeKey(ax, ay, bx, by);
+        for (const vk of vs) {
+          let s = segsByVertex.get(vk);
+          if (!s) { s = new Set(); segsByVertex.set(vk, s); }
+          s.add(ke);
+        }
+      };
+      // River path segments (shared border of consecutive cells). Both the
+      // land->land and land->sea final edges contribute their border to each
+      // of the edge's two vertices (either shared vertex is acceptable as a
+      // canal start).
+      for (const path of (gameState.map.rivers || [])) {
+        for (let i = 1; i < path.length; i++) {
+          const a = path[i - 1], b = path[i];
+          if (hexDistance(a.x, a.y, b.x, b.y) !== 1) continue;
+          addSeg(a.x, a.y, b.x, b.y);
+        }
+      }
+      // Canal edges.
+      const canals = (gameState.transport && gameState.transport.canals) || new Set();
+      for (const ek of canals) {
+        const [ka, kb] = ek.split("|"); const [ax, ay] = ka.split(",").map(Number); const [bx, by] = kb.split(",").map(Number);
+        addSeg(ax, ay, bx, by);
+      }
+      const m = new Map();
+      for (const [vk, s] of segsByVertex) m.set(vk, s.size);
+      _riverVertexCounts = m;
+      return m;
+    }
+    // Approximate altitude in meters above sea level for a cell, from the
+    // normalized elevation map and sea level.
+    function altitudeMeters(x, y) {
+      const map = gameState.map; if (!map || !map.elevation) return 0;
+      const W = map.terrain[0].length;
+      const wrap = !!(map.meta && map.meta.wrap);
+      const xx = wrap ? ((x % W) + W) % W : x;
+      if (y < 0 || y >= map.elevation.length || xx < 0 || xx >= W) return 0;
+      const e = map.elevation[y][xx];
+      const sl = (map.seaLevel != null) ? map.seaLevel : 0.4;
+      const maxM = (CONFIG.maxAltitudeMeters != null) ? CONFIG.maxAltitudeMeters : 8000;
+      if (e <= sl) return 0;
+      return ((e - sl) / (1 - sl)) * maxM;
+    }
+    // Whether an owner has any operational Dock anywhere (enables shallow-sea
+    // travel for that owner's colony-launch paths).
+    function ownerHasDock(owner) {
+      for (const b of gameState.buildings) {
+        if (b.type === 5 && b.owner === owner && isOperational(b)) return true;
+      }
+      return false;
+    }
+    // Whether a cell can be traversed/settled by land movement. Sea is normally
+    // impassable; frozen cells above the altitude threshold are impassable.
+    // With `allowShallowSea` (owner has a Dock), shallow-sea tiles (sea adjacent
+    // to land) become traversable.
+    // A frozen (terrain 9) cell above the configured altitude is impassable —
+    // for movement, and for building roads/monorails/canals.
+    function isImpassableFrozen(x, y) {
+      if (terrainAt(x, y) !== 9) return false;
+      const lim = (CONFIG.impassableFrozenAltitude != null) ? CONFIG.impassableFrozenAltitude : 5000;
+      return altitudeMeters(x, y) > lim;
+    }
+    function isPassableCell(x, y, allowShallowSea) {
+      const terr = terrainAt(x, y);
+      if (terr === 1) return !!allowShallowSea && isShallowSea(x, y);
+      if (terr < 2 || terr > 9) return false;          // off-map
+      if (isImpassableFrozen(x, y)) return false;      // frozen too high
+      return true;
+    }
+    // Movement cost to ENTER cell (x,y) on unimproved terrain, plus the
+    // river-crossing surcharge when the cell sits on a river segment.
+    //
+    // terrainTypes[type].movement is a per-transport-mode cost array:
+    //   [unimproved, road, sea (or river), monorail, air]
+    // (lower = cheaper/faster to enter). Only index 0 (unimproved) is used
+    // today; the road/sea/monorail/air entries are reserved for future
+    // transport infrastructure.
+    function enterCost(x, y) {
+      const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(x, y))]) || {};
+      const mv = Array.isArray(tt.movement) ? tt.movement[0] : 1; // [0] = unimproved
+      let cost = (mv != null ? mv : 1);
+      const W = gameState.map.terrain[0].length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const xx = wrap ? ((x % W) + W) % W : x;
+      if (riverSegmentSet().has(y * W + xx)) {
+        cost += (CONFIG.riverCrossingMovementCost != null ? CONFIG.riverCrossingMovementCost : 2);
+      }
+      return cost;
+    }
+    // Dijkstra over the hex grid from (sx,sy) to (tx,ty), summing enterCost for
+    // each stepped-into cell. Returns { cost, path:[{x,y}...] } or null if the
+    // target is unreachable by land. The start cell contributes no enter cost.
+    function findMovementPath(sx, sy, tx, ty, owner) {
+      const map = gameState.map; if (!map) return null;
+      const W = map.terrain[0].length, H = map.terrain.length;
+      const wrap = !!(map.meta && map.meta.wrap);
+      const wxf = (x) => wrap ? ((x % W) + W) % W : x;
+      const key = (x, y) => y * W + wxf(x);
+      // A Dock owned by `owner` opens shallow-sea tiles to travel.
+      const allowShallow = owner != null && ownerHasDock(owner);
+      if (!isPassableCell(tx, ty, allowShallow)) return null;
+      const startK = key(sx, sy), targetK = key(tx, ty);
+      const dist = new Map(), prev = new Map(), done = new Set();
+      dist.set(startK, 0);
+      // Simple array-based priority queue (maps are small enough here).
+      const pq = [{ k: startK, x: wxf(sx), y: sy, d: 0 }];
+      while (pq.length) {
+        let bi = 0;
+        for (let i = 1; i < pq.length; i++) if (pq[i].d < pq[bi].d) bi = i;
+        const cur = pq.splice(bi, 1)[0];
+        if (done.has(cur.k)) continue;
+        done.add(cur.k);
+        if (cur.k === targetK) break;
+        for (const n of hexNeighborsRenderer(cur.x, cur.y)) {
+          const nx = wxf(n.x), ny = n.y;
+          if (ny < 0 || ny >= H) continue;
+          if (!isPassableCell(nx, ny, allowShallow)) continue;
+          const nk = key(nx, ny);
+          if (done.has(nk)) continue;
+          const nd = cur.d + enterCost(nx, ny);
+          if (!dist.has(nk) || nd < dist.get(nk)) {
+            dist.set(nk, nd); prev.set(nk, cur.k);
+            pq.push({ k: nk, x: nx, y: ny, d: nd });
+          }
+        }
+      }
+      if (!dist.has(targetK)) return null;
+      // Reconstruct path (as x,y from the key).
+      const path = [];
+      let k = targetK;
+      while (k != null) {
+        const px = ((k % W) + W) % W, py = Math.floor(k / W);
+        path.unshift({ x: px, y: py });
+        k = prev.has(k) ? prev.get(k) : null;
+      }
+      return { cost: dist.get(targetK), path };
+    }
+    // Travel time (in turns/years) for the biodome materials to reach a target,
+    // given a movement path cost and the per-year movement allowance.
+    function biodomeTravelTurns(pathCost) {
+      const perYear = (CONFIG.biodomeMovementPerYear != null) ? CONFIG.biodomeMovementPerYear : 12;
+      return Math.max(1, Math.ceil(pathCost / perYear));
+    }
+
+    // ---- colony network matrices -------------------------------------------
+    // The ordered list of all colonies (human + AI) used for both matrices.
+    function allColonies() {
+      return gameState.buildings.filter((b) => b.type === 1 && !b.inTransit);
+    }
+    // Movement-cost matrix between all colonies. Edge cost between adjacent cells
+    // = average of each cell's FASTEST available mode cost. Cells inside a
+    // FOREIGN colony's zone of control are impassable (from `owner`'s view).
+    // Returns { colonies:[...], cost:number[][] } (Infinity = unreachable).
+    function computeMovementCostMatrix() {
+      const cols = allColonies();
+      const n = cols.length;
+      const cost = Array.from({ length: n }, () => new Array(n).fill(Infinity));
+      const W = gameState.map.terrain[0].length, H = gameState.map.terrain.length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const wx = (x) => wrap ? ((x % W) + W) % W : x;
+      const key = (x, y) => y * W + wx(x);
+      for (let i = 0; i < n; i++) {
+        cost[i][i] = 0;
+        const src = cols[i], owner = src.owner;
+        // Dijkstra from src over cells that have a usable mode and are not in
+        // another player's control.
+        const dist = new Map(); dist.set(key(src.x, src.y), 0);
+        const pq = [{ x: wx(src.x), y: src.y, d: 0 }];
+        const done = new Set();
+        const fastestAt = (x, y) => {
+          if (inForeignControl(x, y, owner)) return null;
+          return cellFastest(x, y, owner);
+        };
+        let _guard = 0, _cap = W * H * 8 + 100;
+        while (pq.length) {
+          if (++_guard > _cap) break; // safety: never loop forever
+          let bi = 0; for (let j = 1; j < pq.length; j++) if (pq[j].d < pq[bi].d) bi = j;
+          const cur = pq.splice(bi, 1)[0]; const ck = key(cur.x, cur.y);
+          if (done.has(ck)) continue; done.add(ck);
+          const curF = (cur.x === wx(src.x) && cur.y === src.y) ? cellFastest(cur.x, cur.y, owner) : fastestAt(cur.x, cur.y);
+          if (!curF) continue;
+          for (const nb of hexNeighborsRenderer(cur.x, cur.y)) {
+            const nx = wx(nb.x), ny = nb.y;
+            if (ny < 0 || ny >= H) continue;
+            const nf = fastestAt(nx, ny);
+            if (!nf) continue;
+            const stepCost = (curF.cost + nf.cost) / 2; // average of FROM/TO fastest
+            const nk = key(nx, ny), nd = cur.d + stepCost;
+            if (!dist.has(nk) || nd < dist.get(nk)) { dist.set(nk, nd); pq.push({ x: nx, y: ny, d: nd }); }
+          }
+        }
+        for (let j = 0; j < n; j++) {
+          if (j === i) continue;
+          const d = dist.get(key(cols[j].x, cols[j].y));
+          if (d != null) cost[i][j] = d;
+        }
+      }
+      return { colonies: cols, cost };
+    }
+
+    // Whether a full connecting path exists between two colonies using ONLY the
+    // given predicate `cellOk(x,y)` for every intermediate cell (colony cells
+    // included). Foreign-control cells are excluded. BFS over hex neighbors.
+    function _pathExists(a, b, owner, cellOk) {
+      const W = gameState.map.terrain[0].length, H = gameState.map.terrain.length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const wx = (x) => wrap ? ((x % W) + W) % W : x;
+      const key = (x, y) => y * W + wx(x);
+      const start = key(a.x, a.y), goal = key(b.x, b.y);
+      const seen = new Set([start]);
+      let frontier = [{ x: wx(a.x), y: a.y }];
+      while (frontier.length) {
+        const next = [];
+        for (const c of frontier) {
+          if (key(c.x, c.y) === goal) return true;
+          for (const nb of hexNeighborsRenderer(c.x, c.y)) {
+            const nx = wx(nb.x), ny = nb.y;
+            if (ny < 0 || ny >= H) continue;
+            const nk = key(nx, ny);
+            if (seen.has(nk)) continue;
+            const isEndpoint = (nk === goal || nk === start);
+            if (!isEndpoint && inForeignControl(nx, ny, owner)) continue;
+            if (!isEndpoint && !cellOk(nx, ny)) continue;
+            seen.add(nk); next.push({ x: nx, y: ny });
+          }
+        }
+        frontier = next;
+      }
+      return false;
+    }
+    // Connectedness matrix: for each colony pair, the LARGEST level achievable:
+    //   4 airports in both colonies
+    //   3 monorail on every connecting tile
+    //   2 both have docks and a clear sea/river/canal route
+    //   1 road on every connecting tile
+    //   0 otherwise (a plain overland path with unimproved tiles / or none)
+    function computeConnectednessMatrix() {
+      const cols = allColonies();
+      const n = cols.length;
+      const m = Array.from({ length: n }, () => new Array(n).fill(0));
+      const isWaterRoute = (x, y) => {
+        const terr = terrainAt(x, y);
+        if (terr === 7 || terr === 8 || terr === 9) return false; // mountains/frozen never
+        if (terr === 1) return isShallowSea(x, y);                // shallow sea
+        // land counts only if it carries a river segment or a canal edge
+        const onRiver = riverSegmentSet().has(y * gameState.map.terrain[0].length +
+          ((gameState.map.meta && gameState.map.meta.wrap) ? ((x % gameState.map.terrain[0].length) + gameState.map.terrain[0].length) % gameState.map.terrain[0].length : x));
+        if (onRiver) return true;
+        // A built canal segment counts as a water route (equivalent to river).
+        if (gameState.transport && gameState.transport.canals) {
+          for (const nb of hexNeighborsRenderer(x, y)) {
+            if (hasCanalEdge(x, y, nb.x, nb.y)) return true;
+          }
+        }
+        return false;
+      };
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          const a = cols[i], b = cols[j], owner = a.owner;
+          let level = 0;
+          if (colonyHasAirport(a) && colonyHasAirport(b)) level = 4;
+          else if (_pathExists(a, b, owner, (x, y) => hasMonorail(x, y))) level = 3;
+          else if (colonyHasDock(a) && colonyHasDock(b) && _pathExists(a, b, owner, isWaterRoute)) level = 2;
+          else if (_pathExists(a, b, owner, (x, y) => hasRoad(x, y))) level = 1;
+          else level = 0;
+          m[i][j] = m[j][i] = level;
+        }
+      }
+      return { colonies: cols, level: m };
+    }
 
     // Unified per-cell production breakdown into base vs bonus for Food,
     // Production (material) and Happiness. Used by hover, the work modal, and
@@ -411,37 +1327,42 @@
     function cellBreakdown(gx, gy, isHome, owner) {
       const terr = terrainAt(gx, gy);
       const tp = terrainProd(terr);
-      const tpp = (CONFIG.terrainProduction && CONFIG.terrainProduction[String(terr)]) || {};
+      const tpp = ((CONFIG.terrainTypes && CONFIG.terrainTypes[String(terr)]) || {}).base || {};
       const food = { base: tp.food, bonus: 0 };
       const prod = { base: tp.material, bonus: 0 };
       const happ = { base: tpp.happiness || 0, bonus: 0 };
       const energy = { base: 0, bonus: 0 };
+      const wealth = { base: 0, bonus: 0 };
 
       // Water (river/sea) adjacency food bonus.
       food.bonus += waterFoodBonus(gx, gy);
+      // River-adjacent tiles also gain a wealth bonus.
+      wealth.bonus += riverWealthBonus(gx, gy);
 
-      // Biodome base production on its home cell (uses the same *Bonus keys as
-      // other buildings, per config).
+      // Biodome base production on its home cell (uses the config `bonus`).
       if (isHome) {
-        const bd = buildingType(1) || {};
-        food.bonus += bd.foodBonus || 0;
-        prod.bonus += bd.materialBonus || 0;
-        energy.bonus += bd.energyBonus || 0;
-        happ.bonus += bd.happinessBonus || 0;
+        const n = bldgNet(1);
+        food.bonus += n.food;
+        prod.bonus += n.material;
+        energy.bonus += n.energy;
+        happ.bonus += n.happiness;
+        wealth.bonus += n.wealth;
       }
-      // Owned, operational building standing on this cell.
+      // Owned, operational building standing on this cell. Show NET output
+      // (production bonus minus per-year upkeep) for material/energy.
       for (const b of gameState.buildings) {
         if (b.type === 1) continue;
         if (b.owner !== owner) continue;
         if (b.x !== gx || b.y !== gy) continue;
         if (!isOperational(b)) continue;
-        const t = buildingType(b.type) || {};
-        food.bonus += t.foodBonus || 0;
-        prod.bonus += t.materialBonus || 0;
-        energy.bonus += (t.energyProduced || 0) - (t.energyUse || 0);
-        happ.bonus += t.happinessBonus || 0;
+        const n = bldgNet(b.type);
+        food.bonus += n.food;
+        prod.bonus += n.material;
+        energy.bonus += n.energy;
+        happ.bonus += n.happiness;
+        wealth.bonus += n.wealth;
       }
-      return { food, prod, happ, energy };
+      return { food, prod, happ, energy, wealth };
     }
 
     // ---- status / turn -----------------------------------------------------
@@ -500,69 +1421,86 @@
           if (b.turnsRemaining <= 0) badgeChanged = true; // visual state changes
         }
       }
-
-      // Human production tallies for this year (shown in the panel).
-      let yFood = 0, yMaterial = 0, yEnergy = 0, yHappiness = 0;
+      // Advance in-transit colonies (launched from another colony). When they
+      // arrive (turnsRemaining hits 0) they become active and gain their
+      // transferred colonists.
+      for (const b of gameState.buildings) {
+        if (b.type === 1 && b.inTransit && b.turnsRemaining != null && b.turnsRemaining > 0) {
+          b.turnsRemaining -= 1;
+          if (b.turnsRemaining <= 0) {
+            b.inTransit = false;
+            b.population = (b.population || 0) + (b.pendingColonists || 0);
+            b.pendingColonists = 0;
+            b.turnsRemaining = 0;
+            badgeChanged = true;
+            if (b.owner === 'human') {
+              notify(`${b.name || 'A new colony'} has been established at ${b.x},${b.y}.`);
+              // Prompt the player to assign this colony's first worker.
+              b._justEstablished = true;
+              if (!_newWorkerColonies.includes(b)) _newWorkerColonies.push(b);
+            } else {
+              // AI: assign the new colony's first worker to its best food cell.
+              aiWorkHighestFoodCell(b.x, b.y, b.owner);
+            }
+          }
+        }
+      }
+      // Advance removals: a building being removed disappears after its
+      // removeTurns elapse. Then drop the deleted buildings.
+      let _removed = false;
+      for (const b of gameState.buildings) {
+        if (b.type !== 1 && b.removeTurns != null && b.removeTurns > 0) {
+          b.removeTurns -= 1;
+          if (b.removeTurns <= 0) { b._delete = true; _removed = true; }
+        }
+      }
+      if (_removed) {
+        const gone = gameState.buildings.filter((b) => b._delete);
+        gameState.buildings = gameState.buildings.filter((b) => !b._delete);
+        // Deselect any worked cells that pointed at removed buildings.
+        for (const g of gone) {
+          for (const col of gameState.buildings) {
+            if (col.type === 1 && col.worked) col.worked = col.worked.filter((k) => k !== cellKey(g.x, g.y));
+          }
+        }
+        badgeChanged = true;
+      }
+      // the sum of all human colonies' net budgets).
+      let yFood = 0, yMaterial = 0, yEnergy = 0, yHappiness = 0, yWealth = 0;
+      const _budgetDeficitColonies = []; // human colonies over budget this year
 
       // Index colonies + their buildings by owner.
       const colonies = gameState.buildings.filter((b) => b.type === 1);
       for (const col of colonies) {
+        if (col.inTransit) continue; // still traveling; no economy/growth yet
         const isHuman = col.owner === 'human';
         ensureWorked(col);
         pruneWorkedToControl(col); // drop cells outside the (possibly shrunk) area
         const cap = workCap(col);
         // Worked cells: biodome cell + up to `cap` others (trim if pop dropped).
         const homeKey = cellKey(col.x, col.y);
-        let worked = col.worked.filter((k) => k === homeKey || true);
-        // Keep home + first `cap` extras.
-        const extras = worked.filter((k) => k !== homeKey).slice(0, cap);
+        const extras = col.worked.filter((k) => k !== homeKey).slice(0, cap);
         col.worked = [homeKey, ...extras];
 
-        // Terrain production from worked cells (each worked cell = 1000 workers).
-        let food = 0, material = 0, energy = 0;
-        for (const k of col.worked) {
-          const [wx, wy] = k.split(",").map(Number);
-          const tp = terrainProd(terrainAt(wx, wy));
-          food += tp.food; material += tp.material;
-          // Water-adjacent food bonus (river OR sea) for eligible terrains.
-          food += waterFoodBonus(wx, wy);
-        }
-        // Biodome base production (on its own cell) — uses the *Bonus keys.
-        const bd = buildingType(1) || {};
-        food += bd.foodBonus || 0; material += bd.materialBonus || 0; energy += bd.energyBonus || 0;
-
-        // Other buildings owned by this player within this colony's control.
+        // Per-colony budget from WORKED cells: production, needs, net.
+        // Buildings only produce/consume when their cell is worked. Excess is
+        // stored (up to cap); shortfall is drawn from storage. If any resource
+        // would go below 0, the colony is over budget and must idle buildings.
         const control = new Set(colonyControlCells(col).map((c) => cellKey(c.x, c.y)));
-        let growthBonus = 0;
-        for (const bldg of gameState.buildings) {
-          if (bldg.type === 1) continue;
-          if (bldg.owner !== col.owner) continue;
-          if (!control.has(cellKey(bldg.x, bldg.y))) continue;
-          if (!isOperational(bldg)) continue; // still under construction
-          const t = buildingType(bldg.type) || {};
-          energy += (t.energyProduced || 0) - (t.energyUse || 0);
-          food += (t.foodBonus || 0);
-          material += (t.materialBonus || 0);
-          growthBonus += (t.growthRateBonus || 0);
-        }
+        const result = applyColonyBudget(col);
+        const { net, growthBonus, consumption } = result.budget;
+        const food = result.budget.production.food;
+        const material = result.budget.production.material;
+        const energy = net.energy;
+        const netFood = net.food;
+        if (result.over.length && isHuman) { col._deficitResources = result.over; _budgetDeficitColonies.push(col); }
 
-        // Per-year happiness change for this colony. Happiness behaves like a
-        // stored resource with a +/- rate:
-        //   + food surplus (well-fed colonists are content)
-        //   + operational building happiness bonuses in control
-        //   - food shortfall (starvation breeds unrest)
-        // The stored total may go negative.
-        const workingUnits = col.worked.length;            // cells worked (incl. biodome)
-        const popUnits = Math.floor((col.population || 0) / 1000);
-        // Food consumption feeds colonists: 0.5 food per 1000 colonists.
-        const consumption = popUnits * foodPerUnit;
-        const netFood = food - consumption;
+        // Per-year happiness change for this colony: food surplus raises it,
+        // shortfall lowers it, plus any building happiness bonuses. Stored
+        // happiness accumulates and is clamped to +/- the colony's happiness
+        // storage.
         const happinessRate = netFood + happinessBonusInControl(col, control);
-
-        // Accumulate STORED happiness (may go negative), then clamp to a band so
-        // it saturates instead of running away and causing super-exponential
-        // growth. The band is symmetric: +/- happinessCap.
-        const happinessCap = (CONFIG.happinessCap != null) ? CONFIG.happinessCap : 20;
+        const happinessCap = colonyHappinessStorage(col);
         col.storedHappiness = Math.max(-happinessCap, Math.min(happinessCap,
           (col.storedHappiness || 0) + happinessRate));
 
@@ -621,33 +1559,32 @@
         }
 
         if (isHuman) {
-          yFood += netFood; yMaterial += material; yEnergy += energy; yHappiness += happiness;
+          yFood += net.food; yMaterial += net.material; yEnergy += net.energy;
+          yWealth += net.wealth; yHappiness += happiness;
         } else {
-          // Accumulate this AI's production into its own resource pool.
-          const ap = gameState.players[col.owner];
-          if (ap) {
-            if (!ap.resources) ap.resources = { material: 0, food: 0, energy: 0, wealth: 0 };
-            ap.resources.food = Math.max(0, ap.resources.food + netFood);
-            ap.resources.material = Math.max(0, ap.resources.material + material);
-            ap.resources.energy = Math.max(0, ap.resources.energy + energy);
-            ap.resources.wealth = Math.max(0, ap.resources.wealth + Math.max(0, netFood) * 0.1 + Math.max(0, material) * 0.1);
-          }
+          // AI: auto-idle to fit budget, then its per-colony storage already
+          // reflects the applied budget. (Nothing else to do here.)
         }
       }
 
-      // Accumulate human resources and record per-year rates for the panel.
+      // Player panel resources = SUM of the human colonies' per-colony stored
+      // amounts (each colony stores its own budget). Rates = sum of net budgets.
       const r = gameState.resources;
-      r.food = Math.max(0, r.food + yFood);
-      r.material = Math.max(0, r.material + yMaterial);
-      r.energy = Math.max(0, r.energy + yEnergy);
-      // Wealth: simple derived income (surplus food + material), placeholder.
-      const yWealth = Math.max(0, yFood) * 0.1 + Math.max(0, yMaterial) * 0.1;
-      r.wealth = Math.max(0, r.wealth + yWealth);
+      r.food = 0; r.material = 0; r.energy = 0; r.wealth = 0;
+      for (const col of colonies) {
+        if (col.owner !== 'human') continue;
+        const s = ensureStored(col);
+        r.food += s.food; r.material += s.material; r.energy += s.energy; r.wealth += s.wealth;
+      }
       gameState.rates = { food: yFood, material: yMaterial, energy: yEnergy, wealth: yWealth, happiness: yHappiness };
 
       // Aggregate human population + effective growth rate for the player panel.
       gameState.humanPop = Math.round(humanPopAfter);
       gameState.humanPopRate = humanPopBefore > 0 ? (humanPopAfter / humanPopBefore - 1) : 0;
+
+      // Advance transport construction (roads/monorails/canals) using each
+      // source colony's now-current stored resources.
+      advanceTransportConstruction();
 
       updateResourcesPanel();
       updatePlayerPanel();
@@ -662,21 +1599,41 @@
       // toast. Prompt each queued colony in turn.
       if (_newWorkerColonies.length) {
         for (const col of _newWorkerColonies) {
-          const msg = col._radiusGrew
-            ? `${col.name || 'A colony'} expanded its zone of control — assign workers to the new tiles.`
-            : `${col.name || 'A colony'} can work a new tile — assign it.`;
+          const msg = col._justEstablished
+            ? `${col.name || 'A new colony'} is now active — assign its first worker.`
+            : col._radiusGrew
+              ? `${col.name || 'A colony'} expanded its zone of control — assign workers to the new tiles.`
+              : `${col.name || 'A colony'} can work a new tile — assign it.`;
           notify(msg);
           delete col._radiusGrew;
         }
         onNotificationsIdle(() => {
-          // The dialog overlay shows one colony at a time; open the first that
-          // still has an unworked control cell and spare work capacity.
-          for (const col of _newWorkerColonies) {
+          // The dialog overlay shows one colony at a time. Prefer a newly
+          // established colony; otherwise open the first with spare capacity and
+          // an unworked control cell.
+          const eligible = _newWorkerColonies.filter((col) => {
             const controlCount = colonyControlCells(col).length;
             const homeKey = cellKey(col.x, col.y);
             const hasIdleCap = col.worked.filter(k => k !== homeKey).length < workCap(col);
-            if (col.worked.length < controlCount && hasIdleCap) { openWorkModal(col); break; }
-          }
+            return col.worked.length < controlCount && hasIdleCap;
+          });
+          const pick = eligible.find((c) => c._justEstablished) || eligible[0];
+          for (const c of _newWorkerColonies) delete c._justEstablished;
+          if (pick) openWorkModal(pick);
+        });
+      }
+
+      // Budget shortfall: a human colony ran a resource to 0 and couldn't cover
+      // its needs. Ask the player to idle buildings (deselect their worked cells)
+      // to fit the yearly budget. Open that colony's dialog.
+      if (_budgetDeficitColonies.length) {
+        for (const col of _budgetDeficitColonies) {
+          const shorts = (col._deficitResources || []).join(", ");
+          notify(`${col.name || 'A colony'} is over budget${shorts ? ` (${shorts})` : ''} — deselect worked buildings to idle them and fit the yearly budget.`);
+        }
+        onNotificationsIdle(() => {
+          const col = _budgetDeficitColonies[0];
+          if (col) openWorkModal(col);
         });
       }
     }
@@ -721,18 +1678,12 @@
       const players = gameState.players || [];
       if (!players.length) return;
       gameState.currentPlayer++;
+      let roundCompleted = false;
       if (gameState.currentPlayer >= players.length) {
         gameState.currentPlayer = 0;
         gameState.turn++;
+        roundCompleted = true;
         growColonies(); // populations grow each year/turn
-        // A full round completed: announce the new year. Suppress during the
-        // rapid "fast-forward" when nothing is happening (human already placed
-        // and no AI acted this round) so we don't flood the screen; still show
-        // it whenever an AI placed this round or the human can still act.
-        const humanActed = players[0] && players[0].placed;
-        if (!humanActed || _roundHadAction) {
-          notify(`Year: ${currentYear()} begins`, 5000, "year");
-        }
         _roundHadAction = false;
       }
       updateStatus();
@@ -742,10 +1693,32 @@
         // it (and any queued ones) have finished their 5s / been dismissed.
         scheduleTurnStep(() => aiTakeTurn(gameState.currentPlayer));
       } else if (p && p.kind === 'human' && p.placed) {
-        // Human already founded their colony; keep the clock running while any
-        // AI is still waiting to place. Stop when everyone has placed.
-        const aiPending = players.some((pl) => pl.kind === 'ai' && !pl.placed);
-        if (aiPending) scheduleTurnStep(() => advanceTurn());
+        // Start of the human's turn (new year): announce it and handle the
+        // auto-end flow via the turn-start dialog.
+        startHumanTurn();
+      }
+    }
+
+    // Decide whether to auto-end the current HUMAN turn. Ends automatically when
+    // the human has no action left (no worker to assign, nothing affordable to
+    // A turn stays open (requires manual End Turn) only when the human has a
+    // meaningful action: a free worker AND an unworked cell to put it on in some
+    // colony, a colony ready to launch, OR they're working an unimproved cell
+    // where they could build a building (improve a tile they already work).
+    // Merely being able to build on an unworked cell does NOT keep the turn open
+    // — there's no point building without population to work it. Otherwise
+    // auto-end when "Auto turn end" is on (or an AI still needs to place).
+    function maybeAutoEndHumanTurn() {
+      const players = gameState.players || [];
+      const p = players[gameState.currentPlayer];
+      if (!p || p.kind !== 'human' || !p.placed) return;
+      if (workOverlay && !workOverlay.hidden) return;   // don't advance mid-dialog
+      if (_foundMode) return;                           // mid colony-launch placement
+      if (_skipAutoEndThisTurn) return;                 // player took manual control
+      const humanHasActions = humanHasWorkerToAssign() || humanCanLaunchColony() || humanCanImproveWorkedCell();
+      const aiPending = players.some((pl) => pl.kind === 'ai' && !pl.placed);
+      if (!humanHasActions && (_autoTurnEnd || aiPending)) {
+        scheduleTurnStep(() => advanceTurn());
       }
     }
 
@@ -754,6 +1727,63 @@
     function scheduleTurnStep(fn) {
       onNotificationsIdle(() => setTimeout(fn, 40));
     }
+
+    // ---- start-of-turn dialog (new year + auto-end flow) -------------------
+    const turnStartOverlay = document.getElementById("turnstart-overlay");
+    const turnStartText = document.getElementById("turnstart-text");
+    const turnStartSub = document.getElementById("turnstart-sub");
+    const turnStartHandle = document.getElementById("turnstart-handle");
+    let _turnStartTimers = [];
+    let _skipAutoEndThisTurn = false; // "Let me handle it" was clicked this turn
+    function _clearTurnStartTimers() {
+      for (const t of _turnStartTimers) clearTimeout(t);
+      _turnStartTimers = [];
+    }
+    function _closeTurnStart() {
+      _clearTurnStartTimers();
+      turnStartOverlay.hidden = true;
+      turnStartHandle.hidden = true;
+    }
+    // Called at the start of the human's turn (a new year). Announces the year,
+    // then—if Auto turn end is on—shows a notice with a "Let me handle it"
+    // button and ends the turn automatically per the rules.
+    function startHumanTurn() {
+      _skipAutoEndThisTurn = false;
+      _clearTurnStartTimers();
+      // Step 1: announce the new year for 5 seconds (click to skip).
+      turnStartText.textContent = `Year ${currentYear()} begins`;
+      turnStartSub.textContent = "";
+      turnStartHandle.hidden = true;
+      turnStartOverlay.hidden = false;
+      const NEW_YEAR_MS = 5000, AUTO_END_MS = 30000, NOTHING_MS = 5000;
+      const toStep2 = () => {
+        _clearTurnStartTimers();
+        if (!_autoTurnEnd) { _closeTurnStart(); return; }   // player controls turn
+        // Step 2: auto-end notice.
+        const hasActions = humanHasWorkerToAssign() || humanCanLaunchColony() || humanCanImproveWorkedCell();
+        turnStartText.textContent = "Auto turn end is on";
+        if (!hasActions) {
+          turnStartSub.textContent = "You have no actions this turn — ending automatically…";
+          turnStartHandle.hidden = true;
+          _turnStartTimers.push(setTimeout(() => { _closeTurnStart(); advanceTurn(); }, NOTHING_MS));
+        } else {
+          turnStartSub.textContent = "Your turn will end in 30 seconds. Click below to take control.";
+          turnStartHandle.hidden = false;
+          _turnStartTimers.push(setTimeout(() => { _closeTurnStart(); advanceTurn(); }, AUTO_END_MS));
+        }
+      };
+      _turnStartTimers.push(setTimeout(toStep2, NEW_YEAR_MS));
+      // Click the year message to skip straight to step 2.
+      turnStartOverlay.onclick = (e) => {
+        if (e.target === turnStartHandle) return; // button handles itself
+        if (turnStartHandle.hidden && turnStartSub.textContent === "") toStep2();
+      };
+    }
+    turnStartHandle.addEventListener("click", () => {
+      // "Let me handle it": skip auto-end for this turn; player ends manually.
+      _skipAutoEndThisTurn = true;
+      _closeTurnStart();
+    });
 
     // ---- colony / building placement --------------------------------------
     // Building type properties come from config.json (CONFIG.buildingTypes).
@@ -766,10 +1796,203 @@
       return (bt && bt.name) || (type === 1 ? "Biodome" : "Improvement");
     }
 
+    // ---- building config accessors (new config.json schema) ----------------
+    // Per-building production bonuses: { food, material, energy, growth, wealth }.
+    function bldgBonus(type) {
+      const b = (buildingType(type) || {}).bonus || {};
+      return {
+        food: b.food || 0, material: b.material || 0, energy: b.energy || 0,
+        growth: b.growth || 0, wealth: b.wealth || 0, happiness: b.happiness || 0,
+      };
+    }
+    // Per-year upkeep (costPerYear): { material, energy, wealth }.
+    function bldgUpkeep(type) {
+      const u = (buildingType(type) || {}).costPerYear || {};
+      return { material: u.material || 0, energy: u.energy || 0, wealth: u.wealth || 0 };
+    }
+    // NET per-year output of a building (bonus production minus upkeep).
+    // Food and growth have no upkeep; material/energy/wealth net out.
+    function bldgNet(type) {
+      const b = bldgBonus(type), u = bldgUpkeep(type);
+      return {
+        food: b.food,
+        material: b.material - u.material,
+        energy: b.energy - u.energy,
+        wealth: b.wealth - u.wealth,
+        growth: b.growth,
+        happiness: b.happiness,
+      };
+    }
+    // Per-building storage capacity: { food, material, energy, wealth, happiness }.
+    function bldgStorage(type) {
+      const s = (buildingType(type) || {}).storage || {};
+      return {
+        food: s.food || 0, material: s.material || 0, energy: s.energy || 0,
+        wealth: s.wealth || 0, happiness: s.happiness || 0,
+      };
+    }
+    // Sum of resource storage across all of an owner's OPERATIONAL buildings.
+    // Storage is currently per-colony; since every building belongs to exactly
+    // one colony's control, summing all of a player's buildings gives the
+    // player's total capacity today. (When colonies are connected this will
+    // become a shared per-player pool.) Caps stored Food/Material/Energy/Wealth.
+    function playerResourceCaps(owner) {
+      const caps = { food: 0, material: 0, energy: 0, wealth: 0 };
+      for (const b of gameState.buildings) {
+        if (b.owner !== owner) continue;
+        if (!isOperational(b)) continue;
+        const s = bldgStorage(b.type);
+        caps.food += s.food; caps.material += s.material;
+        caps.energy += s.energy; caps.wealth += s.wealth;
+      }
+      return caps;
+    }
+    // Sum of happiness storage for the operational buildings in a colony's
+    // control. Happiness is stored per-colony and clamped to +/- this value.
+    function colonyHappinessStorage(col) {
+      const control = new Set(colonyControlCells(col).map((c) => cellKey(c.x, c.y)));
+      let sum = 0;
+      for (const b of gameState.buildings) {
+        if (b.owner !== col.owner) continue;
+        if (!isOperational(b)) continue;
+        // The colony's own biodome always counts; other buildings must be in control.
+        if (b.type !== 1 && !control.has(cellKey(b.x, b.y))) continue;
+        if (b.type === 1 && !(b.x === col.x && b.y === col.y)) continue;
+        sum += bldgStorage(b.type).happiness;
+      }
+      return sum;
+    }
+
+    // Operational buildings that belong to a colony: its own biodome plus any
+    // of the owner's operational buildings standing on cells in its control.
+    function colonyBuildings(col) {
+      const control = new Set(colonyControlCells(col).map((c) => cellKey(c.x, c.y)));
+      const out = [];
+      for (const b of gameState.buildings) {
+        if (b.owner !== col.owner) continue;
+        if (!isOperational(b)) continue;
+        if (b.type === 1) {
+          if (b.x === col.x && b.y === col.y) out.push(b);
+        } else if (control.has(cellKey(b.x, b.y))) {
+          out.push(b);
+        }
+      }
+      return out;
+    }
+    // Whether a building's cell is currently worked by its colony. The biodome
+    // (home) cell is always worked.
+    function isBuildingWorked(col, b) {
+      return col.worked && col.worked.includes(cellKey(b.x, b.y));
+    }
+    // Per-colony storage caps = sum of storage over the colony's operational
+    // buildings (built buildings provide storage even if their cell is idle).
+    function colonyStorageCaps(col) {
+      const caps = { food: 0, material: 0, energy: 0, wealth: 0 };
+      for (const b of colonyBuildings(col)) {
+        const s = bldgStorage(b.type);
+        caps.food += s.food; caps.material += s.material;
+        caps.energy += s.energy; caps.wealth += s.wealth;
+      }
+      return caps;
+    }
+    function ensureStored(col) {
+      if (!col.stored) col.stored = { food: 0, material: 0, energy: 0, wealth: 0 };
+      for (const k of ['food', 'material', 'energy', 'wealth']) {
+        if (typeof col.stored[k] !== 'number') col.stored[k] = 0;
+      }
+      return col.stored;
+    }
+    // Recompute the player-panel resource aggregate from human colonies' stored
+    // amounts (used after a build so the panel reflects the spend immediately).
+    function recomputeHumanResourcePanel() {
+      const r = gameState.resources;
+      r.food = 0; r.material = 0; r.energy = 0; r.wealth = 0;
+      for (const b of gameState.buildings) {
+        if (b.type !== 1 || b.owner !== 'human') continue;
+        const s = ensureStored(b);
+        r.food += s.food; r.material += s.material; r.energy += s.energy; r.wealth += s.wealth;
+      }
+    }
+
+    // Compute a colony's per-year budget from its WORKED cells only:
+    //   production (terrain on worked cells + building bonus on worked cells)
+    //   needs      (population food consumption + building upkeep on worked cells)
+    //   net = production - needs, per resource
+    // Buildings only produce/consume when their cell is worked. Returns the
+    // gross production, needs, net, growth bonus, and the food consumption.
+    function colonyBudget(col) {
+      const cfg = CONFIG;
+      const foodPerUnit = (cfg.foodPerColonistUnit != null) ? cfg.foodPerColonistUnit : 1;
+      ensureWorked(col);
+      const homeKey = cellKey(col.x, col.y);
+      const cap = workCap(col);
+      const extras = col.worked.filter((k) => k !== homeKey).slice(0, cap);
+      const worked = [homeKey, ...extras];
+      const workedSet = new Set(worked);
+
+      const production = { food: 0, material: 0, energy: 0, wealth: 0 };
+      const needs = { food: 0, material: 0, energy: 0, wealth: 0 };
+      let growthBonus = 0;
+
+      // Terrain production from each worked cell.
+      for (const k of worked) {
+        const [wx, wy] = k.split(",").map(Number);
+        const tp = terrainProd(terrainAt(wx, wy));
+        production.food += tp.food + waterFoodBonus(wx, wy);
+        production.material += tp.material;
+        production.wealth += riverWealthBonus(wx, wy); // river-adjacent wealth
+      }
+      // Buildings contribute production + upkeep ONLY when their cell is worked.
+      for (const b of colonyBuildings(col)) {
+        if (!workedSet.has(cellKey(b.x, b.y))) continue; // idle: no produce, no upkeep
+        const bo = bldgBonus(b.type), up = bldgUpkeep(b.type);
+        production.food += bo.food;
+        production.material += bo.material;
+        production.energy += bo.energy;
+        production.wealth += bo.wealth;
+        needs.material += up.material;
+        needs.energy += up.energy;
+        needs.wealth += up.wealth;
+        growthBonus += bo.growth;
+      }
+      // Population eats food.
+      const popUnits = Math.floor((col.population || 0) / 1000);
+      needs.food += popUnits * foodPerUnit;
+      // Wealth income also includes derived income (10% of surplus food+material).
+      const derivedWealth = Math.max(0, production.food - needs.food) * 0.1
+        + Math.max(0, production.material) * 0.1;
+      production.wealth += derivedWealth;
+
+      const net = {
+        food: production.food - needs.food,
+        material: production.material - needs.material,
+        energy: production.energy - needs.energy,
+        wealth: production.wealth - needs.wealth,
+      };
+      return { production, needs, net, growthBonus, consumption: needs.food, popUnits };
+    }
+    // Apply a colony's net budget to its stored resources, clamped to
+    // [0, cap]. Returns { over: [resources that went negative], stored, caps }.
+    // "over" lists resources whose shortfall exceeded storage (budget deficit).
+    function applyColonyBudget(col) {
+      const b = colonyBudget(col);
+      const caps = colonyStorageCaps(col);
+      const stored = ensureStored(col);
+      const over = [];
+      for (const k of ['food', 'material', 'energy', 'wealth']) {
+        let v = stored[k] + b.net[k];
+        if (v < 0) { over.push(k); v = 0; }
+        if (v > caps[k]) v = caps[k];
+        stored[k] = v;
+      }
+      return { over, stored, caps, budget: b };
+    }
+
     // ---- economy helpers ---------------------------------------------------
     function terrainProd(type) {
-      const tp = CONFIG.terrainProduction && CONFIG.terrainProduction[String(type)];
-      return tp ? { food: tp.food || 0, material: tp.material || 0 } : { food: 0, material: 0 };
+      const tt = CONFIG.terrainTypes && CONFIG.terrainTypes[String(type)];
+      const b = tt && tt.base;
+      return b ? { food: b.food || 0, material: b.material || 0 } : { food: 0, material: 0 };
     }
     // Sum of operational building happiness bonuses owned by the colony's owner
     // within its control (control is a Set of "x,y" keys).
@@ -780,53 +2003,29 @@
         if (b.owner !== col.owner) continue;
         if (!control.has(cellKey(b.x, b.y))) continue;
         if (!isOperational(b)) continue;
-        sum += (buildingType(b.type) || {}).happinessBonus || 0;
+        sum += bldgNet(b.type).happiness;
       }
       return sum;
     }
 
-    // Compute a colony's CURRENT per-year production/happiness/growth for the
-    // stats panel. Mirrors the math in growColonies but does not mutate state.
+    // Compute a colony's CURRENT per-year budget/happiness/growth for the stats
+    // panel. Mirrors the math in growColonies but does not mutate state.
     function colonyStats(col) {
       const cfg = CONFIG;
       const biodomeCfg = buildingType(1) || {};
       const baseRate = (biodomeCfg.growthRate != null) ? biodomeCfg.growthRate : 0.01;
       const happPerUnit = (cfg.happinessGrowthPerUnit != null) ? cfg.happinessGrowthPerUnit : 0.0025;
-      const foodPerUnit = (cfg.foodPerColonistUnit != null) ? cfg.foodPerColonistUnit : 0.5;
-      const starvationPerUnit = (cfg.starvationRatePerUnit != null) ? cfg.starvationRatePerUnit : 0.02;
-      ensureWorked(col);
-      const homeKey = cellKey(col.x, col.y);
-      const cap = workCap(col);
-      const extras = col.worked.filter((k) => k !== homeKey).slice(0, cap);
-      const worked = [homeKey, ...extras];
-      let food = 0, material = 0, energy = 0;
-      for (const k of worked) {
-        const [wx, wy] = k.split(",").map(Number);
-        const tp = terrainProd(terrainAt(wx, wy));
-        food += tp.food + waterFoodBonus(wx, wy);
-        material += tp.material;
-      }
-      const bd = buildingType(1) || {};
-      food += bd.foodBonus || 0; material += bd.materialBonus || 0; energy += bd.energyBonus || 0;
       const control = new Set(colonyControlCells(col).map((c) => cellKey(c.x, c.y)));
-      let growthBonus = 0;
-      for (const bldg of gameState.buildings) {
-        if (bldg.type === 1) continue;
-        if (bldg.owner !== col.owner) continue;
-        if (!control.has(cellKey(bldg.x, bldg.y))) continue;
-        if (!isOperational(bldg)) continue;
-        const t = buildingType(bldg.type) || {};
-        energy += (t.energyProduced || 0) - (t.energyUse || 0);
-        food += (t.foodBonus || 0);
-        material += (t.materialBonus || 0);
-        growthBonus += (t.growthRateBonus || 0);
-      }
-      const workingUnits = worked.length;
-      const popUnits = Math.floor((col.population || 0) / 1000);
-      const consumption = popUnits * foodPerUnit;
-      const netFood = food - consumption;
+
+      const b = colonyBudget(col);
+      const stored = ensureStored(col);
+      const caps = colonyStorageCaps(col);
+      const growthBonus = b.growthBonus;
+      const consumption = b.consumption;
+      const netFood = b.net.food;
+
       const happinessRate = netFood + happinessBonusInControl(col, control);
-      const happinessCap = (cfg.happinessCap != null) ? cfg.happinessCap : 20;
+      const happinessCap = colonyHappinessStorage(col);
       // Show the stored total as it WILL be after clamping next turn.
       const storedHappiness = Math.max(-happinessCap, Math.min(happinessCap, col.storedHappiness || 0));
       const maxHappBonus = (cfg.maxHappinessGrowthBonus != null) ? cfg.maxHappinessGrowthBonus : 0.01;
@@ -838,15 +2037,22 @@
         rate = -(baseRate + happBonus) + growthBonus;
       }
       if (rate < -0.5) rate = -0.5;
-      // Wealth income mirrors the economy: 10% of surplus food + 10% of material.
-      const wealthRate = Math.max(0, netFood) * 0.1 + Math.max(0, material) * 0.1;
+      // Whether the colony is over budget: any resource shortfall exceeds its
+      // current storage.
+      const over = [];
+      for (const k of ['food', 'material', 'energy', 'wealth']) {
+        if (stored[k] + b.net[k] < 0) over.push(k);
+      }
       return {
         population: col.population || 0,
         growthRate: rate,
         popDelta: (col.population || 0) * rate,
-        food, material, energy, wealthRate,
+        // Net per-year rates (production − needs), per resource.
+        food: b.net.food, material: b.net.material, energy: b.net.energy, wealthRate: b.net.wealth,
         consumption, netFood,
         happinessRate, storedHappiness,
+        stored, caps, over,
+        happinessCap,
       };
     }
     // odd-q offset neighbors within N rings of (x,y) as a de-duped list.
@@ -887,8 +2093,66 @@
       return radius;
     }
     function colonyControlCells(colony) {
-      return cellsWithin(colony.x, colony.y, colonyControlRadius(colony))
-        .filter((c) => terrainAt(c.x, c.y) !== 1); // land only
+      const radius = colonyControlRadius(colony);
+      const cells = cellsWithin(colony.x, colony.y, radius);
+      const docked = colonyHasDock(colony);
+      return cells.filter((c) => {
+        const terr = terrainAt(c.x, c.y);
+        // Overlapping zones: a cell belongs to only ONE colony (the nearest).
+        if (!ownsCell(colony, c.x, c.y)) return false;
+        if (terr !== 1) return true;                 // land it owns is in control
+        // Sea: only if the colony has a Dock AND this is a shallow-sea tile.
+        return docked && isShallowSea(c.x, c.y);
+      });
+    }
+    // Whether `colony` is the owner of cell (x,y) among all colonies whose
+    // control radius covers it. A colony that is already WORKING the cell keeps
+    // it (so overlapping zones don't steal an assigned worker); otherwise the
+    // nearest colony wins, ties broken deterministically by cell key. Exactly
+    // one colony claims each cell.
+    function ownsCell(colony, x, y) {
+      const key = x + "," + y;
+      // 1) If exactly one in-range colony is working this cell, it owns it.
+      let worker = null, workerCount = 0;
+      for (const b of gameState.buildings) {
+        if (b.type !== 1) continue;
+        if (hexDistance(b.x, b.y, x, y) > colonyControlRadius(b)) continue;
+        if (b.worked && b.worked.includes(key)) { worker = b; workerCount++; }
+      }
+      if (workerCount === 1) return worker === colony;
+      // 2) Otherwise the nearest in-range colony (tie -> smallest coord key).
+      let best = null, bestD = Infinity, bestKey = null;
+      for (const b of gameState.buildings) {
+        if (b.type !== 1) continue;
+        const d = hexDistance(b.x, b.y, x, y);
+        if (d > colonyControlRadius(b)) continue;    // outside this colony's reach
+        const bk = b.x + "," + b.y;
+        if (d < bestD || (d === bestD && (bestKey === null || bk < bestKey))) {
+          bestD = d; best = b; bestKey = bk;
+        }
+      }
+      return best === colony;
+    }
+    // Shallow sea = a sea tile edge-adjacent to at least one land tile.
+    function isShallowSea(x, y) {
+      if (terrainAt(x, y) !== 1) return false;
+      for (const n of hexNeighborsRenderer(x, y)) {
+        const tt = terrainAt(n.x, n.y);
+        if (tt >= 2 && tt <= 9) return true;         // any land tile
+      }
+      return false;
+    }
+    // Whether a colony owns an operational Dock (type 5) on a shallow-sea tile
+    // within its control radius. Checked directly (no colonyControlCells call)
+    // to avoid recursion.
+    function colonyHasDock(colony) {
+      const radius = colonyControlRadius(colony);
+      for (const b of gameState.buildings) {
+        if (b.type !== 5 || b.owner !== colony.owner) continue;
+        if (!isOperational(b)) continue;
+        if (hexDistance(colony.x, colony.y, b.x, b.y) <= radius) return true;
+      }
+      return false;
     }
     // Drop any worked cells that fall outside the colony's current control area
     // (e.g. after the radius shrinks because population dropped). The biodome
@@ -937,29 +2201,464 @@
       gameState.buildings.push(rec);
       // Pay the build cost from the owner's resource pool (human uses
       // gameState.resources; each AI uses its own player.resources).
-      const pool = (owner === 'human')
-        ? gameState.resources
-        : (players[owner] && players[owner].resources);
+      // Pay the build cost from the CONTROLLING colony's stored resources
+      // (resources are stored per-colony).
+      const pool = buildPoolAt(x, y, owner);
       if (pool) {
         const cost = buildingCost(type);
         for (const res of Object.keys(cost)) {
           if (pool[res] != null) pool[res] = Math.max(0, pool[res] - cost[res]);
         }
-        if (owner === 'human') updateResourcesPanel();
+        if (owner === 'human') { recomputeHumanResourcePanel(); updateResourcesPanel(); }
       }
       if (hexMap) hexMap.setBuildings(gameState.buildings);
     }
-    // A building is operational once its construction turns have elapsed.
+    // A building is operational once its construction turns have elapsed and it
+    // is not in the process of being removed.
     function isOperational(b) {
+      if (b.removeTurns != null && b.removeTurns > 0) return false; // being removed
+      if (b.inTransit) return false;                                // colony still traveling
       return b.type === 1 || (b.turnsRemaining == null) || b.turnsRemaining <= 0;
+    }
+
+    // ---- remove improvement ------------------------------------------------
+    // Cost to remove a building (drawn from the controlling colony's storage).
+    function removalCost() {
+      return (CONFIG.removeImprovementCost) || { energy: 5, food: 2 };
+    }
+    function removalCostLabel() {
+      const c = removalCost();
+      const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+      const parts = Object.keys(c).map((r) => `${c[r]} ${cap(r)}`);
+      return parts.length ? parts.join(", ") : "free";
+    }
+    function canAffordRemovalAt(x, y, owner) {
+      const pool = buildPoolAt(x, y, owner);
+      if (!pool) return false;
+      const c = removalCost();
+      return Object.keys(c).every((r) => (pool[r] || 0) >= c[r]);
+    }
+    function removalShortfallLabel(x, y, owner) {
+      const c = removalCost();
+      const pool = buildPoolAt(x, y, owner) || {};
+      const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+      const parts = [];
+      for (const r of Object.keys(c)) {
+        const need = c[r] - (pool[r] || 0);
+        if (need > 0) parts.push(`${Math.ceil(need)} more ${cap(r)}`);
+      }
+      return parts.length ? parts.join(", ") : "more resources";
+    }
+    // Begin removing a building: pay the cost from the controlling colony's
+    // storage and mark it with removeTurns. It stops producing immediately and
+    // is deleted once removeTurns reaches 0 (see growColonies).
+    function removeImprovement(x, y, owner) {
+      const b = gameState.buildings.find((bb) => bb.x === x && bb.y === y
+        && bb.owner === owner && bb.type !== 1);
+      if (!b) return false;
+      if (b.removeTurns != null && b.removeTurns > 0) return false; // already removing
+      if (!canAffordRemovalAt(x, y, owner)) return false;
+      const pool = buildPoolAt(x, y, owner);
+      const c = removalCost();
+      for (const r of Object.keys(c)) {
+        if (pool[r] != null) pool[r] = Math.max(0, pool[r] - c[r]);
+      }
+      const turns = (CONFIG.removeImprovementTurns != null) ? CONFIG.removeImprovementTurns : 2;
+      b.removeTurns = turns;
+      // Idle its cell in every colony that was working it (it no longer produces).
+      for (const col of gameState.buildings) {
+        if (col.type === 1 && col.owner === owner && col.worked) {
+          col.worked = col.worked.filter((k) => k !== cellKey(x, y));
+        }
+      }
+      if (owner === 'human') { recomputeHumanResourcePanel(); updateResourcesPanel(); }
+      if (hexMap) hexMap.setBuildings(gameState.buildings);
+      return true;
+    }
+
+    // ---- found a new colony from an existing one ---------------------------
+    // Validity of a launch target for `owner` from host colony `host`:
+    // land (2-8 or low frozen), empty, passable, reachable by land, and at
+    // least minStartDistance from every existing colony.
+    function foundColonyTargetValid(host, tx, ty) {
+      if (!host) return { ok: false, reason: "no host" };
+      // A colony must settle on land (not on a sea tile), so the target itself
+      // is validated without the shallow-sea allowance.
+      const tterr = terrainAt(tx, ty);
+      if (tterr === 1) return { ok: false, reason: "can't settle on water" };
+      if (!isPassableCell(tx, ty, false)) return { ok: false, reason: "impassable" };
+      if (tx === host.x && ty === host.y) return { ok: false, reason: "same cell" };
+      if (cellHasBuilding(tx, ty)) return { ok: false, reason: "cell occupied" };
+      const minD = CONFIG.minStartDistance || 20;
+      for (const b of gameState.buildings) {
+        if (b.type !== 1) continue;
+        if (hexDistance(b.x, b.y, tx, ty) < minD) return { ok: false, reason: `too close to a colony (min ${minD})` };
+      }
+      // Path may cross shallow sea if the host's owner has a Dock.
+      const pf = findMovementPath(host.x, host.y, tx, ty, host.owner);
+      if (!pf) return { ok: false, reason: "no reachable path" };
+      return { ok: true, path: pf.path, cost: pf.cost, travelTurns: biodomeTravelTurns(pf.cost) };
+    }
+    // Launch a new colony from `host` (a biodome) to (tx,ty) for `owner`. Pays
+    // the biodome cost + transfers colonists from the host, and creates an
+    // in-transit biodome that completes after buildTurns + travel turns, then
+    // gains the transferred colonists. Returns the created record or null.
+    function launchColony(host, tx, ty, owner, name) {
+      const v = foundColonyTargetValid(host, tx, ty);
+      if (!v.ok) return null;
+      const minPop = (CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3000;
+      const transfer = (CONFIG.foundColonyPopulationTransfer != null) ? CONFIG.foundColonyPopulationTransfer : 1000;
+      if ((host.population || 0) <= minPop) return null;
+      if (!canAffordBuildingAt(1, host.x, host.y, owner)) return null;
+      // Pay biodome cost from the host colony's storage.
+      const pool = ensureStored(host);
+      const cost = buildingCost(1);
+      for (const r of Object.keys(cost)) { if (pool[r] != null) pool[r] = Math.max(0, pool[r] - cost[r]); }
+      // Transfer colonists out of the host now.
+      host.population = Math.max(0, (host.population || 0) - transfer);
+      const buildTurns = ((buildingType(1) || {}).buildTurns != null) ? buildingType(1).buildTurns : 0;
+      const players = gameState.players || [];
+      const species = (owner === 'human') ? 'You' : ((players[owner] && players[owner].name) || 'Alien');
+      // In-transit biodome: not operational until turnsRemaining hits 0; then it
+      // becomes a colony and gains the transferred colonists.
+      const rec = {
+        x: tx, y: ty, type: 1, owner, name: name || 'Colony', ownerName: species,
+        improvement: improvementName(1),
+        population: 0, worked: [cellKey(tx, ty)],
+        turnsRemaining: buildTurns + v.travelTurns,
+        pendingColonists: transfer, inTransit: true,
+      };
+      gameState.buildings.push(rec);
+      gameState.colonies.push({ x: tx, y: ty, owner, name: rec.name });
+      if (owner === 'human') { recomputeHumanResourcePanel(); updateResourcesPanel(); }
+      if (hexMap) hexMap.setBuildings(gameState.buildings);
+      pushColoniesToMain();
+      return rec;
+    }
+
+    // --- human colony-launch placement mode ---
+    let _foundMode = false;      // active placement mode
+    let _foundHost = null;       // host colony biodome
+    let _foundHoverPath = null;  // last previewed path (array of {x,y})
+    function beginFoundColony(hx, hy) {
+      const host = gameState.buildings.find((b) => b.type === 1 && b.owner === 'human' && b.x === hx && b.y === hy);
+      if (!host) return;
+      _foundMode = true; _foundHost = host; _foundHoverPath = null;
+      notify(`Founding a new colony from ${host.name || 'colony'} — click a land cell to plant it (Esc to cancel).`);
+      if (hexMap) hexMap.setOverlay(foundOverlayDraw);
+    }
+    function cancelFoundColony() {
+      _foundMode = false; _foundHost = null; _foundHoverPath = null;
+      if (hexMap) hexMap.setOverlay(null);
+    }
+    // Recompute the previewed path to the hovered cell and redraw the overlay.
+    function updateFoundPreview(hex) {
+      if (!_foundMode || !_foundHost || !hex) { _foundHoverPath = null; if (hexMap) hexMap.setOverlay(foundOverlayDraw); return; }
+      const pf = findMovementPath(_foundHost.x, _foundHost.y, hex.x, hex.y, _foundHost.owner);
+      _foundHoverPath = pf ? pf.path : null;
+      if (hexMap) hexMap.setOverlay(foundOverlayDraw); // triggers redraw
+    }
+    // Overlay: draw a blue line connecting the midpoints of the path cells.
+    function foundOverlayDraw(ctx, spacing, hexCenter) {
+      if (!_foundMode || !_foundHoverPath || _foundHoverPath.length < 2) return;
+      ctx.save();
+      // Path line color from config.launchPathColor (HSL), default green.
+      const c0 = CONFIG.launchPathColor || { h: 120, s: 0.7, l: 0.45 };
+      const hue = c0.h != null ? c0.h : 120;
+      const sat = Math.round((c0.s != null ? c0.s : 0.7) * 100);
+      const lig = Math.round((c0.l != null ? c0.l : 0.45) * 100);
+      ctx.strokeStyle = `hsla(${hue}, ${sat}%, ${lig}%, 0.9)`;
+      ctx.lineWidth = Math.max(2, spacing.y / 8);
+      ctx.lineJoin = "round"; ctx.lineCap = "round";
+      ctx.beginPath();
+      for (let i = 0; i < _foundHoverPath.length; i++) {
+        const p = _foundHoverPath[i];
+        const c = hexCenter(p.x, p.y);
+        if (i === 0) ctx.moveTo(c.x, c.y); else ctx.lineTo(c.x, c.y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+    async function confirmFoundColony(tx, ty) {
+      const host = _foundHost;
+      const v = foundColonyTargetValid(host, tx, ty);
+      if (!v.ok) { notify(`Can't found a colony there: ${v.reason}.`); return; }
+      // Clear the preview line immediately on click.
+      _foundHoverPath = null; if (hexMap) hexMap.setOverlay(null);
+      const name = await openLaunchNameDialog();
+      if (name == null) { cancelFoundColony(); return; } // cancelled
+      const rec = launchColony(host, tx, ty, 'human', name || 'Colony');
+      cancelFoundColony();
+      if (rec) {
+        notify(`${name || 'New colony'} is under way to ${tx},${ty} — arriving in ${rec.turnsRemaining} turn${rec.turnsRemaining === 1 ? '' : 's'}.`);
+      }
+      maybeAutoEndHumanTurn();
+    }
+
+    // --- transport planning mode (build road / monorail / canal) ---
+    let _transportMode = null;    // 'road' | 'monorail' | 'canal' | null
+    let _transportSource = null;  // { x, y } starting cell
+    let _transportOwner = null;   // owner id of the paying colony
+    let _transportSourceCol = null; // the colony paying for it
+    let _transportHoverPath = null;   // current hovered path (green)
+    let _transportPlannedPaths = [];  // committed plans this session (lighter green)
+    // A simple connected hex path from A to B, stepping to the neighbor closest
+    // to B each time (good enough for building along a corridor).
+    function hexLinePath(ax, ay, bx, by) {
+      const path = [{ x: ax, y: ay }];
+      let cur = { x: ax, y: ay };
+      let guard = 0;
+      while ((cur.x !== bx || cur.y !== by) && guard++ < 500) {
+        let best = null, bestD = Infinity;
+        for (const n of hexNeighborsRenderer(cur.x, cur.y)) {
+          if (n.y < 0 || n.y >= gameState.map.terrain.length) continue;
+          if (isImpassableFrozen(n.x, n.y) && !(n.x === bx && n.y === by)) continue; // can't build through frozen
+          const d = hexDistance(n.x, n.y, bx, by);
+          if (d < bestD) { bestD = d; best = n; }
+        }
+        if (!best) break;
+        cur = { x: best.x, y: best.y };
+        path.push(cur);
+      }
+      return path;
+    }
+    function beginTransport(kind, x, y) {
+      // Source colony = the human colony controlling (or nearest to) the cell.
+      const col = colonyControlling(x, y, 'human') || colonyControllingByRadius(x, y, 'human');
+      if (!col) { notify("Build from within a colony's zone of control."); return; }
+      _transportMode = kind; _transportSource = { x, y };
+      _transportOwner = 'human'; _transportSourceCol = col;
+      _transportHoverPath = null;
+      const label = kind.charAt(0).toUpperCase() + kind.slice(1);
+      notify(`Build ${label} from ${col.name || 'colony'} — move to a tile and click to plan (Esc to cancel).`);
+      if (hexMap) hexMap.setOverlay(transportOverlayDraw);
+    }
+    function cancelTransport() {
+      _transportMode = null; _transportSource = null; _transportOwner = null;
+      _transportSourceCol = null; _transportHoverPath = null;
+      const tip = document.getElementById("build-tooltip"); if (tip) tip.hidden = true;
+      if (hexMap) hexMap.setOverlay(_transportPlannedPaths.length ? transportOverlayDraw : null);
+    }
+    function updateTransportPreview(hex, clientX, clientY) {
+      if (!_transportMode || !_transportSource) return;
+      if (!hex) { _transportHoverPath = null; if (hexMap) hexMap.setOverlay(transportOverlayDraw); return; }
+      _transportHoverPath = hexLinePath(_transportSource.x, _transportSource.y, hex.x, hex.y);
+      // Tooltip: cost + ETA for the current path (dedicated element so the map's
+      // hover tooltip doesn't hide it on every mouse move).
+      const cost = planTotalCost(_transportMode, _transportHoverPath);
+      const eta = planEtaTurns(_transportMode, _transportHoverPath);
+      const tip = document.getElementById("build-tooltip");
+      if (tip && clientX != null) {
+        const nf = (n) => Math.round(n * 10) / 10;
+        const label = _transportMode.charAt(0).toUpperCase() + _transportMode.slice(1);
+        tip.innerHTML = `<b>Build ${label} to (${hex.x},${hex.y})</b><br>` +
+          `Food ${nf(cost.food)} · Material ${nf(cost.material)} · Energy ${nf(cost.energy)} · Wealth ${nf(cost.wealth)}<br>` +
+          `ETA ~${eta} turn${eta === 1 ? '' : 's'}`;
+        tip.style.left = (clientX + 16) + "px";
+        tip.style.top = (clientY + 16) + "px";
+        tip.hidden = false;
+      }
+      if (hexMap) hexMap.setOverlay(transportOverlayDraw);
+    }
+    function confirmTransport(x, y) {
+      if (!_transportMode || !_transportSource || !_transportSourceCol) return;
+      const path = hexLinePath(_transportSource.x, _transportSource.y, x, y);
+      if (path.length < 2) { cancelTransport(); return; }
+      const plan = planTransport('human', _transportMode, _transportSourceCol, path);
+      _transportPlannedPaths.push({ kind: _transportMode, path, planId: plan && plan.id });
+      const kind = _transportMode;
+      _transportHoverPath = null;
+      const tip = document.getElementById("build-tooltip"); if (tip) tip.hidden = true;
+      _transportMode = null; _transportSource = null; _transportSourceCol = null;
+      notify(`${kind.charAt(0).toUpperCase() + kind.slice(1)} planned — construction begins next turn.`);
+      if (hexMap) hexMap.setOverlay(transportOverlayDraw);
+    }
+    // Overlay: hovered path in bright green; committed plans in lighter green.
+    function transportOverlayDraw(ctx, spacing, hexCenter) {
+      const drawPath = (path, stroke, w) => {
+        if (!path || path.length < 2) return;
+        ctx.save();
+        ctx.strokeStyle = stroke; ctx.lineWidth = w; ctx.lineJoin = "round"; ctx.lineCap = "round";
+        ctx.beginPath();
+        for (let i = 0; i < path.length; i++) {
+          const c = hexCenter(path[i].x, path[i].y);
+          if (i === 0) ctx.moveTo(c.x, c.y); else ctx.lineTo(c.x, c.y);
+        }
+        ctx.stroke(); ctx.restore();
+      };
+      const lw = Math.max(2, spacing.y / 8);
+      for (const pl of _transportPlannedPaths) drawPath(pl.path, "hsla(120, 60%, 65%, 0.75)", lw); // lighter green (planned)
+      if (_transportHoverPath) drawPath(_transportHoverPath, "hsla(120, 80%, 40%, 0.95)", lw);      // bright green (hover)
+      // Canal previews are edge-based: draw along each edge's shared border
+      // (approximated as a mark at the border midpoint between the two cells).
+      const drawCanalEdges = (edges, stroke, w) => {
+        if (!edges || !edges.length) return;
+        ctx.save(); ctx.strokeStyle = stroke; ctx.lineWidth = w; ctx.lineCap = "round";
+        for (const e of edges) {
+          const ca = hexCenter(e.a.x, e.a.y), cb = hexCenter(e.b.x, e.b.y);
+          const mx = (ca.x + cb.x) / 2, my = (ca.y + cb.y) / 2;
+          const dx = cb.x - ca.x, dy = cb.y - ca.y, len = Math.hypot(dx, dy) || 1;
+          const ex = (-dy / len) * spacing.x * 0.28, ey = (dx / len) * spacing.x * 0.28;
+          ctx.beginPath(); ctx.moveTo(mx - ex, my - ey); ctx.lineTo(mx + ex, my + ey); ctx.stroke();
+        }
+        ctx.restore();
+      };
+      for (const pl of _canalPlannedEdges) drawCanalEdges(pl.edges, "hsla(120, 60%, 65%, 0.8)", lw); // planned (lighter green)
+      if (_canalHover && _canalHover.edges) drawCanalEdges(_canalHover.edges, "hsla(120, 80%, 40%, 0.95)", lw); // hover (bright green)
+    }
+
+    // --- canal (vertex/edge) build mode ---
+    let _canalMode = false;        // active canal planning
+    let _canalStartVK = null;      // start vertex key
+    let _canalSourceCol = null;    // paying colony
+    let _canalHover = null;        // { vertices, edges, cost } to hovered vertex
+    let _canalPlannedEdges = [];   // committed canal plans' edges (lighter green)
+    function beginCanal(startVK, sourceHex) {
+      let col = colonyControlling(sourceHex.x, sourceHex.y, 'human') || colonyControllingByRadius(sourceHex.x, sourceHex.y, 'human');
+      if (!col) {
+        // Fall back to the nearest human colony to pay for the canal.
+        let best = null, bestD = Infinity;
+        for (const b of gameState.buildings) {
+          if (b.type !== 1 || b.owner !== 'human' || b.inTransit) continue;
+          const d = hexDistance(b.x, b.y, sourceHex.x, sourceHex.y);
+          if (d < bestD) { bestD = d; best = b; }
+        }
+        col = best;
+      }
+      if (!col) { notify("You need a colony to fund canal construction."); return; }
+      if (!vertexConnectable(startVK)) { notify("Canal must start at a sea/river/canal vertex."); return; }
+      _canalMode = true; _canalStartVK = startVK; _canalSourceCol = col; _canalHover = null;
+      notify("Building a canal — move to an end vertex and click to plan (Esc to cancel).");
+      if (hexMap) hexMap.setOverlay(transportOverlayDraw);
+    }
+    function cancelCanal() {
+      _canalMode = false; _canalStartVK = null; _canalSourceCol = null; _canalHover = null;
+      const tip = document.getElementById("build-tooltip"); if (tip) tip.hidden = true;
+      if (hexMap) hexMap.setOverlay((_transportPlannedPaths.length || _canalPlannedEdges.length) ? transportOverlayDraw : null);
+    }
+    function updateCanalPreview(corner, clientX, clientY) {
+      if (!_canalMode || !_canalStartVK) return;
+      const endVK = corner ? cornerVertexKey(corner.cell.x, corner.cell.y, corner.cornerIndex) : null;
+      _canalHover = (endVK && endVK !== _canalStartVK) ? planCanalPath(_canalStartVK, endVK) : null;
+      const tip = document.getElementById("build-tooltip");
+      if (tip) {
+        if (_canalHover) {
+          const c = _canalHover.cost, nf = (n) => Math.round(n * 10) / 10;
+          const eta = Math.max(1, Math.ceil(c.buildTurns || 0));
+          tip.innerHTML = `<b>Build Canal (${_canalHover.edges.length} segment${_canalHover.edges.length===1?'':'s'})</b><br>` +
+            `Food ${nf(c.food)} · Material ${nf(c.material)} · Energy ${nf(c.energy)} · Wealth ${nf(c.wealth)}<br>ETA ~${eta} turn${eta===1?'':'s'}`;
+          tip.style.left = (clientX + 16) + "px"; tip.style.top = (clientY + 16) + "px"; tip.hidden = false;
+        } else { tip.hidden = true; }
+      }
+      if (hexMap) hexMap.setOverlay(transportOverlayDraw);
+    }
+    function confirmCanal(corner) {
+      if (!_canalMode || !_canalStartVK || !_canalSourceCol) return;
+      const endVK = corner ? cornerVertexKey(corner.cell.x, corner.cell.y, corner.cornerIndex) : null;
+      const plan = (endVK && endVK !== _canalStartVK) ? planCanalPath(_canalStartVK, endVK) : null;
+      if (!plan || !plan.edges.length) { notify("No valid canal route to that vertex."); return; }
+      // Build a canal construction plan whose "path" is the chain of cells so
+      // advanceTransportConstruction can lay one border (edge) per step.
+      const p = planCanalEdges('human', _canalSourceCol, plan.edges);
+      _canalPlannedEdges.push({ edges: plan.edges.slice(), planId: p && p.id });
+      _canalHover = null;
+      const tip = document.getElementById("build-tooltip"); if (tip) tip.hidden = true;
+      _canalMode = false; _canalStartVK = null; _canalSourceCol = null;
+      notify("Canal planned — construction begins next turn.");
+      if (hexMap) hexMap.setOverlay(transportOverlayDraw);
+    }
+
+    // Reuse the colony-name dialog for launches; returns the entered name or
+    // null if cancelled.
+    function openLaunchNameDialog() {
+      return new Promise((resolve) => {
+        _launchNameResolve = resolve;
+        nameTarget = null; _launchNaming = true;
+        // Default to the next "Colony N" (existing human colonies + 1).
+        const mine = gameState.colonies.filter((c) => c.owner === 'human').length;
+        nameInput.value = "Colony " + (mine + 1);
+        nameOverlay.hidden = false;
+        setTimeout(() => { nameInput.focus(); nameInput.select(); }, 30);
+      });
     }
 
     // Full build cost object (e.g. { material, wealth }) from config.
     function buildingCost(type) {
       const t = buildingType(type);
-      return (t && t.cost) || {};
+      return (t && (t.buildCost || t.cost)) || {};
     }
-    // Whether the human can afford a building type.
+    // The owner's colony (biodome) whose control area contains (x,y), if any.
+    function colonyControlling(x, y, owner) {
+      const k = cellKey(x, y);
+      for (const b of gameState.buildings) {
+        if (b.type !== 1 || b.owner !== owner) continue;
+        if (colonyControlCells(b).some((c) => cellKey(c.x, c.y) === k)) return b;
+      }
+      return null;
+    }
+    // Owner's colony whose control RADIUS covers (x,y) — includes sea cells that
+    // aren't yet in the (land/dock-limited) control set. Used for placing a
+    // Dock on a shallow-sea tile before any dock exists there.
+    function colonyControllingByRadius(x, y, owner) {
+      for (const b of gameState.buildings) {
+        if (b.type !== 1 || b.owner !== owner) continue;
+        if (hexDistance(b.x, b.y, x, y) <= colonyControlRadius(b)) return b;
+      }
+      return null;
+    }
+    // Where a building type may be placed, honoring terrain. Docks (type 5) go
+    // on shallow-sea tiles within a colony's radius; all others go on empty land
+    // (2-7) within the owner's control. Returns { ok, reason }.
+    function canPlaceTypeAt(type, x, y, owner) {
+      if (cellHasBuilding(x, y)) return { ok: false, reason: "cell occupied" };
+      if (type === 5) {
+        if (terrainAt(x, y) !== 1) return { ok: false, reason: "docks must be built on sea" };
+        if (!isShallowSea(x, y)) return { ok: false, reason: "docks need sea adjacent to land" };
+        if (!colonyControllingByRadius(x, y, owner)) return { ok: false, reason: "outside your zone of control" };
+        return { ok: true };
+      }
+      const terr = terrainAt(x, y);
+      if (terr < 2 || terr > 7) return { ok: false, reason: "must be land" };
+      if (!(owner === 'human' ? humanControls(x, y) : colonyControlling(x, y, owner))) {
+        return { ok: false, reason: "outside your zone of control" };
+      }
+      return { ok: true };
+    }
+    // The stored resources available to build at (x,y): the controlling colony's
+    // per-colony storage. Falls back to an empty pool if no colony controls it.
+    function buildPoolAt(x, y, owner) {
+      const col = colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
+      return col ? ensureStored(col) : null;
+    }
+    // Whether the owner can afford a building type at (x,y), paying from the
+    // controlling colony's stored resources.
+    function canAffordBuildingAt(type, x, y, owner) {
+      const pool = buildPoolAt(x, y, owner);
+      if (!pool) return false;
+      const cost = buildingCost(type);
+      for (const res of Object.keys(cost)) {
+        if ((pool[res] || 0) < cost[res]) return false;
+      }
+      return true;
+    }
+    // Whether the prerequisite building types for `type` all exist (operational)
+    // in the colony that controls (x,y).
+    function hasPrerequisitesAt(type, x, y, owner) {
+      const prereq = (buildingType(type) || {}).prerequisiteBuildings || [];
+      if (!prereq.length) return true;
+      const col = colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
+      if (!col) return false;
+      const present = new Set(colonyBuildings(col).map((b) => b.type));
+      return prereq.every((t) => present.has(t));
+    }
+    // Names of missing prerequisite building types (for the menu label).
+    function missingPrerequisiteNames(type, x, y, owner) {
+      const prereq = (buildingType(type) || {}).prerequisiteBuildings || [];
+      const col = colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
+      const present = new Set(col ? colonyBuildings(col).map((b) => b.type) : []);
+      return prereq.filter((t) => !present.has(t)).map((t) => improvementName(t));
+    }
+    // Whether the human can afford a building type (legacy: uses aggregate).
     function canAffordBuilding(type) {
       const cost = buildingCost(type);
       for (const res of Object.keys(cost)) {
@@ -982,6 +2681,18 @@
       for (const r of Object.keys(cost)) {
         const have = gameState.resources[r] || 0;
         const need = cost[r] - have;
+        if (need > 0) parts.push(`${Math.ceil(need)} more ${cap(r)}`);
+      }
+      return parts.length ? parts.join(", ") : "more resources";
+    }
+    // Per-colony shortfall: what the controlling colony still lacks in storage.
+    function buildingShortfallAtLabel(type, x, y, owner) {
+      const cost = buildingCost(type);
+      const pool = buildPoolAt(x, y, owner) || {};
+      const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+      const parts = [];
+      for (const r of Object.keys(cost)) {
+        const need = cost[r] - (pool[r] || 0);
         if (need > 0) parts.push(`${Math.ceil(need)} more ${cap(r)}`);
       }
       return parts.length ? parts.join(", ") : "more resources";
@@ -1057,14 +2768,8 @@
     // colonies can assign a worker to an unworked controlled cell, or can build
     // an affordable building on an empty controlled land cell.
     function aiHasPossibleActions(pi) {
-      const res = (gameState.players[pi] && gameState.players[pi].resources) || {};
-      const affordableTypes = Object.keys(CONFIG.buildingTypes || {})
-        .map((k) => parseInt(k, 10))
-        .filter((type) => type !== 1)
-        .filter((type) => {
-          const cost = buildingCost(type);
-          return Object.keys(cost).every((r) => (res[r] || 0) >= cost[r]);
-        });
+      const types = Object.keys(CONFIG.buildingTypes || {})
+        .map((k) => parseInt(k, 10)).filter((type) => type !== 1);
       const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi);
       for (const col of myColonies) {
         ensureWorked(col);
@@ -1076,13 +2781,102 @@
           cellKey(c.x, c.y) !== homeKey && !col.worked.includes(cellKey(c.x, c.y)));
         // (a) a free worker slot AND an unworked cell to fill it.
         if (workedExtras < cap && unworked.length > 0) return true;
-        // (b) an affordable building on an empty controlled land cell.
-        if (affordableTypes.length > 0) {
-          const emptyLand = control.some((c) =>
-            cellKey(c.x, c.y) !== homeKey &&
-            terrainAt(c.x, c.y) >= 2 && terrainAt(c.x, c.y) <= 7 &&
-            !gameState.buildings.some((b) => b.x === c.x && b.y === c.y));
-          if (emptyLand) return true;
+        // (b) a buildable, affordable building (with prerequisites) on an empty
+        //     controlled land cell (paid from the colony's own storage).
+        for (const c of control) {
+          if (cellKey(c.x, c.y) === homeKey) continue;
+          if (terrainAt(c.x, c.y) < 2 || terrainAt(c.x, c.y) > 7) continue;
+          if (gameState.buildings.some((b) => b.x === c.x && b.y === c.y)) continue;
+          for (const type of types) {
+            if (hasPrerequisitesAt(type, c.x, c.y, pi) && canAffordBuildingAt(type, c.x, c.y, pi)) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    // Whether any human colony has a free worker slot AND an unworked control
+    // cell to assign it to.
+    function humanHasWorkerToAssign() {
+      const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === 'human');
+      for (const col of myColonies) {
+        ensureWorked(col);
+        const homeKey = cellKey(col.x, col.y);
+        const workedExtras = col.worked.filter((k) => k !== homeKey).length;
+        if (workedExtras >= workCap(col)) continue; // no free worker slot
+        const hasUnworked = colonyControlCells(col).some((c) =>
+          cellKey(c.x, c.y) !== homeKey && !col.worked.includes(cellKey(c.x, c.y)));
+        if (hasUnworked) return true;
+      }
+      return false;
+    }
+
+    // Whether the human could build ANY building right now: some controlled
+    // empty land cell where an affordable building with satisfied prerequisites
+    // could be placed. Used to keep the human's turn from auto-passing.
+    function humanCanBuildAnything() {
+      const types = Object.keys(CONFIG.buildingTypes || {})
+        .map((k) => parseInt(k, 10)).filter((t) => t !== 1);
+      const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === 'human');
+      for (const col of myColonies) {
+        const homeKey = cellKey(col.x, col.y);
+        // Consider every cell within the control radius (land + shallow sea) so
+        // Docks (sea) are covered too.
+        for (const c of cellsWithin(col.x, col.y, colonyControlRadius(col))) {
+          if (cellKey(c.x, c.y) === homeKey) continue;
+          if (cellHasBuilding(c.x, c.y)) continue;       // must be empty
+          for (const type of types) {
+            if (!canPlaceTypeAt(type, c.x, c.y, 'human').ok) continue;
+            if (!hasPrerequisitesAt(type, c.x, c.y, 'human')) continue;
+            if (!canAffordBuildingAt(type, c.x, c.y, 'human')) continue;
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    // Whether the human is working an UNIMPROVED cell (a worked cell with no
+    // building) where an affordable building with met prerequisites could be
+    // placed — i.e. they could improve a tile they're already working. Keeps
+    // the turn open so the player can build there.
+    function humanCanImproveWorkedCell() {
+      const types = Object.keys(CONFIG.buildingTypes || {})
+        .map((k) => parseInt(k, 10)).filter((t) => t !== 1);
+      const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === 'human');
+      for (const col of myColonies) {
+        const homeKey = cellKey(col.x, col.y);
+        for (const k of (col.worked || [])) {
+          if (k === homeKey) continue;                 // biodome already improved
+          const [x, y] = k.split(",").map(Number);
+          if (cellHasBuilding(x, y)) continue;         // already improved
+          for (const type of types) {
+            if (!canPlaceTypeAt(type, x, y, 'human').ok) continue;
+            if (!hasPrerequisitesAt(type, x, y, 'human')) continue;
+            if (!canAffordBuildingAt(type, x, y, 'human')) continue;
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    // Whether any human colony can launch a new colony now (large enough,
+    // affordable, and has at least one valid reachable target).
+    function humanCanLaunchColony() {
+      const minPop = (CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3000;
+      for (const col of gameState.buildings) {
+        if (col.type !== 1 || col.owner !== 'human' || col.inTransit) continue;
+        if ((col.population || 0) <= minPop) continue;
+        if (!canAffordBuildingAt(1, col.x, col.y, 'human')) continue;
+        // Any valid reachable site within a reasonable band?
+        const minD = CONFIG.minStartDistance || 20;
+        for (const c of cellsWithin(col.x, col.y, minD + 12)) {
+          const terr = terrainAt(c.x, c.y);
+          if (terr < 2 || terr > 7) continue;
+          if (hexDistance(col.x, col.y, c.x, c.y) < minD) continue;
+          if (cellHasBuilding(c.x, c.y)) continue;
+          if (foundColonyTargetValid(col, c.x, c.y).ok) return true;
         }
       }
       return false;
@@ -1166,14 +2960,24 @@
       for (const b of (plan.build || [])) {
         if (!b || !Array.isArray(b.at)) continue;
         const type = parseInt(b.type, 10);
-        if (![2, 3, 4].includes(type)) continue;
+        if (![2, 3, 4, 5].includes(type)) continue;
         const [x, y] = b.at;
-        if (!myControl.has(cellKey(x, y))) continue;
-        if (terrainAt(x, y) < 2 || terrainAt(x, y) > 7) continue;
-        if (gameState.buildings.some((bb) => bb.x === x && bb.y === y)) continue;
-        const cost = buildingCost(type);
-        if (!Object.keys(cost).every((r) => (res[r] || 0) >= cost[r])) continue;
+        const place = canPlaceTypeAt(type, x, y, pi);   // handles Dock/sea vs land + control
+        if (!place.ok) continue;
+        if (!hasPrerequisitesAt(type, x, y, pi)) continue;      // prerequisites
+        if (!canAffordBuildingAt(type, x, y, pi)) continue;     // per-colony storage
         placeBuilding(x, y, pi, type); acted = true;
+      }
+      // Launch new colonies from existing ones (plan.launch entries).
+      const minPop = (CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3000;
+      for (const l of (plan.launch || [])) {
+        if (!l || !Array.isArray(l.from) || !Array.isArray(l.to)) continue;
+        const host = colonyAtXY(l.from[0], l.from[1]);
+        if (!host || (host.population || 0) <= minPop) continue;
+        const name = (l.name && String(l.name)) ||
+          ((gameState.players[pi] && gameState.players[pi].name || 'Colony') + ' ' +
+           (gameState.colonies.filter((c) => c.owner === pi).length + 1));
+        if (launchColony(host, l.to[0], l.to[1], pi, name)) acted = true;
       }
       if (acted && hexMap) hexMap.setBuildings(gameState.buildings);
       return acted;
@@ -1312,23 +3116,66 @@
           acted = true;
         }
 
-        // (2) Build what the colony needs, in control, if affordable.
-        // Priority: Solar Panel if energy is low, Farm if food is short,
-        // else Factory to boost material.
+        // (2) Build what the colony needs, in control, if affordable and its
+        // prerequisites are met. Priority is driven by the colony's budget:
+        //   - Low food margin  -> Farm (support population growth).
+        //   - Energy shortfall -> Solar Panel (buildings need energy).
+        //   - Otherwise         -> Factory for material, else Farm to keep growing.
         const controlEmpty = control.filter((c) =>
           cellKey(c.x, c.y) !== homeKey &&
           !gameState.buildings.some((b) => b.x === c.x && b.y === c.y));
         if (controlEmpty.length) {
-          const res = player.resources || {};
-          const wantOrder = hungry ? [2, 3, 4] : [3, 4, 2]; // farm/solar/factory
+          const bud = colonyBudget(col);
+          // Food margin as a fraction of consumption (how much slack to grow).
+          const foodMargin = bud.consumption > 0 ? (bud.net.food / bud.consumption) : bud.net.food;
+          const wantFood = bud.net.food <= 0 || foodMargin < 0.5; // thin/negative food
+          const wantEnergy = bud.net.energy < 0;                  // energy-negative
+          let wantOrder;
+          if (wantFood) wantOrder = [2, 3, 4];        // Farm first to feed growth
+          else if (wantEnergy) wantOrder = [3, 2, 4]; // Solar to cover upkeep
+          else wantOrder = [4, 2, 3];                 // Factory, else Farm, else Solar
           for (const type of wantOrder) {
-            const cost = buildingCost(type);
-            const afford = Object.keys(cost).every((k) => (res[k] || 0) >= cost[k]);
-            if (!afford) continue;
             const spot = controlEmpty[0];
+            // Respect prerequisites and pay from the colony's own storage.
+            if (!hasPrerequisitesAt(type, spot.x, spot.y, pi)) continue;
+            if (!canAffordBuildingAt(type, spot.x, spot.y, pi)) continue;
             placeBuilding(spot.x, spot.y, pi, type);
+            // Work the new building's cell if there is spare capacity, so it
+            // actually produces (idle buildings produce nothing).
+            if (col.worked.filter((k) => k !== homeKey).length < cap) {
+              col.worked.push(cellKey(spot.x, spot.y));
+            }
             acted = true;
             break;
+          }
+        }
+
+        // (2b) Build a Dock on a shallow-sea tile if this colony is coastal and
+        // doesn't have one yet. Docks open shallow-sea tiles to being worked and
+        // let colony-launch paths cross shallow sea. Only build when the colony
+        // has spare worker capacity to actually use the new sea tiles.
+        if (!colonyHasDock(col) &&
+            col.worked.filter((k) => k !== homeKey).length < cap) {
+          let seaSpot = null;
+          for (const c of cellsWithin(col.x, col.y, colonyControlRadius(col))) {
+            if (terrainAt(c.x, c.y) !== 1 || !isShallowSea(c.x, c.y)) continue;
+            if (cellHasBuilding(c.x, c.y)) continue;
+            seaSpot = c; break;
+          }
+          if (seaSpot && hasPrerequisitesAt(5, seaSpot.x, seaSpot.y, pi)
+              && canAffordBuildingAt(5, seaSpot.x, seaSpot.y, pi)) {
+            placeBuilding(seaSpot.x, seaSpot.y, pi, 5);
+            col.worked.push(cellKey(seaSpot.x, seaSpot.y)); // work the new sea tile
+            acted = true;
+          }
+        }
+        const minPop = (CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3000;
+        if ((col.population || 0) > minPop && canAffordBuildingAt(1, col.x, col.y, pi)) {
+          const site = aiChooseLaunchSite(col, pi);
+          if (site) {
+            const name = (gameState.players[pi] && gameState.players[pi].name || 'Colony') + ' ' +
+              (gameState.colonies.filter((c) => c.owner === pi).length + 1);
+            if (launchColony(col, site.x, site.y, pi, name)) acted = true;
           }
         }
       }
@@ -1336,11 +3183,41 @@
       return acted;
     }
 
+    // Choose a launch target for an AI colony: a valid, reachable land cell at
+    // least minStartDistance from any colony, within a reasonable travel range,
+    // scored by terrain quality (near river/water, grassland). Returns {x,y} or
+    // null. Keeps the search local so travel time stays modest.
+    function aiChooseLaunchSite(host, pi) {
+      const minD = CONFIG.minStartDistance || 20;
+      const SEARCH = minD + 12; // search a band beyond the min spacing
+      let best = null, bestScore = -Infinity;
+      for (const c of cellsWithin(host.x, host.y, SEARCH)) {
+        const terr = terrainAt(c.x, c.y);
+        if (terr < 2 || terr > 7) continue;
+        if (cellHasBuilding(c.x, c.y)) continue;
+        if (hexDistance(host.x, host.y, c.x, c.y) < minD) continue; // too close
+        const v = foundColonyTargetValid(host, c.x, c.y);
+        if (!v.ok) continue;
+        let score = 100 - v.travelTurns * 5; // prefer closer (less travel)
+        if (nearRiver(c.x, c.y)) score += 60;
+        if (withinCellsOfWater(c.x, c.y, 3)) score += 30;
+        if (terr === 2) score += 15;         // grassland
+        score += Math.random() * 5;
+        if (score > bestScore) { bestScore = score; best = { x: c.x, y: c.y }; }
+      }
+      return best;
+    }
+
     // ---- context menu + name dialog ---------------------------------------
     const ctxMenu = document.getElementById("context-menu");
     const ctxEstablish = document.getElementById("ctx-establish");
     const ctxBuildItems = document.getElementById("ctx-build-items");
+    const ctxRemove = document.getElementById("ctx-remove");
+    const ctxRoad = document.getElementById("ctx-road");
+    const ctxMonorail = document.getElementById("ctx-monorail");
+    const ctxCanal = document.getElementById("ctx-canal");
     let ctxTarget = null;
+    let _ctxVertex = null; // nearest hex-corner vertex key of the last right-click
     function hideContextMenu() { ctxMenu.hidden = true; ctxTarget = null; }
     function humanCanPlace() {
       const p = gameState.players && gameState.players[gameState.currentPlayer];
@@ -1356,40 +3233,121 @@
     function showContextMenu(clientX, clientY, hex) {
       ctxTarget = hex;
       const terr = hex ? terrainAt(hex.x, hex.y) : 0;
+
+      // If the right-clicked VERTEX is a legal canal start, the ONLY option is
+      // "Build Canal" (all other cell options are hidden).
+      const canalStart = isHumanTurn() && hex && _ctxVertex &&
+        vertexConnectable(_ctxVertex) &&
+        canalEdgesAtVertex(_ctxVertex).length >= 1;
+      if (canalStart) {
+        ctxEstablish.hidden = true;
+        ctxBuildItems.innerHTML = "";
+        ctxRemove.hidden = true;
+        ctxRoad.hidden = true;
+        ctxMonorail.hidden = true;
+        ctxCanal.hidden = false;
+        ctxCanal.classList.remove("disabled");
+        ctxCanal.textContent = "Build Canal";
+        ctxMenu.style.left = clientX + "px";
+        ctxMenu.style.top = clientY + "px";
+        ctxMenu.hidden = false;
+        return;
+      }
+      // Otherwise a canal is never offered in the cell popup.
+      ctxCanal.hidden = true;
+
       const buildable = isHumanTurn() && hex && terr >= 2 && terr <= 7 && !cellHasBuilding(hex.x, hex.y);
 
-      // Establish Colony (type 1) additionally requires a colony module.
-      const canEstablish = buildable && (gameState.players[gameState.currentPlayer].modules || 0) > 0;
-      ctxEstablish.classList.toggle("disabled", !canEstablish);
+      // The colony action item (ctx-establish) is dual-purpose:
+      //  • On your own biodome -> "Launch Colony" (found a new colony from here).
+      //  • On an empty land cell with a colony module -> "Establish Colony".
+      const ownBio = (isHumanTurn() && hex)
+        ? gameState.buildings.find((bb) => bb.x === hex.x && bb.y === hex.y && bb.owner === 'human' && bb.type === 1 && !bb.inTransit)
+        : null;
+      ctxEstablish.dataset.mode = "";
+      if (ownBio) {
+        // Launch Colony from this biodome.
+        const minPop = (CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3000;
+        const enough = (ownBio.population || 0) > minPop;
+        const canPay = canAffordBuildingAt(1, ownBio.x, ownBio.y, 'human');
+        let label = `Launch Colony (${buildingCostLabel(1)} + ${(CONFIG.foundColonyPopulationTransfer || 1000).toLocaleString()} colonists)`;
+        if (!enough) label += ` — needs > ${minPop.toLocaleString()} population`;
+        else if (!canPay) label += " — need " + buildingShortfallAtLabel(1, ownBio.x, ownBio.y, 'human');
+        ctxEstablish.textContent = label;
+        ctxEstablish.classList.toggle("disabled", !enough || !canPay);
+        ctxEstablish.dataset.mode = "launch";
+        ctxEstablish.hidden = false;
+      } else {
+        // Establish the first/next colony on empty land (needs a colony module).
+        const canEstablish = buildable && (gameState.players[gameState.currentPlayer].modules || 0) > 0;
+        ctxEstablish.textContent = "Establish Colony";
+        ctxEstablish.classList.toggle("disabled", !canEstablish);
+        ctxEstablish.dataset.mode = "establish";
+        // Only show it when a module is available (otherwise it's just noise).
+        ctxEstablish.hidden = !(isHumanTurn() && (gameState.players[gameState.currentPlayer].modules || 0) > 0);
+      }
 
       // Build options for the other building types (2..N) from config. A
       // building must be placed on an empty land cell (terrain 2-7) within the
       // human's area of control, and the human must afford its full cost.
       ctxBuildItems.innerHTML = "";
-      const inControl = buildable && humanControls(hex.x, hex.y);
       const types = (CONFIG.buildingTypes) ? Object.keys(CONFIG.buildingTypes) : [];
       for (const tk of types) {
         const type = parseInt(tk, 10);
         if (type === 1) continue; // colony handled by Establish Colony
         const bt = CONFIG.buildingTypes[tk];
-        const affordable = canAffordBuilding(type);
-        const enabled = buildable && inControl && affordable;
+        const canTurn = isHumanTurn() && hex;
+        const place = canTurn ? canPlaceTypeAt(type, hex.x, hex.y, 'human') : { ok: false, reason: "" };
+        const affordable = place.ok && canAffordBuildingAt(type, hex.x, hex.y, 'human');
+        const prereqOk = place.ok && hasPrerequisitesAt(type, hex.x, hex.y, 'human');
+        const enabled = place.ok && affordable && prereqOk;
         const item = document.createElement("div");
         item.className = "ctx-item" + (enabled ? "" : " disabled");
         let label = `Build ${bt.name || ("Type " + type)} (${buildingCostLabel(type)})`;
         // Explain why a disabled item can't be built so it's clear it isn't a bug.
-        if (!enabled && buildable) {
-          if (!inControl) label += " — outside your zone of control";
-          else if (!affordable) label += " — need " + buildingShortfallLabel(type);
+        if (!enabled && canTurn) {
+          if (!place.ok) label += " — " + place.reason;
+          else if (!prereqOk) label += " — requires " + missingPrerequisiteNames(type, hex.x, hex.y, 'human').join(", ");
+          else if (!affordable) label += " — need " + buildingShortfallAtLabel(type, hex.x, hex.y, 'human');
         }
         item.textContent = label;
         item.addEventListener("click", () => {
           if (item.classList.contains("disabled") || !ctxTarget) return;
           const h = ctxTarget; hideContextMenu();
           placeBuilding(h.x, h.y, 'human', type);
+          maybeAutoEndHumanTurn();
         });
         ctxBuildItems.appendChild(item);
       }
+
+      // Remove Improvement: only for a non-colony building the human owns on
+      // this cell that isn't already being removed. Shows the cost; disabled
+      // (with reason) if the controlling colony can't pay.
+      let showRemove = false;
+      if (isHumanTurn() && hex) {
+        const b = gameState.buildings.find((bb) => bb.x === hex.x && bb.y === hex.y
+          && bb.owner === 'human' && bb.type !== 1);
+        if (b) {
+          showRemove = true;
+          const already = b.removeTurns != null && b.removeTurns > 0;
+          const canPay = canAffordRemovalAt(hex.x, hex.y, 'human');
+          const turns = (CONFIG.removeImprovementTurns != null) ? CONFIG.removeImprovementTurns : 2;
+          let label = `Remove Improvement (${removalCostLabel()}, ${turns} turn${turns === 1 ? '' : 's'})`;
+          if (already) label = `Removing… (${b.removeTurns} turn${b.removeTurns === 1 ? '' : 's'} left)`;
+          else if (!canPay) label += " — need " + removalShortfallLabel(hex.x, hex.y, 'human');
+          ctxRemove.textContent = label;
+          ctxRemove.classList.toggle("disabled", already || !canPay);
+        }
+      }
+      ctxRemove.hidden = !showRemove;
+
+      // Build Road / Monorail / Canal: available on any cell within the human's
+      // zone of control, on their turn. (Source colony = controlling colony.)
+      const canBuildTransport = isHumanTurn() && hex &&
+        !!(colonyControlling(hex.x, hex.y, 'human') || colonyControllingByRadius(hex.x, hex.y, 'human'));
+      ctxRoad.hidden = !canBuildTransport;
+      ctxMonorail.hidden = !canBuildTransport;
+      // (Canal is offered only on a legal canal-start vertex, handled above.)
 
       ctxMenu.style.left = clientX + "px";
       ctxMenu.style.top = clientY + "px";
@@ -1397,7 +3355,24 @@
     }
     ctxEstablish.addEventListener("click", () => {
       if (ctxEstablish.classList.contains("disabled") || !ctxTarget) return;
-      const hex = ctxTarget; hideContextMenu(); openNameDialog(hex);
+      const hex = ctxTarget; const mode = ctxEstablish.dataset.mode; hideContextMenu();
+      if (mode === "launch") beginFoundColony(hex.x, hex.y);
+      else openNameDialog(hex);
+    });
+    ctxRemove.addEventListener("click", () => {
+      if (ctxRemove.classList.contains("disabled") || !ctxTarget) return;
+      const hex = ctxTarget; hideContextMenu(); removeImprovement(hex.x, hex.y, 'human');
+      maybeAutoEndHumanTurn();
+    });
+    ctxRoad.addEventListener("click", () => {
+      if (!ctxTarget) return; const h = ctxTarget; hideContextMenu(); beginTransport('road', h.x, h.y);
+    });
+    ctxMonorail.addEventListener("click", () => {
+      if (!ctxTarget) return; const h = ctxTarget; hideContextMenu(); beginTransport('monorail', h.x, h.y);
+    });
+    ctxCanal.addEventListener("click", () => {
+      if (!ctxTarget) return; const startVK = _ctxVertex; const h = ctxTarget; hideContextMenu();
+      if (startVK) beginCanal(startVK, h);
     });
     document.addEventListener("click", (e) => {
       if (!ctxMenu.hidden && !ctxMenu.contains(e.target)) hideContextMenu();
@@ -1406,6 +3381,8 @@
     const nameOverlay = document.getElementById("name-overlay");
     const nameInput = document.getElementById("colony-name");
     let nameTarget = null;
+    let _launchNaming = false;      // name dialog is being used for a colony launch
+    let _launchNameResolve = null;  // resolver for the launch-name promise
     async function openNameDialog(hex) {
       nameTarget = hex;
       // Per-game numbering: "Colony N" where N = (our colonies so far) + 1,
@@ -1415,7 +3392,10 @@
       nameOverlay.hidden = false;
       nameInput.focus(); nameInput.select();
     }
-    function closeNameDialog() { nameOverlay.hidden = true; nameTarget = null; }
+    function closeNameDialog() {
+      nameOverlay.hidden = true; nameTarget = null;
+      if (_launchNaming) { _launchNaming = false; const r = _launchNameResolve; _launchNameResolve = null; if (r) r(null); }
+    }
     document.getElementById("name-cancel").addEventListener("click", closeNameDialog);
     document.getElementById("name-ok").addEventListener("click", confirmName);
     nameInput.addEventListener("keydown", (e) => {
@@ -1423,6 +3403,13 @@
       else if (e.key === "Escape") closeNameDialog();
     });
     async function confirmName() {
+      // Launch-naming path: resolve the pending promise with the entered name.
+      if (_launchNaming) {
+        const name = (nameInput.value || "").trim() || "Colony";
+        _launchNaming = false; nameOverlay.hidden = true;
+        const r = _launchNameResolve; _launchNameResolve = null; if (r) r(name);
+        return;
+      }
       if (!nameTarget) return;
       const name = (nameInput.value || "").trim() || "Colony";
       const hex = nameTarget; closeNameDialog();
@@ -1466,6 +3453,9 @@
       if (_advanceAfterWorkModal) {
         _advanceAfterWorkModal = false;
         advanceTurn(); // hand the round to the AIs after the founding turn
+      } else {
+        // Assigning workers may have exhausted the human's actions — re-check.
+        maybeAutoEndHumanTurn();
       }
     }
 
@@ -1543,15 +3533,28 @@
         ctx.lineWidth = (isHome ? 3 : (isWorked ? 2 : 1));
         ctx.strokeStyle = (isHome ? "#b00020" : (isWorked ? "#d43a4a" : "#888"));
         ctx.stroke();
-        // F/M/E/H text with tight vertical leading.
+        // Per-cell properties: a header (improvement name if any, then terrain
+        // type) followed by F/M/E/W/H. Smaller font + tight leading to fit.
         const bd = cellBreakdown(c.x, c.y, isHome, col.owner);
-        ctx.fillStyle = "#1e1e1e";
-        ctx.font = `${fontPx}px Calibri, sans-serif`;
         const seg = (o) => `${o.base}+${o.bonus}`;
-        const lines = [`F: ${seg(bd.food)}`, `M: ${seg(bd.prod)}`, `E: ${seg(bd.energy)}`, `H: ${seg(bd.happ)}`];
-        const lh = fontPx * 0.92; // contracted leading
+        const bldgHere = gameState.buildings.find((b) => b.x === c.x && b.y === c.y && b.owner === col.owner);
+        const terrName = ((CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(c.x, c.y))]) || {}).name || "";
+        const header = [];
+        if (bldgHere) { header.push(improvementName(bldgHere.type)); header.push(terrName); }
+        else header.push(terrName);
+        const stats = [`F: ${seg(bd.food)}`, `M: ${seg(bd.prod)}`, `E: ${seg(bd.energy)}`,
+                       `W: ${seg(bd.wealth)}`, `H: ${seg(bd.happ)}`];
+        const lines = header.concat(stats);
+        const smallPx = Math.max(5, Math.round(fontPx * 0.62)); // smaller text
+        const lh = smallPx * 0.7;                               // tighter leading
+        ctx.fillStyle = "#1e1e1e";
         let ty = cy - (lines.length - 1) * lh / 2;
-        for (const ln of lines) { ctx.fillText(ln, cx, ty + fontPx * 0.35); ty += lh; }
+        for (let i = 0; i < lines.length; i++) {
+          const isHeader = i < header.length;
+          ctx.font = `${isHeader ? 'bold ' : ''}${smallPx}px Calibri, sans-serif`;
+          ctx.fillText(lines[i], cx, ty + smallPx * 0.35);
+          ty += lh;
+        }
       }
       renderWorkStats(col);
     }
@@ -1566,23 +3569,46 @@
       const cls = (n) => (n > 0 ? "stat-pos" : (n < 0 ? "stat-neg" : ""));
       const pct = (r) => `${sign(r * 100)}${nf(r * 100, 2)}%/yr`;
       const growLabel = s.storedHappiness < 0 ? "declining" : "growing";
-      // Stored resources belong to the colony's owner (human -> gameState.resources,
-      // AI -> gameState.players[owner].resources).
-      const res = (col.owner === 'human')
-        ? gameState.resources
-        : ((gameState.players[col.owner] && gameState.players[col.owner].resources) || { food: 0, material: 0, energy: 0, wealth: 0 });
+      // Per-colony stored resources (each colony holds its own budget).
+      const res = s.stored;
+      const overNote = s.over && s.over.length
+        ? `<div class="stat-note stat-neg">Over budget: ${s.over.join(", ")} storage is empty. Deselect worked buildings to idle them and fit the yearly budget.</div>`
+        : "";
+      // Buildings section: each operational building in the colony with its
+      // non-zero per-year bonuses (and worked/idle state).
+      const bldgRows = [];
+      for (const b of colonyBuildings(col)) {
+        const bo = bldgBonus(b.type);
+        const parts = [];
+        if (bo.food) parts.push(`${sign(bo.food)}${nf(bo.food, 0)} food`);
+        if (bo.material) parts.push(`${sign(bo.material)}${nf(bo.material, 0)} mat`);
+        if (bo.energy) parts.push(`${sign(bo.energy)}${nf(bo.energy, 0)} energy`);
+        if (bo.wealth) parts.push(`${sign(bo.wealth)}${nf(bo.wealth, 0)} wealth`);
+        if (bo.growth) parts.push(`${sign(bo.growth * 100)}${nf(bo.growth * 100, 2)}% growth`);
+        if (bo.happiness) parts.push(`${sign(bo.happiness)}${nf(bo.happiness, 0)} happ`);
+        const worked = isBuildingWorked(col, b);
+        const state = b.type === 1 ? "" : (worked ? "" : ` <span class="stat-neg">(idle)</span>`);
+        const detail = parts.length ? parts.join(", ") : "no bonuses";
+        bldgRows.push(`<div class="stat-row bldg-row"><span>${improvementName(b.type)}${state}</span><span>${detail}</span></div>`);
+      }
+      const buildingsSection = [
+        `<div class="stat-sec">Buildings <span class="stat-hint">(per-year bonus)</span></div>`,
+        ...(bldgRows.length ? bldgRows : [`<div class="stat-note">No buildings yet.</div>`]),
+      ];
       const rows = [
         `<h3>Statistics</h3>`,
         `<div class="stat-sec">Population</div>`,
         `<div class="stat-row"><span>Population</span><span>${nf(Math.round(s.population))}</span></div>`,
         `<div class="stat-row"><span>Growth rate</span><span class="${cls(s.growthRate)}">${pct(s.growthRate)}</span></div>`,
         `<div class="stat-row"><span>Per-year change</span><span class="${cls(s.popDelta)}">${sign(s.popDelta)}${nf(Math.round(s.popDelta))} (${growLabel})</span></div>`,
-        `<div class="stat-sec">Resources <span class="stat-hint">(stored / rate)</span></div>`,
-        `<div class="stat-row"><span>Food</span><span>${nf(Math.round(res.food))} <span class="${cls(s.netFood)}">${sign(s.netFood)}${nf(s.netFood, 1)}/yr</span></span></div>`,
-        `<div class="stat-row"><span>Material</span><span>${nf(Math.round(res.material))} <span class="${cls(s.material)}">${sign(s.material)}${nf(s.material, 1)}/yr</span></span></div>`,
-        `<div class="stat-row"><span>Energy</span><span>${nf(Math.round(res.energy))} <span class="${cls(s.energy)}">${sign(s.energy)}${nf(s.energy, 1)}/yr</span></span></div>`,
-        `<div class="stat-row"><span>Wealth</span><span>${nf(Math.round(res.wealth))} <span class="${cls(s.wealthRate)}">${sign(s.wealthRate)}${nf(s.wealthRate, 1)}/yr</span></span></div>`,
-        `<div class="stat-row"><span>Happiness</span><span>${sign(s.storedHappiness)}${nf(s.storedHappiness, 1)} <span class="${cls(s.happinessRate)}">${sign(s.happinessRate)}${nf(s.happinessRate, 1)}/yr</span></span></div>`,
+        `<div class="stat-sec">Resources <span class="stat-hint">(stored / cap · rate)</span></div>`,
+        `<div class="stat-row"><span>Food</span><span>${nf(Math.round(res.food))} / ${nf(s.caps.food)} <span class="${cls(s.netFood)}">${sign(s.netFood)}${nf(s.netFood, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>Material</span><span>${nf(Math.round(res.material))} / ${nf(s.caps.material)} <span class="${cls(s.material)}">${sign(s.material)}${nf(s.material, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>Energy</span><span>${nf(Math.round(res.energy))} / ${nf(s.caps.energy)} <span class="${cls(s.energy)}">${sign(s.energy)}${nf(s.energy, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>Wealth</span><span>${nf(Math.round(res.wealth))} / ${nf(s.caps.wealth)} <span class="${cls(s.wealthRate)}">${sign(s.wealthRate)}${nf(s.wealthRate, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>Happiness</span><span>${sign(s.storedHappiness)}${nf(s.storedHappiness, 1)} / ±${nf(s.happinessCap)} <span class="${cls(s.happinessRate)}">${sign(s.happinessRate)}${nf(s.happinessRate, 1)}/yr</span></span></div>`,
+        overNote,
+        ...buildingsSection,
         `<div class="stat-note">While stored happiness is positive the colony grows; if it goes negative the population declines.</div>`,
       ];
       el.innerHTML = rows.join("");
@@ -1753,9 +3779,25 @@
         currentPlayer: (extra && extra.currentPlayer) != null ? extra.currentPlayer : 0,
         resources: (extra && extra.resources) || { material: 0, food: 0, energy: 0, wealth: 0 },
         rates: (extra && extra.rates) || { food: 0, material: 0, energy: 0, happiness: 0 },
-        playerName: (extra && extra.playerName) || "Human"
+        playerName: (extra && extra.playerName) || "Human",
+        transport: (extra && extra.transport) || null
       };
       _riverCellSet = null;
+      _origRiverCells = null;
+      _riverEdgeSet = null;
+      _riverVertexCounts = null;
+      // Normalize transport (arrays -> Sets) and clear any stale plan overlay.
+      ensureTransport();
+      // Built canals are equivalent to rivers: re-mark their cells as river.
+      for (const ek of gameState.transport.canals) {
+        const parts = ek.split("|");
+        for (const cp of parts) { const [cx, cy] = cp.split(",").map(Number); markRiverCell(cx, cy); }
+      }
+      const _plans = gameState.transport.plans || [];
+      _transportPlannedPaths = _plans.filter((p) => p.path).map((p) => ({ kind: p.kind, path: p.path, planId: p.id }));
+      _canalPlannedEdges = _plans.filter((p) => p.edges).map((p) => ({ edges: p.edges, planId: p.id }));
+      _canalMode = false; _canalStartVK = null; _transportMode = null; _foundMode = false;
+      invalidateVertexGraph();
 
       if (!gameState.players) {
         const aiCount = (map.meta && map.meta.aiOpponents != null) ? map.meta.aiOpponents : 2;
@@ -1788,6 +3830,7 @@
         buildings: gameState.buildings,
         buildingTypes: CONFIG.buildingTypes || null,
         terrainTypes: CONFIG.terrainTypes || null,
+        bridgeColor: CONFIG.bridgeColor || "#e0322c",
         zoneOfControlSize: CONFIG.zoneOfControlSize || null,
         aiCount: (gameState.players || []).filter((p) => p.kind === 'ai').length,
         resourcePath: "resources/terrain",
@@ -1800,6 +3843,7 @@
       updateStatus(null);
       updateResourcesPanel();
       updatePlayerPanel();
+      if (hexMap.setTransport) hexMap.setTransport(ensureTransport());
 
       if (!canvas._ctxAttached) {
         canvas._ctxAttached = true;
@@ -1807,7 +3851,62 @@
           e.preventDefault();
           if (!hexMap) return;
           const hex = hexMap.hexAtEvent(e);
+          // Capture the nearest hex corner (vertex) for canal building — but ONLY
+          // when the click is within the vertex hit radius (see below). A canal
+          // can be started only by clicking on/near a vertex; interior (and
+          // mid-edge) clicks must never offer "Build Canal".
+          const corner = hexMap.cornerAtEvent ? hexMap.cornerAtEvent(e) : null;
+          const prox = hexMap.borderProximityAtEvent ? hexMap.borderProximityAtEvent(e) : null;
+          // A canal may be started only by clicking essentially ON a vertex.
+          // The hit radius is the larger of a fixed pixel floor
+          // (config.canalVertexClickPixels, default 5) and a zoom-scaled
+          // fraction of the hex radius (config.canalVertexClickFrac, default
+          // 0.28) so vertices remain clickable at any zoom while interior and
+          // mid-edge clicks never offer "Build Canal".
+          const vpxFloor = (CONFIG.canalVertexClickPixels != null) ? CONFIG.canalVertexClickPixels : 5;
+          const vFrac = (CONFIG.canalVertexClickFrac != null) ? CONFIG.canalVertexClickFrac : 0.28;
+          const vpx = prox ? Math.max(vpxFloor, vFrac * prox.radius) : vpxFloor;
+          const onVertex = prox && prox.vertexDist <= vpx;
+          _ctxVertex = (corner && onVertex)
+            ? cornerVertexKey(corner.cell.x, corner.cell.y, corner.cornerIndex)
+            : null;
+          // Only register cell clicks in the INTERIOR of the cell: a click that
+          // lands within a small margin of any vertex or edge should not bring
+          // up the cell right-click menu. The one exception is a legal canal
+          // start vertex (click essentially on the vertex), which opens the
+          // "Build Canal" menu (handled by showContextMenu). The border margin
+          // is a fraction of the hex radius, configurable via
+          // config.cellClickBorderMargin (default 0.28).
+          if (prox) {
+            const frac = (CONFIG.cellClickBorderMargin != null) ? CONFIG.cellClickBorderMargin : 0.28;
+            const margin = frac * prox.radius;
+            const nearBorder = prox.vertexDist <= margin || prox.edgeDist <= margin;
+            const canalStart = isHumanTurn() && hex && _ctxVertex &&
+              vertexConnectable(_ctxVertex) &&
+              canalEdgesAtVertex(_ctxVertex).length >= 1;
+            if (nearBorder && !canalStart) { hideContextMenu(); return; }
+          }
           showContextMenu(e.clientX, e.clientY, hex);
+        });
+        // Colony-launch placement mode: hover previews the path, click plants.
+        canvas.addEventListener("mousemove", (e) => {
+          if (_canalMode && hexMap) { updateCanalPreview(hexMap.cornerAtEvent(e), e.clientX, e.clientY); return; }
+          if (_transportMode && hexMap) { updateTransportPreview(hexMap.hexAtEvent(e), e.clientX, e.clientY); return; }
+          if (!_foundMode || !hexMap) return;
+          const hex = hexMap.hexAtEvent(e);
+          updateFoundPreview(hex);
+        });
+        canvas.addEventListener("click", (e) => {
+          if (_canalMode && hexMap) { confirmCanal(hexMap.cornerAtEvent(e)); return; }
+          if (_transportMode && hexMap) { const h = hexMap.hexAtEvent(e); if (h) confirmTransport(h.x, h.y); return; }
+          if (!_foundMode || !hexMap) return;
+          const hex = hexMap.hexAtEvent(e);
+          if (hex) confirmFoundColony(hex.x, hex.y);
+        });
+        document.addEventListener("keydown", (e) => {
+          if (_canalMode && e.key === "Escape") { cancelCanal(); notify("Canal cancelled."); return; }
+          if (_transportMode && e.key === "Escape") { cancelTransport(); notify("Build cancelled."); return; }
+          if (_foundMode && e.key === "Escape") { cancelFoundColony(); notify("Colony launch cancelled."); }
         });
       }
 
@@ -1833,7 +3932,8 @@
             players: payload.players || null,
             turn: payload.turn || 0, currentPlayer: payload.currentPlayer || 0,
             resources: payload.resources, rates: payload.rates,
-            playerName: payload.playerName
+            playerName: payload.playerName,
+            transport: payload.transport || null
           }
         );
       } catch (err) {

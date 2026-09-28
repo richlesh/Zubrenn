@@ -59,6 +59,12 @@
     </select>
   </div>
 
+  <div class="section-title">Gameplay</div>
+  <div class="field" style="flex-direction: row; align-items: center; gap: 8px;">
+    <input id="autoTurnEnd" type="checkbox" style="width:auto;">
+    <label for="autoTurnEnd" style="margin:0;">Auto turn end (end my turn automatically when I have no actions left)</label>
+  </div>
+
   <div class="section-title">AI Assistant</div>
   <div class="field" style="flex-direction: row; align-items: center; gap: 8px;">
     <input id="useBuiltinAI" type="checkbox" style="width:auto;">
@@ -130,6 +136,7 @@
     const apiKeyIn = document.getElementById("apiKey");
     const apiKeyLink = document.getElementById("api-key-link");
     const useBuiltinChk = document.getElementById("useBuiltinAI");
+    const autoTurnEndChk = document.getElementById("autoTurnEnd");
     const aiConfigDiv = document.getElementById("ai-config");
 
     // Enable/disable the vendor/model/API config based on the checkbox.
@@ -234,6 +241,7 @@
       themeSel.value = current.theme || "dark";
       if (themeSel.value === "dark") document.body.classList.add("dark");
       useBuiltinChk.checked = current.useBuiltinAI !== false; // default on
+      autoTurnEndChk.checked = current.autoTurnEnd !== false; // default on
 
       // Vendor dropdown (sorted by label).
       for (const [key, v] of Object.entries(vendors).sort((a, b) => a[1].label.localeCompare(b[1].label))) {
@@ -300,6 +308,7 @@
         apiKeys: current.apiKeys,
         defaultModels: current.defaultModels,
         useBuiltinAI: useBuiltinChk.checked,
+        autoTurnEnd: autoTurnEndChk.checked,
       });
     });
 
