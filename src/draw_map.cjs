@@ -15,7 +15,8 @@
  *   - Right-panel birdseye/minimap with a viewport rectangle
  *   - Status bar showing hovered hex coords + terrain name
  *   - Keyboard nav (i/j/k/l = 2 hexes, shift = 1 screen), +/- zoom,
- *     spacebar to center, t to toggle textured terrain
+ *     spacebar to center, t to toggle textured terrain (legacy note; nav is now
+ *     arrow keys / Shift+arrows / mouse wheel; zoom + textures via the View menu)
  *   - Click the minimap to jump the viewport
  *   - Resizes to fill its container (map expands with the window)
  *
@@ -62,6 +63,17 @@ function hsv(h, s, v) {
     case 5: r = v; g = p; b = q; break;
   }
   return rgb(r, g, b);
+}
+
+// Light control color for the Area-of-Control view.
+//   human -> hue 0; AI player index i -> hue 360 * i / (aiCount + 1).
+// Light = high lightness, moderate saturation, so land reads as tinted.
+const UNCONTROLLED_LAND = 'rgb(200,200,200)'; // light gray
+function controlColor(owner, aiCount) {
+  let hue;
+  if (owner === 'human' || owner === 0) hue = 0;
+  else hue = (360 * owner / ((aiCount || 0) + 1)) % 360;
+  return `hsl(${Math.round(hue)}, 81%, 78%)`; // light, tinted (saturation +25%)
 }
 
 // Parallel arrays indexed by terrain tile id (0 unused). Mirrors hexgrid5.html.
@@ -153,6 +165,18 @@ function wrapX(x, width) {
   return ((x % width) + width) % width;
 }
 
+// odd-q offset hex neighbors (unwrapped); matches generate_map.hexNeighbors.
+function hexNeighborsDraw(x, y) {
+  const odd = (x & 1) === 1;
+  return odd ? [
+    { x, y: y - 1 }, { x, y: y + 1 }, { x: x + 1, y }, { x: x + 1, y: y + 1 },
+    { x: x - 1, y }, { x: x - 1, y: y + 1 }
+  ] : [
+    { x, y: y - 1 }, { x, y: y + 1 }, { x: x + 1, y: y - 1 }, { x: x + 1, y },
+    { x: x - 1, y: y - 1 }, { x: x - 1, y }
+  ];
+}
+
 // Return the shared edge between two adjacent cells as the two common vertices,
 // or null if they are not edge-adjacent. Uses rounded-vertex matching.
 function sharedEdge(ax, ay, bx, by, spacing) {
@@ -178,7 +202,19 @@ class HexMap {
     this.seaLevel = (opts.seaLevel != null) ? opts.seaLevel : 0; // normalized 0..1
     this.rivers = opts.rivers || [];         // array of paths [{x,y},...]
     this.wrap = !!opts.wrap;                  // horizontal cylindrical wrap
+    this.buildings = opts.buildings || [];   // [{ x, y, type, owner, name }]
+    this.buildingTypes = opts.buildingTypes || null; // config building-type map
+    this.terrainTypes = opts.terrainTypes || null;   // config terrain-type map (name+icon)
+    this.buildingIcons = {};                  // type -> loaded Image
+    this.aiCount = opts.aiCount || 0;         // number of AI players (for control colors)
+    this.controlMode = false;                 // Area-of-Control view toggle
+    this.controlRadius = opts.controlRadius || 2; // fallback radius
+    this.zoneOfControlSize = opts.zoneOfControlSize || null; // pop thresholds -> radius
     this.tooltipEl = opts.tooltip || null;   // floating hover tooltip element
+    this.onHover = opts.onHover || null;      // (info) => void; overrides status write
+    this.onHoverOut = opts.onHoverOut || null;
+    this.onColonyDblClick = opts.onColonyDblClick || null; // (building) => void
+    this.cellInfo = opts.cellInfo || null;    // (x,y) => "F:.. P:.. H:.." string
     this.tooltipDelayMs = opts.tooltipDelayMs != null ? opts.tooltipDelayMs : 2000;
     this.resourcePath = opts.resourcePath || 'resources/terrain';
     this.typeface = opts.typeface || 'Calibri, sans-serif';
@@ -204,6 +240,8 @@ class HexMap {
     // Loaded tile images + patterns.
     this.tileImages = [];
     this.tilePatterns = [];
+    this.biodomeImg = null;   // colony icon
+    this.biodomeReady = false;
 
     // Viewport state (in hexes + pixels).
     this.viewport = {
@@ -266,11 +304,136 @@ class HexMap {
     this._renderBirdseye();
   }
 
+  // Public: the hex under a mouse event (wrapped x when cylindrical), or null
+  // if outside the map vertically.
+  hexAtEvent(e) {
+    const hex = this._hexFromCanvas(e);
+    if (hex.y < 0 || hex.y >= this.worldSize.y) return null;
+    if (!this.wrap && (hex.x < 0 || hex.x >= this.worldSize.x)) return null;
+    return hex;
+  }
+
+  // Public: replace the buildings list and redraw. In Area-of-Control mode the
+  // offscreen buffer (which feeds the minimap) is re-rendered so the minimap
+  // reflects newly-placed AI/player control areas.
+  setBuildings(buildings) {
+    this.buildings = buildings || [];
+    this._control = null; // invalidate control map
+    this._draw();
+    if (this.controlMode) {
+      try { this._renderMapFull(); } catch (e) {}
+    }
+    this._renderBirdseye();
+  }
+
+  // Public: toggle the Area-of-Control view.
+  toggleControl() {
+    this.controlMode = !this.controlMode;
+    this._control = null;
+    this._renderMapFull(); // offscreen (minimap) reflects the mode too
+    this._draw();
+    this._renderBirdseye();
+  }
+
+  // Compute a control map: for each land cell, which colony owner controls it
+  // (nearest colony within controlRadius; ties -> first found). Multi-source
+  // BFS over hex neighbors, honoring horizontal wrap. Cached until invalidated.
+  _computeControl() {
+    const W = this.worldSize.x, H = this.worldSize.y;
+    const owner = new Array(H * W).fill(null);   // owner id or null
+    const dist = new Int32Array(H * W).fill(-1);
+    const srcR = new Int32Array(H * W).fill(0);  // control radius of the source colony
+    const wx = (x) => this.wrap ? wrapX(x, W) : x;
+    const key = (x, y) => y * W + x;
+    let frontier = [];
+    for (const b of this.buildings) {
+      if (b.type !== 1) continue;                // only colonies project control
+      const idx = key(b.x, b.y);
+      if (dist[idx] === -1) {
+        dist[idx] = 0; owner[idx] = b.owner; srcR[idx] = this._controlRadiusForPop(b.population || 0);
+        frontier.push({ x: b.x, y: b.y });
+      }
+    }
+    while (frontier.length) {
+      const next = [];
+      for (const c of frontier) {
+        const ck = key(c.x, c.y);
+        const co = owner[ck], cr = srcR[ck], cd = dist[ck];
+        if (cd >= cr) continue;                  // reached this colony's radius
+        for (const n of hexNeighborsDraw(c.x, c.y)) {
+          const nx = wx(n.x), ny = n.y;
+          if (ny < 0 || ny >= H || nx < 0 || nx >= W) continue;
+          const nidx = key(nx, ny);
+          if (dist[nidx] !== -1) continue;
+          if (this.terrain[ny][nx] === 1) continue; // don't spread control over sea
+          dist[nidx] = cd + 1; owner[nidx] = co; srcR[nidx] = cr;
+          next.push({ x: nx, y: ny });
+        }
+      }
+      frontier = next;
+    }
+    this._control = owner;
+    return owner;
+  }
+  // Control radius for a colony of the given population, from config
+  // zoneOfControlSize thresholds (index+1 = radius). Falls back to controlRadius.
+  _controlRadiusForPop(pop) {
+    const th = this.zoneOfControlSize;
+    if (!th || !th.length) return this.controlRadius || 2;
+    let r = 1;
+    for (let i = 0; i < th.length; i++) if (pop >= th[i]) r = i + 1;
+    return r;
+  }
+  _controlOwnerAt(x, y) {
+    if (!this._control) this._computeControl();
+    return this._control[y * this.worldSize.x + x];
+  }
+
+  // Public: force a redraw (e.g., after external state changes).
+  redraw() { this._draw(); }
+
+  // Public: center the viewport on a given hex cell (wrap-aware).
+  centerOnCell(x, y) {
+    const vp = this.viewport;
+    let ox = Math.round(x - vp.hSize.x / 2);
+    let oy = Math.round(y - vp.hSize.y / 2);
+    this.setOrigin(ox, oy);
+    this._draw();
+    this._renderBirdseye();
+  }
+
+  // Terrain display name for a tile id — from config.terrainTypes if provided,
+  // else the built-in TERRAIN_NAMES.
+  _terrainName(id) {
+    const tt = this.terrainTypes && this.terrainTypes[String(id)];
+    return (tt && tt.name) || TERRAIN_NAMES[id] || 'unknown';
+  }
+  // Terrain tile icon filename for a tile id — from config.terrainTypes if
+  // provided, else the built-in TERRAIN_IMAGES.
+  _terrainIcon(id) {
+    const tt = this.terrainTypes && this.terrainTypes[String(id)];
+    return (tt && tt.icon) || TERRAIN_IMAGES[id] || null;
+  }
+  // Terrain fill color (css string) for a tile id. config.terrainTypes[id].color
+  // is an HSV object { h, s, v }; convert via hsv(). Falls back to the built-in
+  // TERRAIN_COLORS. (A plain string color is also accepted for flexibility.)
+  _terrainColor(id) {
+    const tt = this.terrainTypes && this.terrainTypes[String(id)];
+    const c = tt && tt.color;
+    if (c && typeof c === 'object' && c.h != null) {
+      return hsv(c.h, c.s != null ? c.s : 1, c.v != null ? c.v : 1);
+    }
+    if (typeof c === 'string' && c) return c;
+    return TERRAIN_COLORS[id] || TERRAIN_COLORS[0];
+  }
+
   // ---- tile loading -------------------------------------------------------
 
   _loadTiles() {
     const promises = [];
     for (let i = 0; i < TERRAIN_IMAGES.length; i++) {
+      const file = this._terrainIcon(i);
+      if (!file) continue;
       const img = new Image();
       const idx = i;
       const p = new Promise((resolve) => {
@@ -282,9 +445,37 @@ class HexMap {
         };
         img.onerror = () => resolve(); // don't block on a missing tile
       });
-      img.src = `${this.resourcePath}/${TERRAIN_IMAGES[i]}`;
+      img.src = `${this.resourcePath}/${file}`;
       this.tileImages[i] = img;
       promises.push(p);
+    }
+    // Building icons live in the resources root (parent of the terrain folder).
+    // Load each configured building type's icon; keep the biodome (type 1) in
+    // biodomeImg/biodomeReady for backward compatibility.
+    const resRoot = this.resourcePath.replace(/\/terrain\/?$/, '');
+    const iconFor = (type) => {
+      const bt = this.buildingTypes && this.buildingTypes[String(type)];
+      if (bt && bt.icon) return bt.icon;
+      return type === 1 ? 'biodome.png' : null;
+    };
+    const typesToLoad = this.buildingTypes ? Object.keys(this.buildingTypes) : ['1'];
+    for (const tk of typesToLoad) {
+      const type = parseInt(tk, 10);
+      const file = iconFor(type);
+      if (!file) continue;
+      const img = new Image();
+      const t = type;
+      const ip = new Promise((resolve) => {
+        img.onload = () => {
+          this.buildingIcons[t] = img;
+          if (t === 1) { this.biodomeImg = img; this.biodomeReady = true; }
+          this._draw();
+          resolve();
+        };
+        img.onerror = () => resolve(); // missing icon -> fallback dome/marker
+      });
+      img.src = `${resRoot}/${file}`;
+      promises.push(ip);
     }
     return Promise.all(promises);
   }
@@ -329,10 +520,17 @@ class HexMap {
         const c = getHexCenter(x, y, spacing);
         drawHexPath(ctx, c.x, c.y, spacing);
         const type = this.terrain[y][x];
-        if (this.useTextures && this.tilePatterns[type]) {
+        if (this.controlMode) {
+          if (type === 1) {
+            ctx.fillStyle = this._terrainColor(1);
+          } else {
+            const owner = this._controlOwnerAt(x, y);
+            ctx.fillStyle = (owner == null) ? UNCONTROLLED_LAND : controlColor(owner, this.aiCount);
+          }
+        } else if (this.useTextures && this.tilePatterns[type]) {
           ctx.fillStyle = this.tilePatterns[type];
         } else {
-          ctx.fillStyle = TERRAIN_COLORS[type] || TERRAIN_COLORS[0];
+          ctx.fillStyle = this._terrainColor(type);
         }
         ctx.fill();
         ctx.strokeStyle = rgba(0.5, 0.5, 0.5, 1.0);
@@ -454,10 +652,19 @@ class HexMap {
         const c = getHexCenter(x, y, spacing);
         drawHexPath(ctx, c.x, c.y, spacing);
         const type = this.terrain[y][tx];
-        if (this.useTextures && this.tilePatterns[type]) {
+        if (this.controlMode) {
+          // Area-of-Control: water stays sea; land is tinted by controlling
+          // player, or light gray if uncontrolled.
+          if (type === 1) {
+            ctx.fillStyle = this._terrainColor(1);
+          } else {
+            const owner = this._controlOwnerAt(tx, y);
+            ctx.fillStyle = (owner == null) ? UNCONTROLLED_LAND : controlColor(owner, this.aiCount);
+          }
+        } else if (this.useTextures && this.tilePatterns[type]) {
           ctx.fillStyle = this.tilePatterns[type];
         } else {
-          ctx.fillStyle = TERRAIN_COLORS[type] || TERRAIN_COLORS[0];
+          ctx.fillStyle = this._terrainColor(type);
         }
         ctx.fill();
         ctx.strokeStyle = rgba(0.5, 0.5, 0.5, 1.0);
@@ -467,6 +674,7 @@ class HexMap {
     }
 
     this._drawRivers(ctx, spacing);
+    this._drawBuildings(ctx, spacing);
 
     ctx.restore();
   }
@@ -505,6 +713,97 @@ class HexMap {
     ctx.restore();
   }
 
+  // Draw colony buildings (biodomes) with their name label over each cell.
+  // type 1 = biodome. Uses the biodome.png icon if loaded, else a fallback dome.
+  _drawBuildings(ctx, spacing) {
+    if (!this.buildings || !this.buildings.length) return;
+    const wrapPx = this.worldSize.x * 0.75 * spacing.x;
+    const offsets = this.wrap ? [-wrapPx, 0, wrapPx] : [0];
+    const size = spacing.x * 0.85;           // icon size ~ one cell
+    const fontPx = Math.max(8, Math.round(spacing.y / 3));
+
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = `bold ${fontPx}px ${this.typeface}`;
+    for (const b of this.buildings) {
+      const c = getHexCenter(b.x, b.y, spacing);
+      for (const ox of offsets) {
+        const cx = c.x + ox, cy = c.y;
+        const icon = this.buildingIcons[b.type];
+        // Under construction (not yet operational) -> draw grayed/dimmed.
+        const underConstruction = (b.type !== 1) && (b.turnsRemaining != null) && (b.turnsRemaining > 0);
+        if (icon) {
+          if (underConstruction) {
+            ctx.save();
+            ctx.globalAlpha = 0.45;
+            ctx.drawImage(icon, cx - size / 2, cy - size / 2, size, size);
+            // gray tint overlay on the icon box
+            ctx.globalAlpha = 0.5;
+            ctx.fillStyle = 'rgb(128,128,128)';
+            ctx.fillRect(cx - size / 2, cy - size / 2, size, size);
+            ctx.restore();
+          } else {
+            ctx.drawImage(icon, cx - size / 2, cy - size / 2, size, size);
+          }
+        } else {
+          // Fallback marker so buildings are visible before icons load / if the
+          // icon file is missing. Colonies (type 1) get a dome; others a square.
+          ctx.save();
+          if (underConstruction) ctx.globalAlpha = 0.5;
+          ctx.fillStyle = underConstruction ? 'rgba(160,160,160,0.85)' : 'rgba(255,255,255,0.85)';
+          ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+          ctx.lineWidth = Math.max(1, spacing.y / 24);
+          ctx.beginPath();
+          if (b.type === 1) {
+            ctx.arc(cx, cy, size / 2.6, Math.PI, 2 * Math.PI);
+            ctx.closePath();
+          } else {
+            const s = size / 2.4;
+            ctx.rect(cx - s / 2, cy - s / 2, s, s);
+          }
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+        // Name label above the icon with a subtle outline for legibility.
+        if (b.name) {
+          const ly = cy - size / 2 - 2;
+          ctx.lineWidth = Math.max(2, fontPx / 6);
+          ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+          ctx.fillStyle = '#fff';
+          ctx.strokeText(b.name, cx, ly);
+          ctx.fillText(b.name, cx, ly);
+        }
+        // Population badge: a small circle showing floor(population / 1000),
+        // i.e. the number of full "thousands" of colonists. Placed at the
+        // biodome's top-right.
+        const millions = Math.floor((b.population || 0) / 1000);
+        if (millions >= 1) {
+          const label = String(millions);
+          const br = Math.max(7, size * 0.22);         // badge radius
+          const bx = cx + size * 0.30;                  // top-right of icon
+          const by = cy - size * 0.30;
+          ctx.beginPath();
+          ctx.fillStyle = '#c0392b';                    // badge circle
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = Math.max(1, br / 6);
+          ctx.arc(bx, by, br, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#fff';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = `bold ${Math.round(br * 1.2)}px ${this.typeface}`;
+          ctx.fillText(label, bx, by + 0.5);
+          // restore defaults for the next building's name label
+          ctx.textBaseline = 'alphabetic';
+          ctx.font = `bold ${fontPx}px ${this.typeface}`;
+        }
+      }
+    }
+    ctx.restore();
+  }
+
   // Build a polyline that runs strictly along hex BORDERS (never crossing a
   // cell interior). The river visits, in order, the shared edges between
   // consecutive cells of the path; within each cell we route along that cell's
@@ -530,7 +829,12 @@ class HexMap {
       path = cont;
     }
 
-    // The shared edges between consecutive cells, each as [v0, v1] vertices.
+    // The last cell of the path is a SEA cell, so the last edge is the
+    // land->water edge. We do NOT want the river to run along that edge (it
+    // would share a border with water); instead the river should end at a
+    // single VERTEX of the water cell. So we build the polyline from all the
+    // land-land edges, then finish at the nearest vertex of the final
+    // land->sea edge (a coastal corner).
     const edges = [];
     for (let i = 0; i < path.length - 1; i++) {
       const e = sharedEdge(path[i].x, path[i].y, path[i + 1].x, path[i + 1].y, spacing);
@@ -544,29 +848,51 @@ class HexMap {
       if (!pts.length || vkey(pts[pts.length - 1]) !== vkey(p)) pts.push(p);
     };
 
-    // Start at the endpoint of the first edge that is farther from the next
-    // edge, so we head "into" the path cleanly. Simpler: start at edge[0][0].
-    pushPt(edges[0][0]);
-    pushPt(edges[0][1]);
+    // The final edge (land->water) is the coastal terminus; the "body" edges
+    // are all the earlier land-land edges.
+    const lastEdge = edges[edges.length - 1];
+    const bodyEdges = edges.slice(0, edges.length - 1);
 
-    // For each subsequent edge, connect from the current last point to the
+    if (bodyEdges.length === 0) {
+      // Degenerate: river is a single land cell touching the sea. Draw from the
+      // far corner of that land->water edge to the near corner so it still just
+      // reaches a coastal vertex.
+      pushPt(lastEdge[0]);
+      pushPt(lastEdge[1]);
+      return pts;
+    }
+
+    // Start along the first body edge.
+    pushPt(bodyEdges[0][0]);
+    pushPt(bodyEdges[0][1]);
+
+    // For each subsequent body edge, connect from the current last point to the
     // nearest endpoint of that edge along cell path[i]'s perimeter. Because
     // consecutive shared edges of a hex share a vertex OR are one vertex apart,
     // routing to the nearest endpoint keeps the line on the border.
-    for (let i = 1; i < edges.length; i++) {
+    for (let i = 1; i < bodyEdges.length; i++) {
       const prevPt = pts[pts.length - 1];
-      const [a, b] = edges[i];
-      // Choose ordering so we append the endpoint closest to prevPt first.
+      const [a, b] = bodyEdges[i];
       const da = dist2(prevPt, a);
       const db = dist2(prevPt, b);
-      // Route along the shared cell's perimeter between prevPt and the chosen
-      // near endpoint, walking intermediate vertices of cell path[i].
       const cell = path[i];
       const near = da <= db ? a : b;
       const far = da <= db ? b : a;
       this._appendPerimeterArc(pts, prevPt, near, cell, spacing, pushPt);
       pushPt(near);
       pushPt(far);
+    }
+
+    // Finish at the coastal vertex: the endpoint of the land->water edge
+    // nearest the current river end (route along the last land cell's
+    // perimeter to reach it, staying on the border).
+    {
+      const prevPt = pts[pts.length - 1];
+      const [a, b] = lastEdge;
+      const near = dist2(prevPt, a) <= dist2(prevPt, b) ? a : b;
+      const lastLandCell = path[path.length - 2];
+      this._appendPerimeterArc(pts, prevPt, near, lastLandCell, spacing, pushPt);
+      pushPt(near);
     }
     return pts;
   }
@@ -642,6 +968,7 @@ class HexMap {
     this._bound.move = (e) => this._onMouseMove(e);
     this._bound.leave = () => this._hideTooltip();
     this._bound.wheel = (e) => this._onWheel(e);
+    this._bound.dblclick = (e) => this._onDblClick(e);
     this._bound.birdseyeClick = (e) => this._onBirdseyeClick(e);
     this._bound.resize = () => this._onResize();
 
@@ -649,6 +976,7 @@ class HexMap {
     this.canvas.addEventListener('mousemove', this._bound.move);
     this.canvas.addEventListener('mouseleave', this._bound.leave);
     this.canvas.addEventListener('wheel', this._bound.wheel, { passive: false });
+    this.canvas.addEventListener('dblclick', this._bound.dblclick);
     if (this.birdseye) this.birdseye.addEventListener('click', this._bound.birdseyeClick);
     window.addEventListener('resize', this._bound.resize);
   }
@@ -658,9 +986,18 @@ class HexMap {
     this.canvas.removeEventListener('mousemove', this._bound.move);
     this.canvas.removeEventListener('mouseleave', this._bound.leave);
     this.canvas.removeEventListener('wheel', this._bound.wheel);
+    this.canvas.removeEventListener('dblclick', this._bound.dblclick);
     if (this.birdseye) this.birdseye.removeEventListener('click', this._bound.birdseyeClick);
     window.removeEventListener('resize', this._bound.resize);
     this._hideTooltip();
+  }
+
+  // Double-click on a colony biodome -> notify the renderer (work modal).
+  _onDblClick(e) {
+    const hex = this._hexFromCanvas(e);
+    if (!hex) return;
+    const b = this._buildingAt(hex.x, hex.y);
+    if (b && b.type === 1 && this.onColonyDblClick) this.onColonyDblClick(b);
   }
 
   _resizeCanvasToContainer() {
@@ -691,33 +1028,21 @@ class HexMap {
   }
 
   _onKey(e) {
+    // Ignore when a modifier is held so menu accelerators (Cmd/Ctrl+…) work.
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
     const code = e.keyCode;
     const shift = e.shiftKey;
     const vp = this.viewport;
     let handled = true;
     switch (code) {
-      case 73: case 38: // I / up
+      case 38: // up arrow
         shift ? this.shiftOrigin(0, -vp.hSize.y) : this.shiftOrigin(0, -2); break;
-      case 74: case 37: // J / left
+      case 37: // left arrow
         shift ? this.shiftOrigin(-vp.hSize.x, 0) : this.shiftOrigin(-2, 0); break;
-      case 75: case 40: // K / down
+      case 40: // down arrow
         shift ? this.shiftOrigin(0, vp.hSize.y) : this.shiftOrigin(0, 2); break;
-      case 76: case 39: // L / right
+      case 39: // right arrow
         shift ? this.shiftOrigin(vp.hSize.x, 0) : this.shiftOrigin(2, 0); break;
-      case 84: // T toggle textures
-        this.useTextures = !this.useTextures;
-        this._renderMapFull();
-        break;
-      case 187: case 61: case 107: case 43: // + zoom in
-        this.scaleFactor = Math.min(4, this.scaleFactor + 1);
-        this.setScale(Math.max(4, Math.round(this.defaultScale / Math.pow(1.5, this.scaleFactor))));
-        break;
-      case 189: case 173: case 109: case 45: // - zoom out
-        this.scaleFactor = Math.max(-5, this.scaleFactor - 1);
-        this.setScale(Math.max(4, Math.round(this.defaultScale / Math.pow(1.5, this.scaleFactor))));
-        break;
-      case 32: // space center
-        this.centerViewport(); break;
       default:
         handled = false;
     }
@@ -727,6 +1052,26 @@ class HexMap {
       this._draw();
       this._renderBirdseye();
     }
+  }
+
+  // ---- public view controls (bound to menu accelerators) ------------------
+  toggleTextures() {
+    this.useTextures = !this.useTextures;
+    this._renderMapFull();
+    this._draw();
+    this._renderBirdseye();
+  }
+  zoomIn() {
+    this.scaleFactor = Math.min(4, this.scaleFactor + 1);
+    this.setScale(Math.max(4, Math.round(this.defaultScale / Math.pow(1.5, this.scaleFactor))));
+    this._draw();
+    this._renderBirdseye();
+  }
+  zoomOut() {
+    this.scaleFactor = Math.max(-5, this.scaleFactor - 1);
+    this.setScale(Math.max(4, Math.round(this.defaultScale / Math.pow(1.5, this.scaleFactor))));
+    this._draw();
+    this._renderBirdseye();
   }
 
   _relCoords(el, e) {
@@ -739,21 +1084,25 @@ class HexMap {
     const off = (hex.x < 0 || hex.y < 0 || hex.x >= this.worldSize.x || hex.y >= this.worldSize.y);
 
     if (off) {
-      if (this.statusEl) this.statusEl.textContent = 'Location: —  Terrain: —';
+      if (this.onHoverOut) this.onHoverOut();
+      else if (this.statusEl) this.statusEl.textContent = 'Location: —  Terrain: —';
       this._hideTooltip();
       return;
     }
 
-    const name = TERRAIN_NAMES[this.terrain[hex.y][hex.x]] || 'unknown';
+    const name = this._terrainName(this.terrain[hex.y][hex.x]);
     // Elevation is stored normalized 0..1. Report it relative to sea level:
     // (elevation - seaLevel) * 10000 m, so ocean is negative and land positive.
     let elevText = 'n/a';
+    let meters = null;
     if (this.elevation) {
-      const meters = Math.round((this.elevation[hex.y][hex.x] - this.seaLevel) * 10000);
+      meters = Math.round((this.elevation[hex.y][hex.x] - this.seaLevel) * 10000);
       elevText = (meters > 0 ? '+' : '') + meters.toLocaleString() + ' m';
     }
 
-    if (this.statusEl) {
+    if (this.onHover) {
+      this.onHover({ x: hex.x, y: hex.y, terrain: this.terrain[hex.y][hex.x], name, elevText, meters });
+    } else if (this.statusEl) {
       this.statusEl.textContent =
         `Location: ${hex.x},${hex.y}  Terrain: ${name}  Elevation above Sea Level: ${elevText}`;
     }
@@ -763,12 +1112,39 @@ class HexMap {
     if (this.tooltipEl) {
       this.tooltipEl.style.display = 'none';
       if (this._dwellTimer) clearTimeout(this._dwellTimer);
-      const html = `(${hex.x}, ${hex.y})<br>${name}<br>${elevText} above sea level`;
+      // Tooltip lines, in order: species controlling, building, terrain,
+      // elevation, then coordinates. Colony lines are shown only if a building
+      // occupies the hovered cell.
+      const b = this._buildingAt(hex.x, hex.y);
+      const lines = [];
+      if (b) {
+        const species = b.ownerName || (b.owner === 'human' ? 'You' : 'Alien');
+        const building = b.improvement || 'Colony';
+        lines.push(species);   // species controlling
+        lines.push(building);  // building
+      }
+      // Terrain type, with per-cell F/P/H (base+bonus) next to it when available.
+      let terrainLine = name;
+      if (this.cellInfo) {
+        const info = this.cellInfo(hex.x, hex.y);
+        if (info) terrainLine += "  " + info;
+      }
+      lines.push(terrainLine);                        // terrain type + F/P/H
+      lines.push(`${elevText} above sea level`);     // elevation
+      lines.push(`(${hex.x}, ${hex.y})`);            // x,y
+      const html = lines.join('<br>');
       const cx = e.clientX, cy = e.clientY;
       this._dwellTimer = setTimeout(() => {
         this._showTooltip(html, cx, cy);
       }, this.tooltipDelayMs || 2000);
     }
+  }
+
+  // Building occupying a given cell, or null.
+  _buildingAt(x, y) {
+    if (!this.buildings) return null;
+    for (const b of this.buildings) if (b.x === x && b.y === y) return b;
+    return null;
   }
 
   _showTooltip(html, clientX, clientY) {

@@ -10,6 +10,7 @@ const DEFAULTS = {
   model: "",
   apiKeys: {},
   defaultModels: {},
+  useBuiltinAI: true,
 };
 
 function load() {

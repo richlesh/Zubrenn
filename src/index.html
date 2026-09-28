@@ -24,14 +24,28 @@
     </div>
     <div id="right_panel">
       <canvas id="birdseye" width="180" height="200"></canvas>
+      <div id="player-panel">
+        <div class="player-name" id="player-name" title="Double-click to rename">Human</div>
+        <div class="player-pop">Population: <span id="player-pop">0</span> / <span id="player-popgrowth">+0%</span></div>
+      </div>
+      <div id="resources">
+        <div class="res-title">Resources</div>
+        <table class="res-table">
+          <tr><td>Material</td><td id="res-material">0</td><td class="res-rate" id="rate-material">+0/yr</td></tr>
+          <tr><td>Food</td><td id="res-food">0</td><td class="res-rate" id="rate-food">+0/yr</td></tr>
+          <tr><td>Energy</td><td id="res-energy">0</td><td class="res-rate" id="rate-energy">+0/yr</td></tr>
+          <tr><td>Wealth</td><td id="res-wealth">0</td><td class="res-rate" id="rate-wealth">+0/yr</td></tr>
+          <tr><td>Happiness</td><td></td><td class="res-rate" id="rate-happiness">+0/yr</td></tr>
+        </table>
+      </div>
       <div id="instructions">
         <ul>
-          <li>Use <b>i,j,k,l</b> to navigate by 2 hexes</li>
-          <li>Use <b>Shift+I,J,K,L</b> to navigate by 1 screen</li>
-          <li>Arrow keys also pan the map</li>
-          <li>Use <b>t</b> to toggle textured terrain</li>
-          <li>Use <b>spacebar</b> to center</li>
-          <li>Use <b>+,-</b> to zoom</li>
+          <li>Use <b>arrow keys</b> to pan by 2 hexes</li>
+          <li>Use <b>Shift+arrows</b> to pan by 1 screen</li>
+          <li>Mouse wheel / trackpad also pans</li>
+          <li><b>Cmd/Ctrl&nbsp;=</b> / <b>Cmd/Ctrl&nbsp;-</b> to zoom in/out</li>
+          <li><b>Cmd/Ctrl&nbsp;T</b> toggles textured terrain</li>
+          <li>Right-click a land cell to establish a colony</li>
           <li>Click the minimap to jump the view</li>
         </ul>
       </div>
@@ -40,6 +54,58 @@
 
   <!-- Floating hover tooltip: coordinates, terrain, elevation. -->
   <div id="tooltip"></div>
+
+  <!-- Right-click context menu (colony actions). -->
+  <div id="context-menu" hidden>
+    <div class="ctx-item" id="ctx-establish">Establish Colony</div>
+    <div id="ctx-build-items"></div>
+  </div>
+
+  <!-- Name-your-colony modal overlay. -->
+  <div id="name-overlay" hidden>
+    <div id="name-dialog">
+      <h2>Establish Colony</h2>
+      <label for="colony-name">Colony name</label>
+      <input id="colony-name" type="text" />
+      <div class="name-row">
+        <button id="name-cancel">Cancel</button>
+        <button id="name-ok">Establish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- View Location modal overlay (enter x,y to center on). -->
+  <div id="viewloc-overlay" hidden>
+    <div id="viewloc-dialog">
+      <h2>View Location</h2>
+      <div class="viewloc-row">
+        <div><label for="viewloc-x">X</label><input id="viewloc-x" type="number" min="0" /></div>
+        <div><label for="viewloc-y">Y</label><input id="viewloc-y" type="number" min="0" /></div>
+      </div>
+      <div class="name-row">
+        <button id="viewloc-cancel">Cancel</button>
+        <button id="viewloc-ok">Go</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reusable notification toast/dialog (auto-dismiss 5s / click / Enter). -->
+  <div id="notify-overlay" hidden>
+    <div id="notify-dialog"><span id="notify-text"></span></div>
+  </div>
+
+  <!-- Work-assignment modal (double-click a biodome). -->
+  <div id="work-overlay" hidden>
+    <div id="work-dialog">
+      <h2 id="work-title">Colony</h2>
+      <div id="work-info"></div>
+      <div id="work-body">
+        <canvas id="work-canvas" width="480" height="420"></canvas>
+        <div id="work-stats"></div>
+      </div>
+      <div class="work-row"><button id="work-close">Done</button></div>
+    </div>
+  </div>
 
   <script>
     const { ipcRenderer } = require("electron");
@@ -68,9 +134,29 @@
       ipcRenderer.invoke("settings-get").then(applyTheme).catch(() => {}));
 
     let hexMap = null;
-    // Current game state held in the renderer. Extend this as tile
-    // improvements and pieces are added; saves will include them automatically.
-    let gameState = { map: null, improvements: [], pieces: [] };
+    let _roundHadAction = false; // did a player place/act during the current round?
+    let CONFIG = { maxAIs: 40, minStartDistance: 20, startingYear: 2500,
+                   aiPlacementMinTurns: 3, aiPlacementMaxTurns: 200,
+                   buildingTypes: { "1": { name: "Biodome", startPopulation: 1000, growthRate: 0.01, foodBonus: 1, materialBonus: 1, energyBonus: 2 } },
+                   names: [] };
+    ipcRenderer.invoke("config-get").then((c) => { if (c) CONFIG = c; }).catch(() => {});
+    let SYSTEM_PROMPT = "";
+    ipcRenderer.invoke("system-prompt-get").then((s) => { if (s) SYSTEM_PROMPT = s; }).catch(() => {});
+
+    // Current game state held in the renderer. buildings/colonies/turn state
+    // are all persisted on save.
+    let gameState = {
+      map: null, improvements: [], pieces: [],
+      buildings: [],   // [{ x, y, type, owner, name, population, worked:Set-like array }]
+      colonies: [],    // parallel colony records (same shape sans type)
+      players: null,   // [{ id, kind:'human'|'ai', name, placeTurn, placed, modules }]
+      turn: 0,         // turn counter (Year = startingYear + turn)
+      currentPlayer: 0, // index into players[]
+      playerName: "Human", // editable human player name (saved)
+      // Player (human) accumulated resources and last per-year production rates.
+      resources: { material: 0, food: 0, energy: 0, wealth: 0 },
+      rates: { food: 0, material: 0, energy: 0, happiness: 0 }
+    };
 
     // Exposed for the main process (Save Game) to read the current state.
     window.getGameState = function () {
@@ -78,32 +164,1605 @@
       return {
         map: gameState.map,
         improvements: gameState.improvements || [],
-        pieces: gameState.pieces || []
+        pieces: gameState.pieces || [],
+        buildings: gameState.buildings || [],
+        colonies: gameState.colonies || [],
+        players: gameState.players || null,
+        turn: gameState.turn || 0,
+        currentPlayer: gameState.currentPlayer || 0,
+        resources: gameState.resources || { material: 0, food: 0, energy: 0, wealth: 0 },
+        rates: gameState.rates || { food: 0, material: 0, energy: 0, happiness: 0 },
+        playerName: gameState.playerName || "Human"
       };
     };
 
-    // Render a terrain map and switch to the game view.
+    // ---- reusable notification ---------------------------------------------
+    // Queued notifications: each message shows for its full duration (5s) or
+    // until the user clicks / presses Enter, then the next queued message
+    // appears. This prevents rapid events (e.g. several AI colonies + new-year
+    // announcements during turn fast-forward) from overwriting each other.
+    const notifyOverlay = document.getElementById("notify-overlay");
+    const notifyDialog = document.getElementById("notify-dialog");
+    const notifyText = document.getElementById("notify-text");
+    let _notifyQueue = [];
+    let _notifyTimer = null;
+    let _notifyKeyHandler = null;
+    let _notifyShowing = false;
+    let _notifyIdleCbs = [];  // run once when all notifications have cleared
+
+    // True while a notification is on screen or waiting in the queue. Turn
+    // processing pauses while this is true (see scheduleWhenIdle).
+    function notificationsActive() { return _notifyShowing || _notifyQueue.length > 0; }
+    // Run cb once the notification queue is fully drained (immediately if idle).
+    function onNotificationsIdle(cb) {
+      if (!notificationsActive()) { cb(); return; }
+      _notifyIdleCbs.push(cb);
+    }
+
+    function _notifyShowNext() {
+      if (_notifyTimer) { clearTimeout(_notifyTimer); _notifyTimer = null; }
+      if (_notifyKeyHandler) { document.removeEventListener("keydown", _notifyKeyHandler, true); _notifyKeyHandler = null; }
+      const item = _notifyQueue.shift();
+      if (!item) {
+        _notifyShowing = false;
+        notifyOverlay.hidden = true;
+        // Notifications fully cleared: resume any paused processing.
+        const cbs = _notifyIdleCbs; _notifyIdleCbs = [];
+        for (const cb of cbs) { try { cb(); } catch (e) {} }
+        return;
+      }
+      _notifyShowing = true;
+      renderNotifyMessage(item.message);
+      notifyOverlay.hidden = false;
+      _notifyTimer = setTimeout(_notifyShowNext, item.ms);
+      _notifyKeyHandler = (e) => {
+        if (e.key === "Enter") { e.preventDefault(); _notifyShowNext(); }
+      };
+      document.addEventListener("keydown", _notifyKeyHandler, true);
+    }
+    function dismissNotify() { _notifyShowNext(); } // advance / dismiss current
+    function notify(message, ms, key) {
+      // Coalesce consecutive identical messages (avoids year-tick spam).
+      const last = _notifyQueue[_notifyQueue.length - 1];
+      if (last && last.message === message) return;
+      // If a key is given, replace any QUEUED (not currently showing) message
+      // with the same key so e.g. rapid "Year begins" ticks collapse to the
+      // latest while important one-off messages (AI colonies) stay queued.
+      if (key) {
+        const i = _notifyQueue.findIndex((n) => n.key === key);
+        if (i >= 0) { _notifyQueue[i] = { message, ms: (ms != null ? ms : 5000), key }; if (!_notifyShowing) _notifyShowNext(); return; }
+      }
+      _notifyQueue.push({ message, ms: (ms != null ? ms : 5000), key: key || null });
+      if (!_notifyShowing) _notifyShowNext();
+    }
+    notifyDialog.addEventListener("click", dismissNotify);
+    window.notify = notify; // expose for reuse
+
+    // Render a notification message, turning any "x,y" coordinate into an
+    // underlined hyperlink that centers the map on that cell when clicked.
+    function renderNotifyMessage(message) {
+      const esc = (s) => s.replace(/[&<>"']/g, (c) => (
+        { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+      ));
+      // Match integer coordinate pairs like "40,20" or "40, 20".
+      const re = /\b(\d{1,4})\s*,\s*(\d{1,4})\b/g;
+      let html = "", last = 0, m;
+      while ((m = re.exec(message)) !== null) {
+        html += esc(message.slice(last, m.index));
+        const x = m[1], y = m[2];
+        html += `<a href="#" class="coord-link" data-x="${x}" data-y="${y}">${esc(m[0])}</a>`;
+        last = m.index + m[0].length;
+      }
+      html += esc(message.slice(last));
+      notifyText.innerHTML = html;
+      // Wire each coordinate link to center the map (without dismissing).
+      notifyText.querySelectorAll("a.coord-link").forEach((a) => {
+        a.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation(); // don't let the dialog's click dismiss it
+          const x = parseInt(a.getAttribute("data-x"), 10);
+          const y = parseInt(a.getAttribute("data-y"), 10);
+          if (hexMap && Number.isFinite(x) && Number.isFinite(y)) hexMap.centerOnCell(x, y);
+        });
+      });
+    }
+
+    // ---- player name (double-click to edit) --------------------------------
+    (function setupPlayerNameEdit() {
+      const nameEl = document.getElementById("player-name");
+      if (!nameEl) return;
+      nameEl.addEventListener("dblclick", () => {
+        if (nameEl.querySelector("input")) return; // already editing
+        const current = gameState.playerName || "Human";
+        const input = document.createElement("input");
+        input.type = "text"; input.value = current; input.maxLength = 32;
+        nameEl.textContent = "";
+        nameEl.appendChild(input);
+        input.focus(); input.select();
+        const commit = (save) => {
+          const v = (input.value || "").trim();
+          if (save && v) gameState.playerName = v;
+          nameEl.textContent = gameState.playerName || "Human";
+        };
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") { e.preventDefault(); commit(true); }
+          else if (e.key === "Escape") { e.preventDefault(); commit(false); }
+        });
+        input.addEventListener("blur", () => commit(true));
+      });
+    })();
+
+    // ---- helpers -----------------------------------------------------------
+    const WATER = 1;
+    function terrainAt(x, y) {
+      const t = gameState.map.terrain;
+      const W = t[0].length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const yy = y, xx = wrap ? ((x % W) + W) % W : x;
+      if (yy < 0 || yy >= t.length || xx < 0 || xx >= W) return 0;
+      return t[yy][xx];
+    }
+    // odd-q offset -> cube coords, for hex distance.
+    function offsetToCube(x, y) {
+      const q = x;
+      const r = y - (x - (x & 1)) / 2;
+      return { x: q, z: r, y: -q - r };
+    }
+    function hexDistance(ax, ay, bx, by) {
+      const W = gameState.map.terrain[0].length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      let best = Infinity;
+      const shifts = wrap ? [-W, 0, W] : [0];
+      for (const s of shifts) {
+        const a = offsetToCube(ax, ay);
+        const b = offsetToCube(bx + s, by);
+        const d = Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y), Math.abs(a.z - b.z));
+        if (d < best) best = d;
+      }
+      return best;
+    }
+    function distanceToNearestColony(x, y) {
+      let best = Infinity;
+      for (const b of gameState.buildings) {
+        const d = hexDistance(x, y, b.x, b.y);
+        if (d < best) best = d;
+      }
+      return best;
+    }
+    // odd-q offset neighbors (matches generate_map.hexNeighbors, unwrapped).
+    function hexNeighborsRenderer(x, y) {
+      const odd = (x & 1) === 1;
+      return odd ? [
+        { x, y: y - 1 }, { x, y: y + 1 }, { x: x + 1, y }, { x: x + 1, y: y + 1 },
+        { x: x - 1, y }, { x: x - 1, y: y + 1 }
+      ] : [
+        { x, y: y - 1 }, { x, y: y + 1 }, { x: x + 1, y: y - 1 }, { x: x + 1, y },
+        { x: x - 1, y: y - 1 }, { x: x - 1, y }
+      ];
+    }
+    // Water within `radius` cells? (BFS over hex neighbors.)
+    function withinCellsOfWater(x, y, radius) {
+      const W = gameState.map.terrain[0].length;
+      const H = gameState.map.terrain.length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const wrapX = (cx) => wrap ? ((cx % W) + W) % W : cx;
+      const key = (cx, cy) => cy * W + cx;
+      const seen = new Set();
+      let frontier = [{ x: wrapX(x), y }];
+      seen.add(key(frontier[0].x, frontier[0].y));
+      for (let step = 0; step <= radius; step++) {
+        const next = [];
+        for (const c of frontier) {
+          if (terrainAt(c.x, c.y) === WATER) return true;
+          for (const n of hexNeighborsRenderer(c.x, c.y)) {
+            const nx = wrapX(n.x), ny = n.y;
+            if (ny < 0 || ny >= H) continue;
+            if (seen.has(key(nx, ny))) continue;
+            seen.add(key(nx, ny));
+            next.push({ x: nx, y: ny });
+          }
+        }
+        frontier = next;
+      }
+      return false;
+    }
+    // River proximity (cell on/adjacent to a river path).
+    let _riverCellSet = null;
+    function nearRiver(x, y) {
+      const W = gameState.map.terrain[0].length;
+      const H = gameState.map.terrain.length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const wrapX = (cx) => wrap ? ((cx % W) + W) % W : cx;
+      if (!_riverCellSet) {
+        _riverCellSet = new Set();
+        for (const path of (gameState.map.rivers || [])) {
+          for (const c of path) _riverCellSet.add(c.y * W + c.x);
+        }
+      }
+      if (_riverCellSet.has(y * W + wrapX(x))) return true;
+      for (const n of hexNeighborsRenderer(x, y)) {
+        if (n.y < 0 || n.y >= H) continue;
+        if (_riverCellSet.has(n.y * W + wrapX(n.x))) return true;
+      }
+      return false;
+    }
+    // True if any edge-adjacent cell is sea (tile 1).
+    function nearSea(x, y) {
+      for (const n of hexNeighborsRenderer(x, y)) {
+        if (terrainAt(n.x, n.y) === WATER) return true;
+      }
+      return false;
+    }
+    // Desert, grassland, hills, forest, jungle get +1 food when adjacent to a
+    // river segment OR a sea tile.
+    const WATER_FOOD_TERRAINS = new Set([2, 3, 4, 5, 6]); // grassland,hills,forest,jungle,desert
+    function waterFoodBonus(x, y) {
+      const terr = terrainAt(x, y);
+      if (!WATER_FOOD_TERRAINS.has(terr)) return 0;
+      if (nearRiver(x, y) || nearSea(x, y)) {
+        return (CONFIG.riverAdjacentFoodBonus != null ? CONFIG.riverAdjacentFoodBonus : 1);
+      }
+      return 0;
+    }
+
+    // Unified per-cell production breakdown into base vs bonus for Food,
+    // Production (material) and Happiness. Used by hover, the work modal, and
+    // (via totals) the yearly economy.
+    function cellBreakdown(gx, gy, isHome, owner) {
+      const terr = terrainAt(gx, gy);
+      const tp = terrainProd(terr);
+      const tpp = (CONFIG.terrainProduction && CONFIG.terrainProduction[String(terr)]) || {};
+      const food = { base: tp.food, bonus: 0 };
+      const prod = { base: tp.material, bonus: 0 };
+      const happ = { base: tpp.happiness || 0, bonus: 0 };
+      const energy = { base: 0, bonus: 0 };
+
+      // Water (river/sea) adjacency food bonus.
+      food.bonus += waterFoodBonus(gx, gy);
+
+      // Biodome base production on its home cell (uses the same *Bonus keys as
+      // other buildings, per config).
+      if (isHome) {
+        const bd = buildingType(1) || {};
+        food.bonus += bd.foodBonus || 0;
+        prod.bonus += bd.materialBonus || 0;
+        energy.bonus += bd.energyBonus || 0;
+        happ.bonus += bd.happinessBonus || 0;
+      }
+      // Owned, operational building standing on this cell.
+      for (const b of gameState.buildings) {
+        if (b.type === 1) continue;
+        if (b.owner !== owner) continue;
+        if (b.x !== gx || b.y !== gy) continue;
+        if (!isOperational(b)) continue;
+        const t = buildingType(b.type) || {};
+        food.bonus += t.foodBonus || 0;
+        prod.bonus += t.materialBonus || 0;
+        energy.bonus += (t.energyProduced || 0) - (t.energyUse || 0);
+        happ.bonus += t.happinessBonus || 0;
+      }
+      return { food, prod, happ, energy };
+    }
+
+    // ---- status / turn -----------------------------------------------------
+    function currentYear() { return (CONFIG.startingYear || 2500) + (gameState.turn || 0); }
+
+    // "F:x+y, P:x+y, H:x+y" base+bonus string for a cell (for hover + modal).
+    function cellInfoString(x, y) {
+      if (!gameState.map) return "";
+      const isHome = gameState.buildings.some((b) => b.type === 1 && b.x === x && b.y === y && b.owner === 'human');
+      const bd = cellBreakdown(x, y, isHome, 'human');
+      const seg = (o) => `${o.base}+${o.bonus}`;
+      return `F:${seg(bd.food)}, P:${seg(bd.prod)}, H:${seg(bd.happ)}`;
+    }
+    function updateStatus(hoverInfo) {
+      const el = document.getElementById("status");
+      const p = gameState.players && gameState.players[gameState.currentPlayer];
+      let s = `Year: ${currentYear()}`;
+      if (p) s += `  |  ${p.kind === 'human' ? 'Your turn' : p.name + "'s turn"}`;
+      if (hoverInfo) {
+        // If a colony occupies the hovered cell, show its owner + improvement
+        // BEFORE the terrain / elevation / coordinates.
+        const b = colonyAt(hoverInfo.x, hoverInfo.y);
+        if (b) {
+          const players = gameState.players || [];
+          const owner = b.owner === 'human' ? 'You'
+            : (players[b.owner] && players[b.owner].name) || 'Alien';
+          s += `  |  ${b.name} (${owner}) — ${improvementName(b.type)}`;
+        }
+        s += `  |  ${hoverInfo.name}  ${hoverInfo.elevText} ASL  (${hoverInfo.x},${hoverInfo.y})`;
+      }
+      el.textContent = s;
+    }
+    function colonyAt(x, y) {
+      for (const b of gameState.buildings) if (b.x === x && b.y === y) return b;
+      return null;
+    }
+
+    // Per-year economy + population growth, run once when the year advances.
+    // Human resources accumulate; AIs just grow population for now.
+    function growColonies() {
+      const biodomeCfg = buildingType(1) || {};
+      const baseRate = (biodomeCfg.growthRate != null) ? biodomeCfg.growthRate : 0.01;
+      const foodPerUnit = (CONFIG.foodPerColonistUnit != null) ? CONFIG.foodPerColonistUnit : 0.5;
+      const happPerUnit = (CONFIG.happinessGrowthPerUnit != null) ? CONFIG.happinessGrowthPerUnit : 0.0025;
+      const starvationPerUnit = (CONFIG.starvationRatePerUnit != null) ? CONFIG.starvationRatePerUnit : 0.02;
+      let badgeChanged = false;
+      // Human aggregate population + population-weighted growth (for the panel).
+      let humanPopBefore = 0, humanPopAfter = 0;
+      const _newWorkerColonies = []; // human colonies that gained a worker this year
+
+      // Advance construction: buildings under construction finish over time and
+      // only produce once operational.
+      for (const b of gameState.buildings) {
+        if (b.type !== 1 && b.turnsRemaining != null && b.turnsRemaining > 0) {
+          b.turnsRemaining -= 1;
+          if (b.turnsRemaining <= 0) badgeChanged = true; // visual state changes
+        }
+      }
+
+      // Human production tallies for this year (shown in the panel).
+      let yFood = 0, yMaterial = 0, yEnergy = 0, yHappiness = 0;
+
+      // Index colonies + their buildings by owner.
+      const colonies = gameState.buildings.filter((b) => b.type === 1);
+      for (const col of colonies) {
+        const isHuman = col.owner === 'human';
+        ensureWorked(col);
+        pruneWorkedToControl(col); // drop cells outside the (possibly shrunk) area
+        const cap = workCap(col);
+        // Worked cells: biodome cell + up to `cap` others (trim if pop dropped).
+        const homeKey = cellKey(col.x, col.y);
+        let worked = col.worked.filter((k) => k === homeKey || true);
+        // Keep home + first `cap` extras.
+        const extras = worked.filter((k) => k !== homeKey).slice(0, cap);
+        col.worked = [homeKey, ...extras];
+
+        // Terrain production from worked cells (each worked cell = 1000 workers).
+        let food = 0, material = 0, energy = 0;
+        for (const k of col.worked) {
+          const [wx, wy] = k.split(",").map(Number);
+          const tp = terrainProd(terrainAt(wx, wy));
+          food += tp.food; material += tp.material;
+          // Water-adjacent food bonus (river OR sea) for eligible terrains.
+          food += waterFoodBonus(wx, wy);
+        }
+        // Biodome base production (on its own cell) — uses the *Bonus keys.
+        const bd = buildingType(1) || {};
+        food += bd.foodBonus || 0; material += bd.materialBonus || 0; energy += bd.energyBonus || 0;
+
+        // Other buildings owned by this player within this colony's control.
+        const control = new Set(colonyControlCells(col).map((c) => cellKey(c.x, c.y)));
+        let growthBonus = 0;
+        for (const bldg of gameState.buildings) {
+          if (bldg.type === 1) continue;
+          if (bldg.owner !== col.owner) continue;
+          if (!control.has(cellKey(bldg.x, bldg.y))) continue;
+          if (!isOperational(bldg)) continue; // still under construction
+          const t = buildingType(bldg.type) || {};
+          energy += (t.energyProduced || 0) - (t.energyUse || 0);
+          food += (t.foodBonus || 0);
+          material += (t.materialBonus || 0);
+          growthBonus += (t.growthRateBonus || 0);
+        }
+
+        // Per-year happiness change for this colony. Happiness behaves like a
+        // stored resource with a +/- rate:
+        //   + food surplus (well-fed colonists are content)
+        //   + operational building happiness bonuses in control
+        //   - food shortfall (starvation breeds unrest)
+        // The stored total may go negative.
+        const workingUnits = col.worked.length;            // cells worked (incl. biodome)
+        const popUnits = Math.floor((col.population || 0) / 1000);
+        // Food consumption feeds colonists: 0.5 food per 1000 colonists.
+        const consumption = popUnits * foodPerUnit;
+        const netFood = food - consumption;
+        const happinessRate = netFood + happinessBonusInControl(col, control);
+
+        // Accumulate STORED happiness (may go negative), then clamp to a band so
+        // it saturates instead of running away and causing super-exponential
+        // growth. The band is symmetric: +/- happinessCap.
+        const happinessCap = (CONFIG.happinessCap != null) ? CONFIG.happinessCap : 20;
+        col.storedHappiness = Math.max(-happinessCap, Math.min(happinessCap,
+          (col.storedHappiness || 0) + happinessRate));
+
+        // Growth is gated by the SIGN of stored happiness: while it is positive
+        // the colony grows; when it is negative the population declines. The
+        // happiness contribution to the rate is driven by the per-year
+        // happinessRate and CLAMPED to maxHappinessGrowthBonus (<= 1%) so growth
+        // stays slow and bounded regardless of how content the colony is.
+        const maxHappBonus = (CONFIG.maxHappinessGrowthBonus != null) ? CONFIG.maxHappinessGrowthBonus : 0.01;
+        const happBonus = Math.min(maxHappBonus, Math.abs(happinessRate) * happPerUnit);
+        let rate;
+        if (col.storedHappiness >= 0) {
+          rate = baseRate + happBonus + growthBonus;
+        } else {
+          rate = -(baseRate + happBonus) + growthBonus;
+        }
+        if (rate < -0.5) rate = -0.5;
+        const happiness = happinessRate; // per-year rate (for the human panel)
+
+        const before = Math.floor((col.population || 0) / 1000);
+        const popBefore = col.population || 0;
+        const capBefore = workCap(col);
+        const radiusBefore = colonyControlRadius(col);
+        col.population = Math.max(0, (col.population || 0) * (1 + rate));
+        // Snapshot the latest per-year rates for the colony stats panel.
+        col.lastRates = {
+          food, material, energy,
+          consumption, netFood,
+          happinessRate,
+          storedHappiness: col.storedHappiness,
+          growthRate: rate,
+          popDelta: col.population - popBefore,
+        };
+        if (Math.floor(col.population / 1000) !== before) badgeChanged = true;
+        if (isHuman) { humanPopBefore += popBefore; humanPopAfter += col.population; }
+
+        // New worker available: the human colony's work capacity increased and
+        // there is at least one unworked cell in its zone of control. Queue the
+        // colony so we can prompt the player (unless everything is worked).
+        // Also queue when the control RADIUS grows (new tiles became workable),
+        // so the player can assign existing idle workers to them.
+        if (isHuman) {
+          const capAfter = workCap(col);
+          const radiusAfter = colonyControlRadius(col);
+          const controlCount = colonyControlCells(col).length; // includes home
+          const workedCount = col.worked.length;
+          const hasUnworked = workedCount < controlCount;
+          const hasIdleCap = (col.worked.filter(k => k !== homeKey).length) < capAfter;
+          const gainedWorker = capAfter > capBefore && hasUnworked && hasIdleCap;
+          const gainedRadius = radiusAfter > radiusBefore && hasUnworked && hasIdleCap;
+          if ((gainedWorker || gainedRadius) && !_newWorkerColonies.includes(col)) {
+            col._radiusGrew = gainedRadius && !gainedWorker; // for a tailored message
+            _newWorkerColonies.push(col);
+          }
+          if (radiusAfter > radiusBefore) badgeChanged = true; // redraw expanded zone
+        }
+
+        if (isHuman) {
+          yFood += netFood; yMaterial += material; yEnergy += energy; yHappiness += happiness;
+        } else {
+          // Accumulate this AI's production into its own resource pool.
+          const ap = gameState.players[col.owner];
+          if (ap) {
+            if (!ap.resources) ap.resources = { material: 0, food: 0, energy: 0, wealth: 0 };
+            ap.resources.food = Math.max(0, ap.resources.food + netFood);
+            ap.resources.material = Math.max(0, ap.resources.material + material);
+            ap.resources.energy = Math.max(0, ap.resources.energy + energy);
+            ap.resources.wealth = Math.max(0, ap.resources.wealth + Math.max(0, netFood) * 0.1 + Math.max(0, material) * 0.1);
+          }
+        }
+      }
+
+      // Accumulate human resources and record per-year rates for the panel.
+      const r = gameState.resources;
+      r.food = Math.max(0, r.food + yFood);
+      r.material = Math.max(0, r.material + yMaterial);
+      r.energy = Math.max(0, r.energy + yEnergy);
+      // Wealth: simple derived income (surplus food + material), placeholder.
+      const yWealth = Math.max(0, yFood) * 0.1 + Math.max(0, yMaterial) * 0.1;
+      r.wealth = Math.max(0, r.wealth + yWealth);
+      gameState.rates = { food: yFood, material: yMaterial, energy: yEnergy, wealth: yWealth, happiness: yHappiness };
+
+      // Aggregate human population + effective growth rate for the player panel.
+      gameState.humanPop = Math.round(humanPopAfter);
+      gameState.humanPopRate = humanPopBefore > 0 ? (humanPopAfter / humanPopBefore - 1) : 0;
+
+      updateResourcesPanel();
+      updatePlayerPanel();
+      if (badgeChanged && hexMap) hexMap.setBuildings(gameState.buildings);
+
+      // If a human colony gained a worker (and has an unworked zone cell), tell
+      // the player and open that colony's work dialog. Do this once notifications
+      // clear so it doesn't fight the "Year begins" toast.
+      // If a human colony gained a worker or grew its control radius (and has an
+      // unworked zone cell), tell the player and open that colony's work dialog.
+      // Do this once notifications clear so it doesn't fight the "Year begins"
+      // toast. Prompt each queued colony in turn.
+      if (_newWorkerColonies.length) {
+        for (const col of _newWorkerColonies) {
+          const msg = col._radiusGrew
+            ? `${col.name || 'A colony'} expanded its zone of control — assign workers to the new tiles.`
+            : `${col.name || 'A colony'} can work a new tile — assign it.`;
+          notify(msg);
+          delete col._radiusGrew;
+        }
+        onNotificationsIdle(() => {
+          // The dialog overlay shows one colony at a time; open the first that
+          // still has an unworked control cell and spare work capacity.
+          for (const col of _newWorkerColonies) {
+            const controlCount = colonyControlCells(col).length;
+            const homeKey = cellKey(col.x, col.y);
+            const hasIdleCap = col.worked.filter(k => k !== homeKey).length < workCap(col);
+            if (col.worked.length < controlCount && hasIdleCap) { openWorkModal(col); break; }
+          }
+        });
+      }
+    }
+
+    // Player panel: name + aggregate population and growth across our colonies.
+    function updatePlayerPanel() {
+      const nameEl = document.getElementById("player-name");
+      if (nameEl && nameEl.querySelector("input") == null) nameEl.textContent = gameState.playerName || "Human";
+      const pop = gameState.humanPop != null
+        ? gameState.humanPop
+        : gameState.buildings.filter((b) => b.type === 1 && b.owner === 'human')
+            .reduce((s, b) => s + (b.population || 0), 0);
+      const rate = gameState.humanPopRate || 0;
+      const popEl = document.getElementById("player-pop");
+      const grEl = document.getElementById("player-popgrowth");
+      if (popEl) popEl.textContent = Math.round(pop).toLocaleString();
+      if (grEl) {
+        const pct = (rate * 100);
+        grEl.textContent = (pct >= 0 ? "+" : "") + pct.toFixed(2) + "%";
+        grEl.style.color = pct < 0 ? "#e0554d" : "";
+      }
+    }
+
+    function updateResourcesPanel() {
+      const r = gameState.resources, rt = gameState.rates;
+      const fmt = (n) => Math.round(n).toLocaleString();
+      const rate = (n) => (n >= 0 ? "+" : "") + Math.round(n).toLocaleString() + "/yr";
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      set("res-material", fmt(r.material)); set("rate-material", rate(rt.material));
+      set("res-food", fmt(r.food)); set("rate-food", rate(rt.food));
+      set("res-energy", fmt(r.energy)); set("rate-energy", rate(rt.energy));
+      set("res-wealth", fmt(r.wealth));
+      set("rate-wealth", rate(rt.wealth || 0));
+      set("rate-happiness", rate(rt.happiness));
+    }
+
+    // Advance to the next player; auto-resolve AI turns. Once the human has
+    // placed their colony, their turns auto-pass so the clock keeps advancing
+    // (AIs place after their scheduled turn 3..200). If any AI still hasn't
+    // placed, the game keeps ticking; otherwise it settles on the human's turn.
+    function advanceTurn() {
+      const players = gameState.players || [];
+      if (!players.length) return;
+      gameState.currentPlayer++;
+      if (gameState.currentPlayer >= players.length) {
+        gameState.currentPlayer = 0;
+        gameState.turn++;
+        growColonies(); // populations grow each year/turn
+        // A full round completed: announce the new year. Suppress during the
+        // rapid "fast-forward" when nothing is happening (human already placed
+        // and no AI acted this round) so we don't flood the screen; still show
+        // it whenever an AI placed this round or the human can still act.
+        const humanActed = players[0] && players[0].placed;
+        if (!humanActed || _roundHadAction) {
+          notify(`Year: ${currentYear()} begins`, 5000, "year");
+        }
+        _roundHadAction = false;
+      }
+      updateStatus();
+      const p = players[gameState.currentPlayer];
+      if (p && p.kind === 'ai') {
+        // Pause turn processing while a notification is on screen; resume when
+        // it (and any queued ones) have finished their 5s / been dismissed.
+        scheduleTurnStep(() => aiTakeTurn(gameState.currentPlayer));
+      } else if (p && p.kind === 'human' && p.placed) {
+        // Human already founded their colony; keep the clock running while any
+        // AI is still waiting to place. Stop when everyone has placed.
+        const aiPending = players.some((pl) => pl.kind === 'ai' && !pl.placed);
+        if (aiPending) scheduleTurnStep(() => advanceTurn());
+      }
+    }
+
+    // Schedule the next turn step, but only once notifications have cleared, so
+    // all processing halts while a notification dialog is displayed.
+    function scheduleTurnStep(fn) {
+      onNotificationsIdle(() => setTimeout(fn, 40));
+    }
+
+    // ---- colony / building placement --------------------------------------
+    // Building type properties come from config.json (CONFIG.buildingTypes).
+    // Type 1 = colony (Biodome); 2 = Farm; 3 = Solar Panel; 4 = Factory.
+    function buildingType(type) {
+      return (CONFIG.buildingTypes && CONFIG.buildingTypes[String(type)]) || null;
+    }
+    function improvementName(type) {
+      const bt = buildingType(type);
+      return (bt && bt.name) || (type === 1 ? "Biodome" : "Improvement");
+    }
+
+    // ---- economy helpers ---------------------------------------------------
+    function terrainProd(type) {
+      const tp = CONFIG.terrainProduction && CONFIG.terrainProduction[String(type)];
+      return tp ? { food: tp.food || 0, material: tp.material || 0 } : { food: 0, material: 0 };
+    }
+    // Sum of operational building happiness bonuses owned by the colony's owner
+    // within its control (control is a Set of "x,y" keys).
+    function happinessBonusInControl(col, control) {
+      let sum = 0;
+      for (const b of gameState.buildings) {
+        if (b.type === 1) continue;
+        if (b.owner !== col.owner) continue;
+        if (!control.has(cellKey(b.x, b.y))) continue;
+        if (!isOperational(b)) continue;
+        sum += (buildingType(b.type) || {}).happinessBonus || 0;
+      }
+      return sum;
+    }
+
+    // Compute a colony's CURRENT per-year production/happiness/growth for the
+    // stats panel. Mirrors the math in growColonies but does not mutate state.
+    function colonyStats(col) {
+      const cfg = CONFIG;
+      const biodomeCfg = buildingType(1) || {};
+      const baseRate = (biodomeCfg.growthRate != null) ? biodomeCfg.growthRate : 0.01;
+      const happPerUnit = (cfg.happinessGrowthPerUnit != null) ? cfg.happinessGrowthPerUnit : 0.0025;
+      const foodPerUnit = (cfg.foodPerColonistUnit != null) ? cfg.foodPerColonistUnit : 0.5;
+      const starvationPerUnit = (cfg.starvationRatePerUnit != null) ? cfg.starvationRatePerUnit : 0.02;
+      ensureWorked(col);
+      const homeKey = cellKey(col.x, col.y);
+      const cap = workCap(col);
+      const extras = col.worked.filter((k) => k !== homeKey).slice(0, cap);
+      const worked = [homeKey, ...extras];
+      let food = 0, material = 0, energy = 0;
+      for (const k of worked) {
+        const [wx, wy] = k.split(",").map(Number);
+        const tp = terrainProd(terrainAt(wx, wy));
+        food += tp.food + waterFoodBonus(wx, wy);
+        material += tp.material;
+      }
+      const bd = buildingType(1) || {};
+      food += bd.foodBonus || 0; material += bd.materialBonus || 0; energy += bd.energyBonus || 0;
+      const control = new Set(colonyControlCells(col).map((c) => cellKey(c.x, c.y)));
+      let growthBonus = 0;
+      for (const bldg of gameState.buildings) {
+        if (bldg.type === 1) continue;
+        if (bldg.owner !== col.owner) continue;
+        if (!control.has(cellKey(bldg.x, bldg.y))) continue;
+        if (!isOperational(bldg)) continue;
+        const t = buildingType(bldg.type) || {};
+        energy += (t.energyProduced || 0) - (t.energyUse || 0);
+        food += (t.foodBonus || 0);
+        material += (t.materialBonus || 0);
+        growthBonus += (t.growthRateBonus || 0);
+      }
+      const workingUnits = worked.length;
+      const popUnits = Math.floor((col.population || 0) / 1000);
+      const consumption = popUnits * foodPerUnit;
+      const netFood = food - consumption;
+      const happinessRate = netFood + happinessBonusInControl(col, control);
+      const happinessCap = (cfg.happinessCap != null) ? cfg.happinessCap : 20;
+      // Show the stored total as it WILL be after clamping next turn.
+      const storedHappiness = Math.max(-happinessCap, Math.min(happinessCap, col.storedHappiness || 0));
+      const maxHappBonus = (cfg.maxHappinessGrowthBonus != null) ? cfg.maxHappinessGrowthBonus : 0.01;
+      const happBonus = Math.min(maxHappBonus, Math.abs(happinessRate) * happPerUnit);
+      let rate;
+      if (storedHappiness >= 0) {
+        rate = baseRate + happBonus + growthBonus;
+      } else {
+        rate = -(baseRate + happBonus) + growthBonus;
+      }
+      if (rate < -0.5) rate = -0.5;
+      // Wealth income mirrors the economy: 10% of surplus food + 10% of material.
+      const wealthRate = Math.max(0, netFood) * 0.1 + Math.max(0, material) * 0.1;
+      return {
+        population: col.population || 0,
+        growthRate: rate,
+        popDelta: (col.population || 0) * rate,
+        food, material, energy, wealthRate,
+        consumption, netFood,
+        happinessRate, storedHappiness,
+      };
+    }
+    // odd-q offset neighbors within N rings of (x,y) as a de-duped list.
+    function cellsWithin(x, y, radius) {
+      const W = gameState.map.terrain[0].length, H = gameState.map.terrain.length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const wx = (cx) => wrap ? ((cx % W) + W) % W : cx;
+      const key = (cx, cy) => cy * W + cx;
+      const out = []; const seen = new Set();
+      let frontier = [{ x: wx(x), y }]; seen.add(key(wx(x), y));
+      out.push({ x: wx(x), y });
+      for (let step = 0; step < radius; step++) {
+        const next = [];
+        for (const c of frontier) {
+          for (const n of hexNeighborsRenderer(c.x, c.y)) {
+            const nx = wx(n.x), ny = n.y;
+            if (ny < 0 || ny >= H || nx < 0 || nx >= W) continue;
+            if (seen.has(key(nx, ny))) continue;
+            seen.add(key(nx, ny)); next.push({ x: nx, y: ny }); out.push({ x: nx, y: ny });
+          }
+        }
+        frontier = next;
+      }
+      return out;
+    }
+    // Area-of-control cells for a colony (its own control radius, land only).
+    // Control radius grows with population per config.zoneOfControlSize: an
+    // array of population thresholds; index+1 is the radius once population
+    // reaches that threshold. e.g. [0,10000,100000,1000000] -> radius 1,2,3,4.
+    function colonyControlRadius(colony) {
+      const th = (CONFIG.zoneOfControlSize && CONFIG.zoneOfControlSize.length)
+        ? CONFIG.zoneOfControlSize : [0];
+      const pop = colony.population || 0;
+      let radius = 1;
+      for (let i = 0; i < th.length; i++) {
+        if (pop >= th[i]) radius = i + 1;
+      }
+      return radius;
+    }
+    function colonyControlCells(colony) {
+      return cellsWithin(colony.x, colony.y, colonyControlRadius(colony))
+        .filter((c) => terrainAt(c.x, c.y) !== 1); // land only
+    }
+    // Drop any worked cells that fall outside the colony's current control area
+    // (e.g. after the radius shrinks because population dropped). The biodome
+    // home cell is always kept.
+    function pruneWorkedToControl(colony) {
+      if (!colony.worked) return;
+      const homeKey = cellKey(colony.x, colony.y);
+      const inControl = new Set(colonyControlCells(colony).map((c) => cellKey(c.x, c.y)));
+      colony.worked = colony.worked.filter((k) => k === homeKey || inControl.has(k));
+    }
+    function cellKey(x, y) { return x + "," + y; }
+    // Ensure a colony has a worked set (its own cell is always worked).
+    function ensureWorked(colony) {
+      if (!colony.worked) colony.worked = [cellKey(colony.x, colony.y)];
+      if (!colony.worked.includes(cellKey(colony.x, colony.y)))
+        colony.worked.unshift(cellKey(colony.x, colony.y));
+      return colony.worked;
+    }
+    // Max extra worked cells for a colony = floor(population / 1000).
+    function workCap(colony) { return Math.floor((colony.population || 0) / 1000); }
+
+    function placeColony(x, y, owner, name) {
+      const players = gameState.players || [];
+      const species = (owner === 'human')
+        ? 'You'
+        : ((players[owner] && players[owner].name) || 'Alien');
+      const bt = buildingType(1);
+      const rec = { x, y, type: 1, owner, name, ownerName: species, improvement: improvementName(1),
+                    population: (bt && bt.startPopulation) || 1000,
+                    worked: [cellKey(x, y)] };
+      gameState.buildings.push(rec);
+      gameState.colonies.push({ x, y, owner, name });
+      if (hexMap) hexMap.setBuildings(gameState.buildings);
+      pushColoniesToMain();
+    }
+
+    // Place a non-colony building (farm/solar/factory).
+    function placeBuilding(x, y, owner, type) {
+      const players = gameState.players || [];
+      const species = (owner === 'human')
+        ? 'You'
+        : ((players[owner] && players[owner].name) || 'Alien');
+      const bt = buildingType(type) || {};
+      const rec = { x, y, type, owner, ownerName: species, improvement: improvementName(type),
+                    turnsRemaining: (bt.buildTurns != null ? bt.buildTurns : 0) };
+      gameState.buildings.push(rec);
+      // Pay the build cost from the owner's resource pool (human uses
+      // gameState.resources; each AI uses its own player.resources).
+      const pool = (owner === 'human')
+        ? gameState.resources
+        : (players[owner] && players[owner].resources);
+      if (pool) {
+        const cost = buildingCost(type);
+        for (const res of Object.keys(cost)) {
+          if (pool[res] != null) pool[res] = Math.max(0, pool[res] - cost[res]);
+        }
+        if (owner === 'human') updateResourcesPanel();
+      }
+      if (hexMap) hexMap.setBuildings(gameState.buildings);
+    }
+    // A building is operational once its construction turns have elapsed.
+    function isOperational(b) {
+      return b.type === 1 || (b.turnsRemaining == null) || b.turnsRemaining <= 0;
+    }
+
+    // Full build cost object (e.g. { material, wealth }) from config.
+    function buildingCost(type) {
+      const t = buildingType(type);
+      return (t && t.cost) || {};
+    }
+    // Whether the human can afford a building type.
+    function canAffordBuilding(type) {
+      const cost = buildingCost(type);
+      for (const res of Object.keys(cost)) {
+        if ((gameState.resources[res] || 0) < cost[res]) return false;
+      }
+      return true;
+    }
+    // Short "N Material, M Wealth" cost label for the menu.
+    function buildingCostLabel(type) {
+      const cost = buildingCost(type);
+      const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+      const parts = Object.keys(cost).map((r) => `${cost[r]} ${cap(r)}`);
+      return parts.length ? parts.join(", ") : "free";
+    }
+    // "N more Material, M more Wealth" describing what the human still lacks.
+    function buildingShortfallLabel(type) {
+      const cost = buildingCost(type);
+      const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+      const parts = [];
+      for (const r of Object.keys(cost)) {
+        const have = gameState.resources[r] || 0;
+        const need = cost[r] - have;
+        if (need > 0) parts.push(`${Math.ceil(need)} more ${cap(r)}`);
+      }
+      return parts.length ? parts.join(", ") : "more resources";
+    }
+    // Cells the human currently controls (union of human colony control areas).
+    // Use the colony BUILDINGS (type 1), which carry population, so the control
+    // radius reflects the current zone-of-control size.
+    function humanControlSet() {
+      const set = new Set();
+      for (const b of gameState.buildings) {
+        if (b.type !== 1 || b.owner !== 'human') continue;
+        for (const cell of colonyControlCells(b)) set.add(cellKey(cell.x, cell.y));
+      }
+      return set;
+    }
+    function humanControls(x, y) { return humanControlSet().has(cellKey(x, y)); }
+
+    // Tell the main process about our colonies + alien colonies so it can
+    // (re)build the dynamic View menu. ownerName: 'You' for human, else species.
+    function pushColoniesToMain() {
+      const players = gameState.players || [];
+      const list = gameState.colonies.map((c, i) => {
+        const isHuman = c.owner === 'human';
+        const pname = isHuman ? 'You'
+          : (players[c.owner] && players[c.owner].name) || String(c.owner);
+        return {
+          index: i, x: c.x, y: c.y, name: c.name,
+          kind: isHuman ? 'human' : 'ai', ownerName: pname
+        };
+      });
+      try { ipcRenderer.invoke("colonies-updated", list); } catch (e) {}
+    }
+
+    // ---- AI turn -----------------------------------------------------------
+    async function aiTakeTurn(pi) {
+      const p = gameState.players[pi];
+      if (!p || p.kind !== 'ai') { advanceTurn(); return; }
+      if (!p.placed && (p.modules || 0) > 0 && gameState.turn >= p.placeTurn) {
+        const spot = aiChooseColonySite();
+        if (spot) {
+          placeColony(spot.x, spot.y, pi, p.name);
+          p.modules -= 1;      // consume the colony module
+          p.placed = true;
+          _roundHadAction = true;
+          // Assign the new colony's first worker to the highest-food cell in
+          // its zone of control.
+          aiWorkHighestFoodCell(spot.x, spot.y, pi);
+          notify(`${p.name} established a colony at ${spot.x},${spot.y}`);
+        } else { p.placeTurn = gameState.turn + 3; } // retry later
+      } else if (p.placed) {
+        // Skip the AI entirely (built-in or LLM) if there's nothing it could
+        // do this turn: no worker to assign to an open cell, and no affordable
+        // building it could place on a controlled empty cell.
+        if (!aiHasPossibleActions(pi)) { advanceTurn(); return; }
+        // Established AI plays its turn (work cells + build). Use the configured
+        // LLM if available and the user hasn't chosen the built-in AI; otherwise
+        // fall back to the built-in heuristic. Either consumes the same context.
+        let acted = false;
+        let useLLM = false;
+        try { useLLM = await ipcRenderer.invoke("ai-available"); } catch (e) {}
+        if (useLLM) {
+          try { acted = await aiLLMTurn(pi); }
+          catch (e) { console.error("[ai] LLM turn failed, using built-in:", e); acted = aiPlayTurn(pi); }
+        } else {
+          acted = aiPlayTurn(pi);
+        }
+        if (acted) _roundHadAction = true;
+      }
+      advanceTurn();
+    }
+
+    // Does this AI have any action it could take this turn? True if any of its
+    // colonies can assign a worker to an unworked controlled cell, or can build
+    // an affordable building on an empty controlled land cell.
+    function aiHasPossibleActions(pi) {
+      const res = (gameState.players[pi] && gameState.players[pi].resources) || {};
+      const affordableTypes = Object.keys(CONFIG.buildingTypes || {})
+        .map((k) => parseInt(k, 10))
+        .filter((type) => type !== 1)
+        .filter((type) => {
+          const cost = buildingCost(type);
+          return Object.keys(cost).every((r) => (res[r] || 0) >= cost[r]);
+        });
+      const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi);
+      for (const col of myColonies) {
+        ensureWorked(col);
+        const homeKey = cellKey(col.x, col.y);
+        const control = colonyControlCells(col);
+        const workedExtras = col.worked.filter((k) => k !== homeKey).length;
+        const cap = workCap(col);
+        const unworked = control.filter((c) =>
+          cellKey(c.x, c.y) !== homeKey && !col.worked.includes(cellKey(c.x, c.y)));
+        // (a) a free worker slot AND an unworked cell to fill it.
+        if (workedExtras < cap && unworked.length > 0) return true;
+        // (b) an affordable building on an empty controlled land cell.
+        if (affordableTypes.length > 0) {
+          const emptyLand = control.some((c) =>
+            cellKey(c.x, c.y) !== homeKey &&
+            terrainAt(c.x, c.y) >= 2 && terrainAt(c.x, c.y) <= 7 &&
+            !gameState.buildings.some((b) => b.x === c.x && b.y === c.y));
+          if (emptyLand) return true;
+        }
+      }
+      return false;
+    }
+
+    // Ask the configured LLM to choose worked cells + buildings for the AI's
+    // colonies. Sends the system prompt + a compact JSON context and expects a
+    // JSON reply. Applies valid actions; returns true if any action was taken.
+    async function aiLLMTurn(pi) {
+      const ctx = buildAIContext(pi);
+      const system = ctx.systemPrompt || "You are an AI player in the strategy game Zubrenn.";
+      const user = [
+        "It is your turn. Decide how to develop your colonies.",
+        "Context (JSON): your colonies (with population, workCap, controlRadius,",
+        "worked cells as \"x,y\"), your resources, and a local mapView where each",
+        "cell has {x,y,terrain,building}. Terrain codes and rules are in the",
+        "system prompt.",
+        "",
+        JSON.stringify({
+          player: ctx.player, year: ctx.year,
+          colonies: ctx.colonies, mapView: ctx.mapView
+        }),
+        "",
+        "Reply ONLY with JSON of this exact shape (no prose):",
+        '{ "work": [ { "colony": [cx,cy], "cells": [[x,y],...] } ],',
+        '  "build": [ { "type": <2|3|4>, "at": [x,y] } ] }',
+        "Only work cells inside a colony's zone of control (max workCap extra",
+        "cells per colony). Only build on empty land cells you control that you",
+        "can afford. type 2=Farm, 3=Solar Panel, 4=Factory."
+      ].join("\n");
+
+      const resp = await ipcRenderer.invoke("ai-chat", { system, user, maxTokens: 1024 });
+      if (!resp || !resp.ok || !resp.text) throw new Error(resp && resp.error || "no response");
+      const plan = parseAIPlan(resp.text);
+      if (!plan) throw new Error("unparseable plan");
+      return applyAIPlan(pi, plan);
+    }
+
+    // Extract the first JSON object from an LLM reply (tolerates code fences).
+    function parseAIPlan(text) {
+      try {
+        let t = String(text).trim();
+        const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+        if (fence) t = fence[1].trim();
+        const start = t.indexOf("{"), end = t.lastIndexOf("}");
+        if (start < 0 || end < 0) return null;
+        return JSON.parse(t.slice(start, end + 1));
+      } catch (e) { return null; }
+    }
+
+    // Apply an LLM plan: assign worked cells and build buildings, validating
+    // each against control/cap/affordability rules. Returns true if anything
+    // was applied.
+    function applyAIPlan(pi, plan) {
+      let acted = false;
+      const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi);
+      const colonyAtXY = (x, y) => myColonies.find((c) => c.x === x && c.y === y);
+
+      for (const w of (plan.work || [])) {
+        if (!w || !Array.isArray(w.colony) || !Array.isArray(w.cells)) continue;
+        const col = colonyAtXY(w.colony[0], w.colony[1]);
+        if (!col) continue;
+        ensureWorked(col); pruneWorkedToControl(col);
+        const homeKey = cellKey(col.x, col.y);
+        const control = new Set(colonyControlCells(col).map((c) => cellKey(c.x, c.y)));
+        const cap = workCap(col);
+        for (const cell of w.cells) {
+          if (!Array.isArray(cell)) continue;
+          const k = cellKey(cell[0], cell[1]);
+          if (k === homeKey || !control.has(k) || col.worked.includes(k)) continue;
+          if (col.worked.filter((x) => x !== homeKey).length >= cap) break;
+          col.worked.push(k); acted = true;
+        }
+      }
+      const myControl = (() => {
+        const s = new Set();
+        for (const c of myColonies) for (const cell of colonyControlCells(c)) s.add(cellKey(cell.x, cell.y));
+        return s;
+      })();
+      const res = gameState.players[pi].resources || {};
+      for (const b of (plan.build || [])) {
+        if (!b || !Array.isArray(b.at)) continue;
+        const type = parseInt(b.type, 10);
+        if (![2, 3, 4].includes(type)) continue;
+        const [x, y] = b.at;
+        if (!myControl.has(cellKey(x, y))) continue;
+        if (terrainAt(x, y) < 2 || terrainAt(x, y) > 7) continue;
+        if (gameState.buildings.some((bb) => bb.x === x && bb.y === y)) continue;
+        const cost = buildingCost(type);
+        if (!Object.keys(cost).every((r) => (res[r] || 0) >= cost[r])) continue;
+        placeBuilding(x, y, pi, type); acted = true;
+      }
+      if (acted && hexMap) hexMap.setBuildings(gameState.buildings);
+      return acted;
+    }
+    // Best valid AI site: terrain 2-7, >= minStartDistance from every colony,
+    // preferring near-river and within 3 cells of water.
+    function aiChooseColonySite() {
+      const t = gameState.map.terrain;
+      const H = t.length, W = t[0].length;
+      const minD = CONFIG.minStartDistance || 20;
+      let best = null, bestScore = -Infinity;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const terr = t[y][x];
+          if (terr < 2 || terr > 7) continue;
+          if (distanceToNearestColony(x, y) < minD) continue;
+          let score = 0;
+          if (nearRiver(x, y)) score += 100;
+          if (withinCellsOfWater(x, y, 3)) score += 50;
+          if (terr === 2) score += 10;
+          score += Math.random() * 5;
+          if (score > bestScore) { bestScore = score; best = { x, y }; }
+        }
+      }
+      return best;
+    }
+
+    // Assign a new colony's first worker to the highest-food cell in its zone
+    // of control (excluding the always-worked biodome cell). Ties broken by
+    // material. Respects the colony's work cap.
+    function aiWorkHighestFoodCell(cx, cy, pi) {
+      const col = gameState.buildings.find((b) => b.type === 1 && b.owner === pi && b.x === cx && b.y === cy);
+      if (!col) return;
+      ensureWorked(col);
+      if (workCap(col) < 1) return; // no worker to assign yet
+      const homeKey = cellKey(col.x, col.y);
+      let best = null, bestFood = -Infinity, bestMat = -Infinity;
+      for (const c of colonyControlCells(col)) {
+        const k = cellKey(c.x, c.y);
+        if (k === homeKey || col.worked.includes(k)) continue;
+        const tp = terrainProd(terrainAt(c.x, c.y));
+        const food = tp.food + waterFoodBonus(c.x, c.y);
+        if (food > bestFood || (food === bestFood && tp.material > bestMat)) {
+          bestFood = food; bestMat = tp.material; best = c;
+        }
+      }
+      if (best && bestFood > 0) {
+        col.worked.push(cellKey(best.x, best.y));
+        if (hexMap) hexMap.setBuildings(gameState.buildings);
+      }
+    }
+    // ---- AI decision context + actions ------------------------------------
+    // Build the context handed to an AI player on its turn: the rules summary
+    // (system_prompt.md) plus a local map view (15-cell radius around each of
+    // the AI's colonies) with terrain codes and building improvements, and the
+    // AI's colonies/resources. This is the payload you would send to an LLM.
+    const AI_VIEW_RADIUS = 15;
+    function buildAIContext(pi) {
+      const player = gameState.players[pi];
+      const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi);
+      const W = gameState.map.terrain[0].length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const wx = (x) => wrap ? ((x % W) + W) % W : x;
+
+      // Collect the union of cells within AI_VIEW_RADIUS of the AI's colonies.
+      const seen = new Set();
+      const cells = [];
+      for (const col of myColonies) {
+        for (const c of cellsWithin(col.x, col.y, AI_VIEW_RADIUS)) {
+          const k = cellKey(wx(c.x), c.y);
+          if (seen.has(k)) continue;
+          seen.add(k);
+          const bldg = gameState.buildings.find((b) => b.x === wx(c.x) && b.y === c.y);
+          cells.push({
+            x: wx(c.x), y: c.y,
+            terrain: terrainAt(c.x, c.y),
+            building: bldg ? { type: bldg.type, owner: bldg.owner, operational: isOperational(bldg) } : null
+          });
+        }
+      }
+      return {
+        systemPrompt: SYSTEM_PROMPT,
+        player: { name: player.name, resources: player.resources || {} },
+        colonies: myColonies.map((c) => ({
+          x: c.x, y: c.y, name: c.name, population: Math.round(c.population || 0),
+          workCap: Math.floor((c.population || 0) / 1000),
+          controlRadius: colonyControlRadius(c),
+          worked: (c.worked || []).slice()
+        })),
+        mapView: cells,
+        year: currentYear()
+      };
+    }
+
+    // Rule-based AI decision that consumes the same context the LLM would get.
+    // It (1) assigns workers to the best cells in each colony's zone of control
+    // and (2) builds the buildings the colony most needs, when affordable and
+    // in control. Returns true if any action was taken.
+    function aiPlayTurn(pi) {
+      const player = gameState.players[pi];
+      const ctx = buildAIContext(pi); // (would be sent to an LLM; used locally)
+      let acted = false;
+      const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi);
+
+      for (const col of myColonies) {
+        ensureWorked(col);
+        pruneWorkedToControl(col);
+        const homeKey = cellKey(col.x, col.y);
+        const cap = workCap(col);
+        const control = colonyControlCells(col);
+
+        // (1) Assign workers: fill up to cap, preferring food when the colony
+        // is (or is near) starving, else the highest total yield.
+        const popUnits = Math.floor((col.population || 0) / 1000);
+        const workedFood = col.worked.reduce((s, k) => {
+          const [x, y] = k.split(",").map(Number);
+          return s + terrainProd(terrainAt(x, y)).food + waterFoodBonus(x, y);
+        }, 0);
+        const consumption = popUnits * (CONFIG.foodPerColonistUnit || 0.5);
+        const hungry = workedFood < consumption;
+
+        const candidates = control
+          .filter((c) => cellKey(c.x, c.y) !== homeKey && !col.worked.includes(cellKey(c.x, c.y)))
+          .map((c) => {
+            const tp = terrainProd(terrainAt(c.x, c.y));
+            const food = tp.food + waterFoodBonus(c.x, c.y);
+            const material = tp.material;
+            return { c, food, material, score: hungry ? food * 3 + material : food + material };
+          })
+          .sort((a, b) => b.score - a.score);
+
+        while (col.worked.filter((k) => k !== homeKey).length < cap && candidates.length) {
+          const pick = candidates.shift();
+          if (pick.score <= 0) break; // nothing useful left
+          col.worked.push(cellKey(pick.c.x, pick.c.y));
+          acted = true;
+        }
+
+        // (2) Build what the colony needs, in control, if affordable.
+        // Priority: Solar Panel if energy is low, Farm if food is short,
+        // else Factory to boost material.
+        const controlEmpty = control.filter((c) =>
+          cellKey(c.x, c.y) !== homeKey &&
+          !gameState.buildings.some((b) => b.x === c.x && b.y === c.y));
+        if (controlEmpty.length) {
+          const res = player.resources || {};
+          const wantOrder = hungry ? [2, 3, 4] : [3, 4, 2]; // farm/solar/factory
+          for (const type of wantOrder) {
+            const cost = buildingCost(type);
+            const afford = Object.keys(cost).every((k) => (res[k] || 0) >= cost[k]);
+            if (!afford) continue;
+            const spot = controlEmpty[0];
+            placeBuilding(spot.x, spot.y, pi, type);
+            acted = true;
+            break;
+          }
+        }
+      }
+      if (acted && hexMap) hexMap.setBuildings(gameState.buildings);
+      return acted;
+    }
+
+    // ---- context menu + name dialog ---------------------------------------
+    const ctxMenu = document.getElementById("context-menu");
+    const ctxEstablish = document.getElementById("ctx-establish");
+    const ctxBuildItems = document.getElementById("ctx-build-items");
+    let ctxTarget = null;
+    function hideContextMenu() { ctxMenu.hidden = true; ctxTarget = null; }
+    function humanCanPlace() {
+      const p = gameState.players && gameState.players[gameState.currentPlayer];
+      return p && p.kind === 'human' && (p.modules || 0) > 0; // need a colony module
+    }
+    function isHumanTurn() {
+      const p = gameState.players && gameState.players[gameState.currentPlayer];
+      return p && p.kind === 'human';
+    }
+    function cellHasBuilding(x, y) {
+      return gameState.buildings.some((b) => b.x === x && b.y === y);
+    }
+    function showContextMenu(clientX, clientY, hex) {
+      ctxTarget = hex;
+      const terr = hex ? terrainAt(hex.x, hex.y) : 0;
+      const buildable = isHumanTurn() && hex && terr >= 2 && terr <= 7 && !cellHasBuilding(hex.x, hex.y);
+
+      // Establish Colony (type 1) additionally requires a colony module.
+      const canEstablish = buildable && (gameState.players[gameState.currentPlayer].modules || 0) > 0;
+      ctxEstablish.classList.toggle("disabled", !canEstablish);
+
+      // Build options for the other building types (2..N) from config. A
+      // building must be placed on an empty land cell (terrain 2-7) within the
+      // human's area of control, and the human must afford its full cost.
+      ctxBuildItems.innerHTML = "";
+      const inControl = buildable && humanControls(hex.x, hex.y);
+      const types = (CONFIG.buildingTypes) ? Object.keys(CONFIG.buildingTypes) : [];
+      for (const tk of types) {
+        const type = parseInt(tk, 10);
+        if (type === 1) continue; // colony handled by Establish Colony
+        const bt = CONFIG.buildingTypes[tk];
+        const affordable = canAffordBuilding(type);
+        const enabled = buildable && inControl && affordable;
+        const item = document.createElement("div");
+        item.className = "ctx-item" + (enabled ? "" : " disabled");
+        let label = `Build ${bt.name || ("Type " + type)} (${buildingCostLabel(type)})`;
+        // Explain why a disabled item can't be built so it's clear it isn't a bug.
+        if (!enabled && buildable) {
+          if (!inControl) label += " — outside your zone of control";
+          else if (!affordable) label += " — need " + buildingShortfallLabel(type);
+        }
+        item.textContent = label;
+        item.addEventListener("click", () => {
+          if (item.classList.contains("disabled") || !ctxTarget) return;
+          const h = ctxTarget; hideContextMenu();
+          placeBuilding(h.x, h.y, 'human', type);
+        });
+        ctxBuildItems.appendChild(item);
+      }
+
+      ctxMenu.style.left = clientX + "px";
+      ctxMenu.style.top = clientY + "px";
+      ctxMenu.hidden = false;
+    }
+    ctxEstablish.addEventListener("click", () => {
+      if (ctxEstablish.classList.contains("disabled") || !ctxTarget) return;
+      const hex = ctxTarget; hideContextMenu(); openNameDialog(hex);
+    });
+    document.addEventListener("click", (e) => {
+      if (!ctxMenu.hidden && !ctxMenu.contains(e.target)) hideContextMenu();
+    });
+
+    const nameOverlay = document.getElementById("name-overlay");
+    const nameInput = document.getElementById("colony-name");
+    let nameTarget = null;
+    async function openNameDialog(hex) {
+      nameTarget = hex;
+      // Per-game numbering: "Colony N" where N = (our colonies so far) + 1,
+      // so every new game starts at "Colony 1".
+      const mine = gameState.colonies.filter((c) => c.owner === 'human').length;
+      nameInput.value = "Colony " + (mine + 1);
+      nameOverlay.hidden = false;
+      nameInput.focus(); nameInput.select();
+    }
+    function closeNameDialog() { nameOverlay.hidden = true; nameTarget = null; }
+    document.getElementById("name-cancel").addEventListener("click", closeNameDialog);
+    document.getElementById("name-ok").addEventListener("click", confirmName);
+    nameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") confirmName();
+      else if (e.key === "Escape") closeNameDialog();
+    });
+    async function confirmName() {
+      if (!nameTarget) return;
+      const name = (nameInput.value || "").trim() || "Colony";
+      const hex = nameTarget; closeNameDialog();
+      const human = gameState.players && gameState.players[0];
+      if (!human || (human.modules || 0) <= 0) return; // no colony module available
+      placeColony(hex.x, hex.y, 'human', name);
+      human.modules -= 1;      // consume the colony module
+      human.placed = true;
+      _roundHadAction = true;
+      // Let the player assign their first worker in the new colony, then advance
+      // the turn once they close the work dialog.
+      const newCol = gameState.buildings.find((b) => b.type === 1 && b.x === hex.x && b.y === hex.y);
+      if (newCol) {
+        _advanceAfterWorkModal = true;
+        openWorkModal(newCol);
+      } else {
+        advanceTurn();
+      }
+    }
+
+    // ---- work-assignment modal (double-click a biodome) -------------------
+    const workOverlay = document.getElementById("work-overlay");
+    const workCanvas = document.getElementById("work-canvas");
+    const workTitle = document.getElementById("work-title");
+    const workInfo = document.getElementById("work-info");
+    let workColony = null;
+    let workReadOnly = false;
+    let _advanceAfterWorkModal = false; // advance the turn when the work modal closes
+    let _workHexes = []; // [{ x, y, cx, cy, isHome }] screen layout for hit-testing
+    const WORK_HEX_SCALE = { x: 1.15470053837925, y: 0.86602540378444 };
+
+    function openWorkModal(building) {
+      workColony = building;
+      workReadOnly = (building.owner !== 'human'); // aliens are view-only
+      ensureWorked(building);
+      workOverlay.hidden = false;
+      renderWorkModal();
+    }
+    function closeWorkModal() {
+      workOverlay.hidden = true; workColony = null;
+      if (_advanceAfterWorkModal) {
+        _advanceAfterWorkModal = false;
+        advanceTurn(); // hand the round to the AIs after the founding turn
+      }
+    }
+
+    // Per-cell totals (base+bonus) derived from the unified breakdown.
+    function cellProduction(gx, gy, isHome, owner) {
+      const b = cellBreakdown(gx, gy, isHome, owner);
+      return {
+        f: b.food.base + b.food.bonus,
+        m: b.prod.base + b.prod.bonus,
+        e: b.energy.base + b.energy.bonus,
+        h: b.happ.base + b.happ.bonus
+      };
+    }
+
+    function renderWorkModal() {
+      const col = workColony; if (!col) return;
+      const cap = workCap(col);
+      const homeKey = cellKey(col.x, col.y);
+      const worked = new Set(ensureWorked(col));
+      const extras = [...worked].filter((k) => k !== homeKey).length;
+      workTitle.textContent = (col.name || "Colony") + (workReadOnly ? ` — ${col.ownerName || 'Alien'}` : "");
+      workInfo.textContent = workReadOnly
+        ? `Population ${Math.round(col.population).toLocaleString()} — viewing ${col.ownerName || 'alien'} colony (read-only).`
+        : `Population ${Math.round(col.population).toLocaleString()} — ` +
+          `worked ${extras}/${cap} extra cells (biodome always worked). Click a cell to toggle.`;
+
+      const cells = colonyControlCells(col);
+      const cellSet = new Set(cells.map((c) => cellKey(c.x, c.y)));
+
+      // Lay out as a hex grid (same offset scheme as the map) centered in the
+      // canvas. Compute a cell size that fits all control cells.
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const c of cells) { minX=Math.min(minX,c.x);minY=Math.min(minY,c.y);maxX=Math.max(maxX,c.x);maxY=Math.max(maxY,c.y); }
+      const gw = (maxX - minX + 1), gh = (maxY - minY + 1);
+      const ctx = workCanvas.getContext("2d");
+      const CW = workCanvas.width, CH = workCanvas.height;
+      // cell size so the grid fits with margin
+      const cell = Math.min(CW / (gw * 0.75 + 1) / WORK_HEX_SCALE.x, CH / (gh + 1));
+      const spacing = { x: cell * WORK_HEX_SCALE.x, y: cell };
+      const hexCenter = (x, y) => ({
+        x: (0.5 + (x - minX) * 0.75) * spacing.x,
+        y: (0.5 + ((y - minY) + (((x % 2) + 2) % 2) / 2)) * spacing.y
+      });
+      // center the whole layout in the canvas
+      const layoutW = (gw * 0.75 + 0.25) * spacing.x;
+      const layoutH = (gh + 0.5) * spacing.y;
+      const offX = (CW - layoutW) / 2, offY = (CH - layoutH) / 2;
+
+      ctx.clearRect(0, 0, CW, CH);
+      ctx.textAlign = "center";
+      const fontPx = Math.max(8, Math.floor(cell / 4));
+      _workHexes = [];
+      for (const c of cells) {
+        const k = cellKey(c.x, c.y);
+        const ctr = hexCenter(c.x, c.y);
+        const cx = ctr.x + offX, cy = ctr.y + offY;
+        _workHexes.push({ x: c.x, y: c.y, cx, cy, isHome: (k === homeKey), r: cell });
+        const isHome = (k === homeKey);
+        const isWorked = worked.has(k);
+        // hex path
+        const r = spacing.x / 2, r2 = r / 2, yr = spacing.y / 2;
+        ctx.beginPath();
+        ctx.moveTo(cx - r2, cy - yr); ctx.lineTo(cx + r2, cy - yr); ctx.lineTo(cx + r, cy);
+        ctx.lineTo(cx + r2, cy + yr); ctx.lineTo(cx - r2, cy + yr); ctx.lineTo(cx - r, cy);
+        ctx.closePath();
+        // Fill with the terrain color, lightened by 50%.
+        ctx.fillStyle = terrainColorLightened(terrainAt(c.x, c.y), 0.5);
+        ctx.fill();
+        // Worked cells (incl. the always-worked biodome) get a light-red
+        // highlight overlay whose color is configurable (HSV) in config.json.
+        if (isHome || isWorked) {
+          ctx.fillStyle = workedCellOverlay(isHome ? 0.6 : 0.45);
+          ctx.fill();
+        }
+        ctx.lineWidth = (isHome ? 3 : (isWorked ? 2 : 1));
+        ctx.strokeStyle = (isHome ? "#b00020" : (isWorked ? "#d43a4a" : "#888"));
+        ctx.stroke();
+        // F/M/E/H text with tight vertical leading.
+        const bd = cellBreakdown(c.x, c.y, isHome, col.owner);
+        ctx.fillStyle = "#1e1e1e";
+        ctx.font = `${fontPx}px Calibri, sans-serif`;
+        const seg = (o) => `${o.base}+${o.bonus}`;
+        const lines = [`F: ${seg(bd.food)}`, `M: ${seg(bd.prod)}`, `E: ${seg(bd.energy)}`, `H: ${seg(bd.happ)}`];
+        const lh = fontPx * 0.92; // contracted leading
+        let ty = cy - (lines.length - 1) * lh / 2;
+        for (const ln of lines) { ctx.fillText(ln, cx, ty + fontPx * 0.35); ty += lh; }
+      }
+      renderWorkStats(col);
+    }
+
+    // Right-side statistics panel for the colony dialog.
+    function renderWorkStats(col) {
+      const el = document.getElementById("work-stats");
+      if (!el) return;
+      const s = colonyStats(col);
+      const nf = (n, d = 0) => Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+      const sign = (n) => (n > 0 ? "+" : "");
+      const cls = (n) => (n > 0 ? "stat-pos" : (n < 0 ? "stat-neg" : ""));
+      const pct = (r) => `${sign(r * 100)}${nf(r * 100, 2)}%/yr`;
+      const growLabel = s.storedHappiness < 0 ? "declining" : "growing";
+      // Stored resources belong to the colony's owner (human -> gameState.resources,
+      // AI -> gameState.players[owner].resources).
+      const res = (col.owner === 'human')
+        ? gameState.resources
+        : ((gameState.players[col.owner] && gameState.players[col.owner].resources) || { food: 0, material: 0, energy: 0, wealth: 0 });
+      const rows = [
+        `<h3>Statistics</h3>`,
+        `<div class="stat-sec">Population</div>`,
+        `<div class="stat-row"><span>Population</span><span>${nf(Math.round(s.population))}</span></div>`,
+        `<div class="stat-row"><span>Growth rate</span><span class="${cls(s.growthRate)}">${pct(s.growthRate)}</span></div>`,
+        `<div class="stat-row"><span>Per-year change</span><span class="${cls(s.popDelta)}">${sign(s.popDelta)}${nf(Math.round(s.popDelta))} (${growLabel})</span></div>`,
+        `<div class="stat-sec">Resources <span class="stat-hint">(stored / rate)</span></div>`,
+        `<div class="stat-row"><span>Food</span><span>${nf(Math.round(res.food))} <span class="${cls(s.netFood)}">${sign(s.netFood)}${nf(s.netFood, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>Material</span><span>${nf(Math.round(res.material))} <span class="${cls(s.material)}">${sign(s.material)}${nf(s.material, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>Energy</span><span>${nf(Math.round(res.energy))} <span class="${cls(s.energy)}">${sign(s.energy)}${nf(s.energy, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>Wealth</span><span>${nf(Math.round(res.wealth))} <span class="${cls(s.wealthRate)}">${sign(s.wealthRate)}${nf(s.wealthRate, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>Happiness</span><span>${sign(s.storedHappiness)}${nf(s.storedHappiness, 1)} <span class="${cls(s.happinessRate)}">${sign(s.happinessRate)}${nf(s.happinessRate, 1)}/yr</span></span></div>`,
+        `<div class="stat-note">While stored happiness is positive the colony grows; if it goes negative the population declines.</div>`,
+      ];
+      el.innerHTML = rows.join("");
+    }
+
+    // Terrain color from config (HSV) lightened by `factor` (0.5 = +50%), as a
+    // css rgb string. Falls back to the map's terrain color if config lacks it.
+    function terrainColorLightened(id, factor) {
+      const tt = CONFIG.terrainTypes && CONFIG.terrainTypes[String(id)];
+      const c = tt && tt.color;
+      if (c && typeof c === 'object' && c.h != null) {
+        const v = Math.min(1, (c.v != null ? c.v : 1) * (1 + factor));
+        // Reduce saturation a touch when lightening so it reads as "lighter".
+        const s = Math.max(0, (c.s != null ? c.s : 1) * (1 - factor * 0.5));
+        return hsvToRgbCss(c.h, s, v);
+      }
+      return (hexMap && hexMap._terrainColor(id)) || "#ddd";
+    }
+    // Worked-cell highlight overlay from config.workedCellColor (HSV) with the
+    // given alpha. Defaults to a light red if unset.
+    function workedCellOverlay(alpha) {
+      const c = CONFIG.workedCellColor || { h: 0, s: 0.6, v: 1 };
+      const rgb = hsvToRgbCss(c.h || 0, c.s != null ? c.s : 0.6, c.v != null ? c.v : 1);
+      const nums = rgb.match(/\d+/g) || [255, 100, 100];
+      return `rgba(${nums[0]},${nums[1]},${nums[2]},${alpha})`;
+    }
+    // Local HSV->rgb (mirrors draw_map's hsv()).
+    function hsvToRgbCss(h, s, v) {
+      let r, g, b;
+      const f = h / 60 - Math.floor(h / 60);
+      h = Math.floor(h / 60) % 6;
+      const p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+      switch (h) {
+        case 0: r=v; g=t; b=p; break; case 1: r=q; g=v; b=p; break;
+        case 2: r=p; g=v; b=t; break; case 3: r=p; g=q; b=v; break;
+        case 4: r=t; g=p; b=v; break; case 5: r=v; g=p; b=q; break;
+      }
+      const to = (x) => Math.min(255, Math.floor(x * 256));
+      return `rgb(${to(r)},${to(g)},${to(b)})`;
+    }
+
+    function toggleWorked(k) {
+      const col = workColony; if (!col) return;
+      if (workReadOnly) return; // alien colony view is read-only
+      const homeKey = cellKey(col.x, col.y);
+      if (k === homeKey) return; // biodome always worked
+      const worked = ensureWorked(col);
+      const idx = worked.indexOf(k);
+      if (idx >= 0) {
+        worked.splice(idx, 1);
+      } else {
+        const cap = workCap(col);
+        const extras = worked.filter((w) => w !== homeKey).length;
+        if (extras >= cap) { notify(`This colony can work at most ${cap} extra cell${cap === 1 ? "" : "s"} (need more population).`); return; }
+        worked.push(k);
+      }
+      renderWorkModal();
+    }
+
+    // Canvas click -> hit-test the nearest hex and toggle it.
+    workCanvas.addEventListener("click", (e) => {
+      const rect = workCanvas.getBoundingClientRect();
+      const px = (e.clientX - rect.left) * (workCanvas.width / rect.width);
+      const py = (e.clientY - rect.top) * (workCanvas.height / rect.height);
+      let best = null, bestD = Infinity;
+      for (const h of _workHexes) {
+        const d = (h.cx - px) ** 2 + (h.cy - py) ** 2;
+        if (d < bestD) { bestD = d; best = h; }
+      }
+      if (best && bestD <= (best.r * best.r)) toggleWorked(cellKey(best.x, best.y));
+    });
+
+    document.getElementById("work-close").addEventListener("click", closeWorkModal);
+    workOverlay.addEventListener("click", (e) => { if (e.target === workOverlay) closeWorkModal(); });
+
+    // ---- View menu IPCs ----------------------------------------------------
+    ipcRenderer.on("view-center", (_e, pt) => {
+      if (hexMap && pt) hexMap.centerOnCell(pt.x, pt.y);
+    });
+
+    // View Location overlay (enter x,y).
+    const viewlocOverlay = document.getElementById("viewloc-overlay");
+    const viewlocX = document.getElementById("viewloc-x");
+    const viewlocY = document.getElementById("viewloc-y");
+    function openViewLoc() {
+      if (!gameState.map) return;
+      viewlocX.max = gameState.map.terrain[0].length - 1;
+      viewlocY.max = gameState.map.terrain.length - 1;
+      const vp = hexMap && hexMap.viewport;
+      viewlocX.value = vp ? vp.hOrigin.x : 0;
+      viewlocY.value = vp ? vp.hOrigin.y : 0;
+      viewlocOverlay.hidden = false;
+      viewlocX.focus(); viewlocX.select();
+    }
+    function closeViewLoc() { viewlocOverlay.hidden = true; }
+    function confirmViewLoc() {
+      const x = parseInt(viewlocX.value, 10);
+      const y = parseInt(viewlocY.value, 10);
+      closeViewLoc();
+      if (Number.isFinite(x) && Number.isFinite(y) && hexMap) hexMap.centerOnCell(x, y);
+    }
+    ipcRenderer.on("view-location", () => openViewLoc());
+    ipcRenderer.on("view-toggle-terrain", () => { if (hexMap) hexMap.toggleTextures(); });
+    ipcRenderer.on("view-toggle-control", () => { if (hexMap) hexMap.toggleControl(); });
+    ipcRenderer.on("view-zoom-in", () => { if (hexMap) hexMap.zoomIn(); });
+    ipcRenderer.on("view-zoom-out", () => { if (hexMap) hexMap.zoomOut(); });
+    ipcRenderer.on("view-center-map", () => { if (hexMap) { hexMap.centerViewport(); hexMap.redraw(); } });
+    document.getElementById("viewloc-cancel").addEventListener("click", closeViewLoc);
+    document.getElementById("viewloc-ok").addEventListener("click", confirmViewLoc);
+    [viewlocX, viewlocY].forEach((el) => el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") confirmViewLoc();
+      else if (e.key === "Escape") closeViewLoc();
+    }));
+
+    // ---- Turn menu: End Turn ----------------------------------------------
+    // The human ends their turn. (Player moves aren't implemented yet, so the
+    // human has "no moves" once their colony is placed and we auto-advance;
+    // this handler covers a manual End Turn as well.)
+    ipcRenderer.on("end-turn", () => {
+      const p = gameState.players && gameState.players[gameState.currentPlayer];
+      if (p && p.kind === 'human') advanceTurn();
+    });
+
+    // ---- player setup ------------------------------------------------------
+    function setupPlayers(aiCount) {
+      const names = (CONFIG.names || []).slice();
+      for (let i = names.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [names[i], names[j]] = [names[j], names[i]];
+      }
+      const minT = CONFIG.aiPlacementMinTurns || 3;
+      const maxT = CONFIG.aiPlacementMaxTurns || 200;
+      const players = [{ id: 0, kind: 'human', name: 'You', placed: false, modules: 1 }];
+      const n = Math.max(0, Math.min(aiCount, CONFIG.maxAIs || 40, names.length));
+      for (let i = 0; i < n; i++) {
+        players.push({
+          id: i + 1, kind: 'ai', name: names[i] || ('AI ' + (i + 1)),
+          placeTurn: minT + Math.floor(Math.random() * (maxT - minT + 1)),
+          placed: false, modules: 1,
+          resources: { material: 0, food: 0, energy: 0, wealth: 0 }
+        });
+      }
+      return players;
+    }
+
+    // ---- render a map + init/restore game state ---------------------------
     function showMap(map, extra) {
       const terrain = map && map.terrain;
       if (!terrain || !terrain.length) {
         console.error("[index] showMap: no terrain data");
         return;
       }
-      // Sea level (normalized 0..1) may be top-level (new game) or in meta (load).
       const seaLevel = (map.seaLevel != null)
         ? map.seaLevel
         : (map.meta && map.meta.seaLevel != null ? map.meta.seaLevel : 0);
+
       gameState = {
         map: {
-          meta: map.meta || null,
-          terrain: terrain,
-          elevation: map.elevation || null,
-          rivers: map.rivers || [],
-          seaLevel: seaLevel
+          meta: map.meta || null, terrain: terrain,
+          elevation: map.elevation || null, rivers: map.rivers || [], seaLevel: seaLevel
         },
         improvements: (extra && extra.improvements) || [],
-        pieces: (extra && extra.pieces) || []
+        pieces: (extra && extra.pieces) || [],
+        buildings: (extra && extra.buildings) || [],
+        colonies: (extra && extra.colonies) || [],
+        players: (extra && extra.players) || null,
+        turn: (extra && extra.turn) != null ? extra.turn : 0,
+        currentPlayer: (extra && extra.currentPlayer) != null ? extra.currentPlayer : 0,
+        resources: (extra && extra.resources) || { material: 0, food: 0, energy: 0, wealth: 0 },
+        rates: (extra && extra.rates) || { food: 0, material: 0, energy: 0, happiness: 0 },
+        playerName: (extra && extra.playerName) || "Human"
       };
+      _riverCellSet = null;
+
+      if (!gameState.players) {
+        const aiCount = (map.meta && map.meta.aiOpponents != null) ? map.meta.aiOpponents : 2;
+        gameState.players = setupPlayers(aiCount);
+        gameState.turn = 0;
+        gameState.currentPlayer = 0;
+      }
 
       document.getElementById("welcome").hidden = true;
       document.getElementById("game").hidden = false;
@@ -121,40 +1780,61 @@
 
       if (hexMap) { try { hexMap.destroy(); } catch (e) {} }
       hexMap = new HexMap({
-        canvas,
-        birdseye,
-        status,
-        tooltip,
-        terrain,
+        canvas, birdseye, status, tooltip, terrain,
         elevation: map.elevation || null,
         rivers: map.rivers || [],
         seaLevel: seaLevel,
         wrap: !!(map.meta && map.meta.wrap),
-        resourcePath: "resources/terrain"
+        buildings: gameState.buildings,
+        buildingTypes: CONFIG.buildingTypes || null,
+        terrainTypes: CONFIG.terrainTypes || null,
+        zoneOfControlSize: CONFIG.zoneOfControlSize || null,
+        aiCount: (gameState.players || []).filter((p) => p.kind === 'ai').length,
+        resourcePath: "resources/terrain",
+        onHover: (info) => updateStatus(info),
+        onHoverOut: () => updateStatus(null),
+        onColonyDblClick: (b) => openWorkModal(b),
+        cellInfo: (x, y) => cellInfoString(x, y)
       });
       hexMap.start();
+      updateStatus(null);
+      updateResourcesPanel();
+      updatePlayerPanel();
+
+      if (!canvas._ctxAttached) {
+        canvas._ctxAttached = true;
+        canvas.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          if (!hexMap) return;
+          const hex = hexMap.hexAtEvent(e);
+          showContextMenu(e.clientX, e.clientY, hex);
+        });
+      }
+
+      // Sync the View menu with current colonies (may be empty for a new game).
+      pushColoniesToMain();
     }
 
-    // New Game: main sends the generated map ({ terrain, elevation, rivers, meta }).
+    // New Game.
     ipcRenderer.on("new-map", (_e, result) => {
-      try {
-        showMap(result, null);
-      } catch (err) {
-        console.error("[index] failed to render new map:", err && err.stack || err);
-      }
+      try { showMap(result, null); }
+      catch (err) { console.error("[index] failed to render new map:", err && err.stack || err); }
     });
 
-    // Load Game: main sends { meta, terrain, elevation, rivers, improvements, pieces }.
+    // Load Game.
     ipcRenderer.on("load-game", (_e, payload) => {
       try {
         showMap(
+          { meta: payload.meta, terrain: payload.terrain,
+            elevation: payload.elevation || null, rivers: payload.rivers || [] },
           {
-            meta: payload.meta,
-            terrain: payload.terrain,
-            elevation: payload.elevation || null,
-            rivers: payload.rivers || []
-          },
-          { improvements: payload.improvements, pieces: payload.pieces }
+            improvements: payload.improvements, pieces: payload.pieces,
+            buildings: payload.buildings || [], colonies: payload.colonies || [],
+            players: payload.players || null,
+            turn: payload.turn || 0, currentPlayer: payload.currentPlayer || 0,
+            resources: payload.resources, rates: payload.rates,
+            playerName: payload.playerName
+          }
         );
       } catch (err) {
         console.error("[index] failed to load game:", err && err.stack || err);
@@ -163,3 +1843,4 @@
   </script>
 </body>
 </html>
+

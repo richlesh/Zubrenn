@@ -872,9 +872,11 @@ const DEFAULTS = {
   minRiverLength: 3,     // discard rivers shorter than this many cells
   largestAreaWithoutRiver: 0.15, // add rivers until no river-less land area
                                  //  is >= this fraction of the whole map (0 = off)
-  wrap: true             // horizontal (east-west) cylindrical wrapping. When
+  wrap: true,            // horizontal (east-west) cylindrical wrapping. When
                          //  on, generation uses fBm (only algo that can be
                          //  made seamless) and width is forced even.
+  aiOpponents: 2         // number of AI opponents (2..40); the New Game dialog
+                         //  suggests a default of habitable-land-cells / 100.
 };
 
 /**
@@ -912,6 +914,7 @@ function generateMap(opts = {}) {
   const cellsPerRiver = Math.max(1, parseInt(o.cellsPerRiver, 10) || DEFAULTS.cellsPerRiver);
   const minRiverLength = Math.max(2, parseInt(o.minRiverLength, 10) || DEFAULTS.minRiverLength);
   const largestAreaWithoutRiver = clamp01(numOr(o.largestAreaWithoutRiver, DEFAULTS.largestAreaWithoutRiver));
+  const aiOpponents = Math.max(2, Math.min(40, parseInt(o.aiOpponents, 10) || DEFAULTS.aiOpponents));
 
   const rng = makeRng(seed);
 
@@ -973,7 +976,7 @@ function generateMap(opts = {}) {
       width, height, algo, seed, island, water: waterFraction, octaves,
       roughness, erode, talus, biome, polar,
       rivers: doRivers, springElevation, maxRivers, cellsPerRiver, minRiverLength,
-      largestAreaWithoutRiver, wrap, seaLevel
+      largestAreaWithoutRiver, wrap, seaLevel, aiOpponents
     }
   };
 }

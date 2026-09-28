@@ -114,6 +114,189 @@ body.dark #instructions { background: #2c2c2e; color: #ccc; border-color: #444; 
 #instructions ul { padding: 16px 16px 16px 28px; margin: 0; }
 #instructions li { margin-bottom: 6px; }
 
+/* Player panel (between minimap and resources). */
+#player-panel {
+  border: 1px solid gray; background: #eee; color: #1e1e1e;
+  font: 12px Calibri, sans-serif; padding: 6px 8px; border-radius: 4px;
+}
+body.dark #player-panel { background: #2c2c2e; color: #ddd; border-color: #444; }
+#player-panel .player-name { font-weight: 700; font-size: 14px; margin-bottom: 3px; cursor: text; }
+#player-panel .player-name input {
+  width: 100%; font: 700 14px Calibri, sans-serif; padding: 1px 3px;
+  border: 1px solid #0a84ff; border-radius: 4px; background: #fff; color: #1e1e1e;
+}
+body.dark #player-panel .player-name input { background: #3a3a3c; color: #e0e0e0; }
+#player-panel .player-pop { font-variant-numeric: tabular-nums; }
+
+/* Resources panel (below minimap). */
+#resources {
+  border: 1px solid gray; background: #eee; color: #1e1e1e;
+  font: 12px Calibri, sans-serif; padding: 6px 8px; border-radius: 4px;
+}
+body.dark #resources { background: #2c2c2e; color: #ddd; border-color: #444; }
+#resources .res-title { font-weight: 700; margin-bottom: 4px; }
+#resources .res-table { width: 100%; border-collapse: collapse; }
+#resources .res-table td { padding: 1px 2px; }
+#resources .res-table td:nth-child(2) { text-align: right; font-variant-numeric: tabular-nums; }
+#resources .res-rate { text-align: right; color: #2a8; font-variant-numeric: tabular-nums; }
+body.dark #resources .res-rate { color: #6d9; }
+
+/* Work-assignment modal (double-click a biodome). */
+#work-overlay {
+  position: fixed; z-index: 10003; inset: 0;
+  background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+}
+#work-dialog {
+  background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
+  max-width: 90vw; max-height: 90vh; overflow: auto;
+}
+body.dark #work-dialog { background: #2c2c2e; color: #e0e0e0; }
+#work-dialog h2 { font-size: 15px; margin-bottom: 4px; }
+#work-info { font-size: 12px; color: #666; margin-bottom: 10px; }
+body.dark #work-info { color: #aaa; }
+#work-canvas { display: block; background: #cfd6e6; border-radius: 6px; }
+body.dark #work-canvas { background: #20242e; }
+#work-body { display: flex; gap: 14px; align-items: flex-start; }
+#work-stats {
+  width: 240px; flex: 0 0 240px; font-size: 12px;
+  background: #ffffff; border: 1px solid #ddd; border-radius: 8px; padding: 10px 12px;
+  align-self: stretch;
+}
+body.dark #work-stats { background: #232327; border-color: #444; }
+#work-stats h3 { font-size: 13px; margin: 0 0 8px; }
+#work-stats .stat-sec {
+  font-weight: 600; margin: 12px 0 4px; border-bottom: 1px solid #e2e2e2; padding-bottom: 2px;
+}
+body.dark #work-stats .stat-sec { border-bottom-color: #444; }
+#work-stats .stat-sec:first-of-type { margin-top: 4px; }
+#work-stats .stat-hint { font-weight: 400; color: #888; font-size: 11px; }
+#work-stats .stat-row {
+  display: flex; justify-content: space-between; gap: 8px; padding: 2px 0;
+  font-variant-numeric: tabular-nums;
+}
+#work-stats .stat-row > span:first-child { color: #666; }
+body.dark #work-stats .stat-row > span:first-child { color: #aaa; }
+#work-stats .stat-pos { color: #1a9c4c; }
+#work-stats .stat-neg { color: #d0342c; }
+#work-stats .stat-note { margin-top: 10px; font-size: 11px; color: #888; line-height: 1.4; }
+#work-grid { display: grid; gap: 4px; }
+.work-cell {
+  border: 1px solid #bbb; border-radius: 6px; padding: 6px 4px; min-width: 54px;
+  text-align: center; cursor: pointer; background: #fff; white-space: pre-line;
+  font-variant-numeric: tabular-nums; line-height: 1.25;
+}
+body.dark .work-cell { background: #3a3a3c; border-color: #555; }
+.work-cell.worked { background: #ffe14d; color: #1e1e1e; border-color: #d4b800; }
+.work-cell.biodome { background: #ffd000; font-weight: 700; cursor: default; }
+.work-cell.water { background: #7aa0ff; color: #fff; cursor: default; opacity: 0.7; }
+.work-row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px; }
+.work-row button { padding: 7px 16px; border-radius: 8px; border: none; font-size: 14px; cursor: pointer; }
+#work-close { background: #0a84ff; color: #fff; }
+
+/* Right-click context menu. */
+#context-menu {
+  position: fixed;
+  z-index: 10001;
+  min-width: 150px;
+  background: #fff;
+  color: #1e1e1e;
+  border: 1px solid #999;
+  border-radius: 6px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+  padding: 4px;
+  font: 13px Calibri, sans-serif;
+}
+body.dark #context-menu { background: #2c2c2e; color: #e0e0e0; border-color: #555; }
+#context-menu .ctx-item { padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+#context-menu .ctx-item:hover { background: #0a84ff; color: #fff; }
+#context-menu .ctx-item.disabled { opacity: 0.4; cursor: default; }
+#context-menu .ctx-item.disabled:hover { background: transparent; color: inherit; }
+
+/* Colony name modal. */
+#name-overlay {
+  position: fixed;
+  z-index: 10002;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#name-dialog {
+  background: #f5f5f5;
+  color: #1e1e1e;
+  border-radius: 10px;
+  padding: 20px 22px;
+  width: 320px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+  font: 14px -apple-system, sans-serif;
+}
+body.dark #name-dialog { background: #2c2c2e; color: #e0e0e0; }
+#name-dialog h2 { font-size: 16px; margin-bottom: 12px; }
+#name-dialog label { display: block; font-size: 13px; color: #666; margin-bottom: 4px; }
+body.dark #name-dialog label { color: #aaa; }
+#name-dialog input {
+  width: 100%; padding: 8px 10px; font-size: 14px; border-radius: 8px;
+  border: 1px solid #ccc; background: #fff; color: #1e1e1e; outline: none;
+}
+body.dark #name-dialog input { background: #3a3a3c; color: #e0e0e0; border-color: #555; }
+#name-dialog input:focus { border-color: #0a84ff; }
+.name-row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+.name-row button { padding: 8px 18px; border-radius: 8px; border: none; font-size: 14px; cursor: pointer; }
+#name-cancel { background: #ddd; color: #1e1e1e; }
+body.dark #name-cancel { background: #3a3a3c; color: #e0e0e0; }
+#name-ok { background: #0a84ff; color: #fff; }
+
+/* View Location modal (reuses name-dialog look). */
+#viewloc-overlay {
+  position: fixed; z-index: 10002; inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center;
+}
+#viewloc-dialog {
+  background: #f5f5f5; color: #1e1e1e; border-radius: 10px;
+  padding: 20px 22px; width: 300px; box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+  font: 14px -apple-system, sans-serif;
+}
+body.dark #viewloc-dialog { background: #2c2c2e; color: #e0e0e0; }
+#viewloc-dialog h2 { font-size: 16px; margin-bottom: 12px; }
+.viewloc-row { display: flex; gap: 12px; }
+.viewloc-row > div { flex: 1; }
+.viewloc-row label { display: block; font-size: 13px; color: #666; margin-bottom: 4px; }
+body.dark .viewloc-row label { color: #aaa; }
+.viewloc-row input {
+  width: 100%; padding: 8px 10px; font-size: 14px; border-radius: 8px;
+  border: 1px solid #ccc; background: #fff; color: #1e1e1e; outline: none;
+}
+body.dark .viewloc-row input { background: #3a3a3c; color: #e0e0e0; border-color: #555; }
+.viewloc-row input:focus { border-color: #0a84ff; }
+#viewloc-cancel { background: #ddd; color: #1e1e1e; }
+body.dark #viewloc-cancel { background: #3a3a3c; color: #e0e0e0; }
+#viewloc-ok { background: #0a84ff; color: #fff; }
+
+/* Reusable notification toast/dialog. */
+#notify-overlay {
+  position: fixed; z-index: 10005; top: 24px; left: 0; right: 0;
+  display: flex; justify-content: center;
+  pointer-events: none; /* only the dialog itself is clickable */
+}
+#notify-dialog {
+  pointer-events: auto;
+  background: #0a84ff; color: #fff;
+  font: 15px/1.4 -apple-system, sans-serif;
+  padding: 12px 20px; border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+  max-width: 70%; text-align: center; cursor: pointer;
+  animation: notifyIn 0.18s ease-out;
+}
+@keyframes notifyIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+body.dark #notify-dialog { background: #0a84ff; color: #fff; }
+#notify-dialog a.coord-link {
+  color: #fff; text-decoration: underline; cursor: pointer; font-weight: 700;
+}
+#notify-dialog a.coord-link:hover { color: #ffe14d; }
+
 /* Floating hover tooltip (coords / terrain / elevation). */
 #tooltip {
   position: fixed;

@@ -20,6 +20,19 @@ try {
   VENDORS = {};
 }
 
+// Game config (max AIs, min starting distance, starting year, AI placement
+// turn range, and the pool of alien names). Falls back to sane defaults.
+let CONFIG = {
+  maxAIs: 40, minStartDistance: 20, startingYear: 2500,
+  aiPlacementMinTurns: 3, aiPlacementMaxTurns: 200, names: []
+};
+try {
+  CONFIG = Object.assign(CONFIG,
+    JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8")));
+} catch (e) {
+  console.error("Failed to load config.json:", e && e.message);
+}
+
 function openExternal(url) {
   if (process.platform === "linux") {
     const child = spawn("xdg-open", [url], { detached: true, stdio: "ignore" });
@@ -117,6 +130,66 @@ function showAbout() {
   aboutWin.on("closed", () => { aboutWin = null; });
 }
 
+function buildViewMenu() {
+  const isMac = process.platform === "darwin";
+  const ours = gameColonies.filter((c) => c.kind === "human");
+  const aliens = gameColonies.filter((c) => c.kind === "ai");
+
+  // Our colonies alphabetical for the "View Colony" submenu; accelerators
+  // Cmd-1, Cmd-2 ... are assigned by ESTABLISHMENT order (their index).
+  const oursAlpha = ours.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const colonySubmenu = oursAlpha.map((c) => {
+    // Accelerator by order established (index among our colonies).
+    const order = ours.findIndex((o) => o.index === c.index); // 0-based
+    const accel = order >= 0 && order < 9 ? `CmdOrCtrl+${order + 1}` : undefined;
+    return {
+      label: c.name,
+      accelerator: accel,
+      click: () => sendToMain("view-center", { x: c.x, y: c.y })
+    };
+  });
+
+  // Aliens grouped by species (ownerName); center on that species' FIRST colony.
+  const bySpecies = new Map();
+  for (const c of aliens) {
+    if (!bySpecies.has(c.ownerName)) bySpecies.set(c.ownerName, c);
+  }
+  const alienNames = Array.from(bySpecies.keys()).sort((a, b) => a.localeCompare(b));
+  const alienSubmenu = alienNames.map((sp) => {
+    const first = bySpecies.get(sp);
+    return { label: sp, click: () => sendToMain("view-center", { x: first.x, y: first.y }) };
+  });
+
+  const home = ours[0]; // first colony established
+  return {
+    label: "View",
+    submenu: [
+      { label: "View Location…", accelerator: "CmdOrCtrl+L", click: () => sendToMain("view-location") },
+      {
+        label: "View Home",
+        accelerator: "CmdOrCtrl+Alt+H",
+        enabled: !!home,
+        click: () => { if (home) sendToMain("view-center", { x: home.x, y: home.y }); }
+      },
+      {
+        label: "View Colony",
+        enabled: colonySubmenu.length > 0,
+        submenu: colonySubmenu.length ? colonySubmenu : [{ label: "(none yet)", enabled: false }]
+      },
+      {
+        label: "View Alien",
+        enabled: alienSubmenu.length > 0,
+        submenu: alienSubmenu.length ? alienSubmenu : [{ label: "(none yet)", enabled: false }]
+      },
+      { type: "separator" },
+      { label: "Toggle Terrain Textures", accelerator: "CmdOrCtrl+T", click: () => sendToMain("view-toggle-terrain") },
+      { label: "Toggle Area of Control", accelerator: "CmdOrCtrl+Shift+C", click: () => sendToMain("view-toggle-control") },
+      { label: "Zoom In", accelerator: "CmdOrCtrl+=", click: () => sendToMain("view-zoom-in") },
+      { label: "Zoom Out", accelerator: "CmdOrCtrl+-", click: () => sendToMain("view-zoom-out") }
+    ]
+  };
+}
+
 function buildMenu() {
   const isMac = process.platform === "darwin";
   const template = [
@@ -149,6 +222,13 @@ function buildMenu() {
       ]
     },
     { role: "editMenu" },
+    buildViewMenu(),
+    {
+      label: "Turn",
+      submenu: [
+        { label: "End Turn", accelerator: "CmdOrCtrl+Return", click: () => sendToMain("end-turn") }
+      ]
+    },
     {
       label: "Window",
       submenu: [
@@ -221,10 +301,97 @@ function openSettings() {
 ipcMain.handle("settings-get", () => load());
 ipcMain.handle("settings-get-data", () => ({ settings: load(), VENDORS }));
 
-// Minimal model resolver: return the bundled static list for a vendor.
-// (A real integration would query the provider here.)
-ipcMain.handle("get-models-for-vendor", (_e, vendor) => (VENDORS[vendor] && VENDORS[vendor].models) || []);
-ipcMain.handle("fetch-models", (_e, { vendor }) => (VENDORS[vendor] && VENDORS[vendor].models) || []);
+// Game config (read-only) for the renderer.
+ipcMain.handle("config-get", () => CONFIG);
+
+// The AI system prompt (rules summary) provided to AI players on their turn.
+let SYSTEM_PROMPT = "";
+try {
+  SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, "resources", "system_prompt.md"), "utf8");
+} catch (e) { SYSTEM_PROMPT = ""; }
+ipcMain.handle("system-prompt-get", () => SYSTEM_PROMPT);
+
+// --- AI LLM integration ---------------------------------------------------
+const aiProvider = require("./ai_provider.cjs");
+
+// Whether a usable AI model is configured (and the user hasn't chosen built-in).
+ipcMain.handle("ai-available", () => {
+  const s = load();
+  if (s.useBuiltinAI) return false; // user opted for the built-in heuristic AI
+  return !!aiProvider.resolveConfig(s);
+});
+
+// Ask the configured LLM. Returns { ok, text } or { ok:false, error }.
+ipcMain.handle("ai-chat", async (_e, { system, user, maxTokens, timeoutMs }) => {
+  const s = load();
+  if (s.useBuiltinAI) return { ok: false, error: "built-in AI selected" };
+  try {
+    const text = await aiProvider.chat(VENDORS, s, system || "", user || "",
+      { maxTokens: maxTokens || 1024, timeoutMs: timeoutMs || 30000 });
+    return { ok: true, text };
+  } catch (err) {
+    return { ok: false, error: String(err && err.message || err) };
+  }
+});
+
+// Colonies pushed from the renderer, used to build the dynamic View menu.
+// Each: { index, x, y, name, kind:'human'|'ai', ownerName }.
+let gameColonies = [];
+ipcMain.handle("colonies-updated", (_e, list) => {
+  gameColonies = Array.isArray(list) ? list : [];
+  buildMenu();
+});
+
+function sendToMain(channel, payload) {
+  if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send(channel, payload);
+}
+
+// The user's cumulative colony count (used to default the next colony name to
+// "Colony N"). Tracked in settings so it persists across games/sessions.
+ipcMain.handle("user-colony-count-get", () => (load().userColonyCount || 0));
+ipcMain.handle("user-colony-count-increment", () => {
+  const s = load();
+  s.userColonyCount = (s.userColonyCount || 0) + 1;
+  save(s);
+  return s.userColonyCount;
+});
+
+// Live model-list resolver. For Ollama (and any OpenAI-compatible vendor with a
+// resolvable endpoint) query the provider's /models endpoint; fall back to the
+// bundled static list on any error or when no endpoint/key is available.
+// Ollama needs NO API key — it serves local models at localhost:11434/v1.
+const staticModels = (vendor) => (VENDORS[vendor] && VENDORS[vendor].models) || [];
+
+async function fetchModelsLive(vendor) {
+  try {
+    const s = load();
+    const keys = s.apiKeys || {};
+    if (vendor === "anthropic") return staticModels(vendor); // no /models parity here
+    if (vendor === "microsoft" || vendor === "amazon" || vendor === "ibm") return staticModels(vendor);
+    // Ollama: no key needed. Others: need a resolvable endpoint (key/baseURL).
+    const ep = aiProvider.resolveEndpoint(VENDORS, vendor, keys);
+    if (!ep) return staticModels(vendor);
+    const url = ep.baseURL.replace(/\/+$/, "") + "/models";
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    let json;
+    try {
+      const res = await fetch(url, { headers: ep.headers, signal: ctrl.signal });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      json = await res.json();
+    } finally { clearTimeout(timer); }
+    const data = json && json.data;
+    const ids = Array.isArray(data)
+      ? data.map((d) => d && d.id).filter((x) => typeof x === "string")
+      : [];
+    return ids.length ? ids.sort((a, b) => a.localeCompare(b)) : staticModels(vendor);
+  } catch (e) {
+    return staticModels(vendor);
+  }
+}
+
+ipcMain.handle("get-models-for-vendor", (_e, vendor) => fetchModelsLive(vendor));
+ipcMain.handle("fetch-models", (_e, { vendor }) => fetchModelsLive(vendor));
 
 ipcMain.handle("settings-save", (_e, newSettings) => {
   const existing = load();
@@ -244,8 +411,8 @@ let newGameWin;
 function openNewGame() {
   if (newGameWin) return newGameWin.focus();
   newGameWin = new BrowserWindow({
-    width: 460,
-    height: 1020,
+    width: 840,
+    height: 760,
     resizable: false,
     parent: mainWin,
     modal: true,
@@ -330,7 +497,16 @@ function buildSaveObject(gameState) {
     },
     // Reserved for future features; pass through whatever the renderer sends.
     improvements: (gameState && gameState.improvements) || [],
-    pieces: (gameState && gameState.pieces) || []
+    pieces: (gameState && gameState.pieces) || [],
+    // Colony placement + turn state.
+    buildings: (gameState && gameState.buildings) || [],
+    colonies: (gameState && gameState.colonies) || [],
+    players: (gameState && gameState.players) || null,
+    turn: (gameState && gameState.turn) != null ? gameState.turn : 0,
+    currentPlayer: (gameState && gameState.currentPlayer) != null ? gameState.currentPlayer : 0,
+    resources: (gameState && gameState.resources) || { material: 0, food: 0, energy: 0, wealth: 0 },
+    rates: (gameState && gameState.rates) || { food: 0, material: 0, energy: 0, happiness: 0 },
+    playerName: (gameState && gameState.playerName) || "Human"
   };
 }
 
@@ -495,7 +671,15 @@ async function loadGame() {
     elevation: map.elevation || null,
     rivers: map.rivers || [],
     improvements: parsed.improvements || [],
-    pieces: parsed.pieces || []
+    pieces: parsed.pieces || [],
+    buildings: parsed.buildings || [],
+    colonies: parsed.colonies || [],
+    players: parsed.players || null,
+    turn: parsed.turn != null ? parsed.turn : 0,
+    currentPlayer: parsed.currentPlayer != null ? parsed.currentPlayer : 0,
+    resources: parsed.resources || { material: 0, food: 0, energy: 0, wealth: 0 },
+    rates: parsed.rates || { food: 0, material: 0, energy: 0, happiness: 0 },
+    playerName: parsed.playerName || "Human"
   };
   const send = () => {
     if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send("load-game", payload);

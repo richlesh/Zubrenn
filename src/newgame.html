@@ -24,6 +24,16 @@
     body.dark .section-title { color: #777; border-top-color: #3a3a3c; }
     .field { display: flex; flex-direction: column; gap: 4px; }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    /* Two-column layout for the New Game form. */
+    .settings-columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 28px;
+      align-items: start;
+    }
+    .settings-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+    /* The first section title in each column shouldn't add a big top gap. */
+    .settings-col > .section-title:first-child { margin-top: 0; padding-top: 0; border-top: none; }
     label { font-size: 13px; color: #666; }
     body.dark label { color: #aaa; }
     .rangeval { font-size: 12px; color: #0a84ff; font-variant-numeric: tabular-nums; }
@@ -56,6 +66,9 @@
 </head>
 <body>
   <h1>New Game</h1>
+
+  <div class="settings-columns">
+    <div class="settings-col">
 
   <div class="section-title">Map Size</div>
   <div class="grid2">
@@ -119,6 +132,9 @@
     <input id="talus" type="range" min="0" max="1" step="0.01" value="0.06">
   </div>
 
+    </div><!-- /settings-col (left) -->
+    <div class="settings-col">
+
   <div class="section-title">Biomes</div>
   <div class="checkrow">
     <input id="biome" type="checkbox" checked>
@@ -157,6 +173,16 @@
     <input id="largestAreaWithoutRiver" type="range" min="0" max="0.5" step="0.01" value="0.15">
     <div class="hint">Adds rivers until no river-free land region is this large (0 = off).</div>
   </div>
+
+  <div class="section-title">Opponents</div>
+  <div class="field" id="aiOpponents-field">
+    <div class="labelrow"><label for="aiOpponents">Number of AI Opponents</label><span class="rangeval" id="aiOpponents-val">2</span></div>
+    <input id="aiOpponents" type="range" min="2" max="40" step="1" value="2">
+    <div class="hint">Default ≈ floor(width × height × (1 − water) ÷ 900). Updates when width, height, or water change.</div>
+  </div>
+
+    </div><!-- /settings-col (right) -->
+  </div><!-- /settings-columns -->
 
   <div class="row">
     <button id="cancel-btn">Cancel</button>
@@ -249,6 +275,47 @@
     lawr.addEventListener("input", syncLawr);
     syncLawr();
 
+    // --- Number of AI Opponents ---------------------------------------------
+    // Default estimate (no map preview needed): approximate land squares as
+    //   (width * height) * (1 - water) / 900
+    // clamped to the slider range (2..40). Recomputed whenever width, height,
+    // or water ratio change, unless the user has manually moved the slider.
+    const aiOpp = document.getElementById("aiOpponents");
+    const aiOppVal = document.getElementById("aiOpponents-val");
+    let aiUserAdjusted = false;
+
+    function clampAI(n) {
+      if (!Number.isFinite(n)) n = 2;
+      return Math.max(2, Math.min(40, Math.trunc(n)));
+    }
+    function syncAiLabel() { aiOppVal.textContent = aiOpp.value; }
+
+    function computeDefaultOpponents() {
+      const w = parseInt(document.getElementById("width").value, 10) || 0;
+      const h = parseInt(document.getElementById("height").value, 10) || 0;
+      const water = parseFloat(document.getElementById("water").value);
+      const waterFrac = Number.isFinite(water) ? water : 0.35;
+      const landSquares = (w * h) * (1 - waterFrac) / 900;
+      return clampAI(Math.floor(landSquares));
+    }
+
+    function refreshAiDefault() {
+      if (aiUserAdjusted) return; // respect a manual choice
+      aiOpp.value = String(computeDefaultOpponents());
+      syncAiLabel();
+    }
+
+    aiOpp.addEventListener("input", () => { aiUserAdjusted = true; syncAiLabel(); });
+
+    // Recompute the default when width, height, or water ratio change.
+    ["width", "height"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) { el.addEventListener("change", refreshAiDefault); el.addEventListener("input", refreshAiDefault); }
+    });
+    document.getElementById("water").addEventListener("input", refreshAiDefault);
+    // Initial default.
+    refreshAiDefault();
+
     function readOptions() {
       const seedRaw = document.getElementById("seed").value.trim();
       return {
@@ -270,7 +337,8 @@
         maxRivers: parseInt(document.getElementById("maxRivers").value, 10),
         cellsPerRiver: parseInt(document.getElementById("cellsPerRiver").value, 10),
         minRiverLength: parseInt(document.getElementById("minRiverLength").value, 10),
-        largestAreaWithoutRiver: parseFloat(document.getElementById("largestAreaWithoutRiver").value)
+        largestAreaWithoutRiver: parseFloat(document.getElementById("largestAreaWithoutRiver").value),
+        aiOpponents: parseInt(document.getElementById("aiOpponents").value, 10)
       };
     }
 

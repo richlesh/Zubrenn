@@ -60,6 +60,11 @@
   </div>
 
   <div class="section-title">AI Assistant</div>
+  <div class="field" style="flex-direction: row; align-items: center; gap: 8px;">
+    <input id="useBuiltinAI" type="checkbox" style="width:auto;">
+    <label for="useBuiltinAI" style="margin:0;">Use Built-in AI (ignore vendor/model below)</label>
+  </div>
+  <div id="ai-config">
   <div class="field">
     <label>Vendor</label>
     <select id="vendor"></select>
@@ -109,6 +114,7 @@
   <div id="generic-yaml-section" style="display:none;">
     <div class="field"><label>API Key / Token</label><input id="generic-yaml-api-key" type="password" placeholder="Enter API key or token…"></div>
   </div>
+  </div><!-- /#ai-config -->
 
   <div class="row">
     <button id="cancel-btn">Cancel</button>
@@ -123,6 +129,19 @@
     const modelSel = document.getElementById("model");
     const apiKeyIn = document.getElementById("apiKey");
     const apiKeyLink = document.getElementById("api-key-link");
+    const useBuiltinChk = document.getElementById("useBuiltinAI");
+    const aiConfigDiv = document.getElementById("ai-config");
+
+    // Enable/disable the vendor/model/API config based on the checkbox.
+    function syncBuiltinAI() {
+      const off = useBuiltinChk.checked;
+      aiConfigDiv.style.opacity = off ? "0.4" : "1";
+      aiConfigDiv.style.pointerEvents = off ? "none" : "";
+      aiConfigDiv.querySelectorAll("select, input, a").forEach((el) => {
+        if ("disabled" in el) el.disabled = off;
+      });
+    }
+    useBuiltinChk.addEventListener("change", syncBuiltinAI);
 
     let vendors, current;
 
@@ -214,6 +233,7 @@
 
       themeSel.value = current.theme || "dark";
       if (themeSel.value === "dark") document.body.classList.add("dark");
+      useBuiltinChk.checked = current.useBuiltinAI !== false; // default on
 
       // Vendor dropdown (sorted by label).
       for (const [key, v] of Object.entries(vendors).sort((a, b) => a[1].label.localeCompare(b[1].label))) {
@@ -226,6 +246,7 @@
       vendorSel.dataset.prev = vendorSel.value;
       updateVendorUI(vendorSel.value);
       await populateModels(vendorSel.value, current.defaultModels[vendorSel.value] || current.model);
+      syncBuiltinAI();
     });
 
     themeSel.addEventListener("change", () => {
@@ -278,6 +299,7 @@
         model: modelSel.value,
         apiKeys: current.apiKeys,
         defaultModels: current.defaultModels,
+        useBuiltinAI: useBuiltinChk.checked,
       });
     });
 
