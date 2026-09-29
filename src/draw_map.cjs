@@ -30,6 +30,12 @@
  *   map.start();
  */
 
+// Shared river geometry: normalizes a river cell path into the contiguous
+// chain of cell borders it occupies, then decomposes that into strokes. The
+// game rules (index.html) build on the SAME chain, so what gets drawn and
+// what gets modelled cannot drift apart.
+const RiverEdges = require('./river_edges.cjs');
+
 // --- Color model (matches hexgrid5.html terrain_colors) --------------------
 
 function rgb(r, g, b) {
@@ -1024,14 +1030,26 @@ class HexMap {
     const wrapPx = this.worldSize.x * 0.75 * spacing.x;
     const offsets = this.wrap ? [-wrapPx, 0, wrapPx] : [0];
 
+    // Each river is normalized into a contiguous chain of cell borders, then
+    // decomposed into strokes so every border is painted EXACTLY once. A river
+    // is not always a single line: at a hairpin, the border between two
+    // consecutive river cells can hang off the trunk as a dead-end stub — a
+    // feeder creek. Those get their own stroke (previously the renderer walked
+    // out and back, painting them twice). Creeks use the same color and width
+    // as the trunk.
     for (const path of this.rivers) {
-      const poly = this._riverPolyline(path, spacing);
-      if (!poly || poly.length < 2) continue;
-      for (const ox of offsets) {
-        ctx.beginPath();
-        ctx.moveTo(poly[0].x + ox, poly[0].y);
-        for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x + ox, poly[i].y);
-        ctx.stroke();
+      const chain = RiverEdges.riverEdgeChain(path, {
+        wrap: this.wrap, width: this.worldSize.x, raw: true,
+      });
+      const strokes = RiverEdges.edgeChainStrokes(chain, spacing);
+      for (const poly of strokes) {
+        if (!poly || poly.length < 2) continue;
+        for (const ox of offsets) {
+          ctx.beginPath();
+          ctx.moveTo(poly[0].x + ox, poly[0].y);
+          for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x + ox, poly[i].y);
+          ctx.stroke();
+        }
       }
     }
     ctx.restore();
@@ -1128,118 +1146,6 @@ class HexMap {
       }
     }
     ctx.restore();
-  }
-
-  // Build a polyline that runs strictly along hex BORDERS (never crossing a
-  // cell interior). The river visits, in order, the shared edges between
-  // consecutive cells of the path; within each cell we route along that cell's
-  // perimeter (the shorter vertex arc) from its entry edge to its exit edge.
-  _riverPolyline(path, spacing) {
-    if (!path || path.length < 2) return null;
-
-    // For wrapped maps, unwrap the path's x into a CONTINUOUS sequence so a
-    // seam crossing (x jumping ~width) becomes a single step to x = -1 or
-    // width, and the shared-edge/perimeter geometry stays local. getHexCenter
-    // and hexVertices tolerate out-of-range x (even width preserves parity).
-    if (this.wrap) {
-      const W = this.worldSize.x;
-      const cont = [{ x: path[0].x, y: path[0].y }];
-      for (let i = 1; i < path.length; i++) {
-        const prevX = cont[i - 1].x;
-        let x = path[i].x;
-        // Shift x by whole widths to be nearest to prevX.
-        while (x - prevX > W / 2) x -= W;
-        while (x - prevX < -W / 2) x += W;
-        cont.push({ x, y: path[i].y });
-      }
-      path = cont;
-    }
-
-    // The last cell of the path is a SEA cell, so the last edge is the
-    // land->water edge. We do NOT want the river to run along that edge (it
-    // would share a border with water); instead the river should end at a
-    // single VERTEX of the water cell. So we build the polyline from all the
-    // land-land edges, then finish at the nearest vertex of the final
-    // land->sea edge (a coastal corner).
-    const edges = [];
-    for (let i = 0; i < path.length - 1; i++) {
-      const e = sharedEdge(path[i].x, path[i].y, path[i + 1].x, path[i + 1].y, spacing);
-      if (e) edges.push(e);
-    }
-    if (edges.length === 0) return null;
-
-    const vkey = (p) => p.x + '|' + p.y;
-    const pts = [];
-    const pushPt = (p) => {
-      if (!pts.length || vkey(pts[pts.length - 1]) !== vkey(p)) pts.push(p);
-    };
-
-    // The final edge (land->water) is the coastal terminus; the "body" edges
-    // are all the earlier land-land edges.
-    const lastEdge = edges[edges.length - 1];
-    const bodyEdges = edges.slice(0, edges.length - 1);
-
-    if (bodyEdges.length === 0) {
-      // Degenerate: river is a single land cell touching the sea. Draw from the
-      // far corner of that land->water edge to the near corner so it still just
-      // reaches a coastal vertex.
-      pushPt(lastEdge[0]);
-      pushPt(lastEdge[1]);
-      return pts;
-    }
-
-    // Start along the first body edge.
-    pushPt(bodyEdges[0][0]);
-    pushPt(bodyEdges[0][1]);
-
-    // For each subsequent body edge, connect from the current last point to the
-    // nearest endpoint of that edge along cell path[i]'s perimeter. Because
-    // consecutive shared edges of a hex share a vertex OR are one vertex apart,
-    // routing to the nearest endpoint keeps the line on the border.
-    for (let i = 1; i < bodyEdges.length; i++) {
-      const prevPt = pts[pts.length - 1];
-      const [a, b] = bodyEdges[i];
-      const da = dist2(prevPt, a);
-      const db = dist2(prevPt, b);
-      const cell = path[i];
-      const near = da <= db ? a : b;
-      const far = da <= db ? b : a;
-      this._appendPerimeterArc(pts, prevPt, near, cell, spacing, pushPt);
-      pushPt(near);
-      pushPt(far);
-    }
-
-    // Finish at the coastal vertex: the endpoint of the land->water edge
-    // nearest the current river end (route along the last land cell's
-    // perimeter to reach it, staying on the border).
-    {
-      const prevPt = pts[pts.length - 1];
-      const [a, b] = lastEdge;
-      const near = dist2(prevPt, a) <= dist2(prevPt, b) ? a : b;
-      const lastLandCell = path[path.length - 2];
-      this._appendPerimeterArc(pts, prevPt, near, lastLandCell, spacing, pushPt);
-      pushPt(near);
-    }
-    return pts;
-  }
-
-  // Walk along cell `cell`'s perimeter from vertex `from` to vertex `to`,
-  // appending intermediate corner vertices (exclusive of endpoints) via the
-  // shorter direction. Keeps the river exactly on the hex border.
-  _appendPerimeterArc(pts, from, to, cell, spacing, pushPt) {
-    const verts = hexVertices(cell.x, cell.y, spacing);
-    const vkey = (p) => p.x + '|' + p.y;
-    const fi = verts.findIndex((v) => vkey(v) === vkey(from));
-    const ti = verts.findIndex((v) => vkey(v) === vkey(to));
-    if (fi === -1 || ti === -1) return; // not both on this cell; skip arc
-    // Two directions around the 6-vertex ring; choose the shorter.
-    const fwd = (ti - fi + 6) % 6;
-    const bwd = (fi - ti + 6) % 6;
-    if (fwd <= bwd) {
-      for (let k = 1; k < fwd; k++) pushPt(verts[(fi + k) % 6]);
-    } else {
-      for (let k = 1; k < bwd; k++) pushPt(verts[(fi - k + 6) % 6]);
-    }
   }
 
   _renderBirdseye() {

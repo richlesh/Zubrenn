@@ -144,6 +144,24 @@
       if (!HexMap) console.error("[index] could not load draw_map.cjs");
     })();
 
+    // Load shared river geometry (normalizes a river cell path into the
+    // contiguous chain of cell borders it occupies). The renderer uses the
+    // SAME module, so the borders the rules treat as river are exactly the
+    // ones the blue line is drawn along.
+    let RiverEdges = null;
+    (function loadRiverEdges() {
+      const candidates = [];
+      try {
+        const path = require("path");
+        candidates.push(path.join(__dirname, "river_edges.cjs"));
+      } catch (e) {}
+      candidates.push("./river_edges.cjs");
+      for (const c of candidates) {
+        try { RiverEdges = require(c); if (RiverEdges && RiverEdges.riverEdgeChain) break; } catch (e) {}
+      }
+      if (!RiverEdges) console.error("[index] could not load river_edges.cjs");
+    })();
+
     // Load formatting utilities.
     let formatSI = (x) => (typeof x === "number" ? x.toFixed(1) : String(x));
     (function loadUtilities() {
@@ -1050,13 +1068,45 @@
     function riverEdgeSet() {
       if (_riverEdgeSet) return _riverEdgeSet;
       _riverEdgeSet = new Set();
-      for (const path of (gameState.map.rivers || [])) {
-        for (let i = 1; i < path.length; i++) {
-          const a = path[i - 1], b = path[i];
-          if (hexDistance(a.x, a.y, b.x, b.y) === 1) _riverEdgeSet.add(edgeKey(a.x, a.y, b.x, b.y));
-        }
+      for (const e of allRiverBorderEdges()) {
+        _riverEdgeSet.add(edgeKey(e.a.x, e.a.y, e.b.x, e.b.y));
       }
       return _riverEdgeSet;
+    }
+    // Every cell border occupied by a river, as [{a:{x,y}, b:{x,y}}...].
+    //
+    // A river is generated as a CELL PATH, but the water runs along the
+    // BORDERS between those cells — and consecutive borders only touch when
+    // the river turns sharply. On straighter or wider turns the line has to
+    // travel around a cell's perimeter to get from one border to the next,
+    // and those perimeter borders carry river just the same.
+    //
+    // Taking only the consecutive-cell borders (as this used to) therefore
+    // missed well over half of them, leaving vertices in the middle of a
+    // visible bend with a single incident river edge instead of two. That is
+    // why "Build Canal" did not appear on many vertices the player could
+    // plainly see the river passing through. river_edges.cjs walks the same
+    // geometry the renderer draws, so the two now agree by construction.
+    let _riverBorderEdges = null;
+    function allRiverBorderEdges() {
+      if (_riverBorderEdges) return _riverBorderEdges;
+      const W = gameState.map.terrain[0].length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const out = [];
+      for (const path of (gameState.map.rivers || [])) {
+        if (RiverEdges) {
+          for (const e of RiverEdges.riverEdgeChain(path, { wrap, width: W })) out.push(e);
+        } else {
+          // Fallback if the module failed to load: consecutive-cell borders
+          // only (the old, incomplete behaviour).
+          for (let i = 1; i < path.length; i++) {
+            const a = path[i - 1], b = path[i];
+            if (hexDistance(a.x, a.y, b.x, b.y) === 1) out.push({ a, b });
+          }
+        }
+      }
+      _riverBorderEdges = out;
+      return out;
     }
     // Whether the specific shared border between adjacent cells is a river or
     // canal SEGMENT (edge-precise — not merely adjacent to a river cell).
@@ -1087,17 +1137,12 @@
           s.add(ke);
         }
       };
-      // River path segments (shared border of consecutive cells). Both the
-      // land->land and land->sea final edges contribute their border to each
-      // of the edge's two vertices (either shared vertex is acceptable as a
-      // canal start).
-      for (const path of (gameState.map.rivers || [])) {
-        for (let i = 1; i < path.length; i++) {
-          const a = path[i - 1], b = path[i];
-          if (hexDistance(a.x, a.y, b.x, b.y) !== 1) continue;
-          addSeg(a.x, a.y, b.x, b.y);
-        }
-      }
+      // Every border the river actually occupies — including the perimeter
+      // borders it takes to round a cell between two non-touching segments,
+      // which the drawn line runs along but which used to be omitted here.
+      // Each border contributes to both of its vertices (either end is an
+      // acceptable canal start).
+      for (const e of allRiverBorderEdges()) addSeg(e.a.x, e.a.y, e.b.x, e.b.y);
       // Canal edges.
       const canals = (gameState.transport && gameState.transport.canals) || new Set();
       for (const ek of canals) {
@@ -4048,6 +4093,7 @@
       }
       _riverCellSet = null;
       _origRiverCells = null;
+      _riverBorderEdges = null;
       _riverEdgeSet = null;
       _riverVertexCounts = null;
       // Normalize transport (arrays -> Sets) and clear any stale plan overlay.
