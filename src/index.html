@@ -26,17 +26,20 @@
       <canvas id="birdseye" width="180" height="200"></canvas>
       <div id="player-panel">
         <div class="player-name" id="player-name" title="Double-click to rename">Human</div>
-        <div class="player-pop">Population: <span id="player-pop">0</span> / <span id="player-popgrowth">+0%</span></div>
+        <div class="player-pop"><span>Population: <span id="player-pop">0</span></span> <span id="player-popgrowth" class="player-rate">+0.00%/yr</span></div>
+        <div class="player-stat"><span>Energy: <span id="player-energy">0</span> / <span id="player-energy-max">0</span></span> <span id="player-energy-rate" class="player-rate">+0/yr</span></div>
+        <div class="player-stat"><span>Food: <span id="player-food">0</span> / <span id="player-food-max">0</span></span> <span id="player-food-rate" class="player-rate">+0/yr</span></div>
+        <div class="player-stat"><span>Material: <span id="player-material">0</span> / <span id="player-material-max">0</span></span> <span id="player-material-rate" class="player-rate">+0/yr</span></div>
+        <div class="player-stat"><span>Wealth: <span id="player-wealth">0</span> / <span id="player-wealth-max">0</span></span> <span id="player-wealth-rate" class="player-rate">+0/yr</span></div>
+        <div class="player-stat"><span>Happiness: <span id="player-happiness">0</span> / <span id="player-happiness-max">0</span></span> <span id="player-happiness-rate" class="player-rate">+0/yr</span></div>
       </div>
-      <div id="resources">
-        <div class="res-title">Resources</div>
-        <table class="res-table">
-          <tr><td>Material</td><td id="res-material">0</td><td class="res-rate" id="rate-material">+0/yr</td></tr>
-          <tr><td>Food</td><td id="res-food">0</td><td class="res-rate" id="rate-food">+0/yr</td></tr>
-          <tr><td>Energy</td><td id="res-energy">0</td><td class="res-rate" id="rate-energy">+0/yr</td></tr>
-          <tr><td>Wealth</td><td id="res-wealth">0</td><td class="res-rate" id="rate-wealth">+0/yr</td></tr>
-          <tr><td>Happiness</td><td></td><td class="res-rate" id="rate-happiness">+0/yr</td></tr>
-        </table>
+      <div id="buildings-panel">
+        <div class="bldg-panel-title">Buildings</div>
+        <div class="bldg-stat">Colonies: <span id="bldg-colonies">0</span></div>
+        <div class="bldg-stat">Solar Panels: <span id="bldg-solar-panels">0</span></div>
+        <div class="bldg-stat">Farms: <span id="bldg-farms">0</span></div>
+        <div class="bldg-stat">Factories: <span id="bldg-factories">0</span></div>
+        <div class="bldg-stat">Docks: <span id="bldg-docks">0</span></div>
       </div>
       <div id="instructions">
         <ul>
@@ -141,6 +144,26 @@
       if (!HexMap) console.error("[index] could not load draw_map.cjs");
     })();
 
+    // Load formatting utilities.
+    let formatSI = (x) => (typeof x === "number" ? x.toFixed(1) : String(x));
+    (function loadUtilities() {
+      const candidates = [];
+      try {
+        const path = require("path");
+        candidates.push(path.join(__dirname, "utilities.cjs"));
+      } catch (e) {}
+      candidates.push("./src/utilities.cjs");
+      for (const c of candidates) {
+        try {
+          const mod = require(c);
+          if (mod && typeof mod.formatSI === "function") {
+            formatSI = mod.formatSI;
+            break;
+          }
+        } catch (e) {}
+      }
+    })();
+
     // Apply saved theme.
     let _autoTurnEnd = true; // whether to auto-end the human turn when idle
     function applyTheme(settings) {
@@ -173,12 +196,20 @@
       playerName: "Human", // editable human player name (saved)
       // Player (human) accumulated resources and last per-year production rates.
       resources: { material: 0, food: 0, energy: 0, wealth: 0 },
-      rates: { food: 0, material: 0, energy: 0, happiness: 0 }
+      rates: { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 }
     };
 
     // Exposed for the main process (Save Game) to read the current state.
     window.getGameState = function () {
       if (!gameState.map || !gameState.map.terrain) return null;
+      const nameEl = document.getElementById("player-name");
+      const input = nameEl ? nameEl.querySelector("input") : null;
+      if (input && input.value.trim()) {
+        gameState.playerName = input.value.trim();
+        if (gameState.players && gameState.players[0] && gameState.players[0].kind === 'human') {
+          gameState.players[0].name = gameState.playerName;
+        }
+      }
       return {
         map: gameState.map,
         improvements: gameState.improvements || [],
@@ -189,7 +220,7 @@
         turn: gameState.turn || 0,
         currentPlayer: gameState.currentPlayer || 0,
         resources: gameState.resources || { material: 0, food: 0, energy: 0, wealth: 0 },
-        rates: gameState.rates || { food: 0, material: 0, energy: 0, happiness: 0 },
+        rates: gameState.rates || { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 },
         playerName: gameState.playerName || "Human",
         transport: serializeTransport()
       };
@@ -230,7 +261,6 @@
     const notifyText = document.getElementById("notify-text");
     let _notifyQueue = [];
     let _notifyTimer = null;
-    let _notifyKeyHandler = null;
     let _notifyShowing = false;
     let _notifyIdleCbs = [];  // run once when all notifications have cleared
 
@@ -245,7 +275,6 @@
 
     function _notifyShowNext() {
       if (_notifyTimer) { clearTimeout(_notifyTimer); _notifyTimer = null; }
-      if (_notifyKeyHandler) { document.removeEventListener("keydown", _notifyKeyHandler, true); _notifyKeyHandler = null; }
       const item = _notifyQueue.shift();
       if (!item) {
         _notifyShowing = false;
@@ -259,10 +288,6 @@
       renderNotifyMessage(item.message);
       notifyOverlay.hidden = false;
       _notifyTimer = setTimeout(_notifyShowNext, item.ms);
-      _notifyKeyHandler = (e) => {
-        if (e.key === "Enter") { e.preventDefault(); _notifyShowNext(); }
-      };
-      document.addEventListener("keydown", _notifyKeyHandler, true);
     }
     function dismissNotify() { _notifyShowNext(); } // advance / dismiss current
     function notify(message, ms, key) {
@@ -325,7 +350,13 @@
         input.focus(); input.select();
         const commit = (save) => {
           const v = (input.value || "").trim();
-          if (save && v) gameState.playerName = v;
+          if (save && v) {
+            gameState.playerName = v;
+            if (gameState.players && gameState.players[0] && gameState.players[0].kind === 'human') {
+              gameState.players[0].name = v;
+            }
+            pushColoniesToMain();
+          }
           nameEl.textContent = gameState.playerName || "Human";
         };
         input.addEventListener("keydown", (e) => {
@@ -935,7 +966,6 @@
       if (changed) {
         if (hexMap && typeof hexMap.setTransport === 'function') hexMap.setTransport(tr);
         recomputeHumanResourcePanel && recomputeHumanResourcePanel();
-        updateResourcesPanel && updateResourcesPanel();
       }
       return changed;
     }
@@ -1139,6 +1169,45 @@
       }
       return cost;
     }
+    // Dijkstra movement cost exploration from (sx,sy) over reachable cells for `owner`.
+    // Returns { dist: Map<key, cost>, prev: Map<key, fromKey> }.
+    function findMovementCostsFrom(sx, sy, owner, maxCost) {
+      const map = gameState.map;
+      if (!map) return { dist: new Map(), prev: new Map() };
+      const W = map.terrain[0].length, H = map.terrain.length;
+      const wrap = !!(map.meta && map.meta.wrap);
+      const wxf = (x) => wrap ? ((x % W) + W) % W : x;
+      const key = (x, y) => y * W + wxf(x);
+      const allowShallow = owner != null && ownerHasDock(owner);
+      const startK = key(sx, sy);
+      const dist = new Map(), prev = new Map(), done = new Set();
+      dist.set(startK, 0);
+      const pq = [{ k: startK, x: wxf(sx), y: sy, d: 0 }];
+      let _guard = 0, _cap = W * H * 6 + 100;
+      while (pq.length && _guard++ < _cap) {
+        let bi = 0;
+        for (let i = 1; i < pq.length; i++) if (pq[i].d < pq[bi].d) bi = i;
+        const cur = pq.splice(bi, 1)[0];
+        if (done.has(cur.k)) continue;
+        done.add(cur.k);
+        if (maxCost != null && cur.d > maxCost) continue;
+        for (const n of hexNeighborsRenderer(cur.x, cur.y)) {
+          const nx = wxf(n.x), ny = n.y;
+          if (ny < 0 || ny >= H) continue;
+          if (!isPassableCell(nx, ny, allowShallow)) continue;
+          const nk = key(nx, ny);
+          if (done.has(nk)) continue;
+          const nd = cur.d + enterCost(nx, ny);
+          if (maxCost != null && nd > maxCost) continue;
+          if (!dist.has(nk) || nd < dist.get(nk)) {
+            dist.set(nk, nd); prev.set(nk, cur.k);
+            pq.push({ k: nk, x: nx, y: ny, d: nd });
+          }
+        }
+      }
+      return { dist, prev };
+    }
+
     // Dijkstra over the hex grid from (sx,sy) to (tx,ty), summing enterCost for
     // each stepped-into cell. Returns { cost, path:[{x,y}...] } or null if the
     // target is unreachable by land. The start cell contributes no enter cost.
@@ -1156,7 +1225,8 @@
       dist.set(startK, 0);
       // Simple array-based priority queue (maps are small enough here).
       const pq = [{ k: startK, x: wxf(sx), y: sy, d: 0 }];
-      while (pq.length) {
+      let _guard = 0, _cap = W * H * 6 + 100;
+      while (pq.length && _guard++ < _cap) {
         let bi = 0;
         for (let i = 1; i < pq.length; i++) if (pq[i].d < pq[bi].d) bi = i;
         const cur = pq.splice(bi, 1)[0];
@@ -1180,7 +1250,8 @@
       // Reconstruct path (as x,y from the key).
       const path = [];
       let k = targetK;
-      while (k != null) {
+      let _g = 0, _maxSteps = W * H + 10;
+      while (k != null && _g++ < _maxSteps) {
         const px = ((k % W) + W) % W, py = Math.floor(k / W);
         path.unshift({ x: px, y: py });
         k = prev.has(k) ? prev.get(k) : null;
@@ -1586,7 +1657,6 @@
       // source colony's now-current stored resources.
       advanceTransportConstruction();
 
-      updateResourcesPanel();
       updatePlayerPanel();
       if (badgeChanged && hexMap) hexMap.setBuildings(gameState.buildings);
 
@@ -1638,7 +1708,7 @@
       }
     }
 
-    // Player panel: name + aggregate population and growth across our colonies.
+    // Player panel: name + aggregate population, resources, and building counts across our colonies.
     function updatePlayerPanel() {
       const nameEl = document.getElementById("player-name");
       if (nameEl && nameEl.querySelector("input") == null) nameEl.textContent = gameState.playerName || "Human";
@@ -1649,25 +1719,60 @@
       const rate = gameState.humanPopRate || 0;
       const popEl = document.getElementById("player-pop");
       const grEl = document.getElementById("player-popgrowth");
-      if (popEl) popEl.textContent = Math.round(pop).toLocaleString();
+      if (popEl) popEl.textContent = formatSI(pop);
       if (grEl) {
         const pct = (rate * 100);
-        grEl.textContent = (pct >= 0 ? "+" : "") + pct.toFixed(2) + "%";
+        grEl.textContent = (pct >= 0 ? "+" : "") + pct.toFixed(2) + "%/yr";
         grEl.style.color = pct < 0 ? "#e0554d" : "";
       }
+      const r = gameState.resources || { energy: 0, food: 0, material: 0, wealth: 0 };
+      const rt = gameState.rates || { energy: 0, food: 0, material: 0, wealth: 0, happiness: 0 };
+      const caps = playerResourceCaps('human');
+      const humanColonies = (gameState.buildings || []).filter((b) => b.type === 1 && b.owner === 'human' && !b.inTransit);
+      const totalHappiness = humanColonies.reduce((s, b) => s + (b.storedHappiness || 0), 0);
+
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      const setRate = (id, n) => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.textContent = (n >= 0 ? "+" : "") + formatSI(n || 0) + "/yr";
+          el.style.color = (n < 0) ? "#e0554d" : "";
+        }
+      };
+
+      set("player-energy", formatSI(r.energy || 0));
+      set("player-energy-max", formatSI(caps.energy || 0));
+      setRate("player-energy-rate", rt.energy);
+
+      set("player-food", formatSI(r.food || 0));
+      set("player-food-max", formatSI(caps.food || 0));
+      setRate("player-food-rate", rt.food);
+
+      set("player-material", formatSI(r.material || 0));
+      set("player-material-max", formatSI(caps.material || 0));
+      setRate("player-material-rate", rt.material);
+
+      set("player-wealth", formatSI(r.wealth || 0));
+      set("player-wealth-max", formatSI(caps.wealth || 0));
+      setRate("player-wealth-rate", rt.wealth);
+
+      set("player-happiness", formatSI(totalHappiness || 0));
+      set("player-happiness-max", formatSI(caps.happiness || 0));
+      setRate("player-happiness-rate", rt.happiness);
+
+      updateBuildingsPanel();
     }
 
-    function updateResourcesPanel() {
-      const r = gameState.resources, rt = gameState.rates;
-      const fmt = (n) => Math.round(n).toLocaleString();
-      const rate = (n) => (n >= 0 ? "+" : "") + Math.round(n).toLocaleString() + "/yr";
+    function updateBuildingsPanel() {
+      const bldgs = gameState.buildings || [];
+      const humanBldgs = bldgs.filter((b) => b.owner === 'human' && !b.inTransit);
+      const count = (type) => humanBldgs.filter((b) => b.type === type).length;
       const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-      set("res-material", fmt(r.material)); set("rate-material", rate(rt.material));
-      set("res-food", fmt(r.food)); set("rate-food", rate(rt.food));
-      set("res-energy", fmt(r.energy)); set("rate-energy", rate(rt.energy));
-      set("res-wealth", fmt(r.wealth));
-      set("rate-wealth", rate(rt.wealth || 0));
-      set("rate-happiness", rate(rt.happiness));
+      set("bldg-colonies", count(1).toLocaleString());
+      set("bldg-solar-panels", count(3).toLocaleString());
+      set("bldg-farms", count(2).toLocaleString());
+      set("bldg-factories", count(4).toLocaleString());
+      set("bldg-docks", count(5).toLocaleString());
     }
 
     // Advance to the next player; auto-resolve AI turns. Once the human has
@@ -1755,7 +1860,7 @@
       turnStartSub.textContent = "";
       turnStartHandle.hidden = true;
       turnStartOverlay.hidden = false;
-      const NEW_YEAR_MS = 5000, AUTO_END_MS = 30000, NOTHING_MS = 5000;
+      const NEW_YEAR_MS = 2000, AUTO_END_MS = 30000, NOTHING_MS = 2000;
       const toStep2 = () => {
         _clearTurnStartTimers();
         if (!_autoTurnEnd) { _closeTurnStart(); return; }   // player controls turn
@@ -1776,7 +1881,12 @@
       // Click the year message to skip straight to step 2.
       turnStartOverlay.onclick = (e) => {
         if (e.target === turnStartHandle) return; // button handles itself
-        if (turnStartHandle.hidden && turnStartSub.textContent === "") toStep2();
+        if (turnStartHandle.hidden && turnStartSub.textContent === "") {
+          toStep2();
+        } else if (turnStartHandle.hidden && turnStartSub.textContent !== "") {
+          _closeTurnStart();
+          advanceTurn();
+        }
       };
     }
     turnStartHandle.addEventListener("click", () => {
@@ -1837,13 +1947,14 @@
     // player's total capacity today. (When colonies are connected this will
     // become a shared per-player pool.) Caps stored Food/Material/Energy/Wealth.
     function playerResourceCaps(owner) {
-      const caps = { food: 0, material: 0, energy: 0, wealth: 0 };
+      const caps = { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 };
       for (const b of gameState.buildings) {
         if (b.owner !== owner) continue;
         if (!isOperational(b)) continue;
         const s = bldgStorage(b.type);
         caps.food += s.food; caps.material += s.material;
         caps.energy += s.energy; caps.wealth += s.wealth;
+        caps.happiness += (s.happiness || 0);
       }
       return caps;
     }
@@ -2186,6 +2297,7 @@
       gameState.buildings.push(rec);
       gameState.colonies.push({ x, y, owner, name });
       if (hexMap) hexMap.setBuildings(gameState.buildings);
+      if (owner === 'human') updatePlayerPanel();
       pushColoniesToMain();
     }
 
@@ -2209,7 +2321,7 @@
         for (const res of Object.keys(cost)) {
           if (pool[res] != null) pool[res] = Math.max(0, pool[res] - cost[res]);
         }
-        if (owner === 'human') { recomputeHumanResourcePanel(); updateResourcesPanel(); }
+        if (owner === 'human') { recomputeHumanResourcePanel(); updatePlayerPanel(); }
       }
       if (hexMap) hexMap.setBuildings(gameState.buildings);
     }
@@ -2271,7 +2383,7 @@
           col.worked = col.worked.filter((k) => k !== cellKey(x, y));
         }
       }
-      if (owner === 'human') { recomputeHumanResourcePanel(); updateResourcesPanel(); }
+      if (owner === 'human') { recomputeHumanResourcePanel(); updateResourcesPanel(); updatePlayerPanel(); }
       if (hexMap) hexMap.setBuildings(gameState.buildings);
       return true;
     }
@@ -2330,7 +2442,7 @@
       };
       gameState.buildings.push(rec);
       gameState.colonies.push({ x: tx, y: ty, owner, name: rec.name });
-      if (owner === 'human') { recomputeHumanResourcePanel(); updateResourcesPanel(); }
+      if (owner === 'human') { recomputeHumanResourcePanel(); updateResourcesPanel(); updatePlayerPanel(); }
       if (hexMap) hexMap.setBuildings(gameState.buildings);
       pushColoniesToMain();
       return rec;
@@ -2487,8 +2599,27 @@
         ctx.stroke(); ctx.restore();
       };
       const lw = Math.max(2, spacing.y / 8);
-      for (const pl of _transportPlannedPaths) drawPath(pl.path, "hsla(120, 60%, 65%, 0.75)", lw); // lighter green (planned)
-      if (_transportHoverPath) drawPath(_transportHoverPath, "hsla(120, 80%, 40%, 0.95)", lw);      // bright green (hover)
+      const c = CONFIG.planningPathColor || { h: 120, s: 0.667, l: 0.48 };
+      let planStroke, hoverStroke, canalPlanStroke, canalHoverStroke;
+      if (c && typeof c === 'object' && c.h != null) {
+        const hue = c.h;
+        const sVal = c.s != null ? c.s : 0.667;
+        const lVal = c.l != null ? c.l : (c.v != null ? c.v * (1 - sVal / 2) : 0.48);
+        planStroke = hslToRgbaCss(hue, sVal * 0.75, Math.min(1, lVal * 1.35), 0.75);
+        hoverStroke = hslToRgbaCss(hue, sVal, lVal, 0.95);
+        canalPlanStroke = hslToRgbaCss(hue, sVal * 0.75, Math.min(1, lVal * 1.35), 0.8);
+        canalHoverStroke = hoverStroke;
+      } else if (typeof c === 'string') {
+        planStroke = c; hoverStroke = c; canalPlanStroke = c; canalHoverStroke = c;
+      } else {
+        planStroke = "hsla(120, 60%, 65%, 0.75)";
+        hoverStroke = "hsla(120, 80%, 40%, 0.95)";
+        canalPlanStroke = "hsla(120, 60%, 65%, 0.8)";
+        canalHoverStroke = hoverStroke;
+      }
+
+      for (const pl of _transportPlannedPaths) drawPath(pl.path, planStroke, lw); // planned
+      if (_transportHoverPath) drawPath(_transportHoverPath, hoverStroke, lw);      // hover
       // Canal previews are edge-based: draw along each edge's shared border
       // (approximated as a mark at the border midpoint between the two cells).
       const drawCanalEdges = (edges, stroke, w) => {
@@ -2503,8 +2634,8 @@
         }
         ctx.restore();
       };
-      for (const pl of _canalPlannedEdges) drawCanalEdges(pl.edges, "hsla(120, 60%, 65%, 0.8)", lw); // planned (lighter green)
-      if (_canalHover && _canalHover.edges) drawCanalEdges(_canalHover.edges, "hsla(120, 80%, 40%, 0.95)", lw); // hover (bright green)
+      for (const pl of _canalPlannedEdges) drawCanalEdges(pl.edges, canalPlanStroke, lw); // planned
+      if (_canalHover && _canalHover.edges) drawCanalEdges(_canalHover.edges, canalHoverStroke, lw); // hover
     }
 
     // --- canal (vertex/edge) build mode ---
@@ -2728,40 +2859,49 @@
 
     // ---- AI turn -----------------------------------------------------------
     async function aiTakeTurn(pi) {
-      const p = gameState.players[pi];
-      if (!p || p.kind !== 'ai') { advanceTurn(); return; }
-      if (!p.placed && (p.modules || 0) > 0 && gameState.turn >= p.placeTurn) {
-        const spot = aiChooseColonySite();
-        if (spot) {
-          placeColony(spot.x, spot.y, pi, p.name);
-          p.modules -= 1;      // consume the colony module
-          p.placed = true;
-          _roundHadAction = true;
-          // Assign the new colony's first worker to the highest-food cell in
-          // its zone of control.
-          aiWorkHighestFoodCell(spot.x, spot.y, pi);
-          notify(`${p.name} established a colony at ${spot.x},${spot.y}`);
-        } else { p.placeTurn = gameState.turn + 3; } // retry later
-      } else if (p.placed) {
-        // Skip the AI entirely (built-in or LLM) if there's nothing it could
-        // do this turn: no worker to assign to an open cell, and no affordable
-        // building it could place on a controlled empty cell.
-        if (!aiHasPossibleActions(pi)) { advanceTurn(); return; }
-        // Established AI plays its turn (work cells + build). Use the configured
-        // LLM if available and the user hasn't chosen the built-in AI; otherwise
-        // fall back to the built-in heuristic. Either consumes the same context.
-        let acted = false;
-        let useLLM = false;
-        try { useLLM = await ipcRenderer.invoke("ai-available"); } catch (e) {}
-        if (useLLM) {
-          try { acted = await aiLLMTurn(pi); }
-          catch (e) { console.error("[ai] LLM turn failed, using built-in:", e); acted = aiPlayTurn(pi); }
-        } else {
-          acted = aiPlayTurn(pi);
+      try {
+        const p = gameState.players && gameState.players[pi];
+        if (!p || p.kind !== 'ai') return;
+        if (!p.placed && (p.modules || 0) > 0 && gameState.turn >= p.placeTurn) {
+          const spot = aiChooseColonySite();
+          if (spot) {
+            placeColony(spot.x, spot.y, pi, p.name);
+            p.modules -= 1;      // consume the colony module
+            p.placed = true;
+            _roundHadAction = true;
+            // Assign the new colony's first worker to the highest-food cell in
+            // its zone of control.
+            aiWorkHighestFoodCell(spot.x, spot.y, pi);
+            notify(`${p.name} established a colony at ${spot.x},${spot.y}`);
+          } else { p.placeTurn = gameState.turn + 3; } // retry later
+        } else if (p.placed) {
+          // Skip the AI entirely (built-in or LLM) if there's nothing it could
+          // do this turn: no worker to assign to an open cell, and no affordable
+          // building it could place on a controlled empty cell.
+          if (aiHasPossibleActions(pi)) {
+            // Established AI plays its turn (work cells + build). Use the configured
+            // LLM if available and the user hasn't chosen the built-in AI; otherwise
+            // fall back to the built-in heuristic. Either consumes the same context.
+            let acted = false;
+            let useLLM = false;
+            try { useLLM = await ipcRenderer.invoke("ai-available"); } catch (e) {}
+            if (useLLM) {
+              try { acted = await aiLLMTurn(pi); }
+              catch (e) {
+                console.error("[ai] LLM turn failed, using built-in:", e);
+                try { acted = aiPlayTurn(pi); } catch (e2) { console.error("[ai] built-in turn failed:", e2); }
+              }
+            } else {
+              try { acted = aiPlayTurn(pi); } catch (e) { console.error("[ai] built-in turn failed:", e); }
+            }
+            if (acted) _roundHadAction = true;
+          }
         }
-        if (acted) _roundHadAction = true;
+      } catch (err) {
+        console.error("[ai] aiTakeTurn error for player " + pi + ":", err);
+      } finally {
+        advanceTurn();
       }
-      advanceTurn();
     }
 
     // Does this AI have any action it could take this turn? True if any of its
@@ -2790,6 +2930,19 @@
           for (const type of types) {
             if (hasPrerequisitesAt(type, c.x, c.y, pi) && canAffordBuildingAt(type, c.x, c.y, pi)) return true;
           }
+        }
+        // (c) a dock on shallow sea
+        if (!colonyHasDock(col) && workedExtras < cap) {
+          for (const c of cellsWithin(col.x, col.y, colonyControlRadius(col))) {
+            if (terrainAt(c.x, c.y) === 1 && isShallowSea(c.x, c.y) && !cellHasBuilding(c.x, c.y)) {
+              if (hasPrerequisitesAt(5, c.x, c.y, pi) && canAffordBuildingAt(5, c.x, c.y, pi)) return true;
+            }
+          }
+        }
+        // (d) launch a new colony
+        const minPop = (CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3000;
+        if ((col.population || 0) > minPop && canAffordBuildingAt(1, col.x, col.y, pi)) {
+          return true;
         }
       }
       return false;
@@ -2865,18 +3018,29 @@
     // affordable, and has at least one valid reachable target).
     function humanCanLaunchColony() {
       const minPop = (CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3000;
+      const W = gameState.map ? gameState.map.terrain[0].length : 0;
+      const wrap = !!(gameState.map && gameState.map.meta && gameState.map.meta.wrap);
+      const wxf = (x) => wrap ? ((x % W) + W) % W : x;
+      const key = (x, y) => y * W + wxf(x);
       for (const col of gameState.buildings) {
         if (col.type !== 1 || col.owner !== 'human' || col.inTransit) continue;
         if ((col.population || 0) <= minPop) continue;
         if (!canAffordBuildingAt(1, col.x, col.y, 'human')) continue;
         // Any valid reachable site within a reasonable band?
         const minD = CONFIG.minStartDistance || 20;
+        const reachable = findMovementCostsFrom(col.x, col.y, col.owner);
         for (const c of cellsWithin(col.x, col.y, minD + 12)) {
           const terr = terrainAt(c.x, c.y);
           if (terr < 2 || terr > 7) continue;
+          if (c.x === col.x && c.y === col.y) continue;
           if (hexDistance(col.x, col.y, c.x, c.y) < minD) continue;
           if (cellHasBuilding(c.x, c.y)) continue;
-          if (foundColonyTargetValid(col, c.x, c.y).ok) return true;
+          let tooClose = false;
+          for (const b of gameState.buildings) {
+            if (b.type === 1 && hexDistance(b.x, b.y, c.x, c.y) < minD) { tooClose = true; break; }
+          }
+          if (tooClose) continue;
+          if (reachable.dist.has(key(c.x, c.y))) return true;
         }
       }
       return false;
@@ -2908,7 +3072,7 @@
         "can afford. type 2=Farm, 3=Solar Panel, 4=Factory."
       ].join("\n");
 
-      const resp = await ipcRenderer.invoke("ai-chat", { system, user, maxTokens: 1024 });
+      const resp = await ipcRenderer.invoke("ai-chat", { system, user, maxTokens: 1024, timeoutMs: 8000 });
       if (!resp || !resp.ok || !resp.text) throw new Error(resp && resp.error || "no response");
       const plan = parseAIPlan(resp.text);
       if (!plan) throw new Error("unparseable plan");
@@ -3190,15 +3354,29 @@
     function aiChooseLaunchSite(host, pi) {
       const minD = CONFIG.minStartDistance || 20;
       const SEARCH = minD + 12; // search a band beyond the min spacing
+      const reachable = findMovementCostsFrom(host.x, host.y, host.owner);
+      const W = gameState.map ? gameState.map.terrain[0].length : 0;
+      const wrap = !!(gameState.map && gameState.map.meta && gameState.map.meta.wrap);
+      const wxf = (x) => wrap ? ((x % W) + W) % W : x;
+      const key = (x, y) => y * W + wxf(x);
       let best = null, bestScore = -Infinity;
       for (const c of cellsWithin(host.x, host.y, SEARCH)) {
         const terr = terrainAt(c.x, c.y);
         if (terr < 2 || terr > 7) continue;
+        if (!isPassableCell(c.x, c.y, false)) continue;
+        if (c.x === host.x && c.y === host.y) continue;
         if (cellHasBuilding(c.x, c.y)) continue;
         if (hexDistance(host.x, host.y, c.x, c.y) < minD) continue; // too close
-        const v = foundColonyTargetValid(host, c.x, c.y);
-        if (!v.ok) continue;
-        let score = 100 - v.travelTurns * 5; // prefer closer (less travel)
+        let tooClose = false;
+        for (const b of gameState.buildings) {
+          if (b.type === 1 && hexDistance(b.x, b.y, c.x, c.y) < minD) { tooClose = true; break; }
+        }
+        if (tooClose) continue;
+        const ck = key(c.x, c.y);
+        if (!reachable.dist.has(ck)) continue; // unreachable
+        const cost = reachable.dist.get(ck);
+        const travelTurns = biodomeTravelTurns(cost);
+        let score = 100 - travelTurns * 5; // prefer closer (less travel)
         if (nearRiver(c.x, c.y)) score += 60;
         if (withinCellsOfWater(c.x, c.y, 3)) score += 30;
         if (terr === 2) score += 15;         // grassland
@@ -3614,26 +3792,72 @@
       el.innerHTML = rows.join("");
     }
 
-    // Terrain color from config (HSV) lightened by `factor` (0.5 = +50%), as a
+    // Terrain color from config (HSL) lightened by `factor` (0.5 = +50%), as a
     // css rgb string. Falls back to the map's terrain color if config lacks it.
     function terrainColorLightened(id, factor) {
       const tt = CONFIG.terrainTypes && CONFIG.terrainTypes[String(id)];
       const c = tt && tt.color;
       if (c && typeof c === 'object' && c.h != null) {
-        const v = Math.min(1, (c.v != null ? c.v : 1) * (1 + factor));
-        // Reduce saturation a touch when lightening so it reads as "lighter".
-        const s = Math.max(0, (c.s != null ? c.s : 1) * (1 - factor * 0.5));
-        return hsvToRgbCss(c.h, s, v);
+        if (c.l != null) {
+          const l = Math.min(1, c.l * (1 + factor));
+          const s = Math.max(0, (c.s != null ? c.s : 1) * (1 - factor * 0.3));
+          return hslToRgbCss(c.h, s, l);
+        } else if (c.v != null) {
+          const v = Math.min(1, c.v * (1 + factor));
+          const s = Math.max(0, (c.s != null ? c.s : 1) * (1 - factor * 0.5));
+          return hsvToRgbCss(c.h, s, v);
+        }
       }
       return (hexMap && hexMap._terrainColor(id)) || "#ddd";
     }
-    // Worked-cell highlight overlay from config.workedCellColor (HSV) with the
+    // Worked-cell highlight overlay from config.workedCellColor (HSL) with the
     // given alpha. Defaults to a light red if unset.
     function workedCellOverlay(alpha) {
-      const c = CONFIG.workedCellColor || { h: 0, s: 0.6, v: 1 };
-      const rgb = hsvToRgbCss(c.h || 0, c.s != null ? c.s : 0.6, c.v != null ? c.v : 1);
+      const c = CONFIG.workedCellColor || { h: 0, s: 1, l: 0.7 };
+      if (c && typeof c === 'object' && c.l != null) {
+        return hslToRgbaCss(c.h || 0, c.s != null ? c.s : 1, c.l, alpha != null ? alpha : 1);
+      }
+      const rgb = hsvToRgbCss((c && c.h) || 0, (c && c.s != null) ? c.s : 0.6, (c && c.v != null) ? c.v : 1);
       const nums = rgb.match(/\d+/g) || [255, 100, 100];
       return `rgba(${nums[0]},${nums[1]},${nums[2]},${alpha})`;
+    }
+    // Local HSL->rgb (mirrors draw_map's hsl()).
+    function hslToRgbCss(h, s, l) {
+      h = ((h % 360) + 360) % 360;
+      s = Math.max(0, Math.min(1, s != null ? s : 1));
+      l = Math.max(0, Math.min(1, l != null ? l : 0.5));
+      const c = (1 - Math.abs(2 * l - 1)) * s;
+      const hp = h / 60;
+      const x = c * (1 - Math.abs((hp % 2) - 1));
+      let r = 0, g = 0, b = 0;
+      if (hp >= 0 && hp < 1) { r = c; g = x; b = 0; }
+      else if (hp >= 1 && hp < 2) { r = x; g = c; b = 0; }
+      else if (hp >= 2 && hp < 3) { r = 0; g = c; b = x; }
+      else if (hp >= 3 && hp < 4) { r = 0; g = x; b = c; }
+      else if (hp >= 4 && hp < 5) { r = x; g = 0; b = c; }
+      else if (hp >= 5 && hp < 6) { r = c; g = 0; b = x; }
+      const m = l - c / 2;
+      const to = (val) => Math.max(0, Math.min(255, Math.floor(val * 256)));
+      return `rgb(${to(r + m)},${to(g + m)},${to(b + m)})`;
+    }
+    // Local HSL->rgba (mirrors draw_map's hsla()).
+    function hslToRgbaCss(h, s, l, a) {
+      h = ((h % 360) + 360) % 360;
+      s = Math.max(0, Math.min(1, s != null ? s : 1));
+      l = Math.max(0, Math.min(1, l != null ? l : 0.5));
+      const c = (1 - Math.abs(2 * l - 1)) * s;
+      const hp = h / 60;
+      const x = c * (1 - Math.abs((hp % 2) - 1));
+      let r = 0, g = 0, b = 0;
+      if (hp >= 0 && hp < 1) { r = c; g = x; b = 0; }
+      else if (hp >= 1 && hp < 2) { r = x; g = c; b = 0; }
+      else if (hp >= 2 && hp < 3) { r = 0; g = c; b = x; }
+      else if (hp >= 3 && hp < 4) { r = 0; g = x; b = c; }
+      else if (hp >= 4 && hp < 5) { r = x; g = 0; b = c; }
+      else if (hp >= 5 && hp < 6) { r = c; g = 0; b = x; }
+      const m = l - c / 2;
+      const to = (val) => Math.max(0, Math.min(255, Math.floor(val * 256)));
+      return `rgba(${to(r + m)},${to(g + m)},${to(b + m)},${a != null ? a : 1})`;
     }
     // Local HSV->rgb (mirrors draw_map's hsv()).
     function hsvToRgbCss(h, s, v) {
@@ -3646,8 +3870,22 @@
         case 2: r=p; g=v; b=t; break; case 3: r=p; g=q; b=v; break;
         case 4: r=t; g=p; b=v; break; case 5: r=v; g=p; b=q; break;
       }
-      const to = (x) => Math.min(255, Math.floor(x * 256));
+      const to = (x) => Math.max(0, Math.min(255, Math.floor(x * 256)));
       return `rgb(${to(r)},${to(g)},${to(b)})`;
+    }
+    // Local HSV->rgba (mirrors draw_map's hsva()).
+    function hsvToRgbaCss(h, s, v, a) {
+      let r, g, b;
+      const f = h / 60 - Math.floor(h / 60);
+      h = Math.floor(h / 60) % 6;
+      const p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+      switch (h) {
+        case 0: r=v; g=t; b=p; break; case 1: r=q; g=v; b=p; break;
+        case 2: r=p; g=v; b=t; break; case 3: r=p; g=q; b=v; break;
+        case 4: r=t; g=p; b=v; break; case 5: r=v; g=p; b=q; break;
+      }
+      const to = (x) => Math.max(0, Math.min(255, Math.floor(x * 256)));
+      return `rgba(${to(r)},${to(g)},${to(b)},${a != null ? a : 1})`;
     }
 
     function toggleWorked(k) {
@@ -3724,12 +3962,35 @@
     }));
 
     // ---- Turn menu: End Turn ----------------------------------------------
-    // The human ends their turn. (Player moves aren't implemented yet, so the
-    // human has "no moves" once their colony is placed and we auto-advance;
-    // this handler covers a manual End Turn as well.)
-    ipcRenderer.on("end-turn", () => {
+    // The human ends their turn. Dismisses any active timeout dialogs (such as
+    // Year Beginning or Auto End turn, or notification toast) and advances.
+    function endTurn() {
+      if (turnStartOverlay && !turnStartOverlay.hidden) {
+        _closeTurnStart();
+      }
+      if (_notifyShowing) {
+        _notifyShowNext();
+      }
       const p = gameState.players && gameState.players[gameState.currentPlayer];
       if (p && p.kind === 'human') advanceTurn();
+    }
+    ipcRenderer.on("end-turn", () => {
+      endTurn();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const tag = e.target && e.target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || (e.target && e.target.isContentEditable)) {
+          return;
+        }
+        if (nameOverlay && !nameOverlay.hidden) return;
+        if (viewlocOverlay && !viewlocOverlay.hidden) return;
+        if (workOverlay && !workOverlay.hidden) return;
+
+        e.preventDefault();
+        endTurn();
+      }
     });
 
     // ---- player setup ------------------------------------------------------
@@ -3741,7 +4002,7 @@
       }
       const minT = CONFIG.aiPlacementMinTurns || 3;
       const maxT = CONFIG.aiPlacementMaxTurns || 200;
-      const players = [{ id: 0, kind: 'human', name: 'You', placed: false, modules: 1 }];
+      const players = [{ id: 0, kind: 'human', name: gameState.playerName || 'Human', placed: false, modules: 1 }];
       const n = Math.max(0, Math.min(aiCount, CONFIG.maxAIs || 40, names.length));
       for (let i = 0; i < n; i++) {
         players.push({
@@ -3778,10 +4039,13 @@
         turn: (extra && extra.turn) != null ? extra.turn : 0,
         currentPlayer: (extra && extra.currentPlayer) != null ? extra.currentPlayer : 0,
         resources: (extra && extra.resources) || { material: 0, food: 0, energy: 0, wealth: 0 },
-        rates: (extra && extra.rates) || { food: 0, material: 0, energy: 0, happiness: 0 },
-        playerName: (extra && extra.playerName) || "Human",
+        rates: (extra && extra.rates) || { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 },
+        playerName: (extra && (extra.playerName || (extra.players && extra.players[0] && extra.players[0].kind === 'human' && extra.players[0].name))) || gameState.playerName || "Human",
         transport: (extra && extra.transport) || null
       };
+      if (gameState.players && gameState.players[0] && gameState.players[0].kind === 'human') {
+        gameState.players[0].name = gameState.playerName;
+      }
       _riverCellSet = null;
       _origRiverCells = null;
       _riverEdgeSet = null;
@@ -3830,7 +4094,13 @@
         buildings: gameState.buildings,
         buildingTypes: CONFIG.buildingTypes || null,
         terrainTypes: CONFIG.terrainTypes || null,
-        bridgeColor: CONFIG.bridgeColor || "#e0322c",
+        bridgeColor: CONFIG.bridgeColor,
+        roadColor: CONFIG.roadColor,
+        monorailColor: CONFIG.monorailColor,
+        riverColor: CONFIG.riverColor,
+        canalColor: CONFIG.canalColor,
+        planningPathColor: CONFIG.planningPathColor,
+        underConstructionColor: CONFIG.underConstructionColor,
         zoneOfControlSize: CONFIG.zoneOfControlSize || null,
         aiCount: (gameState.players || []).filter((p) => p.kind === 'ai').length,
         resourcePath: "resources/terrain",
@@ -3841,7 +4111,6 @@
       });
       hexMap.start();
       updateStatus(null);
-      updateResourcesPanel();
       updatePlayerPanel();
       if (hexMap.setTransport) hexMap.setTransport(ensureTransport());
 

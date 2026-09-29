@@ -126,20 +126,32 @@ body.dark #player-panel { background: #2c2c2e; color: #ddd; border-color: #444; 
   border: 1px solid #0a84ff; border-radius: 4px; background: #fff; color: #1e1e1e;
 }
 body.dark #player-panel .player-name input { background: #3a3a3c; color: #e0e0e0; }
-#player-panel .player-pop { font-variant-numeric: tabular-nums; }
+#player-panel .player-pop,
+#player-panel .player-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+#player-panel .player-rate {
+  color: #2a8;
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+  text-align: right;
+  white-space: nowrap;
+}
+body.dark #player-panel .player-rate { color: #6d9; }
 
-/* Resources panel (below minimap). */
-#resources {
+/* Buildings panel (below player panel). */
+#buildings-panel {
   border: 1px solid gray; background: #eee; color: #1e1e1e;
   font: 12px Calibri, sans-serif; padding: 6px 8px; border-radius: 4px;
 }
-body.dark #resources { background: #2c2c2e; color: #ddd; border-color: #444; }
-#resources .res-title { font-weight: 700; margin-bottom: 4px; }
-#resources .res-table { width: 100%; border-collapse: collapse; }
-#resources .res-table td { padding: 1px 2px; }
-#resources .res-table td:nth-child(2) { text-align: right; font-variant-numeric: tabular-nums; }
-#resources .res-rate { text-align: right; color: #2a8; font-variant-numeric: tabular-nums; }
-body.dark #resources .res-rate { color: #6d9; }
+body.dark #buildings-panel { background: #2c2c2e; color: #ddd; border-color: #444; }
+#buildings-panel .bldg-panel-title { font-weight: 700; margin-bottom: 4px; }
+#buildings-panel .bldg-stat { font-variant-numeric: tabular-nums; }
+
 
 /* Work-assignment modal (double-click a biodome). */
 #work-overlay {

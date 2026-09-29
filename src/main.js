@@ -505,7 +505,7 @@ function buildSaveObject(gameState) {
     turn: (gameState && gameState.turn) != null ? gameState.turn : 0,
     currentPlayer: (gameState && gameState.currentPlayer) != null ? gameState.currentPlayer : 0,
     resources: (gameState && gameState.resources) || { material: 0, food: 0, energy: 0, wealth: 0 },
-    rates: (gameState && gameState.rates) || { food: 0, material: 0, energy: 0, happiness: 0 },
+    rates: (gameState && gameState.rates) || { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 },
     playerName: (gameState && gameState.playerName) || "Human",
     // Transport network (roads/monorails/canals/bridges/airports + build plans).
     transport: (gameState && gameState.transport) || null
@@ -680,8 +680,8 @@ async function loadGame() {
     turn: parsed.turn != null ? parsed.turn : 0,
     currentPlayer: parsed.currentPlayer != null ? parsed.currentPlayer : 0,
     resources: parsed.resources || { material: 0, food: 0, energy: 0, wealth: 0 },
-    rates: parsed.rates || { food: 0, material: 0, energy: 0, happiness: 0 },
-    playerName: parsed.playerName || "Human",
+    rates: parsed.rates || { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 },
+    playerName: parsed.playerName || (parsed.players && parsed.players[0] && parsed.players[0].kind === 'human' && parsed.players[0].name) || "Human",
     transport: parsed.transport || null
   };
   const send = () => {

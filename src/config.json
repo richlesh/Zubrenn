@@ -3,7 +3,7 @@
     "1": {
       "name": "Sea",
       "icon": "Port of Taganrog.png",
-      "color": { "h": 240, "s": 1, "v": 0.5 },
+      "color": { "h": 240, "s": 1, "l": 0.25 },
       "movement": [1000, 1, 0.75, 0.2, 0.1],
       "base": { "food": 1, "material": 0 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
@@ -13,7 +13,7 @@
     "2": {
       "name": "Grassland",
       "icon": "Open Square Path Grass.png",
-      "color": { "h": 120, "s": 0.8, "v": 1 },
+      "color": { "h": 120, "s": 1, "l": 0.6 },
       "movement": [2, 1, 0.75, 0.2, 0.1],
       "base": { "food": 2, "material": 1 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
@@ -23,7 +23,7 @@
     "3": {
       "name": "Hills",
       "icon": "Just Add Bison.png",
-      "color": { "h": 90, "s": 0.7, "v": 0.8 },
+      "color": { "h": 90, "s": 0.583, "l": 0.52 },
       "movement": [3, 1, 0.75, 0.2, 0.1],
       "base": { "food": 1, "material": 2 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
@@ -33,7 +33,7 @@
     "4": {
       "name": "Forest",
       "icon": "Shrub Cover.png",
-      "color": { "h": 120, "s": 1, "v": 0.6 },
+      "color": { "h": 120, "s": 1, "l": 0.3 },
       "movement": [4, 1, 0.75, 0.2, 0.1],
       "base": { "food": 1, "material": 2 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
@@ -43,7 +43,7 @@
     "5": {
       "name": "Jungle",
       "icon": "Deep Forest.png",
-      "color": { "h": 120, "s": 1, "v": 0.3 },
+      "color": { "h": 120, "s": 1, "l": 0.15 },
       "movement": [5, 1, 0.75, 0.2, 0.1],
       "base": { "food": 1, "material": 2 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
@@ -53,7 +53,7 @@
     "6": {
       "name": "Desert",
       "icon": "Slush.png",
-      "color": { "h": 60, "s": 0.75, "v": 0.75 },
+      "color": { "h": 60, "s": 0.6, "l": 0.469 },
       "movement": [2, 1, 0.75, 0.2, 0.1],
       "base": { "food": 0, "material": 0 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
@@ -63,7 +63,7 @@
     "7": {
       "name": "Mountain-Low",
       "icon": "Dense Pine Forest.png",
-      "color": { "h": 120, "s": 0.9, "v": 0.5 },
+      "color": { "h": 120, "s": 0.818, "l": 0.275 },
       "movement": [4, 1, 1000, 0.2, 0.1],
       "base": { "food": 0, "material": 3 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
@@ -73,7 +73,7 @@
     "8": {
       "name": "Mountain-High",
       "icon": "Age of the Canyon.png",
-      "color": { "h": 30, "s": 0.5, "v": 0.3 },
+      "color": { "h": 30, "s": 0.333, "l": 0.225 },
       "movement": [5, 1, 1000, 0.2, 0.1],
       "base": { "food": 0, "material": 4 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
@@ -83,7 +83,7 @@
     "9": {
       "name": "Frozen",
       "icon": "Polar Zone.png",
-      "color": { "h": 0, "s": 0, "v": 1 },
+      "color": { "h": 0, "s": 0, "l": 1 },
       "movement": [2, 1, 1000, 0.2, 0.1],
       "base": { "food": 0, "material": 0 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
@@ -92,7 +92,13 @@
     }
   },
   "bridgeCost": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
-  "bridgeColor": "#e0322c",
+  "bridgeColor": { "h": 0, "s": 0.75, "l": 0.5 },
+  "roadColor": { "h": 30, "s": 0.5, "l": 0.35 },
+  "monorailColor": { "h": 40, "s": 1.0, "l": 0.5 },
+  "riverColor": { "h": 240, "s": 1, "l": 0.5 },
+  "canalColor": { "h": 240, "s": 1, "l": 0.75 },
+  "planningPathColor": { "h": 120, "s": 0.75, "l": 0.5 },
+  "underConstructionColor": { "h": 0, "s": 0, "l": 0.5 },
   "maxAIs": 40,
   "minStartDistance": 6,
   "startingYear": 2500,
@@ -119,7 +125,7 @@
   "canalVertexClickPixels": 10,
   "canalVertexClickFrac": 0.28,
   "maxAltitudeMeters": 8000,
-  "workedCellColor": { "h": 0, "s": 0.6, "v": 1 },
+  "workedCellColor": { "h": 0, "s": 1, "l": 0.7 },
   "launchPathColor": { "h": 120, "s": 0.7, "l": 0.45 },
   "buildingTypes": {
     "1": {

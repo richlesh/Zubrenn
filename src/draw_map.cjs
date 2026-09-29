@@ -33,17 +33,55 @@
 // --- Color model (matches hexgrid5.html terrain_colors) --------------------
 
 function rgb(r, g, b) {
-  r = Math.min(255, Math.floor(r * 256));
-  g = Math.min(255, Math.floor(g * 256));
-  b = Math.min(255, Math.floor(b * 256));
+  r = Math.max(0, Math.min(255, Math.floor(r * 256)));
+  g = Math.max(0, Math.min(255, Math.floor(g * 256)));
+  b = Math.max(0, Math.min(255, Math.floor(b * 256)));
   return `rgb(${r},${g},${b})`;
 }
 
 function rgba(r, g, b, a) {
-  r = Math.min(255, Math.floor(r * 256));
-  g = Math.min(255, Math.floor(g * 256));
-  b = Math.min(255, Math.floor(b * 256));
-  return `rgba(${r},${g},${b},${a})`;
+  r = Math.max(0, Math.min(255, Math.floor(r * 256)));
+  g = Math.max(0, Math.min(255, Math.floor(g * 256)));
+  b = Math.max(0, Math.min(255, Math.floor(b * 256)));
+  return `rgba(${r},${g},${b},${a != null ? a : 1})`;
+}
+
+// HSL -> css rgb string (h[0,360) s[0,1] l[0,1])
+function hsl(h, s, l) {
+  h = ((h % 360) + 360) % 360;
+  s = Math.max(0, Math.min(1, s != null ? s : 1));
+  l = Math.max(0, Math.min(1, l != null ? l : 0.5));
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const hp = h / 60;
+  const x = c * (1 - Math.abs((hp % 2) - 1));
+  let r = 0, g = 0, b = 0;
+  if (hp >= 0 && hp < 1) { r = c; g = x; b = 0; }
+  else if (hp >= 1 && hp < 2) { r = x; g = c; b = 0; }
+  else if (hp >= 2 && hp < 3) { r = 0; g = c; b = x; }
+  else if (hp >= 3 && hp < 4) { r = 0; g = x; b = c; }
+  else if (hp >= 4 && hp < 5) { r = x; g = 0; b = c; }
+  else if (hp >= 5 && hp < 6) { r = c; g = 0; b = x; }
+  const m = l - c / 2;
+  return rgb(r + m, g + m, b + m);
+}
+
+// HSL -> css rgba string (h[0,360) s[0,1] l[0,1], a[0,1])
+function hsla(h, s, l, a) {
+  h = ((h % 360) + 360) % 360;
+  s = Math.max(0, Math.min(1, s != null ? s : 1));
+  l = Math.max(0, Math.min(1, l != null ? l : 0.5));
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const hp = h / 60;
+  const x = c * (1 - Math.abs((hp % 2) - 1));
+  let r = 0, g = 0, b = 0;
+  if (hp >= 0 && hp < 1) { r = c; g = x; b = 0; }
+  else if (hp >= 1 && hp < 2) { r = x; g = c; b = 0; }
+  else if (hp >= 2 && hp < 3) { r = 0; g = c; b = x; }
+  else if (hp >= 3 && hp < 4) { r = 0; g = x; b = c; }
+  else if (hp >= 4 && hp < 5) { r = x; g = 0; b = c; }
+  else if (hp >= 5 && hp < 6) { r = c; g = 0; b = x; }
+  const m = l - c / 2;
+  return rgba(r + m, g + m, b + m, a != null ? a : 1);
 }
 
 // HSV -> css rgb string (h[0,360) s[0,1] v[0,1])
@@ -65,6 +103,101 @@ function hsv(h, s, v) {
   return rgb(r, g, b);
 }
 
+// HSV -> css rgba string (h[0,360) s[0,1] v[0,1], a[0,1])
+function hsva(h, s, v, a) {
+  let r, g, b;
+  const f = h / 60 - Math.floor(h / 60);
+  h = Math.floor(h / 60) % 6;
+  const p = v * (1 - s);
+  const q = v * (1 - f * s);
+  const t = v * (1 - (1 - f) * s);
+  switch (h) {
+    case 0: r = v; g = t; b = p; break;
+    case 1: r = q; g = v; b = p; break;
+    case 2: r = p; g = v; b = t; break;
+    case 3: r = p; g = q; b = v; break;
+    case 4: r = t; g = p; b = v; break;
+    case 5: r = v; g = p; b = q; break;
+  }
+  return rgba(r, g, b, a != null ? a : 1);
+}
+
+function resolveColor(c, fallback) {
+  if (c && typeof c === 'object') {
+    if (c.l != null) {
+      return hsl(c.h, c.s != null ? c.s : 1, c.l);
+    }
+    if (c.v != null) {
+      return hsv(c.h, c.s != null ? c.s : 1, c.v);
+    }
+    if (c.h != null) {
+      return hsl(c.h, c.s != null ? c.s : 1, 0.5);
+    }
+  }
+  if (typeof c === 'string' && c) return c;
+  if (fallback && typeof fallback === 'object') {
+    if (fallback.l != null) {
+      return hsl(fallback.h, fallback.s != null ? fallback.s : 1, fallback.l);
+    }
+    if (fallback.v != null) {
+      return hsv(fallback.h, fallback.s != null ? fallback.s : 1, fallback.v);
+    }
+    if (fallback.h != null) {
+      return hsl(fallback.h, fallback.s != null ? fallback.s : 1, 0.5);
+    }
+  }
+  return fallback || '#000000';
+}
+
+function resolveColorAlpha(c, alpha, fallback) {
+  if (c && typeof c === 'object') {
+    if (c.l != null) {
+      return hsla(c.h, c.s != null ? c.s : 1, c.l, alpha != null ? alpha : 1);
+    }
+    if (c.v != null) {
+      return hsva(c.h, c.s != null ? c.s : 1, c.v, alpha != null ? alpha : 1);
+    }
+    if (c.h != null) {
+      return hsla(c.h, c.s != null ? c.s : 1, 0.5, alpha != null ? alpha : 1);
+    }
+  }
+  if (typeof c === 'string' && c) {
+    if (c.startsWith('#')) {
+      let hex = c.slice(1);
+      if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
+      const r = parseInt(hex.slice(0, 2), 16) / 255;
+      const g = parseInt(hex.slice(2, 4), 16) / 255;
+      const b = parseInt(hex.slice(4, 6), 16) / 255;
+      return rgba(r, g, b, alpha != null ? alpha : 1);
+    }
+    if (c.startsWith('rgb(')) {
+      const nums = c.match(/\d+/g);
+      if (nums && nums.length >= 3) {
+        return `rgba(${nums[0]},${nums[1]},${nums[2]},${alpha != null ? alpha : 1})`;
+      }
+    }
+    if (c.startsWith('hsl(')) {
+      const m = c.match(/hsl\s*\(\s*([\d.]+)\s*,\s*([\d.]+%?)\s*,\s*([\d.]+%?)\s*\)/);
+      if (m) {
+        return `hsla(${m[1]},${m[2]},${m[3]},${alpha != null ? alpha : 1})`;
+      }
+    }
+    return c;
+  }
+  if (fallback && typeof fallback === 'object') {
+    if (fallback.l != null) {
+      return hsla(fallback.h, fallback.s != null ? fallback.s : 1, fallback.l, alpha != null ? alpha : 1);
+    }
+    if (fallback.v != null) {
+      return hsva(fallback.h, fallback.s != null ? fallback.s : 1, fallback.v, alpha != null ? alpha : 1);
+    }
+    if (fallback.h != null) {
+      return hsla(fallback.h, fallback.s != null ? fallback.s : 1, 0.5, alpha != null ? alpha : 1);
+    }
+  }
+  return fallback || `rgba(0,0,0,${alpha != null ? alpha : 1})`;
+}
+
 // Light control color for the Area-of-Control view.
 //   human -> hue 0; AI player index i -> hue 360 * i / (aiCount + 1).
 // Light = high lightness, moderate saturation, so land reads as tinted.
@@ -78,17 +211,17 @@ function controlColor(owner, aiCount) {
 
 // Parallel arrays indexed by terrain tile id (0 unused). Mirrors hexgrid5.html.
 const TERRAIN_COLORS = [
-  hsv(0, 0, 0),       // 0 undefined
-  hsv(240, 1, 0.5),   // 1 sea
-  hsv(120, 0.8, 1),   // 2 grassland
-  hsv(90, 0.7, 0.8),  // 3 hills
-  hsv(120, 1, 0.6),   // 4 forest
-  hsv(120, 1, 0.3),   // 5 jungle
-  hsv(60, 0.75, 0.75),// 6 desert
-  hsv(120, 0.9, 0.5), // 7 mountain-low
-  hsv(30, 0.5, 0.3),  // 8 mountain-high
-  hsv(0, 0, 1),       // 9 frozen
-  hsv(240, 1, 1)      // 10 river
+  hsl(0, 0, 0),        // 0 undefined
+  hsl(240, 1, 0.25),   // 1 sea
+  hsl(120, 1, 0.6),    // 2 grassland
+  hsl(90, 0.583, 0.52),// 3 hills
+  hsl(120, 1, 0.3),    // 4 forest
+  hsl(120, 1, 0.15),   // 5 jungle
+  hsl(60, 0.6, 0.469), // 6 desert
+  hsl(120, 0.818, 0.275), // 7 mountain-low
+  hsl(30, 0.333, 0.225),  // 8 mountain-high
+  hsl(0, 0, 1),        // 9 frozen
+  hsl(240, 1, 0.5)     // 10 river
 ];
 
 const TERRAIN_NAMES = [
@@ -217,7 +350,13 @@ class HexMap {
     this.buildings = opts.buildings || [];   // [{ x, y, type, owner, name }]
     this.buildingTypes = opts.buildingTypes || null; // config building-type map
     this.terrainTypes = opts.terrainTypes || null;   // config terrain-type map (name+icon)
-    this.bridgeColor = opts.bridgeColor || "#e0322c"; // bridge line color
+    this.bridgeColor = opts.bridgeColor || { h: 2, s: 0.746, l: 0.528 }; // bridge line color
+    this.roadColor = opts.roadColor || { h: 30, s: 0.538, l: 0.351 };
+    this.monorailColor = opts.monorailColor || { h: 220, s: 0.155, l: 0.811 };
+    this.riverColor = opts.riverColor || { h: 240, s: 1, l: 0.5 };
+    this.canalColor = opts.canalColor || { h: 240, s: 1, l: 0.5 };
+    this.planningPathColor = opts.planningPathColor || { h: 120, s: 0.667, l: 0.48 };
+    this.underConstructionColor = opts.underConstructionColor || { h: 0, s: 0, l: 0.5 };
     this.buildingIcons = {};                  // type -> loaded Image
     this.aiCount = opts.aiCount || 0;         // number of AI players (for control colors)
     this.controlMode = false;                 // Area-of-Control view toggle
@@ -489,13 +628,13 @@ class HexMap {
     return (tt && tt.icon) || TERRAIN_IMAGES[id] || null;
   }
   // Terrain fill color (css string) for a tile id. config.terrainTypes[id].color
-  // is an HSV object { h, s, v }; convert via hsv(). Falls back to the built-in
-  // TERRAIN_COLORS. (A plain string color is also accepted for flexibility.)
+  // is an HSL object { h, s, l } (or HSV { h, s, v }); convert via resolveColor().
+  // Falls back to the built-in TERRAIN_COLORS. (A plain string color is also accepted for flexibility.)
   _terrainColor(id) {
     const tt = this.terrainTypes && this.terrainTypes[String(id)];
     const c = tt && tt.color;
     if (c && typeof c === 'object' && c.h != null) {
-      return hsv(c.h, c.s != null ? c.s : 1, c.v != null ? c.v : 1);
+      return resolveColor(c, TERRAIN_COLORS[id] || TERRAIN_COLORS[0]);
     }
     if (typeof c === 'string' && c) return c;
     return TERRAIN_COLORS[id] || TERRAIN_COLORS[0];
@@ -815,11 +954,11 @@ class HexMap {
     };
     // Roads brown, monorails silver — center-to-center, uniform width. A cell
     // never carries both (a monorail replaces a road on that cell).
-    linkKind(roadsSet, "#8a5a2b", lineW);   // road (brown)
-    linkKind(monoSet, "#c8cdd6", lineW);    // monorail (silver)
+    linkKind(roadsSet, resolveColor(this.roadColor, "#8a5a2b"), lineW);   // road
+    linkKind(monoSet, resolveColor(this.monorailColor, "#c8cdd6"), lineW);    // monorail
 
     // Canals drawn along the shared edge, in the same blue as rivers.
-    ctx.strokeStyle = (typeof TERRAIN_COLORS !== 'undefined' && TERRAIN_COLORS[10]) || 'rgb(0,80,255)';
+    ctx.strokeStyle = resolveColor(this.canalColor, resolveColor(this.riverColor, (typeof TERRAIN_COLORS !== 'undefined' && TERRAIN_COLORS[10]) || 'rgb(0,80,255)'));
     ctx.lineWidth = Math.max(2, lineW); ctx.lineCap = "round";
     for (const ek of canalSet) {
       const [ka, kb] = ek.split("|"); const a = parseCell(ka), b = parseCell(kb);
@@ -842,7 +981,7 @@ class HexMap {
     // Bridges (red): a road/monorail edge crossing a river or sea. Drawn as a
     // red line between the two cell centers, on top of the road/monorail.
     if (bridgeSet.size) {
-      ctx.strokeStyle = this.bridgeColor || "#e0322c";
+      ctx.strokeStyle = resolveColor(this.bridgeColor, "#e0322c");
       ctx.lineWidth = lineW; ctx.lineCap = "round";
       for (const ek of bridgeSet) {
         const [ka, kb] = ek.split("|"); const a = parseCell(ka), b = parseCell(kb);
@@ -870,7 +1009,7 @@ class HexMap {
   // cell centers), so the water sits on cell boundaries rather than centers.
   _drawRivers(ctx, spacing) {
     if (!this.rivers || !this.rivers.length) return;
-    const riverColor = TERRAIN_COLORS[10] || 'rgb(0,80,255)';
+    const riverColor = resolveColor(this.riverColor, (typeof TERRAIN_COLORS !== 'undefined' && TERRAIN_COLORS[10]) || 'rgb(0,80,255)');
     const width = Math.max(2, spacing.y / 6);
 
     ctx.save();
@@ -924,9 +1063,9 @@ class HexMap {
             ctx.save();
             ctx.globalAlpha = 0.45;
             ctx.drawImage(icon, cx - size / 2, cy - size / 2, size, size);
-            // gray tint overlay on the icon box
+            // tint overlay on the icon box
             ctx.globalAlpha = 0.5;
-            ctx.fillStyle = 'rgb(128,128,128)';
+            ctx.fillStyle = resolveColor(this.underConstructionColor, 'rgb(128,128,128)');
             ctx.fillRect(cx - size / 2, cy - size / 2, size, size);
             ctx.restore();
           } else {
@@ -937,7 +1076,7 @@ class HexMap {
           // icon file is missing. Colonies (type 1) get a dome; others a square.
           ctx.save();
           if (underConstruction) ctx.globalAlpha = 0.5;
-          ctx.fillStyle = underConstruction ? 'rgba(160,160,160,0.85)' : 'rgba(255,255,255,0.85)';
+          ctx.fillStyle = underConstruction ? resolveColorAlpha(this.underConstructionColor, 0.85, 'rgba(160,160,160,0.85)') : 'rgba(255,255,255,0.85)';
           ctx.strokeStyle = 'rgba(0,0,0,0.8)';
           ctx.lineWidth = Math.max(1, spacing.y / 24);
           ctx.beginPath();
@@ -1411,4 +1550,4 @@ class HexMap {
   }
 }
 
-module.exports = { HexMap, TERRAIN_COLORS, TERRAIN_NAMES, TERRAIN_IMAGES };
+module.exports = { HexMap, TERRAIN_COLORS, TERRAIN_NAMES, TERRAIN_IMAGES, hsl, hsla, hsv, hsva, resolveColor, resolveColorAlpha };
