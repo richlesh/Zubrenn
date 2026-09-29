@@ -180,6 +180,15 @@ own stored resources. Each year it computes, from its **worked** cells only:
   stored** (up to the storage cap); if net is negative the **shortfall is drawn
   from storage**.
 
+**Connected colonies share resources.** If a colony's own storage can't cover a
+shortfall, it draws the difference from other colonies **you own that are
+connected to it** — either by a **road/monorail path** between their biodomes, or
+by a **connected river/canal path** touching a corner of each colony. It pulls
+from whichever connected colony currently **stores the most** of that resource.
+Only if no connected colony can cover it does the colony go over budget. So
+linking colonies with roads, monorails, or canals lets a rich colony prop up a
+struggling neighbour instead of forcing it to idle buildings.
+
 If storage for any resource would drop **below 0**, the colony is **over
 budget** and cannot sustain its worked buildings. Reduce your yearly needs by
 **idling buildings** — deselect (unwork) their cells so they stop consuming

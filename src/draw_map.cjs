@@ -1250,6 +1250,26 @@ class HexMap {
     this.canvas.addEventListener('dblclick', this._bound.dblclick);
     if (this.birdseye) this.birdseye.addEventListener('click', this._bound.birdseyeClick);
     window.addEventListener('resize', this._bound.resize);
+
+    // The window 'resize' event does NOT fire when the canvas gains its real
+    // size purely from layout (e.g. the game panel is un-hidden and the flex
+    // frame lays out a beat later). Before this, the map was fitted to a stale
+    // or zero canvas size, so pointer->hex math (right-click menus, build
+    // planning/under-construction overlays) was wrong until some later real
+    // resize — which is why opening DevTools (it fires 'resize') "fixed" it.
+    // A ResizeObserver fires as soon as the element is actually laid out and on
+    // every subsequent size change, so the viewport always matches what's on
+    // screen.
+    if (typeof ResizeObserver === 'function') {
+      this._resizeObserver = new ResizeObserver(() => {
+        // Only re-fit when the displayed box differs from the backing store, to
+        // avoid a feedback loop (we set canvas.width/height inside _onResize).
+        const w = Math.max(100, Math.floor(this.canvas.clientWidth || 0));
+        const h = Math.max(100, Math.floor(this.canvas.clientHeight || 0));
+        if (w !== this.canvas.width || h !== this.canvas.height) this._onResize();
+      });
+      try { this._resizeObserver.observe(this.canvas); } catch (e) {}
+    }
   }
 
   _detachEvents() {
@@ -1260,6 +1280,10 @@ class HexMap {
     this.canvas.removeEventListener('dblclick', this._bound.dblclick);
     if (this.birdseye) this.birdseye.removeEventListener('click', this._bound.birdseyeClick);
     window.removeEventListener('resize', this._bound.resize);
+    if (this._resizeObserver) {
+      try { this._resizeObserver.disconnect(); } catch (e) {}
+      this._resizeObserver = null;
+    }
     this._hideTooltip();
   }
 

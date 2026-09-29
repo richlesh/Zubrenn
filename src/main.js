@@ -130,6 +130,44 @@ function showAbout() {
   aboutWin.on("closed", () => { aboutWin = null; });
 }
 
+let backstoryWin;
+function showBackstory() {
+  if (backstoryWin && !backstoryWin.isDestroyed()) return backstoryWin.focus();
+  backstoryWin = new BrowserWindow({
+    width: 720,
+    height: 620,
+    resizable: true,
+    minimizable: false,
+    maximizable: true,
+    parent: mainWin,
+    modal: true,
+    icon: appIcon,
+    backgroundColor: "#000000",
+    show: false,
+    webPreferences: { nodeIntegration: true, contextIsolation: false }
+  });
+  backstoryWin.setMenuBarVisibility(false);
+  backstoryWin.loadFile(path.join(__dirname, "backstory.html"));
+  backstoryWin.once("ready-to-show", () => {
+    if (mainWin && !mainWin.isDestroyed()) {
+      const [px, py] = mainWin.getPosition();
+      const [pw, ph] = mainWin.getSize();
+      const [w, h] = backstoryWin.getSize();
+      backstoryWin.setPosition(Math.round(px + (pw - w) / 2), Math.round(py + (ph - h) / 2));
+    }
+    backstoryWin.show();
+  });
+  // Register a fresh close handler per open, and always remove it when the
+  // window goes away (whether closed via the Skip button or the OS), so a later
+  // reopen from Help ▸ Backstory can register again without conflict.
+  ipcMain.removeHandler("close-backstory");
+  ipcMain.handle("close-backstory", () => backstoryWin?.close());
+  backstoryWin.on("closed", () => {
+    ipcMain.removeHandler("close-backstory");
+    backstoryWin = null;
+  });
+}
+
 function buildViewMenu() {
   const isMac = process.platform === "darwin";
   const ours = gameColonies.filter((c) => c.kind === "human");
@@ -244,6 +282,13 @@ function buildMenu() {
           { type: "separator" },
           { role: "front" },
         ] : []),
+      ]
+    },
+    {
+      role: "help",
+      label: "Help",
+      submenu: [
+        { label: "Backstory", click: showBackstory }
       ]
     }
   ];
@@ -715,7 +760,12 @@ function showSplash(nagOnly) {
 
   const handler = () => {
     if (!splash.isDestroyed()) splash.close();
-    if (!nagOnly) createWindow();
+    if (!nagOnly) {
+      const win = createWindow();
+      // After the splash is dismissed, roll the backstory crawl once the main
+      // window has loaded (it can also be reopened from Help ▸ Backstory).
+      win.webContents.once("did-finish-load", () => showBackstory());
+    }
   };
   ipcMain.once("splash-close", handler);
   splash.on("closed", () => ipcMain.removeListener("splash-close", handler));

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Zubrenn — Backstory</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      background: #000;
+      color: #6dffa8;                 /* glowing green */
+      font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+      position: relative;
+      opacity: 1;
+      transition: opacity 1.6s ease;
+    }
+    /* Fade the whole screen (crawl + stars) to black before auto-close. */
+    body.fading { opacity: 0; }
+    /* Starfield backdrop. */
+    #stars, #stars2, #stars3 {
+      position: absolute; inset: 0; background: transparent; pointer-events: none;
+    }
+    #stars  { box-shadow: none; }
+
+    /* Flat, straight-up movie crawl viewport (no 3D tilt). */
+    #viewport {
+      position: absolute; inset: 0;
+      display: flex; justify-content: center;
+      /* gently fade the very top and bottom edges into black */
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%);
+      mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%);
+      overflow: hidden;
+    }
+    #crawl {
+      position: absolute;
+      top: 100%;
+      width: min(80%, 720px);
+      text-align: center;
+      animation: crawl var(--crawl-secs, 60s) linear forwards;
+    }
+    #crawl h2 {
+      text-align: center;
+      font-size: 30px;
+      letter-spacing: 1px;
+      margin: 0 0 28px;
+      text-transform: uppercase;
+      color: #9dffc4;
+      text-shadow: 0 0 8px rgba(80, 255, 150, 0.9), 0 0 18px rgba(60, 220, 130, 0.6);
+    }
+    #crawl p {
+      font-size: 22px;
+      line-height: 1.6;
+      margin: 0 0 22px;
+      font-weight: 600;
+      text-shadow: 0 0 6px rgba(80, 255, 150, 0.85), 0 0 14px rgba(60, 220, 130, 0.55);
+    }
+    #crawl strong { color: #c6ffdd; text-shadow: 0 0 8px rgba(120, 255, 180, 0.95), 0 0 20px rgba(80, 240, 150, 0.7); }
+    @keyframes crawl {
+      0%   { top: 100%;   opacity: 1; }
+      92%  { opacity: 1; }
+      100% { top: -220%;  opacity: 0; }
+    }
+
+    /* Controls. */
+    #controls {
+      position: absolute; bottom: 16px; left: 0; right: 0;
+      display: flex; justify-content: center; gap: 12px;
+      z-index: 5;
+    }
+    #controls button {
+      padding: 8px 22px;
+      background: rgba(80, 255, 150, 0.14);
+      color: #8dffbb;
+      border: 1px solid rgba(80, 255, 150, 0.5);
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      backdrop-filter: blur(2px);
+    }
+    #controls button:hover { background: rgba(80, 255, 150, 0.28); }
+    #err { padding: 40px; font-size: 16px; color: #ff9d9d; text-align: center; }
+  </style>
+</head>
+<body>
+  <canvas id="starfield"></canvas>
+  <div id="viewport"><div id="crawl"></div></div>
+  <div id="controls">
+    <button id="replay-btn" title="Play the crawl again">Replay</button>
+    <button id="music-btn" title="Toggle music" hidden>Music: On</button>
+    <button id="close-btn" title="Dismiss (Esc)">Skip &rsaquo;</button>
+  </div>
+  <!-- Background theme; source is set from JS only if the file exists. Plays
+       once (no loop) so the crawl can auto-close when it ends. -->
+  <audio id="theme" preload="auto"></audio>
+
+  <script>
+    const { ipcRenderer } = require("electron");
+    const fs = require("fs");
+    const path = require("path");
+
+    // --- load the backstory text from resources/backstory.html ---
+    // We reuse that file as the single source of the story copy: pull its
+    // <body> inner HTML (headings + paragraphs) and drop it into the crawl.
+    function loadBackstoryHtml() {
+      try {
+        const file = path.join(__dirname, "resources", "backstory.html");
+        const raw = fs.readFileSync(file, "utf8");
+        const m = raw.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+        return (m ? m[1] : raw).trim();
+      } catch (err) {
+        return null;
+      }
+    }
+
+    const crawl = document.getElementById("crawl");
+    const bodyHtml = loadBackstoryHtml();
+    if (bodyHtml) {
+      crawl.innerHTML = bodyHtml;
+    } else {
+      crawl.innerHTML = '<p id="err">Backstory unavailable.</p>';
+    }
+
+    // Scale the crawl duration to the amount of text so long stories aren't
+    // rushed and short ones don't drag.
+    function tuneDuration() {
+      const chars = (crawl.textContent || "").length;
+      // Base pacing, then slowed (×1.75) so the current backstory runs ~60s.
+      const base = Math.max(30, Math.min(90, Math.round(chars / 42)));
+      const secs = Math.round(base * 1.75);
+      crawl.style.setProperty("--crawl-secs", secs + "s");
+    }
+    tuneDuration();
+
+    // --- background music ---------------------------------------------------
+    // Play resources/zubrenn_theme.m4a under the crawl. Wired defensively: if
+    // the file is missing we simply run silently and hide the Music button.
+    const theme = document.getElementById("theme");
+    const musicBtn = document.getElementById("music-btn");
+    let musicOn = true;
+    let hasTheme = false;
+    try {
+      const themePath = path.join(__dirname, "resources", "zubrenn_theme.m4a");
+      if (fs.existsSync(themePath)) {
+        // Use a file:// URL so the <audio> element can load it directly.
+        theme.src = "resources/zubrenn_theme.m4a";
+        theme.volume = 0.6;
+        hasTheme = true;
+        musicBtn.hidden = false;
+      }
+    } catch (err) { hasTheme = false; }
+
+    const THEME_VOL = 0.6;      // base playback volume
+    function startMusic() {
+      if (!hasTheme || !musicOn) return;
+      try { theme.volume = THEME_VOL; theme.currentTime = 0; const p = theme.play(); if (p && p.catch) p.catch(() => {}); }
+      catch (err) {}
+    }
+    function stopMusic() {
+      if (!hasTheme) return;
+      try { theme.pause(); theme.currentTime = 0; } catch (err) {}
+    }
+    function toggleMusic() {
+      if (!hasTheme) return;
+      musicOn = !musicOn;
+      musicBtn.textContent = "Music: " + (musicOn ? "On" : "Off");
+      if (musicOn) startMusic(); else stopMusic();
+    }
+    // Kick the theme off with the crawl (a tick later so autoplay is allowed
+    // in the Electron window context).
+    setTimeout(startMusic, 0);
+
+    // Restart the CSS animation from the top.
+    function replay() {
+      // Clear any in-progress fade so the crawl is fully visible again.
+      document.body.classList.remove("fading");
+      _fading = false;
+      crawl.style.animation = "none";
+      // force reflow so the animation restarts
+      void crawl.offsetWidth;
+      crawl.style.animation = "";
+      startMusic();   // restart the theme with the crawl
+    }
+
+    let _closing = false;
+    function close() {
+      if (_closing) return;
+      _closing = true;
+      stopMusic();
+      ipcRenderer.invoke("close-backstory");
+    }
+    // Auto-dismiss: when the scroll text finishes, fade the whole screen out
+    // (crawl + stars + music) and then close. The music does NOT loop, but the
+    // close is driven by the crawl finishing, not by the music ending.
+    let _fading = false;
+    function fadeAndClose() {
+      if (_fading || _closing) return;
+      _fading = true;
+      document.body.classList.add("fading");   // 1.6s opacity transition
+      try { if (hasTheme) { theme.volume = 0; } } catch (err) {}
+      setTimeout(close, 1700);                  // close just after the fade
+    }
+    // The crawl keyframe animation ending = the last text has scrolled off.
+    crawl.addEventListener("animationend", fadeAndClose);
+
+    document.getElementById("close-btn").addEventListener("click", close);
+    document.getElementById("replay-btn").addEventListener("click", replay);
+    musicBtn.addEventListener("click", toggleMusic);
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") close();
+      else if (e.key === "Enter" || e.key === " ") close();
+    });
+    // When the crawl finishes on its own, leave the controls up so the player
+    // can Replay or Skip; do not auto-close (they dismiss it themselves).
+
+    // --- twinkling starfield ---
+    const canvas = document.getElementById("starfield");
+    const ctx = canvas.getContext("2d");
+    let stars = [];
+    function sizeStars() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      const n = Math.round((canvas.width * canvas.height) / 6000);
+      stars = [];
+      for (let i = 0; i < n; i++) {
+        stars.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          r: Math.random() * 1.3 + 0.2,
+          a: Math.random(),
+          da: (Math.random() * 0.02 + 0.005) * (Math.random() < 0.5 ? -1 : 1),
+        });
+      }
+    }
+    function drawStars() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const s of stars) {
+        s.a += s.da;
+        if (s.a <= 0.1 || s.a >= 1) s.da *= -1;
+        ctx.globalAlpha = Math.max(0.1, Math.min(1, s.a));
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      requestAnimationFrame(drawStars);
+    }
+    sizeStars();
+    drawStars();
+    window.addEventListener("resize", sizeStars);
+  </script>
+</body>
+</html>

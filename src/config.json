@@ -100,7 +100,7 @@
   "planningPathColor": { "h": 120, "s": 0.75, "l": 0.5 },
   "underConstructionColor": { "h": 0, "s": 0, "l": 0.5 },
   "maxAIs": 40,
-  "minStartDistance": 6,
+  "minStartDistance": 8,
   "startingYear": 2500,
   "aiPlacementMinTurns": 3,
   "aiPlacementMaxTurns": 200,
@@ -172,6 +172,15 @@
       "buildCost": { "material": 1, "energy": 1, "wealth": 1, "turns": 2 },
       "costPerYear": { "material": 0, "energy": 1, "wealth": 1 },
       "bonus": { "food": 1, "material": 0, "energy": 0, "growth": 0, "wealth": 1 },
+      "storage": { "food": 300, "material": 300, "energy": 0, "wealth": 0, "happiness": 0 }
+    },
+    "6": {
+      "name": "Air Field",
+      "icon": "air_field.png",
+      "prerequisiteBuildings": [4],
+      "buildCost": { "material": 2, "energy": 2, "wealth": 2, "turns": 2 },
+      "costPerYear": { "material": 0, "energy": 1, "wealth": 1 },
+      "bonus": { "food": 0, "material": 0, "energy": 0, "growth": 0, "wealth": 2 },
       "storage": { "food": 300, "material": 300, "energy": 0, "wealth": 0, "happiness": 0 }
     }
   },

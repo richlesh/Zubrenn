@@ -257,7 +257,7 @@
         airports: arr(tr.airports),
         plans: (tr.plans || []).map((p) => {
           const base = { owner: p.owner, kind: p.kind, source: { x: p.source.x, y: p.source.y },
-            accrued: p.accrued, paused: !!p.paused, id: p.id };
+            accrued: p.accrued, paused: !!p.paused, stallReason: p.stallReason || null, id: p.id };
           if (p.edges) {
             base.edges = p.edges.map((e) => ({ a: { x: e.a.x, y: e.a.y }, b: { x: e.b.x, y: e.b.y } }));
             base.edgeIndex = p.edgeIndex;
@@ -267,6 +267,10 @@
           }
           return base;
         }),
+        canalRemovals: (tr.canalRemovals || []).map((r) => ({
+          a: { x: r.a.x, y: r.a.y }, b: { x: r.b.x, y: r.b.y },
+          owner: r.owner, turnsLeft: r.turnsLeft,
+        })),
       };
     }
 
@@ -528,6 +532,10 @@
       tr.bridges = tr.bridges instanceof Set ? tr.bridges : new Set(tr.bridges || []); // edge keys
       tr.airports = tr.airports instanceof Set ? tr.airports : new Set(tr.airports || []); // colony cell keys
       tr.plans = Array.isArray(tr.plans) ? tr.plans : [];
+      // Canals being removed over time: array of { a:{x,y}, b:{x,y}, owner,
+      // turnsLeft }. The canal edge stays in tr.canals (and keeps working) until
+      // turnsLeft reaches 0, at which point advanceCanalRemovals() finalizes it.
+      tr.canalRemovals = Array.isArray(tr.canalRemovals) ? tr.canalRemovals : [];
       return tr;
     }
     function edgeKey(x1, y1, x2, y2) {
@@ -631,28 +639,55 @@
       }
       return parts.length ? parts.join(", ") : "more resources";
     }
-    // Destroy a built canal segment: charge the cost, drop the edge, and undo
-    // its river marking.
+    // Whether a built canal edge is already scheduled for removal.
+    function isCanalRemoving(ax, ay, bx, by) {
+      const tr = ensureTransport();
+      const ek = edgeKey(ax, ay, bx, by);
+      return (tr.canalRemovals || []).some(
+        (r) => edgeKey(r.a.x, r.a.y, r.b.x, r.b.y) === ek);
+    }
+
+    // The canal edges currently being removed, as [{a:{x,y}, b:{x,y}}...] for
+    // the overlay to draw in the under-construction colour.
+    function _canalRemovingEdges() {
+      const tr = ensureTransport();
+      return (tr.canalRemovals || []).map((r) => ({ a: r.a, b: r.b }));
+    }
+
+    // Re-evaluate whether the map overlay should be active. The overlay draws
+    // planned transport paths, canal planning/hover marks, AND canals being
+    // removed, so it must be enabled whenever any of those exist.
+    function refreshCanalOverlay() {
+      if (!hexMap || typeof hexMap.setOverlay !== 'function') return;
+      const anyPlanned = (typeof _transportPlannedPaths !== 'undefined' && _transportPlannedPaths.length) ||
+        (typeof _canalPlannedEdges !== 'undefined' && _canalPlannedEdges.length);
+      const anyMode = (typeof _transportMode !== 'undefined' && _transportMode) ||
+        (typeof _canalMode !== 'undefined' && _canalMode) ||
+        (typeof _foundMode !== 'undefined' && _foundMode);
+      const anyRemoving = ensureTransport().canalRemovals.length > 0;
+      hexMap.setOverlay((anyMode || anyPlanned || anyRemoving) ? transportOverlayDraw : null);
+    }
+
+    // Begin removing a built canal segment: charge the cost now and SCHEDULE the
+    // removal over removeCanalCost.turns turns. The canal stays in tr.canals (so
+    // it keeps functioning as water) and is drawn in the under-construction
+    // colour until advanceCanalRemovals() finalizes it.
     //
-    // Building a canal marks BOTH its cells as river cells so all river logic
-    // applies. On removal a cell may only stop being a river cell if nothing
-    // else still makes it one — an original river, or another canal still
-    // touching it — so we recompute that per cell rather than blindly clearing.
+    // We also prune this edge from pending/planned build plans immediately, so
+    // construction cannot rebuild what the player just ordered torn down.
     function removeCanalEdge(ax, ay, bx, by, owner) {
       const tr = ensureTransport();
       const ek = edgeKey(ax, ay, bx, by);
       if (!tr.canals.has(ek)) return false;
+      if (isCanalRemoving(ax, ay, bx, by)) return false;   // already removing
       if (!canAffordCanalRemoval(ax, ay, bx, by, owner)) return false;
       const pool = canalRemovalPool(ax, ay, bx, by, owner);
       const c = canalRemovalCost();
       for (const r of _resourceKeysOf(c)) {
         if (pool[r] != null) pool[r] = Math.max(0, pool[r] - c[r]);
       }
-      tr.canals.delete(ek);
-      tr.bridges.delete(ek);          // any bridge over it goes too
 
-      // Drop pending build plans that included this edge, so construction does
-      // not silently rebuild what the player just removed.
+      // Drop pending build plans that included this edge.
       for (const plan of (tr.plans || [])) {
         if (plan.kind !== 'canal' || !plan.edges) continue;
         plan.edges = plan.edges.filter(
@@ -666,6 +701,31 @@
         }
         _canalPlannedEdges = _canalPlannedEdges.filter((pp) => pp.edges.length);
       }
+
+      tr.canalRemovals.push({
+        a: { x: ax, y: ay }, b: { x: bx, y: by }, owner,
+        turnsLeft: _turnsOf(c, 2),
+      });
+      if (hexMap && typeof hexMap.setTransport === 'function') hexMap.setTransport(tr);
+      refreshCanalOverlay();
+      if (owner === 'human') {
+        recomputeHumanResourcePanel(); updatePlayerPanel();
+      }
+      return true;
+    }
+
+    // Finalize a scheduled canal removal: drop the edge (and any bridge over it)
+    // and undo its river marking.
+    //
+    // Building a canal marks BOTH its cells as river cells so all river logic
+    // applies. On removal a cell may only stop being a river cell if nothing
+    // else still makes it one — an original river, or another canal still
+    // touching it — so we recompute that per cell rather than blindly clearing.
+    function _finalizeCanalRemoval(ax, ay, bx, by) {
+      const tr = ensureTransport();
+      const ek = edgeKey(ax, ay, bx, by);
+      tr.canals.delete(ek);
+      tr.bridges.delete(ek);          // any bridge over it goes too
 
       // A cell stays a river cell only if an ORIGINAL river ran through it or
       // another canal still touches it.
@@ -692,10 +752,27 @@
       _riverVertexCounts = null;
       invalidateVertexGraph();
       if (hexMap && typeof hexMap.setTransport === 'function') hexMap.setTransport(tr);
-      if (owner === 'human') {
-        recomputeHumanResourcePanel(); updateResourcesPanel(); updatePlayerPanel();
+    }
+
+    // Advance all scheduled canal removals by one turn; finalize any that reach
+    // zero. Called during turn processing right after transport construction.
+    function advanceCanalRemovals() {
+      const tr = ensureTransport();
+      if (!tr.canalRemovals || !tr.canalRemovals.length) return;
+      let anyHuman = false;
+      const remaining = [];
+      for (const r of tr.canalRemovals) {
+        r.turnsLeft -= 1;
+        if (r.turnsLeft <= 0) {
+          _finalizeCanalRemoval(r.a.x, r.a.y, r.b.x, r.b.y);
+          if (r.owner === 'human') anyHuman = true;
+        } else {
+          remaining.push(r);
+        }
       }
-      return true;
+      tr.canalRemovals = remaining;
+      refreshCanalOverlay();
+      if (anyHuman) { recomputeHumanResourcePanel(); updatePlayerPanel(); }
     }
 
     // Cost to bridge a ROAD across a SINGLE shallow-sea tile between two land
@@ -773,7 +850,7 @@
       _vertexGraph = g;
       return g;
     }
-    function invalidateVertexGraph() { _vertexGraph = null; }
+    function invalidateVertexGraph() { _vertexGraph = null; if (typeof invalidateColonyConnectivity === 'function') invalidateColonyConnectivity(); }
     // Cells incident to a vertex (up to 3 on-map).
     function vertexCells(vkey) { const v = vertexGraph().get(vkey); return v ? v.cells : []; }
     // A canal SEGMENT (shared border of adjacent cells a,b) is allowed if both
@@ -984,6 +1061,8 @@
     // Mark a cell/edge as built for the given kind.
     function _applyBuiltSegment(kind, fx, fy, tx, ty) {
       const tr = ensureTransport();
+      // Any new road/monorail/canal segment can change colony connectivity.
+      if (typeof invalidateColonyConnectivity === 'function') invalidateColonyConnectivity();
       if (kind === 'canal') {
         tr.canals.add(edgeKey(fx, fy, tx, ty));
         // A built canal is treated exactly like a river from now on: mark both
@@ -1004,6 +1083,18 @@
         }
       }
     }
+    // The resources (and how much more of each) a source colony's `pool` lacks
+    // to pay a segment cost `seg`. Returns a short label like
+    // "3 more Material, 1 more Energy", or "" if nothing is short.
+    function _segmentShortfall(seg, pool) {
+      const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+      const parts = [];
+      for (const k of ["food", "material", "energy", "wealth"]) {
+        const need = (seg[k] || 0) - (pool[k] || 0);
+        if (need > 1e-9) parts.push(`${Math.ceil(need)} more ${cap(k)}`);
+      }
+      return parts.join(", ");
+    }
     // Advance all construction plans by one turn. Builds segments from the
     // source outward, paying each completed segment's cost from the source
     // colony's stored resources; pauses a plan if resources are insufficient.
@@ -1020,6 +1111,7 @@
         // accrued turns + resources allow.
         plan.accrued += 1; // one turn of construction effort
         plan.paused = false;
+        plan.stallReason = null; // recomputed below if it can't afford a segment
         // Canal plans are EDGE-based (explicit list of cell-border edges).
         if (plan.edges) {
           let prog = true;
@@ -1032,9 +1124,8 @@
             const seg = canalSegmentCost(e.a.x, e.a.y, e.b.x, e.b.y);
             const need = Math.max(0.0001, seg.turns || 0);
             if (plan.accrued + 1e-9 < need) break;
-            const afford = ["food", "material", "energy", "wealth"].every((k) => (pool[k] || 0) >= (seg[k] || 0));
-            if (!afford) { plan.paused = true; break; }
-            for (const k of ["food", "material", "energy", "wealth"]) pool[k] = Math.max(0, (pool[k] || 0) - (seg[k] || 0));
+            const pay = payColonySegmentCost(col, pool, seg);
+            if (!pay.paid) { plan.paused = true; plan.stallReason = pay.shortfall; break; }
             _applyBuiltSegment('canal', e.a.x, e.a.y, e.b.x, e.b.y);
             invalidateVertexGraph();
             plan.accrued -= need; plan.edgeIndex += 1; prog = true; changed = true;
@@ -1061,11 +1152,11 @@
           const seg = transportSegmentCost(plan.kind, a.x, a.y, b.x, b.y);
           const need = Math.max(0.0001, seg.turns || 0);
           if (plan.accrued + 1e-9 < need) break; // not enough build effort yet this turn
-          // Can we afford the segment's resources?
-          const afford = ["food", "material", "energy", "wealth"].every((k) => (pool[k] || 0) >= (seg[k] || 0));
-          if (!afford) { plan.paused = true; break; }
-          // Pay + build the segment.
-          for (const k of ["food", "material", "energy", "wealth"]) pool[k] = Math.max(0, (pool[k] || 0) - (seg[k] || 0));
+          // Pay from the source colony, borrowing any shortfall from connected
+          // colonies (roads/monorails or a river/canal path).
+          const pay = payColonySegmentCost(col, pool, seg);
+          if (!pay.paid) { plan.paused = true; plan.stallReason = pay.shortfall; break; }
+          // Build the segment (cost already paid by payColonySegmentCost).
           _applyBuiltSegment(plan.kind, a.x, a.y, b.x, b.y);
           plan.accrued -= need;
           plan.segIndex += 1;
@@ -1698,6 +1789,11 @@
       let yFood = 0, yMaterial = 0, yEnergy = 0, yHappiness = 0, yWealth = 0;
       const _budgetDeficitColonies = []; // human colonies over budget this year
 
+      // Recompute colony connectivity fresh for this tick: in-transit colonies
+      // may have arrived and buildings may have changed since last year, and
+      // the shared-resource borrowing below relies on up-to-date groups.
+      invalidateColonyConnectivity();
+
       // Index colonies + their buildings by owner.
       const colonies = gameState.buildings.filter((b) => b.type === 1);
       for (const col of colonies) {
@@ -1814,6 +1910,8 @@
       // Advance transport construction (roads/monorails/canals) using each
       // source colony's now-current stored resources.
       advanceTransportConstruction();
+      // Advance any scheduled canal removals; those whose timer hits 0 finalize.
+      advanceCanalRemovals();
 
       updatePlayerPanel();
       if (badgeChanged && hexMap) hexMap.setBuildings(gameState.buildings);
@@ -2121,12 +2219,21 @@
         if (turnStartSub.textContent === "") afterYear();
       };
     }
-    turnStartHandle.addEventListener("click", () => {
-      // "Let me handle it": no more auto-end or warnings for this turn.
+    // Hand control of THIS turn back to the player: no more auto-end or idle
+    // warnings until the turn ends. Auto turn end resumes next turn because
+    // startHumanTurn() clears _skipAutoEndThisTurn. Used by the warning's
+    // "Let me handle it" button and by pressing Escape during the turn.
+    function takeManualControlThisTurn() {
+      if (_skipAutoEndThisTurn) return false;
       _skipAutoEndThisTurn = true;
       _warningShowing = false;
       stopIdleWatch();
       _closeTurnStart();
+      return true;
+    }
+    turnStartHandle.addEventListener("click", () => {
+      // "Let me handle it": no more auto-end or warnings for this turn.
+      takeManualControlThisTurn();
     });
 
     // Global activity taps. Capture phase so they see the event regardless of
@@ -2332,11 +2439,412 @@
       const over = [];
       for (const k of ['food', 'material', 'energy', 'wealth']) {
         let v = stored[k] + b.net[k];
-        if (v < 0) { over.push(k); v = 0; }
+        if (v < 0) {
+          // Try to cover the shortfall from connected same-owner colonies
+          // (roads/monorails OR a river/canal path), drawing from the one that
+          // stores the most of this resource. Only if still short after that
+          // does the colony go over budget (and must idle buildings).
+          const borrowed = borrowFromConnected(col, k, -v);
+          v += borrowed;
+          if (v < 0) { over.push(k); v = 0; }
+        }
         if (v > caps[k]) v = caps[k];
         stored[k] = v;
       }
       return { over, stored, caps, budget: b };
+    }
+
+    // ---- inter-colony resource sharing --------------------------------------
+    // Connected colonies (same owner) can share stored resources. Two colonies
+    // are connected when EITHER holds:
+    //   • a road/monorail path links their biodome cells (a colony attaches to
+    //     the transport network via its biodome cell or a hex-neighbour of it
+    //     that carries road/monorail), OR
+    //   • a connected path of river/canal SEGMENTS links a corner vertex of one
+    //     colony to a corner vertex of the other.
+    // We union both relations into per-owner groups so a colony can reach every
+    // colony it is transitively connected to by either means.
+    //
+    // The result is cached and invalidated whenever transport changes or a new
+    // economy tick begins (see invalidateColonyConnectivity()).
+    let _colonyGroupsCache = null; // owner -> Map(colonyKey -> groupId)
+    function invalidateColonyConnectivity() { _colonyGroupsCache = null; }
+    function _colonyKey(col) { return col.x + "," + col.y; }
+
+    function colonyConnectivity(owner) {
+      if (!_colonyGroupsCache) _colonyGroupsCache = new Map();
+      if (_colonyGroupsCache.has(owner)) return _colonyGroupsCache.get(owner);
+
+      const cols = gameState.buildings.filter(
+        (b) => b.type === 1 && b.owner === owner && !b.inTransit);
+      // Union-find over colony indices.
+      const parent = cols.map((_, i) => i);
+      const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+      const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; };
+
+      // ---- road/monorail connectivity ----
+      // Build connected components of the road+monorail cell graph, then map
+      // each colony's transport attach-cells to a component id.
+      const tr = ensureTransport();
+      const netCells = new Set([...tr.roads, ...tr.monorails]); // cell keys "x,y"
+      const cellComp = new Map();     // cellKey -> component id
+      let comp = 0;
+      for (const start of netCells) {
+        if (cellComp.has(start)) continue;
+        const id = comp++;
+        const stack = [start];
+        cellComp.set(start, id);
+        while (stack.length) {
+          const ck = stack.pop();
+          const [cx, cy] = ck.split(",").map(Number);
+          for (const n of hexNeighborsRenderer(cx, cy)) {
+            const nk = cellKey(n.x, n.y);
+            if (netCells.has(nk) && !cellComp.has(nk)) { cellComp.set(nk, id); stack.push(nk); }
+          }
+        }
+      }
+      // The transport components a colony touches: its biodome cell if on the
+      // network, plus any hex-neighbour that is.
+      const colRoadComps = cols.map((col) => {
+        const set = new Set();
+        const own = cellKey(col.x, col.y);
+        if (cellComp.has(own)) set.add(cellComp.get(own));
+        for (const n of hexNeighborsRenderer(col.x, col.y)) {
+          const nk = cellKey(n.x, n.y);
+          if (cellComp.has(nk)) set.add(cellComp.get(nk));
+        }
+        return set;
+      });
+      // Union colonies that share any transport component.
+      const byRoadComp = new Map(); // compId -> first colony index seen
+      for (let i = 0; i < cols.length; i++) {
+        for (const cid of colRoadComps[i]) {
+          if (byRoadComp.has(cid)) union(i, byRoadComp.get(cid));
+          else byRoadComp.set(cid, i);
+        }
+      }
+
+      // ---- river/canal connectivity ----
+      // Vertex components over existing river/canal border segments.
+      const vAdj = new Map(); // vkey -> Set(vkey)
+      const link = (u, v) => {
+        if (!vAdj.has(u)) vAdj.set(u, new Set());
+        if (!vAdj.has(v)) vAdj.set(v, new Set());
+        vAdj.get(u).add(v); vAdj.get(v).add(u);
+      };
+      // River border segments.
+      for (const e of allRiverBorderEdges()) {
+        const vs = edgeVertices(e.a.x, e.a.y, e.b.x, e.b.y);
+        if (vs.length === 2) link(vs[0], vs[1]);
+      }
+      // Canal segments (edge keys "x1,y1|x2,y2").
+      for (const ek of tr.canals) {
+        const [ka, kb] = ek.split("|");
+        const [ax, ay] = ka.split(",").map(Number);
+        const [bx, by] = kb.split(",").map(Number);
+        const vs = edgeVertices(ax, ay, bx, by);
+        if (vs.length === 2) link(vs[0], vs[1]);
+      }
+      // Flood the vertex graph into components.
+      const vComp = new Map();
+      let vc = 0;
+      for (const v of vAdj.keys()) {
+        if (vComp.has(v)) continue;
+        const id = vc++;
+        const stack = [v]; vComp.set(v, id);
+        while (stack.length) {
+          const u = stack.pop();
+          for (const w of (vAdj.get(u) || [])) {
+            if (!vComp.has(w)) { vComp.set(w, id); stack.push(w); }
+          }
+        }
+      }
+      // The water components each colony's corner vertices touch.
+      const colWaterComps = cols.map((col) => {
+        const set = new Set();
+        for (const vk of cellCornerKeys(col.x, col.y)) {
+          if (vComp.has(vk)) set.add(vComp.get(vk));
+        }
+        return set;
+      });
+      const byWaterComp = new Map();
+      for (let i = 0; i < cols.length; i++) {
+        for (const cid of colWaterComps[i]) {
+          if (byWaterComp.has(cid)) union(i, byWaterComp.get(cid));
+          else byWaterComp.set(cid, i);
+        }
+      }
+
+      // Final: colonyKey -> group root id.
+      const groups = new Map();
+      for (let i = 0; i < cols.length; i++) groups.set(_colonyKey(cols[i]), find(i));
+      _colonyGroupsCache.set(owner, groups);
+      return groups;
+    }
+
+    // Same-owner colonies connected to `col` (excluding itself).
+    function connectedColonies(col) {
+      const groups = colonyConnectivity(col.owner);
+      const myGroup = groups.get(_colonyKey(col));
+      if (myGroup == null) return [];
+      const out = [];
+      for (const b of gameState.buildings) {
+        if (b.type !== 1 || b.owner !== col.owner || b.inTransit) continue;
+        if (b === col) continue;
+        if (groups.get(_colonyKey(b)) === myGroup) out.push(b);
+      }
+      return out;
+    }
+
+    // Borrow up to `amount` of `resource` for `col` from the connected colony
+    // that currently stores the MOST of it, repeatedly draining the richest
+    // until the need is met or no connected colony has any left. Drains the
+    // peers' storage and RETURNS the amount obtained; the caller adds it to
+    // `col`'s balance (so this must not also credit col.stored).
+    function borrowFromConnected(col, resource, amount) {
+      if (!(amount > 0)) return 0;
+      const peers = connectedColonies(col);
+      if (!peers.length) return 0;
+      let got = 0;
+      let guard = 0;
+      while (amount - got > 1e-9 && guard++ < peers.length + 1) {
+        // Find the richest peer for this resource.
+        let best = null, bestAmt = 0;
+        for (const p of peers) {
+          const s = ensureStored(p);
+          if ((s[resource] || 0) > bestAmt) { bestAmt = s[resource]; best = p; }
+        }
+        if (!best || bestAmt <= 1e-9) break;
+        const take = Math.min(bestAmt, amount - got);
+        ensureStored(best)[resource] = bestAmt - take;
+        got += take;
+      }
+      return got;
+    }
+
+    // Total of `resource` available across colonies connected to `col`
+    // (excluding col itself). Used to test whether a shortfall can be covered by
+    // borrowing before committing to drain peers.
+    function connectedAvailable(col, resource) {
+      let sum = 0;
+      for (const p of connectedColonies(col)) sum += (ensureStored(p)[resource] || 0);
+      return sum;
+    }
+
+    // Pay a transport segment's resource cost `seg` from source colony `col`'s
+    // storage (`pool` === col.stored), borrowing any per-resource shortfall from
+    // CONNECTED colonies (roads/monorails or a river/canal path) first. Borrows
+    // and pays only if the whole cost can be covered network-wide, so peers are
+    // never drained for a segment that still can't be afforded.
+    // Returns { paid:true } on success (pool debited, peers drained as needed),
+    // or { paid:false, shortfall:label } with nothing changed.
+    function payColonySegmentCost(col, pool, seg) {
+      const keys = ["food", "material", "energy", "wealth"];
+      // Can the network cover every resource (own storage + connected supply)?
+      for (const k of keys) {
+        const need = (seg[k] || 0) - (pool[k] || 0);
+        if (need > 1e-9 && need > connectedAvailable(col, k) + 1e-9) {
+          // Report the true remaining gap after all possible borrowing.
+          const combinedPool = {};
+          for (const kk of keys) combinedPool[kk] = (pool[kk] || 0) + connectedAvailable(col, kk);
+          return { paid: false, shortfall: _segmentShortfall(seg, combinedPool) };
+        }
+      }
+      // Affordable network-wide: borrow each shortfall into the pool, then pay.
+      for (const k of keys) {
+        const need = (seg[k] || 0) - (pool[k] || 0);
+        if (need > 1e-9) {
+          const got = borrowFromConnected(col, k, need);
+          pool[k] = (pool[k] || 0) + got;
+        }
+      }
+      for (const k of keys) pool[k] = Math.max(0, (pool[k] || 0) - (seg[k] || 0));
+      return { paid: true };
+    }
+
+    // ---- direct colony connections (for the Network panel) ------------------
+    // The other same-owner colonies DIRECTLY connected to `col`, and by what
+    // transport type. "Direct" means reachable over ONE modality's network
+    // without routing through a THIRD colony. Returns
+    //   [{ colony, type }]  with type in road|monorail|river|sea|air
+    // If two colonies share more than one modality, the strongest single link
+    // is reported (road > monorail > river > sea > air by list order).
+    function directColonyConnections(col) {
+      const owner = col.owner;
+      const others = gameState.buildings.filter(
+        (b) => b.type === 1 && b.owner === owner && !b.inTransit && b !== col);
+      if (!others.length) return [];
+      const otherByCell = new Map(); // "x,y" -> colony (biodome cell)
+      for (const b of others) otherByCell.set(cellKey(b.x, b.y), b);
+      // A colony can be connected by more than one modality (e.g. a river AND
+      // an air link), so we collect a SET of types per colony and list them all.
+      const found = new Map(); // colonyKey -> Set(type)
+      const addType = (key, type) => {
+        if (!found.has(key)) found.set(key, new Set());
+        found.get(key).add(type);
+      };
+
+      // --- generic cell-network BFS (road / monorail) ---
+      // Walk `netCells` from cells adjacent to col's biodome; a hop onto another
+      // colony's biodome cell records a direct link but is NOT traversed further
+      // (so links THROUGH a third colony don't count).
+      const cellNetworkLinks = (netCells, type) => {
+        const start = [];
+        // Entry points: the biodome cell itself and any neighbour on the network.
+        if (netCells.has(cellKey(col.x, col.y))) start.push(cellKey(col.x, col.y));
+        for (const n of hexNeighborsRenderer(col.x, col.y)) {
+          const nk = cellKey(n.x, n.y);
+          if (netCells.has(nk)) start.push(nk);
+        }
+        const seen = new Set(start);
+        const stack = [...start];
+        while (stack.length) {
+          const ck = stack.pop();
+          const [cx, cy] = ck.split(",").map(Number);
+          for (const n of hexNeighborsRenderer(cx, cy)) {
+            const nk = cellKey(n.x, n.y);
+            // Reached another colony's biodome (on or beside the network)?
+            const hit = otherByCell.get(nk);
+            if (hit) addType(_colonyKey(hit), type);
+            if (netCells.has(nk) && !seen.has(nk)) {
+              // Don't traverse through a cell that IS another colony's biodome.
+              if (otherByCell.has(nk)) { seen.add(nk); continue; }
+              seen.add(nk); stack.push(nk);
+            }
+          }
+        }
+      };
+      const tr = ensureTransport();
+      cellNetworkLinks(tr.roads, "road");
+      cellNetworkLinks(tr.monorails, "monorail");
+
+      // --- river/canal vertex BFS ---
+      // Adjacency over existing river/canal segments; entry = col's corner
+      // vertices; a vertex belonging to another colony records a link.
+      const vAdj = new Map();
+      const link = (u, v) => {
+        if (!vAdj.has(u)) vAdj.set(u, new Set());
+        if (!vAdj.has(v)) vAdj.set(v, new Set());
+        vAdj.get(u).add(v); vAdj.get(v).add(u);
+      };
+      for (const e of allRiverBorderEdges()) {
+        const vs = edgeVertices(e.a.x, e.a.y, e.b.x, e.b.y);
+        if (vs.length === 2) link(vs[0], vs[1]);
+      }
+      for (const ek of tr.canals) {
+        const [ka, kb] = ek.split("|");
+        const [ax, ay] = ka.split(",").map(Number);
+        const [bx, by] = kb.split(",").map(Number);
+        const vs = edgeVertices(ax, ay, bx, by);
+        if (vs.length === 2) link(vs[0], vs[1]);
+      }
+      // Map each colony's corner vertices for target detection.
+      const vertexOwner = new Map(); // vkey -> colony (other colonies only)
+      for (const b of others) for (const vk of cellCornerKeys(b.x, b.y)) vertexOwner.set(vk, b);
+      const colVerts = new Set(cellCornerKeys(col.x, col.y));
+      {
+        const seen = new Set([...colVerts].filter((v) => vAdj.has(v)));
+        const stack = [...seen];
+        while (stack.length) {
+          const u = stack.pop();
+          for (const w of (vAdj.get(u) || [])) {
+            const hit = vertexOwner.get(w);
+            if (hit) addType(_colonyKey(hit), "river");
+            if (!seen.has(w)) {
+              // Stop routing through a third colony's vertices.
+              if (vertexOwner.has(w)) { seen.add(w); continue; }
+              seen.add(w); stack.push(w);
+            }
+          }
+        }
+      }
+
+      // --- sea (docks) ---
+      // Both colonies need a Dock; connected if their shallow-sea access tiles
+      // reach each other through the shallow-sea graph without passing another
+      // colony's sea tiles. Sea links are gathered first, then filtered by the
+      // 15-cell radius rule below.
+      const seaLinked = new Set(); // colonyKey of sea-connected colonies
+      if (colonyHasDock(col)) {
+        const seaOf = (c) => new Set(
+          colonyControlCells(c).filter((cc) => terrainAt(cc.x, cc.y) === 1)
+            .map((cc) => cellKey(cc.x, cc.y)));
+        const mySea = seaOf(col);
+        if (mySea.size) {
+          const otherSea = new Map(); // seaCellKey -> colony
+          for (const b of others) {
+            if (!colonyHasDock(b)) continue;
+            for (const sk of seaOf(b)) otherSea.set(sk, b);
+          }
+          const seen = new Set(mySea);
+          const stack = [...mySea];
+          while (stack.length) {
+            const ck = stack.pop();
+            const [cx, cy] = ck.split(",").map(Number);
+            for (const n of hexNeighborsRenderer(cx, cy)) {
+              if (terrainAt(n.x, n.y) !== 1) continue; // sea tiles only
+              const nk = cellKey(n.x, n.y);
+              const hit = otherSea.get(nk);
+              if (hit) seaLinked.add(_colonyKey(hit));
+              if (!seen.has(nk)) {
+                if (otherSea.has(nk)) { seen.add(nk); continue; } // don't cross another colony's sea
+                seen.add(nk); stack.push(nk);
+              }
+            }
+          }
+        }
+      }
+
+      // --- air ---
+      // Two colonies are air-linked when they EACH have an Air Field (building
+      // type 6) and are within 15 cells of each other.
+      const airLinked = new Set();
+      if (colonyHasAirfield(col)) {
+        for (const b of others) {
+          if (colonyHasAirfield(b) && hexDistance(col.x, col.y, b.x, b.y) <= 15) {
+            airLinked.add(_colonyKey(b));
+          }
+        }
+      }
+
+      // Sea links are only listed for colonies within 15 cells; if none are
+      // within 15 cells, list just the single CLOSEST sea-linked colony. Types
+      // are additive, so this does not suppress a road/river/etc. link the same
+      // colony may also have. (Air links are already limited to within 15 cells
+      // by definition.)
+      const SEA_RADIUS = 15;
+      {
+        const cands = others.filter((b) => seaLinked.has(_colonyKey(b)));
+        if (cands.length) {
+          const dist = (b) => hexDistance(col.x, col.y, b.x, b.y);
+          const within = cands.filter((b) => dist(b) <= SEA_RADIUS);
+          if (within.length) {
+            for (const b of within) addType(_colonyKey(b), "sea");
+          } else {
+            let closest = cands[0];
+            for (const b of cands) if (dist(b) < dist(closest)) closest = b;
+            addType(_colonyKey(closest), "sea");
+          }
+        }
+      }
+      // Air links (already within 15 cells by definition).
+      for (const b of others) {
+        if (airLinked.has(_colonyKey(b))) addType(_colonyKey(b), "air");
+      }
+
+      // Assemble result, sorted by colony name. Each colony lists ALL of its
+      // connection types, ordered road, monorail, river, sea, air.
+      const ORDER = ["road", "monorail", "river", "sea", "air"];
+      const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+      const out = [];
+      for (const b of others) {
+        const set = found.get(_colonyKey(b));
+        if (!set || !set.size) continue;
+        const label = ORDER.filter((t) => set.has(t)).map(cap).join(", ");
+        out.push({ colony: b, type: label });
+      }
+      out.sort((a, z) => (a.colony.name || "").localeCompare(z.colony.name || ""));
+      return out;
     }
 
     // ---- economy helpers ---------------------------------------------------
@@ -2505,6 +3013,17 @@
       }
       return false;
     }
+    // Whether a colony owns an operational Air Field (building type 6) within
+    // its control radius. Used for air-transport network links.
+    function colonyHasAirfield(colony) {
+      const radius = colonyControlRadius(colony);
+      for (const b of gameState.buildings) {
+        if (b.type !== 6 || b.owner !== colony.owner) continue;
+        if (!isOperational(b)) continue;
+        if (hexDistance(colony.x, colony.y, b.x, b.y) <= radius) return true;
+      }
+      return false;
+    }
     // Drop any worked cells that fall outside the colony's current control area
     // (e.g. after the radius shrinks because population dropped). The biodome
     // home cell is always kept.
@@ -2617,7 +3136,7 @@
           col.worked = col.worked.filter((k) => k !== cellKey(x, y));
         }
       }
-      if (owner === 'human') { recomputeHumanResourcePanel(); updateResourcesPanel(); updatePlayerPanel(); }
+      if (owner === 'human') { recomputeHumanResourcePanel(); updatePlayerPanel(); }
       if (hexMap) hexMap.setBuildings(gameState.buildings);
       return true;
     }
@@ -2676,7 +3195,7 @@
       };
       gameState.buildings.push(rec);
       gameState.colonies.push({ x: tx, y: ty, owner, name: rec.name });
-      if (owner === 'human') { recomputeHumanResourcePanel(); updateResourcesPanel(); updatePlayerPanel(); }
+      if (owner === 'human') { recomputeHumanResourcePanel(); updatePlayerPanel(); }
       if (hexMap) hexMap.setBuildings(gameState.buildings);
       pushColoniesToMain();
       return rec;
@@ -2806,6 +3325,60 @@
       }
       if (hexMap) hexMap.setOverlay(transportOverlayDraw);
     }
+
+    // ---- stalled-project hover hint -----------------------------------------
+    // A paused plan (couldn't afford a segment) whose UNBUILT portion is under
+    // the pointer, with the reason. Canals match by hovered border edge; roads
+    // and monorails match by hovered cell on the not-yet-built tail of the path.
+    // Returns { plan, label } or null.
+    function _stalledPlanAtEvent(e) {
+      if (!hexMap) return null;
+      const tr = gameState.transport;
+      if (!tr || !Array.isArray(tr.plans)) return null;
+      const paused = tr.plans.filter((p) => p.paused && p.stallReason);
+      if (!paused.length) return null;
+      const edge = hexMap.edgeAtEvent ? hexMap.edgeAtEvent(e) : null;
+      const hex = hexMap.hexAtEvent ? hexMap.hexAtEvent(e) : null;
+      const ekAt = edge ? edgeKey(edge.cell.x, edge.cell.y, edge.other.x, edge.other.y) : null;
+      for (const plan of paused) {
+        if (plan.edges) {
+          // Canal: hovered border must be one of the plan's remaining edges.
+          if (!ekAt) continue;
+          for (let i = Math.max(0, plan.edgeIndex || 0); i < plan.edges.length; i++) {
+            const eg = plan.edges[i];
+            if (edgeKey(eg.a.x, eg.a.y, eg.b.x, eg.b.y) === ekAt) return { plan, label: plan.stallReason };
+          }
+        } else if (plan.path) {
+          // Road/monorail: hovered cell must be on the unbuilt tail of the path
+          // (from the last-built node onward).
+          if (!hex) continue;
+          const start = Math.max(0, (plan.segIndex || 1) - 1);
+          for (let j = start; j < plan.path.length; j++) {
+            if (plan.path[j].x === hex.x && plan.path[j].y === hex.y) return { plan, label: plan.stallReason };
+          }
+        }
+      }
+      return null;
+    }
+    // Show/hide the dedicated build-tooltip with a stalled-project reason.
+    let _stallTipShown = false;
+    function updateStallHint(e) {
+      const tip = document.getElementById("build-tooltip");
+      if (!tip) return false;
+      const hit = _stalledPlanAtEvent(e);
+      if (!hit) {
+        if (_stallTipShown) { tip.hidden = true; _stallTipShown = false; }
+        return false;
+      }
+      const kind = hit.plan.kind ? (hit.plan.kind.charAt(0).toUpperCase() + hit.plan.kind.slice(1)) : "Project";
+      tip.innerHTML = `<b>${kind} construction stalled</b><br>` +
+        (hit.label ? `Needs ${hit.label} at the source colony.` : "Waiting on resources at the source colony.");
+      tip.style.left = (e.clientX + 16) + "px";
+      tip.style.top = (e.clientY + 16) + "px";
+      tip.hidden = false;
+      _stallTipShown = true;
+      return true;
+    }
     function confirmTransport(x, y) {
       if (!_transportMode || !_transportSource || !_transportSourceCol) return;
       const path = hexLinePath(_transportSource.x, _transportSource.y, x, y);
@@ -2921,6 +3494,16 @@
     }
 
     function transportOverlayDraw(ctx, spacing, hexCenter) {
+      // Live construction plan for an overlay entry, matched by id. Used so the
+      // green "under construction" overlay only covers the segments NOT YET
+      // built; completed segments are already drawn in their finished colour by
+      // the normal map render.
+      const _planById = (id) => {
+        if (id == null) return null;
+        const tr = gameState.transport;
+        if (!tr || !Array.isArray(tr.plans)) return null;
+        return tr.plans.find((p) => p.id === id) || null;
+      };
       const drawPath = (path, stroke, w) => {
         if (!path || path.length < 2) return;
         ctx.save();
@@ -2952,7 +3535,14 @@
         canalHoverStroke = hoverStroke;
       }
 
-      for (const pl of _transportPlannedPaths) drawPath(pl.path, planStroke, lw); // planned
+      for (const pl of _transportPlannedPaths) {
+        // Only the part from the last-built node onward is still "planned"; the
+        // built prefix shows in its finished road/monorail colour already.
+        const plan = _planById(pl.planId);
+        const seg = (plan && plan.segIndex != null) ? plan.segIndex : 1;
+        const remainder = pl.path.slice(Math.max(0, seg - 1));
+        drawPath(remainder, planStroke, lw); // planned (unbuilt) portion
+      }
       if (_transportHoverPath) drawPath(_transportHoverPath, hoverStroke, lw);      // hover
       // Canal previews are edge-based: draw along each edge's shared border
       // (approximated as a mark at the border midpoint between the two cells).
@@ -2968,8 +3558,19 @@
         }
         ctx.restore();
       };
-      for (const pl of _canalPlannedEdges) drawCanalEdges(pl.edges, canalPlanStroke, lw); // planned
+      for (const pl of _canalPlannedEdges) {
+        // Only edges not yet built stay in the planning colour; built edges are
+        // already drawn as canals (river-style) by the normal map render.
+        const plan = _planById(pl.planId);
+        const idx = (plan && plan.edgeIndex != null) ? plan.edgeIndex : 0;
+        const remainder = (pl.edges || []).slice(idx);
+        drawCanalEdges(remainder, canalPlanStroke, lw); // planned (unbuilt) edges
+      }
       if (_canalHover && _canalHover.edges) drawCanalEdges(_canalHover.edges, canalHoverStroke, lw); // hover
+      // Canals scheduled for removal are shown in the same under-construction
+      // colour as canals being built, until the timer finalizes their removal.
+      const removals = _canalRemovingEdges();
+      if (removals.length) drawCanalEdges(removals, canalPlanStroke, lw);
     }
 
     // --- canal (vertex/edge) build mode ---
@@ -3774,11 +4375,17 @@
         ctxCanal.hidden = true;
         const c = canalRemovalCost();
         const turns = _turnsOf(c, 2);
+        const removing = isCanalRemoving(a.x, a.y, b.x, b.y);
         const canPay = canAffordCanalRemoval(a.x, a.y, b.x, b.y, 'human');
-        let label = `Remove Canal (${canalRemovalCostLabel()}, ${turns} turn${turns === 1 ? '' : 's'})`;
-        if (!canPay) label += " — need " + canalRemovalShortfallLabel(a.x, a.y, b.x, b.y, 'human');
+        let label;
+        if (removing) {
+          label = "Removing Canal…";
+        } else {
+          label = `Remove Canal (${canalRemovalCostLabel()}, ${turns} turn${turns === 1 ? '' : 's'})`;
+          if (!canPay) label += " — need " + canalRemovalShortfallLabel(a.x, a.y, b.x, b.y, 'human');
+        }
         ctxCanalRemove.textContent = label;
-        ctxCanalRemove.classList.toggle("disabled", !canPay);
+        ctxCanalRemove.classList.toggle("disabled", removing || !canPay);
         ctxCanalRemove.hidden = false;
         ctxMenu.style.left = clientX + "px";
         ctxMenu.style.top = clientY + "px";
@@ -3912,7 +4519,8 @@
       const { a, b } = _ctxCanalEdge;
       hideContextMenu();
       if (removeCanalEdge(a.x, a.y, b.x, b.y, 'human')) {
-        notify("Canal removed.");
+        const t = _turnsOf(canalRemovalCost(), 2);
+        notify(`Canal removal started — ${t} turn${t === 1 ? '' : 's'}.`);
         maybeAutoEndHumanTurn();
       }
     });
@@ -4137,6 +4745,16 @@
         `<div class="stat-sec">Buildings <span class="stat-hint">(per-year bonus)</span></div>`,
         ...(bldgRows.length ? bldgRows : [`<div class="stat-note">No buildings yet.</div>`]),
       ];
+      // Network section: colonies DIRECTLY connected to this one, with the
+      // connection type(s) right-aligned (road/monorail/river/sea/air). A colony
+      // linked by more than one modality lists them all (e.g. "River, Air").
+      const netLinks = directColonyConnections(col);
+      const netRows = netLinks.map((ln) =>
+        `<div class="stat-row"><span>${ln.colony.name || 'Colony'}</span><span>${ln.type}</span></div>`);
+      const networkSection = [
+        `<div class="stat-sec">Network <span class="stat-hint">(directly connected)</span></div>`,
+        ...(netRows.length ? netRows : [`<div class="stat-note">Not connected to any colony.</div>`]),
+      ];
       const rows = [
         `<h3>Statistics</h3>`,
         `<div class="stat-sec">Population</div>`,
@@ -4151,6 +4769,7 @@
         `<div class="stat-row"><span>Happiness</span><span>${sign(s.storedHappiness)}${nf(s.storedHappiness, 1)} / ±${nf(s.happinessCap)} <span class="${cls(s.happinessRate)}">${sign(s.happinessRate)}${nf(s.happinessRate, 1)}/yr</span></span></div>`,
         overNote,
         ...buildingsSection,
+        ...networkSection,
         `<div class="stat-note">While stored happiness is positive the colony grows; if it goes negative the population declines.</div>`,
       ];
       el.innerHTML = rows.join("");
@@ -4478,6 +5097,7 @@
       updateStatus(null);
       updatePlayerPanel();
       if (hexMap.setTransport) hexMap.setTransport(ensureTransport());
+      refreshCanalOverlay();  // show any in-progress canal removals from a load
 
       if (!canvas._ctxAttached) {
         canvas._ctxAttached = true;
@@ -4544,6 +5164,14 @@
           // hovered cell; moving to another cell moves the overlay with it.
           if (e.altKey && hexMap) setDebugHitCell(hexMap.hexAtEvent(e));
           else if (_debugHitCell) setDebugHitCell(null);
+          // When not actively planning/placing, hovering a stalled transport
+          // project's unbuilt link shows why it isn't building.
+          if (!_canalMode && !_transportMode && !_foundMode) {
+            updateStallHint(e);
+          } else if (_stallTipShown) {
+            const bt = document.getElementById("build-tooltip");
+            if (bt) bt.hidden = true; _stallTipShown = false;
+          }
           if (_canalMode && hexMap) { updateCanalPreview(hexMap.cornerAtEvent(e), e.clientX, e.clientY); return; }
           if (_transportMode && hexMap) { updateTransportPreview(hexMap.hexAtEvent(e), e.clientX, e.clientY); return; }
           if (!_foundMode || !hexMap) return;
@@ -4556,7 +5184,10 @@
           if (e.key === "Alt" || e.altKey === false) setDebugHitCell(null);
         });
         window.addEventListener("blur", () => setDebugHitCell(null));
-        canvas.addEventListener("mouseleave", () => setDebugHitCell(null));
+        canvas.addEventListener("mouseleave", () => {
+          setDebugHitCell(null);
+          if (_stallTipShown) { const bt = document.getElementById("build-tooltip"); if (bt) bt.hidden = true; _stallTipShown = false; }
+        });
         canvas.addEventListener("click", (e) => {
           if (_canalMode && hexMap) { confirmCanal(hexMap.cornerAtEvent(e)); return; }
           if (_transportMode && hexMap) { const h = hexMap.hexAtEvent(e); if (h) confirmTransport(h.x, h.y); return; }
@@ -4567,7 +5198,12 @@
         document.addEventListener("keydown", (e) => {
           if (_canalMode && e.key === "Escape") { cancelCanal(); notify("Canal cancelled."); return; }
           if (_transportMode && e.key === "Escape") { cancelTransport(); notify("Build cancelled."); return; }
-          if (_foundMode && e.key === "Escape") { cancelFoundColony(); notify("Colony launch cancelled."); }
+          if (_foundMode && e.key === "Escape") { cancelFoundColony(); notify("Colony launch cancelled."); return; }
+          // Escape with no active build/launch mode: take manual control of this
+          // turn so auto turn end won't end it for you. Auto-end resumes next turn.
+          if (e.key === "Escape" && _autoTurnEnd && isHumanTurn()) {
+            if (takeManualControlThisTurn()) notify("Auto turn end paused — end this turn yourself (Cmd/Ctrl+Return).");
+          }
         });
       }
 
@@ -4604,4 +5240,3 @@
   </script>
 </body>
 </html>
-
