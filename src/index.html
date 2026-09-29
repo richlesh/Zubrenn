@@ -555,6 +555,15 @@
       for (const k of _COST_KEYS) out[k] = ((a && a[k] || 0) + (b && b[k] || 0)) / 2;
       return out;
     }
+    // `turns` in a cost block is a DURATION, not a payable resource, so the
+    // resource helpers below skip it.
+    function _resourceKeysOf(c) { return Object.keys(c).filter((r) => r !== "turns"); }
+    function _turnsOf(c, dflt) { return (c && c.turns != null) ? c.turns : dflt; }
+    function costLabelOf(c) {
+      const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+      const parts = _resourceKeysOf(c).map((r) => `${c[r]} ${cap(r)}`);
+      return parts.length ? parts.join(", ") : "free";
+    }
     // Build time for a building type, taken from its buildCost.turns. (Older
     // configs put this in a top-level buildTurns; accept that too.)
     function buildTurnsOf(bt) {
@@ -594,6 +603,101 @@
     function canalSegmentCost(fx, fy, tx, ty) {
       return _avgCost(canalCostAt(fx, fy), canalCostAt(tx, ty));
     }
+    // ---- canal removal ------------------------------------------------------
+    // Cost to remove one canal SEGMENT (a built border), from config. `turns`
+    // is the build time, not a resource (see _resourceKeysOf).
+    function canalRemovalCost() {
+      return CONFIG.removeCanalCost || { energy: 2, food: 1, turns: 2 };
+    }
+    function canalRemovalCostLabel() { return costLabelOf(canalRemovalCost()); }
+    // Removal is paid from the colony controlling either of the border's cells.
+    function canalRemovalPool(ax, ay, bx, by, owner) {
+      return buildPoolAt(ax, ay, owner) || buildPoolAt(bx, by, owner);
+    }
+    function canAffordCanalRemoval(ax, ay, bx, by, owner) {
+      const pool = canalRemovalPool(ax, ay, bx, by, owner);
+      if (!pool) return false;
+      const c = canalRemovalCost();
+      return _resourceKeysOf(c).every((r) => (pool[r] || 0) >= c[r]);
+    }
+    function canalRemovalShortfallLabel(ax, ay, bx, by, owner) {
+      const c = canalRemovalCost();
+      const pool = canalRemovalPool(ax, ay, bx, by, owner) || {};
+      const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+      const parts = [];
+      for (const r of _resourceKeysOf(c)) {
+        const need = c[r] - (pool[r] || 0);
+        if (need > 0) parts.push(`${Math.ceil(need)} more ${cap(r)}`);
+      }
+      return parts.length ? parts.join(", ") : "more resources";
+    }
+    // Destroy a built canal segment: charge the cost, drop the edge, and undo
+    // its river marking.
+    //
+    // Building a canal marks BOTH its cells as river cells so all river logic
+    // applies. On removal a cell may only stop being a river cell if nothing
+    // else still makes it one — an original river, or another canal still
+    // touching it — so we recompute that per cell rather than blindly clearing.
+    function removeCanalEdge(ax, ay, bx, by, owner) {
+      const tr = ensureTransport();
+      const ek = edgeKey(ax, ay, bx, by);
+      if (!tr.canals.has(ek)) return false;
+      if (!canAffordCanalRemoval(ax, ay, bx, by, owner)) return false;
+      const pool = canalRemovalPool(ax, ay, bx, by, owner);
+      const c = canalRemovalCost();
+      for (const r of _resourceKeysOf(c)) {
+        if (pool[r] != null) pool[r] = Math.max(0, pool[r] - c[r]);
+      }
+      tr.canals.delete(ek);
+      tr.bridges.delete(ek);          // any bridge over it goes too
+
+      // Drop pending build plans that included this edge, so construction does
+      // not silently rebuild what the player just removed.
+      for (const plan of (tr.plans || [])) {
+        if (plan.kind !== 'canal' || !plan.edges) continue;
+        plan.edges = plan.edges.filter(
+          (e) => edgeKey(e.a.x, e.a.y, e.b.x, e.b.y) !== ek);
+      }
+      tr.plans = (tr.plans || []).filter((pl) => !pl.edges || pl.edges.length);
+      if (typeof _canalPlannedEdges !== 'undefined' && Array.isArray(_canalPlannedEdges)) {
+        for (const pp of _canalPlannedEdges) {
+          pp.edges = (pp.edges || []).filter(
+            (e) => edgeKey(e.a.x, e.a.y, e.b.x, e.b.y) !== ek);
+        }
+        _canalPlannedEdges = _canalPlannedEdges.filter((pp) => pp.edges.length);
+      }
+
+      // A cell stays a river cell only if an ORIGINAL river ran through it or
+      // another canal still touches it.
+      const W = gameState.map.terrain[0].length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const wx = (x) => wrap ? ((x % W) + W) % W : x;
+      const stillRiver = (x, y) => {
+        if (originalRiverCells().has(y * W + wx(x))) return true;
+        for (const ck of tr.canals) {
+          const [ka, kb] = ck.split("|");
+          const [cax, cay] = ka.split(",").map(Number);
+          const [cbx, cby] = kb.split(",").map(Number);
+          if ((cax === x && cay === y) || (cbx === x && cby === y)) return true;
+        }
+        return false;
+      };
+      const rs = riverSegmentSet();
+      for (const [cx, cy] of [[ax, ay], [bx, by]]) {
+        if (!stillRiver(cx, cy)) rs.delete(cy * W + wx(cx));
+      }
+
+      // River-derived caches all depend on the canal set.
+      _riverEdgeSet = null;
+      _riverVertexCounts = null;
+      invalidateVertexGraph();
+      if (hexMap && typeof hexMap.setTransport === 'function') hexMap.setTransport(tr);
+      if (owner === 'human') {
+        recomputeHumanResourcePanel(); updateResourcesPanel(); updatePlayerPanel();
+      }
+      return true;
+    }
+
     // Cost to bridge a ROAD across a SINGLE shallow-sea tile between two land
     // cells FROM and TO that are both adjacent to the sea cell. This is a DOUBLE
     // bridge: FROM->sea-center and sea-center->TO. Each span costs
@@ -2454,7 +2558,7 @@
       const pool = buildPoolAt(x, y, owner);
       if (pool) {
         const cost = buildingCost(type);
-        for (const res of Object.keys(cost)) {
+        for (const res of _resourceKeysOf(cost)) {
           if (pool[res] != null) pool[res] = Math.max(0, pool[res] - cost[res]);
         }
         if (owner === 'human') { recomputeHumanResourcePanel(); updatePlayerPanel(); }
@@ -2473,15 +2577,6 @@
     // Cost to remove a building (drawn from the controlling colony's storage).
     function removalCost() {
       return (CONFIG.removeImprovementCost) || { energy: 5, food: 2 };
-    }
-    // `turns` in a cost block is a DURATION, not a payable resource, so the
-    // resource helpers below skip it.
-    function _resourceKeysOf(c) { return Object.keys(c).filter((r) => r !== "turns"); }
-    function _turnsOf(c, dflt) { return (c && c.turns != null) ? c.turns : dflt; }
-    function costLabelOf(c) {
-      const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-      const parts = _resourceKeysOf(c).map((r) => `${c[r]} ${cap(r)}`);
-      return parts.length ? parts.join(", ") : "free";
     }
     function removalCostLabel() { return costLabelOf(removalCost()); }
     function canAffordRemovalAt(x, y, owner) {
@@ -2564,7 +2659,7 @@
       // Pay biodome cost from the host colony's storage.
       const pool = ensureStored(host);
       const cost = buildingCost(1);
-      for (const r of Object.keys(cost)) { if (pool[r] != null) pool[r] = Math.max(0, pool[r] - cost[r]); }
+      for (const r of _resourceKeysOf(cost)) { if (pool[r] != null) pool[r] = Math.max(0, pool[r] - cost[r]); }
       // Transfer colonists out of the host now.
       host.population = Math.max(0, (host.population || 0) - transfer);
       const buildTurns = buildTurnsOf(buildingType(1));
@@ -3006,7 +3101,7 @@
       const pool = buildPoolAt(x, y, owner);
       if (!pool) return false;
       const cost = buildingCost(type);
-      for (const res of Object.keys(cost)) {
+      for (const res of _resourceKeysOf(cost)) {
         if ((pool[res] || 0) < cost[res]) return false;
       }
       return true;
@@ -3031,24 +3126,19 @@
     // Whether the human can afford a building type (legacy: uses aggregate).
     function canAffordBuilding(type) {
       const cost = buildingCost(type);
-      for (const res of Object.keys(cost)) {
+      for (const res of _resourceKeysOf(cost)) {
         if ((gameState.resources[res] || 0) < cost[res]) return false;
       }
       return true;
     }
     // Short "N Material, M Wealth" cost label for the menu.
-    function buildingCostLabel(type) {
-      const cost = buildingCost(type);
-      const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-      const parts = Object.keys(cost).map((r) => `${cost[r]} ${cap(r)}`);
-      return parts.length ? parts.join(", ") : "free";
-    }
+    function buildingCostLabel(type) { return costLabelOf(buildingCost(type)); }
     // "N more Material, M more Wealth" describing what the human still lacks.
     function buildingShortfallLabel(type) {
       const cost = buildingCost(type);
       const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
       const parts = [];
-      for (const r of Object.keys(cost)) {
+      for (const r of _resourceKeysOf(cost)) {
         const have = gameState.resources[r] || 0;
         const need = cost[r] - have;
         if (need > 0) parts.push(`${Math.ceil(need)} more ${cap(r)}`);
@@ -3061,7 +3151,7 @@
       const pool = buildPoolAt(x, y, owner) || {};
       const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
       const parts = [];
-      for (const r of Object.keys(cost)) {
+      for (const r of _resourceKeysOf(cost)) {
         const need = cost[r] - (pool[r] || 0);
         if (need > 0) parts.push(`${Math.ceil(need)} more ${cap(r)}`);
       }
@@ -3633,9 +3723,11 @@
     const ctxRoad = document.getElementById("ctx-road");
     const ctxMonorail = document.getElementById("ctx-monorail");
     const ctxCanal = document.getElementById("ctx-canal");
+    const ctxCanalRemove = document.getElementById("ctx-canal-remove");
     let ctxTarget = null;
     let _ctxVertex = null; // nearest hex-corner vertex key of the last right-click
-    function hideContextMenu() { ctxMenu.hidden = true; ctxTarget = null; }
+    let _ctxCanalEdge = null; // {a:{x,y}, b:{x,y}} canal border of the last right-click
+    function hideContextMenu() { ctxMenu.hidden = true; ctxTarget = null; _ctxCanalEdge = null; }
     function humanCanPlace() {
       const p = gameState.players && gameState.players[gameState.currentPlayer];
       return p && p.kind === 'human' && (p.modules || 0) > 0; // need a colony module
@@ -3665,13 +3757,37 @@
         ctxCanal.hidden = false;
         ctxCanal.classList.remove("disabled");
         ctxCanal.textContent = "Build Canal";
+        ctxCanalRemove.hidden = true;
         ctxMenu.style.left = clientX + "px";
         ctxMenu.style.top = clientY + "px";
         ctxMenu.hidden = false;
         return;
       }
-      // Otherwise a canal is never offered in the cell popup.
+      // A right-click on a built canal border offers only "Remove Canal".
+      if (isHumanTurn() && _ctxCanalEdge) {
+        const a = _ctxCanalEdge.a, b = _ctxCanalEdge.b;
+        ctxEstablish.hidden = true;
+        ctxBuildItems.innerHTML = "";
+        ctxRemove.hidden = true;
+        ctxRoad.hidden = true;
+        ctxMonorail.hidden = true;
+        ctxCanal.hidden = true;
+        const c = canalRemovalCost();
+        const turns = _turnsOf(c, 2);
+        const canPay = canAffordCanalRemoval(a.x, a.y, b.x, b.y, 'human');
+        let label = `Remove Canal (${canalRemovalCostLabel()}, ${turns} turn${turns === 1 ? '' : 's'})`;
+        if (!canPay) label += " — need " + canalRemovalShortfallLabel(a.x, a.y, b.x, b.y, 'human');
+        ctxCanalRemove.textContent = label;
+        ctxCanalRemove.classList.toggle("disabled", !canPay);
+        ctxCanalRemove.hidden = false;
+        ctxMenu.style.left = clientX + "px";
+        ctxMenu.style.top = clientY + "px";
+        ctxMenu.hidden = false;
+        return;
+      }
+      // Otherwise neither canal option is offered in the cell popup.
       ctxCanal.hidden = true;
+      ctxCanalRemove.hidden = true;
 
       const buildable = isHumanTurn() && hex && terr >= 2 && terr <= 7 && !cellHasBuilding(hex.x, hex.y);
 
@@ -3790,6 +3906,15 @@
     ctxCanal.addEventListener("click", () => {
       if (!ctxTarget) return; const startVK = _ctxVertex; const h = ctxTarget; hideContextMenu();
       if (startVK) beginCanal(startVK, h);
+    });
+    ctxCanalRemove.addEventListener("click", () => {
+      if (ctxCanalRemove.classList.contains("disabled") || !_ctxCanalEdge) return;
+      const { a, b } = _ctxCanalEdge;
+      hideContextMenu();
+      if (removeCanalEdge(a.x, a.y, b.x, b.y, 'human')) {
+        notify("Canal removed.");
+        maybeAutoEndHumanTurn();
+      }
     });
     document.addEventListener("click", (e) => {
       if (!ctxMenu.hidden && !ctxMenu.contains(e.target)) hideContextMenu();
@@ -4379,6 +4504,19 @@
           _ctxVertex = (corner && onVertex)
             ? cornerVertexKey(corner.cell.x, corner.cell.y, corner.cornerIndex)
             : null;
+          // A click on a BORDER (not on a vertex) that carries a built canal
+          // targets that canal for removal. Vertex hits win, so a corner click
+          // still offers "Build Canal" rather than removing a canal that
+          // happens to end there.
+          _ctxCanalEdge = null;
+          if (!onVertex && prox && hexMap.edgeAtEvent) {
+            const frac0 = (CONFIG.cellClickBorderMargin != null) ? CONFIG.cellClickBorderMargin : 0.28;
+            const ce = hexMap.edgeAtEvent(e);
+            if (ce && ce.dist <= frac0 * prox.radius &&
+                hasCanalEdge(ce.cell.x, ce.cell.y, ce.other.x, ce.other.y)) {
+              _ctxCanalEdge = { a: ce.cell, b: ce.other };
+            }
+          }
           // Only register cell clicks in the INTERIOR of the cell: a click that
           // lands within a small margin of any vertex or edge should not bring
           // up the cell right-click menu. The one exception is a legal canal
@@ -4393,7 +4531,10 @@
             const canalStart = isHumanTurn() && hex && _ctxVertex &&
               vertexConnectable(_ctxVertex) &&
               canalEdgesAtVertex(_ctxVertex).length >= 1;
-            if (nearBorder && !canalStart) { hideContextMenu(); return; }
+            // A canal border click is the other exception: it opens the
+            // "Remove Canal" menu instead of being suppressed.
+            const canalRemove = isHumanTurn() && !!_ctxCanalEdge;
+            if (nearBorder && !canalStart && !canalRemove) { hideContextMenu(); return; }
           }
           showContextMenu(e.clientX, e.clientY, hex);
         });

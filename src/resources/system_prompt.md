@@ -67,7 +67,7 @@ found a new colony from it:
 - It costs the **Biodome build cost** (paid from the host colony's storage) and
   transfers **`foundColonyPopulationTransfer`** (1,000) colonists out of the host.
 - The new biodome travels overland to the target cell. **Travel time** =
-  Biodome `buildTurns` + `ceil(pathCost / biodomeMovementPerYear)` turns
+  Biodome `buildCost.turns` + `ceil(pathCost / biodomeMovementPerYear)` turns
   (`biodomeMovementPerYear` = 12). While in transit it produces nothing; on
   arrival it becomes a colony and gains the 1,000 colonists.
 - **Movement / path cost:** each cell entered costs its terrain
@@ -112,8 +112,18 @@ idle building on an unworked cell does nothing but still provides storage.
 Dock require a Biodome; the Factory requires a Biodome **and** a Solar Panel.
 
 **Removing a building** (Remove Improvement) costs `removeImprovementCost`
-(Energy + Food from the colony) and takes `removeImprovementTurns` to complete;
-the building stops producing immediately and disappears when the timer expires.
+(Energy + Food from the colony) and takes `removeImprovementCost.turns` to
+complete; the building stops producing immediately and disappears when the
+timer expires.
+
+**Removing a canal:** right-clicking a built canal border offers **Remove
+Canal**, which costs `removeCanalCost` (Energy + Food, paid by a colony
+controlling either adjacent cell). The border stops being a canal immediately;
+each adjacent cell stops counting as a river cell unless an original river or
+another canal still touches it.
+
+In every cost block, `turns` is the build/removal time, not a payable
+resource.
 
 **Docks and the sea:** a **Dock** (type 5) is built on a **shallow-sea** tile
 (a sea tile edge-adjacent to land) inside a colony's zone of control. Building a
