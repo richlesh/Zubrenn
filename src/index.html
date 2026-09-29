@@ -67,6 +67,7 @@
     <div class="ctx-item" id="ctx-road" hidden>Build Road</div>
     <div class="ctx-item" id="ctx-monorail" hidden>Build Monorail</div>
     <div class="ctx-item" id="ctx-canal" hidden>Build Canal</div>
+    <div class="ctx-item" id="ctx-canal-remove" hidden>Remove Canal</div>
   </div>
 
   <!-- Name-your-colony modal overlay. -->
@@ -196,7 +197,7 @@
     let _roundHadAction = false; // did a player place/act during the current round?
     let CONFIG = { maxAIs: 40, minStartDistance: 20, startingYear: 2500,
                    aiPlacementMinTurns: 3, aiPlacementMaxTurns: 200,
-                   buildingTypes: { "1": { name: "Biodome", startPopulation: 1000, growthRate: 0.01, buildTurns: 0, bonus: { food: 1, material: 1, energy: 2, growth: 0, wealth: 1 } } },
+                   buildingTypes: { "1": { name: "Biodome", startPopulation: 1000, growthRate: 0.01, buildCost: { turns: 0 }, bonus: { food: 1, material: 1, energy: 2, growth: 0, wealth: 1 } } },
                    names: [] };
     ipcRenderer.invoke("config-get").then((c) => { if (c) CONFIG = c; }).catch(() => {});
     let SYSTEM_PROMPT = "";
@@ -540,10 +541,10 @@
     function colonyHasAirport(col) { return ensureTransport().airports.has(cellKey(col.x, col.y)); }
 
     // ---- transport build costs ---------------------------------------------
-    // A cost object is { food, material, energy, wealth, buildTurns }. These
+    // A cost object is { food, material, energy, wealth, turns }. These
     // helpers read the per-terrain cost blocks from config.
-    const _COST_KEYS = ["food", "material", "energy", "wealth", "buildTurns"];
-    function _emptyCost() { return { food: 0, material: 0, energy: 0, wealth: 0, buildTurns: 0 }; }
+    const _COST_KEYS = ["food", "material", "energy", "wealth", "turns"];
+    function _emptyCost() { return { food: 0, material: 0, energy: 0, wealth: 0, turns: 0 }; }
     function _addCost(a, b, scale) {
       const s = (scale == null) ? 1 : scale;
       for (const k of _COST_KEYS) a[k] = (a[k] || 0) + (b && b[k] || 0) * s;
@@ -553,6 +554,14 @@
       const out = _emptyCost();
       for (const k of _COST_KEYS) out[k] = ((a && a[k] || 0) + (b && b[k] || 0)) / 2;
       return out;
+    }
+    // Build time for a building type, taken from its buildCost.turns. (Older
+    // configs put this in a top-level buildTurns; accept that too.)
+    function buildTurnsOf(bt) {
+      if (!bt) return 0;
+      if (bt.buildCost && bt.buildCost.turns != null) return bt.buildCost.turns;
+      if (bt.buildTurns != null) return bt.buildTurns;   // legacy
+      return 0;
     }
     function roadCostAt(x, y) {
       const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(x, y))]) || {};
@@ -826,12 +835,12 @@
       }
       return total;
     }
-    // Estimated completion time (turns) for a plan: sum of per-segment buildTurns
+    // Estimated completion time (turns) for a plan: sum of per-segment turns
     // (does not model resource-shortfall pauses).
     function planEtaTurns(kind, path) {
       let turns = 0;
       for (let i = 1; i < path.length; i++) {
-        turns += transportSegmentCost(kind, path[i-1].x, path[i-1].y, path[i].x, path[i].y).buildTurns || 0;
+        turns += transportSegmentCost(kind, path[i-1].x, path[i-1].y, path[i].x, path[i].y).turns || 0;
       }
       return Math.max(1, Math.ceil(turns));
     }
@@ -844,7 +853,7 @@
         source: { x: source.x, y: source.y },
         path: path.map((c) => ({ x: c.x, y: c.y })),
         segIndex: 1,      // next segment to build connects path[segIndex-1] -> path[segIndex]
-        accrued: 0,       // fractional buildTurns accumulated toward current segment
+        accrued: 0,       // fractional turns accumulated toward current segment
         paused: false,
         id: (gameState._transportPlanSeq = (gameState._transportPlanSeq || 0) + 1),
       };
@@ -852,7 +861,7 @@
       return plan;
     }
     // Create a CANAL plan from an explicit list of edges [{a:{x,y},b:{x,y}}...].
-    // Built one edge (border) per turn's worth of buildTurns, paid from source.
+    // Built one edge (border) per turn's worth of turns, paid from source.
     function planCanalEdges(owner, source, edges) {
       if (!Array.isArray(edges) || !edges.length) return null;
       const tr = ensureTransport();
@@ -904,7 +913,7 @@
         if (!col) continue; // source colony gone -> drop plan
         const pool = ensureStored(col);
         // One turn's worth of build progress; complete as many segments as the
-        // accrued buildTurns + resources allow.
+        // accrued turns + resources allow.
         plan.accrued += 1; // one turn of construction effort
         plan.paused = false;
         // Canal plans are EDGE-based (explicit list of cell-border edges).
@@ -917,7 +926,7 @@
             if (!canalSegmentAllowed(e.a.x, e.a.y, e.b.x, e.b.y)) { plan.edgeIndex += 1; prog = true; continue; }
             if (!canalSegmentInRange(e.a.x, e.a.y, e.b.x, e.b.y, plan.owner)) { plan.edgeIndex += 1; prog = true; continue; }
             const seg = canalSegmentCost(e.a.x, e.a.y, e.b.x, e.b.y);
-            const need = Math.max(0.0001, seg.buildTurns || 0);
+            const need = Math.max(0.0001, seg.turns || 0);
             if (plan.accrued + 1e-9 < need) break;
             const afford = ["food", "material", "energy", "wealth"].every((k) => (pool[k] || 0) >= (seg[k] || 0));
             if (!afford) { plan.paused = true; break; }
@@ -946,7 +955,7 @@
             plan.segIndex += 1; progressed = true; continue;
           }
           const seg = transportSegmentCost(plan.kind, a.x, a.y, b.x, b.y);
-          const need = Math.max(0.0001, seg.buildTurns || 0);
+          const need = Math.max(0.0001, seg.turns || 0);
           if (plan.accrued + 1e-9 < need) break; // not enough build effort yet this turn
           // Can we afford the segment's resources?
           const afford = ["food", "material", "energy", "wealth"].every((k) => (pool[k] || 0) >= (seg[k] || 0));
@@ -1827,6 +1836,7 @@
     function advanceTurn() {
       const players = gameState.players || [];
       if (!players.length) return;
+      stopIdleWatch();        // the human's turn is over; drop any idle warning
       gameState.currentPlayer++;
       let roundCompleted = false;
       if (gameState.currentPlayer >= players.length) {
@@ -1868,6 +1878,7 @@
       const humanHasActions = humanHasWorkerToAssign() || humanCanLaunchColony() || humanCanImproveWorkedCell();
       const aiPending = players.some((pl) => pl.kind === 'ai' && !pl.placed);
       if (!humanHasActions && (_autoTurnEnd || aiPending)) {
+        stopIdleWatch();      // no stale warning once the turn is on its way out
         scheduleTurnStep(() => advanceTurn());
       }
     }
@@ -1894,51 +1905,131 @@
       turnStartOverlay.hidden = true;
       turnStartHandle.hidden = true;
     }
+    // Idle-based auto-end.
+    //
+    // The "your turn will end" warning is for a player who has walked away, so
+    // it must never interrupt someone who is playing. It appears only when ALL
+    // of the following hold:
+    //   - Auto turn end is on,
+    //   - the player actually has something to do this turn (otherwise the
+    //     turn just ends, with a brief notice),
+    //   - and they have not moved the mouse or pressed a key for IDLE_MS.
+    // Any input before the warning restarts the idle countdown; any input while
+    // the warning is showing dismisses it and hands control back, restarting
+    // the countdown again. So the turn only ends after two full idle periods
+    // with no input at all.
+    const IDLE_MS = 30000;       // quiet time before the warning appears
+    const WARN_MS = 30000;       // warning visible before the turn auto-ends
+    const NEW_YEAR_MS = 2000;    // "Year N begins" announcement
+    const NOTHING_MS = 2000;     // "no actions" notice before ending
+
+    let _idleTimer = null;       // pending warning
+    let _warnTimer = null;       // pending auto-end (warning on screen)
+    let _idleArmed = false;      // watching for idleness this turn
+    let _warningShowing = false;
+
+    function _clearIdleTimers() {
+      if (_idleTimer) { clearTimeout(_idleTimer); _idleTimer = null; }
+      if (_warnTimer) { clearTimeout(_warnTimer); _warnTimer = null; }
+    }
+    // Stop watching entirely (turn over, or player took manual control).
+    function stopIdleWatch() {
+      _clearIdleTimers();
+      _idleArmed = false;
+      if (_warningShowing) { _warningShowing = false; _closeTurnStart(); }
+    }
+    function humanHasAnyAction() {
+      return humanHasWorkerToAssign() || humanCanLaunchColony() || humanCanImproveWorkedCell();
+    }
+    // Begin (or restart) the quiet period that precedes the warning.
+    function armIdleWatch() {
+      if (!_autoTurnEnd || _skipAutoEndThisTurn) return;
+      const players = gameState.players || [];
+      const p = players[gameState.currentPlayer];
+      if (!p || p.kind !== 'human' || !p.placed) return;
+      _idleArmed = true;
+      _clearIdleTimers();
+      _idleTimer = setTimeout(showAutoEndWarning, IDLE_MS);
+    }
+    // Any mouse move or key press: the player is here, so reset. If the warning
+    // is up, take it down and give them another full idle period.
+    function noteUserActivity() {
+      if (!_idleArmed) return;
+      if (_warningShowing) { _warningShowing = false; _closeTurnStart(); }
+      _clearIdleTimers();
+      _idleTimer = setTimeout(showAutoEndWarning, IDLE_MS);
+    }
+    function showAutoEndWarning() {
+      _clearIdleTimers();
+      if (!_idleArmed || !_autoTurnEnd || _skipAutoEndThisTurn) return;
+      // These are declared further down the script; guard against the temporal
+      // dead zone so an early timer can never throw.
+      let busy = false;
+      try {
+        busy = (workOverlay && !workOverlay.hidden) || _foundMode || !!_transportMode || _canalMode;
+      } catch (err) { busy = false; }
+      if (busy) { armIdleWatch(); return; }   // mid-dialog or mid-action
+      if (!humanHasAnyAction()) { stopIdleWatch(); advanceTurn(); return; }
+      _warningShowing = true;
+      turnStartText.textContent = "Auto turn end is on";
+      turnStartSub.textContent = `Your turn will end in ${Math.round(WARN_MS / 1000)} seconds. Click below to take control.`;
+      turnStartHandle.hidden = false;
+      turnStartOverlay.hidden = false;
+      _warnTimer = setTimeout(() => {
+        _warningShowing = false;
+        stopIdleWatch();
+        _closeTurnStart();
+        advanceTurn();
+      }, WARN_MS);
+    }
+
     // Called at the start of the human's turn (a new year). Announces the year,
-    // then—if Auto turn end is on—shows a notice with a "Let me handle it"
-    // button and ends the turn automatically per the rules.
+    // then starts watching for idleness. The auto-end warning is NOT shown up
+    // front — only after the player has been idle for IDLE_MS.
     function startHumanTurn() {
       _skipAutoEndThisTurn = false;
       _clearTurnStartTimers();
-      // Step 1: announce the new year for 5 seconds (click to skip).
+      stopIdleWatch();
       turnStartText.textContent = `Year ${currentYear()} begins`;
       turnStartSub.textContent = "";
       turnStartHandle.hidden = true;
       turnStartOverlay.hidden = false;
-      const NEW_YEAR_MS = 2000, AUTO_END_MS = 30000, NOTHING_MS = 2000;
-      const toStep2 = () => {
+      const afterYear = () => {
         _clearTurnStartTimers();
-        if (!_autoTurnEnd) { _closeTurnStart(); return; }   // player controls turn
-        // Step 2: auto-end notice.
-        const hasActions = humanHasWorkerToAssign() || humanCanLaunchColony() || humanCanImproveWorkedCell();
-        turnStartText.textContent = "Auto turn end is on";
-        if (!hasActions) {
+        _closeTurnStart();
+        if (!_autoTurnEnd) return;                  // player controls the turn
+        if (!humanHasAnyAction()) {
+          // Nothing to do: say so briefly, then end. No "take control" button,
+          // since there is nothing to take control of.
+          turnStartText.textContent = "Auto turn end is on";
           turnStartSub.textContent = "You have no actions this turn — ending automatically…";
           turnStartHandle.hidden = true;
+          turnStartOverlay.hidden = false;
           _turnStartTimers.push(setTimeout(() => { _closeTurnStart(); advanceTurn(); }, NOTHING_MS));
-        } else {
-          turnStartSub.textContent = "Your turn will end in 30 seconds. Click below to take control.";
-          turnStartHandle.hidden = false;
-          _turnStartTimers.push(setTimeout(() => { _closeTurnStart(); advanceTurn(); }, AUTO_END_MS));
+          return;
         }
+        armIdleWatch();                             // wait for them to go quiet
       };
-      _turnStartTimers.push(setTimeout(toStep2, NEW_YEAR_MS));
-      // Click the year message to skip straight to step 2.
+      _turnStartTimers.push(setTimeout(afterYear, NEW_YEAR_MS));
+      // Click the year announcement to skip it.
       turnStartOverlay.onclick = (e) => {
-        if (e.target === turnStartHandle) return; // button handles itself
-        if (turnStartHandle.hidden && turnStartSub.textContent === "") {
-          toStep2();
-        } else if (turnStartHandle.hidden && turnStartSub.textContent !== "") {
-          _closeTurnStart();
-          advanceTurn();
-        }
+        if (e.target === turnStartHandle) return;   // button handles itself
+        if (turnStartSub.textContent === "") afterYear();
       };
     }
     turnStartHandle.addEventListener("click", () => {
-      // "Let me handle it": skip auto-end for this turn; player ends manually.
+      // "Let me handle it": no more auto-end or warnings for this turn.
       _skipAutoEndThisTurn = true;
+      _warningShowing = false;
+      stopIdleWatch();
       _closeTurnStart();
     });
+
+    // Global activity taps. Capture phase so they see the event regardless of
+    // what handles it, and passive since they never interfere.
+    for (const evt of ["mousemove", "mousedown", "wheel", "keydown"]) {
+      window.addEventListener(evt, noteUserActivity, { capture: true, passive: true });
+    }
 
     // ---- colony / building placement --------------------------------------
     // Building type properties come from config.json (CONFIG.buildingTypes).
@@ -2354,7 +2445,7 @@
         : ((players[owner] && players[owner].name) || 'Alien');
       const bt = buildingType(type) || {};
       const rec = { x, y, type, owner, ownerName: species, improvement: improvementName(type),
-                    turnsRemaining: (bt.buildTurns != null ? bt.buildTurns : 0) };
+                    turnsRemaining: buildTurnsOf(bt) };
       gameState.buildings.push(rec);
       // Pay the build cost from the owner's resource pool (human uses
       // gameState.resources; each AI uses its own player.resources).
@@ -2383,24 +2474,28 @@
     function removalCost() {
       return (CONFIG.removeImprovementCost) || { energy: 5, food: 2 };
     }
-    function removalCostLabel() {
-      const c = removalCost();
+    // `turns` in a cost block is a DURATION, not a payable resource, so the
+    // resource helpers below skip it.
+    function _resourceKeysOf(c) { return Object.keys(c).filter((r) => r !== "turns"); }
+    function _turnsOf(c, dflt) { return (c && c.turns != null) ? c.turns : dflt; }
+    function costLabelOf(c) {
       const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-      const parts = Object.keys(c).map((r) => `${c[r]} ${cap(r)}`);
+      const parts = _resourceKeysOf(c).map((r) => `${c[r]} ${cap(r)}`);
       return parts.length ? parts.join(", ") : "free";
     }
+    function removalCostLabel() { return costLabelOf(removalCost()); }
     function canAffordRemovalAt(x, y, owner) {
       const pool = buildPoolAt(x, y, owner);
       if (!pool) return false;
       const c = removalCost();
-      return Object.keys(c).every((r) => (pool[r] || 0) >= c[r]);
+      return _resourceKeysOf(c).every((r) => (pool[r] || 0) >= c[r]);
     }
     function removalShortfallLabel(x, y, owner) {
       const c = removalCost();
       const pool = buildPoolAt(x, y, owner) || {};
       const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
       const parts = [];
-      for (const r of Object.keys(c)) {
+      for (const r of _resourceKeysOf(c)) {
         const need = c[r] - (pool[r] || 0);
         if (need > 0) parts.push(`${Math.ceil(need)} more ${cap(r)}`);
       }
@@ -2417,11 +2512,10 @@
       if (!canAffordRemovalAt(x, y, owner)) return false;
       const pool = buildPoolAt(x, y, owner);
       const c = removalCost();
-      for (const r of Object.keys(c)) {
+      for (const r of _resourceKeysOf(c)) {
         if (pool[r] != null) pool[r] = Math.max(0, pool[r] - c[r]);
       }
-      const turns = (CONFIG.removeImprovementTurns != null) ? CONFIG.removeImprovementTurns : 2;
-      b.removeTurns = turns;
+      b.removeTurns = _turnsOf(c, 2);
       // Idle its cell in every colony that was working it (it no longer produces).
       for (const col of gameState.buildings) {
         if (col.type === 1 && col.owner === owner && col.worked) {
@@ -2458,7 +2552,7 @@
     }
     // Launch a new colony from `host` (a biodome) to (tx,ty) for `owner`. Pays
     // the biodome cost + transfers colonists from the host, and creates an
-    // in-transit biodome that completes after buildTurns + travel turns, then
+    // in-transit biodome that completes after build turns + travel turns, then
     // gains the transferred colonists. Returns the created record or null.
     function launchColony(host, tx, ty, owner, name) {
       const v = foundColonyTargetValid(host, tx, ty);
@@ -2473,7 +2567,7 @@
       for (const r of Object.keys(cost)) { if (pool[r] != null) pool[r] = Math.max(0, pool[r] - cost[r]); }
       // Transfer colonists out of the host now.
       host.population = Math.max(0, (host.population || 0) - transfer);
-      const buildTurns = ((buildingType(1) || {}).buildTurns != null) ? buildingType(1).buildTurns : 0;
+      const buildTurns = buildTurnsOf(buildingType(1));
       const players = gameState.players || [];
       const species = (owner === 'human') ? 'You' : ((players[owner] && players[owner].name) || 'Alien');
       // In-transit biodome: not operational until turnsRemaining hits 0; then it
@@ -2820,7 +2914,7 @@
       if (tip) {
         if (_canalHover) {
           const c = _canalHover.cost, nf = (n) => Math.round(n * 10) / 10;
-          const eta = Math.max(1, Math.ceil(c.buildTurns || 0));
+          const eta = Math.max(1, Math.ceil(c.turns || 0));
           tip.innerHTML = `<b>Build Canal (${_canalHover.edges.length} segment${_canalHover.edges.length===1?'':'s'})</b><br>` +
             `Food ${nf(c.food)} · Material ${nf(c.material)} · Energy ${nf(c.energy)} · Wealth ${nf(c.wealth)}<br>ETA ~${eta} turn${eta===1?'':'s'}`;
           tip.style.left = (clientX + 16) + "px"; tip.style.top = (clientY + 16) + "px"; tip.hidden = false;
@@ -3654,7 +3748,7 @@
           showRemove = true;
           const already = b.removeTurns != null && b.removeTurns > 0;
           const canPay = canAffordRemovalAt(hex.x, hex.y, 'human');
-          const turns = (CONFIG.removeImprovementTurns != null) ? CONFIG.removeImprovementTurns : 2;
+          const turns = _turnsOf(removalCost(), 2);
           let label = `Remove Improvement (${removalCostLabel()}, ${turns} turn${turns === 1 ? '' : 's'})`;
           if (already) label = `Removing… (${b.removeTurns} turn${b.removeTurns === 1 ? '' : 's'} left)`;
           else if (!canPay) label += " — need " + removalShortfallLabel(hex.x, hex.y, 'human');

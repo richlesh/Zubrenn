@@ -496,6 +496,45 @@ class HexMap {
     return { cell: { x: hex.x, y: hex.y }, cornerIndex: best };
   }
 
+  // Public: the cell BORDER (edge) nearest a mouse event: the hovered cell and
+  // the index of its closest edge, plus the neighbouring cell across it.
+  // Edge i runs between corners i and i+1 (see hexVertices). Returns null off
+  // the map.
+  //   { cell:{x,y}, edgeIndex, other:{x,y}, dist }
+  edgeAtEvent(e) {
+    const hex = this.hexAtEvent(e);
+    if (!hex) return null;
+    const vp = this.viewport;
+    const spacing = vp.wCellSpacing;
+    const c0 = getHexCenter(0, 0, spacing);
+    const c = this._relCoords(this.canvas, e);
+    const toScreen = (p) => ({
+      x: p.x - vp.wOrigin.x + spacing.x / 2 - c0.x,
+      y: p.y - vp.wOrigin.y + spacing.y / 2 - c0.y,
+    });
+    const verts = hexVertices(hex.x, hex.y, spacing).map(toScreen);
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < verts.length; i++) {
+      const d = distPointToSegment(c, verts[i], verts[(i + 1) % verts.length]);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    // Neighbour across edge i, in the same order as hexVertices' corners:
+    // 0 top -> N, 1 -> NE, 2 -> SE, 3 bottom -> S, 4 -> SW, 5 -> NW.
+    const odd = ((hex.x % 2) + 2) % 2 === 1;
+    const OTHER = [
+      { dx: 0, dy: -1 },
+      odd ? { dx: 1, dy: 0 } : { dx: 1, dy: -1 },
+      odd ? { dx: 1, dy: 1 } : { dx: 1, dy: 0 },
+      { dx: 0, dy: 1 },
+      odd ? { dx: -1, dy: 1 } : { dx: -1, dy: 0 },
+      odd ? { dx: -1, dy: 0 } : { dx: -1, dy: -1 },
+    ][best];
+    let ox = hex.x + OTHER.dx;
+    if (this.wrap) ox = wrapX(ox, this.worldSize.x);
+    return { cell: { x: hex.x, y: hex.y }, edgeIndex: best,
+             other: { x: ox, y: hex.y + OTHER.dy }, dist: bestD };
+  }
+
   // Public: how close a mouse event is to the nearest VERTEX and nearest EDGE
   // (border) of the hex under the cursor, all in screen pixels. Also returns
   // the hex "radius" (half the wider cell spacing) so callers can express an
