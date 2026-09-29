@@ -2631,6 +2631,106 @@
       if (hexMap) hexMap.setOverlay(transportOverlayDraw);
     }
     // Overlay: hovered path in bright green; committed plans in lighter green.
+    // ---- DEBUG: right-click hit-zone overlay (hold Option/Alt) -------------
+    // Hold Option and hover a cell to see exactly how a right-click there is
+    // classified. The zones are computed from the SAME CONFIG values the
+    // contextmenu handler uses, so this shows real behaviour rather than a
+    // parallel guess:
+    //   - thin red outline  : interior region -> CELL menu
+    //   - yellow circles    : vertex regions  -> Build Canal (if legal)
+    //   - light blue bars   : edge regions    -> suppressed (no menu)
+    // A click is a vertex hit when vertexDist <= max(canalVertexClickPixels,
+    // canalVertexClickFrac * radius); otherwise, if it is within
+    // cellClickBorderMargin * radius of any vertex or edge, it is suppressed;
+    // otherwise it opens the cell menu.
+    let _debugHitCell = null;   // {x,y} cell currently shown, or null
+
+    function _debugHitZonesDraw(ctx, spacing, hexCenter) {
+      const cell = _debugHitCell;
+      if (!cell) return;
+      const c = hexCenter(cell.x, cell.y);
+      const r = spacing.x / 2, r2 = r / 2, yr = spacing.y / 2;
+      // Hex corners in the same order as hexVertices() / _cellCornerPoints().
+      const V = [
+        { x: c.x - r2, y: c.y - yr }, { x: c.x + r2, y: c.y - yr },
+        { x: c.x + r,  y: c.y      }, { x: c.x + r2, y: c.y + yr },
+        { x: c.x - r2, y: c.y + yr }, { x: c.x - r,  y: c.y      },
+      ];
+      const vpxFloor = (CONFIG.canalVertexClickPixels != null) ? CONFIG.canalVertexClickPixels : 5;
+      const vFrac = (CONFIG.canalVertexClickFrac != null) ? CONFIG.canalVertexClickFrac : 0.28;
+      const marginFrac = (CONFIG.cellClickBorderMargin != null) ? CONFIG.cellClickBorderMargin : 0.28;
+      const vpx = Math.max(vpxFloor, vFrac * r);   // vertex hit radius
+      const margin = marginFrac * r;               // edge/vertex suppression band
+
+      ctx.save();
+
+      // Edge bands: the strip within `margin` of each border, drawn as a
+      // rotated rectangle lying along that border.
+      ctx.fillStyle = "rgba(120,190,255,0.40)";
+      for (let i = 0; i < 6; i++) {
+        const a = V[i], b = V[(i + 1) % 6];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const len = Math.hypot(dx, dy) || 1;
+        ctx.save();
+        ctx.translate(a.x, a.y);
+        ctx.rotate(Math.atan2(dy, dx));
+        ctx.fillRect(0, -margin, len, margin);   // inward side of the border
+        ctx.restore();
+      }
+
+      // Cell interior: everything not inside an edge band or vertex disc. The
+      // hex inset by `margin` is exactly that region.
+      ctx.strokeStyle = "rgba(255,0,0,0.95)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const v = V[i];
+        const dx = v.x - c.x, dy = v.y - c.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const k = Math.max(0, (d - margin / Math.cos(Math.PI / 6))) / d;
+        const p = { x: c.x + dx * k, y: c.y + dy * k };
+        if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+
+      // Vertex discs, drawn last so they sit above the edge bands (a vertex
+      // hit takes priority over the edge-suppression test).
+      for (const v of V) {
+        ctx.beginPath();
+        ctx.arc(v.x, v.y, vpx, 0, 2 * Math.PI);
+        ctx.fillStyle = "rgba(255,225,40,0.75)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(120,100,0,0.9)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    // Show/hide the debug overlay. Rebinds the map overlay callback, chaining
+    // onto whatever overlay is already active so plan previews still draw.
+    function setDebugHitCell(cell) {
+      const same = (!cell && !_debugHitCell) ||
+        (cell && _debugHitCell && cell.x === _debugHitCell.x && cell.y === _debugHitCell.y);
+      if (same) return;
+      _debugHitCell = cell ? { x: cell.x, y: cell.y } : null;
+      if (!hexMap || typeof hexMap.setOverlay !== "function") return;
+      if (_debugHitCell) {
+        hexMap.setOverlay((ctx, spacing, hexCenter) => {
+          try { transportOverlayDraw(ctx, spacing, hexCenter); } catch (err) {}
+          _debugHitZonesDraw(ctx, spacing, hexCenter);
+        });
+      } else {
+        // Restore the normal overlay (or none).
+        const anyPlanned = (_transportPlannedPaths && _transportPlannedPaths.length) ||
+          (typeof _canalPlannedEdges !== "undefined" && _canalPlannedEdges.length);
+        const anyMode = _transportMode || (typeof _canalMode !== "undefined" && _canalMode) || _foundMode;
+        hexMap.setOverlay((anyMode || anyPlanned) ? transportOverlayDraw : null);
+      }
+    }
+
     function transportOverlayDraw(ctx, spacing, hexCenter) {
       const drawPath = (path, stroke, w) => {
         if (!path || path.length < 2) return;
@@ -4205,12 +4305,23 @@
         });
         // Colony-launch placement mode: hover previews the path, click plants.
         canvas.addEventListener("mousemove", (e) => {
+          // DEBUG: Option/Alt held -> show the right-click hit zones for the
+          // hovered cell; moving to another cell moves the overlay with it.
+          if (e.altKey && hexMap) setDebugHitCell(hexMap.hexAtEvent(e));
+          else if (_debugHitCell) setDebugHitCell(null);
           if (_canalMode && hexMap) { updateCanalPreview(hexMap.cornerAtEvent(e), e.clientX, e.clientY); return; }
           if (_transportMode && hexMap) { updateTransportPreview(hexMap.hexAtEvent(e), e.clientX, e.clientY); return; }
           if (!_foundMode || !hexMap) return;
           const hex = hexMap.hexAtEvent(e);
           updateFoundPreview(hex);
         });
+        // DEBUG: drop the hit-zone overlay as soon as Option is released, the
+        // pointer leaves the map, or the window loses focus.
+        window.addEventListener("keyup", (e) => {
+          if (e.key === "Alt" || e.altKey === false) setDebugHitCell(null);
+        });
+        window.addEventListener("blur", () => setDebugHitCell(null));
+        canvas.addEventListener("mouseleave", () => setDebugHitCell(null));
         canvas.addEventListener("click", (e) => {
           if (_canalMode && hexMap) { confirmCanal(hexMap.cornerAtEvent(e)); return; }
           if (_transportMode && hexMap) { const h = hexMap.hexAtEvent(e); if (h) confirmTransport(h.x, h.y); return; }

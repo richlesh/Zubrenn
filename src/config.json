@@ -6,9 +6,9 @@
       "color": { "h": 240, "s": 1, "l": 0.25 },
       "movement": [1000, 1, 0.75, 0.2, 0.1],
       "base": { "food": 1, "material": 0 },
-      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
-      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
-      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 1 }
     },
     "2": {
       "name": "Grassland",
@@ -16,9 +16,9 @@
       "color": { "h": 120, "s": 1, "l": 0.6 },
       "movement": [2, 1, 0.75, 0.2, 0.1],
       "base": { "food": 2, "material": 1 },
-      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
-      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
-      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 1 }
     },
     "3": {
       "name": "Hills",
@@ -26,9 +26,9 @@
       "color": { "h": 90, "s": 0.583, "l": 0.52 },
       "movement": [3, 1, 0.75, 0.2, 0.1],
       "base": { "food": 1, "material": 2 },
-      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
-      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
-      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 1 }
     },
     "4": {
       "name": "Forest",
@@ -36,9 +36,9 @@
       "color": { "h": 120, "s": 1, "l": 0.3 },
       "movement": [4, 1, 0.75, 0.2, 0.1],
       "base": { "food": 1, "material": 2 },
-      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
-      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
-      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 1 }
     },
     "5": {
       "name": "Jungle",
@@ -46,9 +46,9 @@
       "color": { "h": 120, "s": 1, "l": 0.15 },
       "movement": [5, 1, 0.75, 0.2, 0.1],
       "base": { "food": 1, "material": 2 },
-      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
-      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
-      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 1 }
     },
     "6": {
       "name": "Desert",
@@ -56,9 +56,9 @@
       "color": { "h": 60, "s": 0.6, "l": 0.469 },
       "movement": [2, 1, 0.75, 0.2, 0.1],
       "base": { "food": 0, "material": 0 },
-      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
-      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
-      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 1 }
     },
     "7": {
       "name": "Mountain-Low",
@@ -66,9 +66,9 @@
       "color": { "h": 120, "s": 0.818, "l": 0.275 },
       "movement": [4, 1, 1000, 0.2, 0.1],
       "base": { "food": 0, "material": 3 },
-      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
-      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
-      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 1 }
     },
     "8": {
       "name": "Mountain-High",
@@ -76,9 +76,9 @@
       "color": { "h": 30, "s": 0.333, "l": 0.225 },
       "movement": [5, 1, 1000, 0.2, 0.1],
       "base": { "food": 0, "material": 4 },
-      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
-      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
-      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 1 }
     },
     "9": {
       "name": "Frozen",
@@ -86,12 +86,12 @@
       "color": { "h": 0, "s": 0, "l": 1 },
       "movement": [2, 1, 1000, 0.2, 0.1],
       "base": { "food": 0, "material": 0 },
-      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
-      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "buildTurns": 0.5 },
-      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "buildTurns": 1 }
+      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
+      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
+      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 1 }
     }
   },
-  "bridgeCost": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "buildTurns": 0.5 },
+  "bridgeCost": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
   "bridgeColor": { "h": 0, "s": 0.75, "l": 0.5 },
   "roadColor": { "h": 30, "s": 0.5, "l": 0.35 },
   "monorailColor": { "h": 40, "s": 1.0, "l": 0.5 },
@@ -112,8 +112,8 @@
   "zoneOfControlSize": [0, 10000, 100000, 1000000],
   "riverAdjacentFoodBonus": 1,
   "riverAdjacentWealthBonus": 1,
-  "removeImprovementCost": { "energy": 5, "food": 2 },
-  "removeImprovementTurns": 2,
+  "removeImprovementCost": { "energy": 5, "food": 2, "turns": 2 },
+  "removeCanalCost": { "energy": 2, "food": 1, "turns": 2 },
   "foundColonyMinPopulation": 3000,
   "foundColonyPopulationTransfer": 1000,
   "biodomeMovementPerYear": 12,
@@ -134,8 +134,7 @@
       "startPopulation": 1000,
       "growthRate": 0.01,
       "prerequisiteBuildings": [],
-      "buildCost": { "material": 3, "wealth": 5 },
-      "buildTurns": 2,
+      "buildCost": { "material": 3, "wealth": 5, "turns": 2 },
       "bonus": { "food": 1, "material": 1, "energy": 1, "growth": 0, "wealth": 1 },
       "storage": { "food": 100, "material": 100, "energy": 100, "wealth": 100, "happiness": 100 }
     },
@@ -143,8 +142,7 @@
       "name": "Farm",
       "icon": "farm.png",
       "prerequisiteBuildings": [1],
-      "buildCost": { "material": 3, "energy": 2, "wealth": 2 },
-      "buildTurns": 1,
+      "buildCost": { "material": 3, "energy": 2, "wealth": 2, "turns": 1 },
       "costPerYear": { "material": 1, "energy": 1, "wealth": 0.5 },
       "bonus": { "food": 3, "material": 0, "energy": 0, "growth": 0.0025, "wealth": 1 },
       "storage": { "food": 500, "material": 0, "energy": 100, "wealth": 0, "happiness": 0 }
@@ -153,8 +151,7 @@
       "name": "Solar Panel",
       "icon": "solar_panel.png",
       "prerequisiteBuildings": [1],
-      "buildCost": { "material": 2, "energy": 2, "wealth": 2 },
-      "buildTurns": 1,
+      "buildCost": { "material": 2, "energy": 2, "wealth": 2, "turns": 1 },
       "costPerYear": { "material": 0, "energy": 0, "wealth": 0.5 },
       "bonus": { "food": 0, "material": 0, "energy": 6, "growth": 0, "wealth": 0 },
       "storage": { "food": 0, "material": 0, "energy": 500, "wealth": 0, "happiness": 0 }
@@ -163,8 +160,7 @@
       "name": "Factory",
       "icon": "factory.png",
       "prerequisiteBuildings": [1, 3],
-      "buildCost": { "material": 5, "energy": 5, "wealth": 5 },
-      "buildTurns": 3,
+      "buildCost": { "material": 5, "energy": 5, "wealth": 5, "turns": 3 },
       "costPerYear": { "material": 2, "energy": 3, "wealth": 1 },
       "bonus": { "food": 0, "material": 5, "energy": 0, "growth": -0.0025, "wealth": 1 },
       "storage": { "food": 0, "material": 500, "energy": 200, "wealth": 0, "happiness": 0 }
@@ -173,8 +169,7 @@
       "name": "Dock",
       "icon": "dock.png",
       "prerequisiteBuildings": [1],
-      "buildCost": { "material": 1, "energy": 1, "wealth": 1 },
-      "buildTurns": 2,
+      "buildCost": { "material": 1, "energy": 1, "wealth": 1, "turns": 2 },
       "costPerYear": { "material": 0, "energy": 1, "wealth": 1 },
       "bonus": { "food": 1, "material": 0, "energy": 0, "growth": 0, "wealth": 1 },
       "storage": { "food": 300, "material": 300, "energy": 0, "wealth": 0, "happiness": 0 }
