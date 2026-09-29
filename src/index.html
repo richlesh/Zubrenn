@@ -185,13 +185,81 @@
 
     // Apply saved theme.
     let _autoTurnEnd = true; // whether to auto-end the human turn when idle
+
+    // --- Background music -------------------------------------------------
+    // A looping theme track played in the main game window. Controlled by the
+    // `musicEnabled` / `musicVolume` settings (see Settings ▸ Audio).
+    let _bgm = null;
+    let _bgmPendingPlay = false; // set when autoplay was blocked; retried on first gesture
+    let _bgmSuspended = false;   // externally paused (e.g. while Backstory is open)
+    function bgmSrcPath() {
+      try {
+        const path = require("path");
+        return path.join(__dirname, "resources", "zubrenn_theme_long.m4a");
+      } catch (e) {
+        return "./resources/zubrenn_theme_long.m4a";
+      }
+    }
+    function ensureBgm() {
+      if (_bgm) return _bgm;
+      _bgm = new Audio(bgmSrcPath());
+      _bgm.loop = true;
+      _bgm.preload = "auto";
+      return _bgm;
+    }
+    function tryPlayBgm() {
+      const a = ensureBgm();
+      const p = a.play();
+      if (p && typeof p.catch === "function") {
+        p.then(() => { _bgmPendingPlay = false; }).catch(() => {
+          // Autoplay was blocked (no user gesture yet). Retry on the next gesture.
+          _bgmPendingPlay = true;
+        });
+      }
+    }
+    function applyMusic(settings) {
+      const enabled = settings.musicEnabled !== false; // default on
+      let vol = settings.musicVolume;
+      vol = (typeof vol === "number" && isFinite(vol)) ? Math.max(0, Math.min(100, vol)) : 50;
+      const a = ensureBgm();
+      a.volume = vol / 100;
+      if (enabled && !_bgmSuspended) {
+        if (a.paused) tryPlayBgm();
+      } else {
+        _bgmPendingPlay = false;
+        if (!a.paused) a.pause();
+      }
+    }
+    // If autoplay is blocked by the browser policy, start on the first user
+    // interaction with the window (only while music is enabled).
+    function _bgmGestureStart() {
+      if (_bgmPendingPlay && _bgm && _bgm.paused) tryPlayBgm();
+    }
+    window.addEventListener("pointerdown", _bgmGestureStart);
+    window.addEventListener("keydown", _bgmGestureStart);
+
     function applyTheme(settings) {
       document.body.classList.toggle("dark", (settings.theme || "dark") === "dark");
       _autoTurnEnd = settings.autoTurnEnd !== false; // default on
+      applyMusic(settings);
     }
     ipcRenderer.invoke("settings-get").then(applyTheme).catch(() => {});
     ipcRenderer.on("settings-updated", () =>
       ipcRenderer.invoke("settings-get").then(applyTheme).catch(() => {}));
+
+    // Temporarily suspend the background music without changing the user's
+    // saved preference (e.g. while the modal Backstory crawl — which has its
+    // own theme — is on screen). Resuming re-checks the current setting so a
+    // user who disabled music while suspended stays silent.
+    ipcRenderer.on("music-suspend", () => {
+      _bgmSuspended = true;
+      _bgmPendingPlay = false;
+      if (_bgm && !_bgm.paused) _bgm.pause();
+    });
+    ipcRenderer.on("music-resume", () => {
+      _bgmSuspended = false;
+      ipcRenderer.invoke("settings-get").then(applyMusic).catch(() => {});
+    });
 
     let hexMap = null;
     let _roundHadAction = false; // did a player place/act during the current round?

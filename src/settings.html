@@ -65,8 +65,17 @@
     <label for="autoTurnEnd" style="margin:0;">Auto turn end (end my turn automatically when I have no actions left)</label>
   </div>
 
-  <div class="section-title">AI Assistant</div>
+  <div class="section-title">Audio</div>
   <div class="field" style="flex-direction: row; align-items: center; gap: 8px;">
+    <input id="musicEnabled" type="checkbox" style="width:auto;">
+    <label for="musicEnabled" style="margin:0;">Play background music</label>
+  </div>
+  <div class="field">
+    <label for="musicVolume">Music volume: <span id="musicVolumeValue">50</span>%</label>
+    <input id="musicVolume" type="range" min="0" max="100" step="1" value="50">
+  </div>
+
+  <div class="section-title">AI Assistant</div>  <div class="field" style="flex-direction: row; align-items: center; gap: 8px;">
     <input id="useBuiltinAI" type="checkbox" style="width:auto;">
     <label for="useBuiltinAI" style="margin:0;">Use Built-in AI (ignore vendor/model below)</label>
   </div>
@@ -137,6 +146,9 @@
     const apiKeyLink = document.getElementById("api-key-link");
     const useBuiltinChk = document.getElementById("useBuiltinAI");
     const autoTurnEndChk = document.getElementById("autoTurnEnd");
+    const musicEnabledChk = document.getElementById("musicEnabled");
+    const musicVolumeIn = document.getElementById("musicVolume");
+    const musicVolumeValue = document.getElementById("musicVolumeValue");
     const aiConfigDiv = document.getElementById("ai-config");
 
     // Enable/disable the vendor/model/API config based on the checkbox.
@@ -242,6 +254,13 @@
       if (themeSel.value === "dark") document.body.classList.add("dark");
       useBuiltinChk.checked = current.useBuiltinAI !== false; // default on
       autoTurnEndChk.checked = current.autoTurnEnd !== false; // default on
+      musicEnabledChk.checked = current.musicEnabled !== false; // default on
+      {
+        const v = current.musicVolume;
+        const vol = (typeof v === "number" && isFinite(v)) ? Math.max(0, Math.min(100, v)) : 50;
+        musicVolumeIn.value = String(vol);
+        musicVolumeValue.textContent = String(vol);
+      }
 
       // Vendor dropdown (sorted by label).
       for (const [key, v] of Object.entries(vendors).sort((a, b) => a[1].label.localeCompare(b[1].label))) {
@@ -259,6 +278,10 @@
 
     themeSel.addEventListener("change", () => {
       document.body.classList.toggle("dark", themeSel.value === "dark");
+    });
+
+    musicVolumeIn.addEventListener("input", () => {
+      musicVolumeValue.textContent = String(musicVolumeIn.value);
     });
 
     vendorSel.addEventListener("change", async () => {
@@ -309,6 +332,8 @@
         defaultModels: current.defaultModels,
         useBuiltinAI: useBuiltinChk.checked,
         autoTurnEnd: autoTurnEndChk.checked,
+        musicEnabled: musicEnabledChk.checked,
+        musicVolume: Math.max(0, Math.min(100, parseInt(musicVolumeIn.value, 10) || 0)),
       });
     });
 

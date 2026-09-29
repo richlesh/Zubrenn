@@ -148,6 +148,9 @@ function showBackstory() {
   });
   backstoryWin.setMenuBarVisibility(false);
   backstoryWin.loadFile(path.join(__dirname, "backstory.html"));
+  // Pause the main window's background music while the (modal) backstory crawl
+  // is up — it has its own theme track, so this avoids overlapping music.
+  sendToMain("music-suspend");
   backstoryWin.once("ready-to-show", () => {
     if (mainWin && !mainWin.isDestroyed()) {
       const [px, py] = mainWin.getPosition();
@@ -165,6 +168,8 @@ function showBackstory() {
   backstoryWin.on("closed", () => {
     ipcMain.removeHandler("close-backstory");
     backstoryWin = null;
+    // Restore the main window's background music (respects the saved setting).
+    sendToMain("music-resume");
   });
 }
 

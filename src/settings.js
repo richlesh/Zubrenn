@@ -12,6 +12,8 @@ const DEFAULTS = {
   defaultModels: {},
   useBuiltinAI: true,
   autoTurnEnd: true,
+  musicEnabled: true,
+  musicVolume: 50, // 0–100
 };
 
 function load() {
