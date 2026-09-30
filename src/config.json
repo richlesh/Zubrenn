@@ -114,6 +114,7 @@
   "riverAdjacentWealthBonus": 1,
   "removeImprovementCost": { "energy": 5, "food": 2, "turns": 2 },
   "removeCanalCost": { "energy": 2, "food": 1, "turns": 2 },
+  "removeTransportCost": { "energy": 2, "food": 1, "turns": 2 },
   "foundColonyMinPopulation": 3000,
   "foundColonyPopulationTransfer": 1000,
   "biodomeMovementPerYear": 12,
@@ -181,7 +182,8 @@
       "buildCost": { "material": 2, "energy": 2, "wealth": 2, "turns": 2 },
       "costPerYear": { "material": 0, "energy": 1, "wealth": 1 },
       "bonus": { "food": 0, "material": 0, "energy": 0, "growth": 0, "wealth": 2 },
-      "storage": { "food": 300, "material": 300, "energy": 0, "wealth": 0, "happiness": 0 }
+      "storage": { "food": 300, "material": 300, "energy": 0, "wealth": 0, "happiness": 0 },
+      "range": 16
     }
   },
   "names": ["Xel'Thara", "Vorn Kesh", "Zayllux", "Qortham", "Nyssarion", "Braal Vex", "Ithkane", "Ozúmara", "Threxil", "Vandros", "Kla276-Ur", "Sythara", "Draviim", "Uxberos", "Nel'Quoth", "Zaethys", "Morvax", "Illandor", "Kryssoth", "Obrahn", "Tyllvex", "Aznareth", "Woltrim", "Ekshara", "Pravoxi", "Ghorlune", "Yssibel", "Vraektor", "Nomilar", "Quenthaa", "Drommus", "Xibante", "Ulvarion", "Zephkar", "Trelisso", "Marnok", "Ashvenn", "Ryllakor", "Ozzenphar", "Velinth", "Kaebrax", "Junossi", "Thraliun", "Wexmoor", "Sillquith", "Ombrayel", "Draznok", "Yttheris", "Cavornu", "Ezraliim", "Bolthara", "Nivexus", "Qelmarr", "Zundareth", "Praxilon", "Voshkane", "Illurnex", "Krethsibar", "Aomvel", "Struxil", "Tazmuroth", "Welganth", "Nyrreth", "Osvakim", "Dranthel", "Ubelquor", "Zaethmor", "Fylvaris", "Krondaxi", "Ylssuran", "Menthara", "Vraddek", "Oxilune", "Perthaan", "Zunveil", "Chalorix", "Trennoss", "Auvraeth", "Skellivon", "Nymbrak", "Quorlath", "Delvimar", "Ossanther", "Kryllos", "Ythanor", "Vezmara", "Onbrakil", "Zathurex", "Prellun", "Maxothis", "Illveska", "Grondaal", "Ybernith", "Kavaslon", "Threnvox", "Wulmarra", "Ozziketh", "Drava'Nel", "Selquorra", "Nyxathil"]

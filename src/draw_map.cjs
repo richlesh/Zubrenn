@@ -1492,12 +1492,18 @@ class HexMap {
       // elevation, then coordinates. Colony lines are shown only if a building
       // occupies the hovered cell.
       const b = this._buildingAt(hex.x, hex.y);
+      const transportKind = this._cellTransportKind(hex.x, hex.y);
       const lines = [];
       if (b) {
         const species = b.ownerName || (b.owner === 'human' ? 'You' : 'Alien');
-        const building = b.improvement || 'Colony';
+        let building = b.improvement || 'Colony';
+        // Append the transport improvement on this tile, e.g. "Factory, road".
+        if (transportKind) building += ", " + transportKind;
         lines.push(species);   // species controlling
-        lines.push(building);  // building
+        lines.push(building);  // building (+ road/monorail)
+      } else if (transportKind) {
+        // No building, but the tile has a road/monorail — surface it on its own.
+        lines.push(transportKind.charAt(0).toUpperCase() + transportKind.slice(1));
       }
       // Terrain type, with per-cell F/P/H (base+bonus) next to it when available.
       let terrainLine = name;
@@ -1521,6 +1527,18 @@ class HexMap {
     if (!this.buildings) return null;
     for (const b of this.buildings) if (b.x === x && b.y === y) return b;
     return null;
+  }
+  // "road" / "monorail" / "" for the transport improvement on a cell (a cell
+  // carries at most one). Used to annotate the hover tooltip.
+  _cellTransportKind(x, y) {
+    const tr = this.transport;
+    if (!tr) return "";
+    const key = x + "," + y;
+    const roads = tr.roads instanceof Set ? tr.roads : new Set(tr.roads || []);
+    if (roads.has(key)) return "road";
+    const mono = tr.monorails instanceof Set ? tr.monorails : new Set(tr.monorails || []);
+    if (mono.has(key)) return "monorail";
+    return "";
   }
 
   _showTooltip(html, clientX, clientY) {

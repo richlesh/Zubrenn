@@ -66,6 +66,7 @@
     <div class="ctx-item" id="ctx-remove" hidden>Remove Improvement</div>
     <div class="ctx-item" id="ctx-road" hidden>Build Road</div>
     <div class="ctx-item" id="ctx-monorail" hidden>Build Monorail</div>
+    <div class="ctx-item" id="ctx-remove-transport" hidden>Remove Transportation</div>
     <div class="ctx-item" id="ctx-canal" hidden>Build Canal</div>
     <div class="ctx-item" id="ctx-canal-remove" hidden>Remove Canal</div>
   </div>
@@ -341,6 +342,9 @@
           a: { x: r.a.x, y: r.a.y }, b: { x: r.b.x, y: r.b.y },
           owner: r.owner, turnsLeft: r.turnsLeft,
         })),
+        transportRemovals: (tr.transportRemovals || []).map((r) => ({
+          x: r.x, y: r.y, owner: r.owner, turnsLeft: r.turnsLeft,
+        })),
       };
     }
 
@@ -611,6 +615,11 @@
       // turnsLeft }. The canal edge stays in tr.canals (and keeps working) until
       // turnsLeft reaches 0, at which point advanceCanalRemovals() finalizes it.
       tr.canalRemovals = Array.isArray(tr.canalRemovals) ? tr.canalRemovals : [];
+      // Roads/monorails scheduled for removal over time: array of
+      // { x, y, owner, turnsLeft }. The cell keeps working until turnsLeft hits
+      // 0, when advanceTransportRemovals() finalizes it (drops the cell from
+      // tr.roads/tr.monorails and any incident edge from the edge sets).
+      tr.transportRemovals = Array.isArray(tr.transportRemovals) ? tr.transportRemovals : [];
       return tr;
     }
     function edgeKey(x1, y1, x2, y2) {
@@ -847,6 +856,127 @@
       }
       tr.canalRemovals = remaining;
       refreshCanalOverlay();
+      if (anyHuman) { recomputeHumanResourcePanel(); updatePlayerPanel(); }
+    }
+
+    // ---- road / monorail removal -------------------------------------------
+    // Cost (and turns) to remove the road/monorail on a cell, from config.
+    function transportRemovalCost() {
+      return CONFIG.removeTransportCost || { energy: 2, food: 1, turns: 2 };
+    }
+    function transportRemovalCostLabel() { return costLabelOf(transportRemovalCost()); }
+    // True if the cell carries a road or a monorail.
+    function cellHasTransport(x, y) { return hasRoad(x, y) || hasMonorail(x, y); }
+    // The nearest same-owner colony (biodome) to a cell, by hex distance, or
+    // null if none. Used to pick who pays to remove transport on a cell that no
+    // single colony may "control" (it only needs to be near a colony).
+    function nearestColony(x, y, owner) {
+      let best = null, bestD = Infinity;
+      for (const b of gameState.buildings) {
+        if (b.type !== 1 || b.owner !== owner || b.inTransit) continue;
+        const d = hexDistance(b.x, b.y, x, y);
+        if (d < bestD) { bestD = d; best = b; }
+      }
+      return best ? { colony: best, dist: bestD } : null;
+    }
+    // The colony that pays to remove transport on a cell: the nearest same-owner
+    // colony, but only if it is within minColonyDistance of the cell.
+    function transportRemovalColony(x, y, owner) {
+      const nc = nearestColony(x, y, owner);
+      if (!nc) return null;
+      const minD = CONFIG.minColonyDistance || 20;
+      return nc.dist <= minD ? nc.colony : null;
+    }
+    // Removal is affordable if the paying colony plus its transport-connected
+    // network can cover the cost (own storage + borrowable from connected peers).
+    function canAffordTransportRemoval(x, y, owner) {
+      const col = transportRemovalColony(x, y, owner);
+      if (!col) return false;
+      const pool = ensureStored(col);
+      const c = transportRemovalCost();
+      return _resourceKeysOf(c).every((r) =>
+        (pool[r] || 0) + connectedAvailable(col, r) >= c[r] - 1e-9);
+    }
+    function transportRemovalShortfallLabel(x, y, owner) {
+      const c = transportRemovalCost();
+      const col = transportRemovalColony(x, y, owner);
+      const pool = col ? ensureStored(col) : {};
+      const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+      const parts = [];
+      for (const r of _resourceKeysOf(c)) {
+        const avail = (pool[r] || 0) + (col ? connectedAvailable(col, r) : 0);
+        const need = c[r] - avail;
+        if (need > 0) parts.push(`${Math.ceil(need)} more ${cap(r)}`);
+      }
+      return parts.length ? parts.join(", ") : "more resources";
+    }
+    function isTransportRemoving(x, y) {
+      const tr = ensureTransport();
+      return (tr.transportRemovals || []).some((r) => r.x === x && r.y === y);
+    }
+    // Finalize a road/monorail removal: drop the cell from tr.roads/tr.monorails
+    // and remove from tr.roadEdges/tr.monorailEdges (and tr.bridges) every edge
+    // that has this cell as an endpoint (either the first or the second "x,y"
+    // component). Bridges belong to the road/monorail segment crossing the
+    // water, so removing the transport must remove its bridge too.
+    function _finalizeTransportRemoval(x, y) {
+      const tr = ensureTransport();
+      const ck = cellKey(x, y);
+      tr.roads.delete(ck);
+      tr.monorails.delete(ck);
+      const incident = (ek) => { const [a, b] = ek.split("|"); return a === ck || b === ck; };
+      for (const ek of Array.from(tr.roadEdges)) if (incident(ek)) tr.roadEdges.delete(ek);
+      for (const ek of Array.from(tr.monorailEdges)) if (incident(ek)) tr.monorailEdges.delete(ek);
+      for (const ek of Array.from(tr.bridges)) if (incident(ek)) tr.bridges.delete(ek);
+      // Removing transport can change colony connectivity.
+      if (typeof invalidateColonyConnectivity === 'function') invalidateColonyConnectivity();
+      if (hexMap && typeof hexMap.setTransport === 'function') hexMap.setTransport(tr);
+    }
+    // Begin removing the road/monorail on a cell: charge the cost to the nearest
+    // colony (within minColonyDistance), borrowing any shortfall from connected
+    // colonies, and SCHEDULE the removal over removeTransportCost.turns turns.
+    // Also prune the cell from any pending build plans so construction can't
+    // rebuild it.
+    function removeTransportAt(x, y, owner) {
+      const tr = ensureTransport();
+      if (!cellHasTransport(x, y)) return false;
+      if (isTransportRemoving(x, y)) return false;             // already removing
+      const col = transportRemovalColony(x, y, owner);
+      if (!col) return false;                                   // no colony within range
+      const c = transportRemovalCost();
+      const pay = payColonyCost(col, ensureStored(col), c);     // borrows if needed
+      if (!pay.paid) return false;
+      // Drop this cell from pending road/monorail build plans.
+      for (const plan of (tr.plans || [])) {
+        if (plan.edges || !plan.path) continue; // canal plans are edge-based
+        plan.path = plan.path.filter((p) => !(p.x === x && p.y === y));
+      }
+      tr.plans = (tr.plans || []).filter((pl) => pl.edges || (pl.path && pl.path.length >= 2));
+      const turns = _turnsOf(c, 2);
+      if (turns <= 0) {
+        _finalizeTransportRemoval(x, y);
+      } else {
+        tr.transportRemovals.push({ x, y, owner, turnsLeft: turns });
+      }
+      if (owner === 'human') { recomputeHumanResourcePanel(); updatePlayerPanel(); }
+      return true;
+    }
+    // Advance scheduled road/monorail removals by one turn; finalize any at 0.
+    function advanceTransportRemovals() {
+      const tr = ensureTransport();
+      if (!tr.transportRemovals || !tr.transportRemovals.length) return;
+      let anyHuman = false;
+      const remaining = [];
+      for (const r of tr.transportRemovals) {
+        r.turnsLeft -= 1;
+        if (r.turnsLeft <= 0) {
+          _finalizeTransportRemoval(r.x, r.y);
+          if (r.owner === 'human') anyHuman = true;
+        } else {
+          remaining.push(r);
+        }
+      }
+      tr.transportRemovals = remaining;
       if (anyHuman) { recomputeHumanResourcePanel(); updatePlayerPanel(); }
     }
 
@@ -1238,7 +1368,7 @@
             const seg = canalSegmentCost(e.a.x, e.a.y, e.b.x, e.b.y);
             const need = Math.max(0.0001, seg.turns || 0);
             if (plan.accrued + 1e-9 < need) break;
-            const pay = payColonySegmentCost(col, pool, seg);
+            const pay = payColonyCost(col, pool, seg);
             if (!pay.paid) { plan.paused = true; plan.stallReason = pay.shortfall; break; }
             _applyBuiltSegment('canal', e.a.x, e.a.y, e.b.x, e.b.y);
             invalidateVertexGraph();
@@ -1259,8 +1389,12 @@
           if (plan.kind === 'canal' && !canalSegmentAllowed(a.x, a.y, b.x, b.y)) {
             plan.segIndex += 1; continue; // skip an illegal canal segment
           }
-          // Skip a segment that already fully exists (no cost, no time).
+          // Skip a segment that already fully exists (no cost, no time). Both
+          // endpoint cells already carry this kind, but the CONNECTING EDGE may
+          // still be missing (e.g. building to/through an existing road or
+          // joining two existing roads) — record it so the link is drawn.
           if (segmentRemainingFraction(plan.kind, a.x, a.y, b.x, b.y) <= 0) {
+            if (plan.kind !== 'canal') { _applyBuiltSegment(plan.kind, a.x, a.y, b.x, b.y); changed = true; }
             plan.segIndex += 1; progressed = true; continue;
           }
           const seg = transportSegmentCost(plan.kind, a.x, a.y, b.x, b.y);
@@ -1268,9 +1402,9 @@
           if (plan.accrued + 1e-9 < need) break; // not enough build effort yet this turn
           // Pay from the source colony, borrowing any shortfall from connected
           // colonies (roads/monorails or a river/canal path).
-          const pay = payColonySegmentCost(col, pool, seg);
+          const pay = payColonyCost(col, pool, seg);
           if (!pay.paid) { plan.paused = true; plan.stallReason = pay.shortfall; break; }
-          // Build the segment (cost already paid by payColonySegmentCost).
+          // Build the segment (cost already paid by payColonyCost).
           _applyBuiltSegment(plan.kind, a.x, a.y, b.x, b.y);
           plan.accrued -= need;
           plan.segIndex += 1;
@@ -1743,7 +1877,7 @@
         for (let j = i + 1; j < n; j++) {
           const a = cols[i], b = cols[j], owner = a.owner;
           let level = 0;
-          if (colonyHasAirport(a) && colonyHasAirport(b)) level = 4;
+          if (coloniesAirLinked(a, b)) level = 4;
           else if (_pathExists(a, b, owner, (x, y) => hasMonorail(x, y))) level = 3;
           else if (colonyHasDock(a) && colonyHasDock(b) && _pathExists(a, b, owner, isWaterRoute)) level = 2;
           else if (_pathExists(a, b, owner, (x, y) => hasRoad(x, y))) level = 1;
@@ -2085,6 +2219,8 @@
       advanceTransportConstruction();
       // Advance any scheduled canal removals; those whose timer hits 0 finalize.
       advanceCanalRemovals();
+      // Advance any scheduled road/monorail removals likewise.
+      advanceTransportRemovals();
 
       updatePlayerPanel();
       if (badgeChanged && hexMap) hexMap.setBuildings(gameState.buildings);
@@ -2665,9 +2801,11 @@
     //     the transport network via its biodome cell or a hex-neighbour of it
     //     that carries road/monorail), OR
     //   • a connected path of river/canal SEGMENTS links a corner vertex of one
-    //     colony to a corner vertex of the other.
-    // We union both relations into per-owner groups so a colony can reach every
-    // colony it is transitively connected to by either means.
+    //     colony to a corner vertex of the other, OR
+    //   • both colonies have a Dock and a shallow-sea route links them (sea), OR
+    //   • both colonies have an Air Field within buildingTypes[6].range (air).
+    // We union all relations into per-owner groups so a colony can reach every
+    // colony it is transitively connected to by any means.
     //
     // The result is cached and invalidated whenever transport changes or a new
     // economy tick begins (see invalidateColonyConnectivity()).
@@ -2779,6 +2917,35 @@
         }
       }
 
+      // ---- air connectivity ----
+      // Two same-owner colonies are air-linked when they EACH have an Air Field
+      // (building type 6) and are within buildingTypes[6].range of each other.
+      // Because the link is range-limited it isn't "any two airfields", so we
+      // check pairs (colony counts are small); skip pairs already connected.
+      const airCols = [];
+      for (let i = 0; i < cols.length; i++) if (colonyHasAirfield(cols[i])) airCols.push(i);
+      for (let a = 0; a < airCols.length; a++) {
+        for (let b = a + 1; b < airCols.length; b++) {
+          const i = airCols[a], j = airCols[b];
+          if (find(i) === find(j)) continue;
+          if (coloniesAirLinked(cols[i], cols[j])) union(i, j);
+        }
+      }
+
+      // ---- sea connectivity ----
+      // Two colonies are sea-connected if BOTH have a Dock and a shallow-sea
+      // route links them. Pairwise check (colony counts are small); only test
+      // pairs not already in the same group to save work.
+      const dockCols = [];
+      for (let i = 0; i < cols.length; i++) if (colonyHasDock(cols[i])) dockCols.push(i);
+      for (let a = 0; a < dockCols.length; a++) {
+        for (let b = a + 1; b < dockCols.length; b++) {
+          const i = dockCols[a], j = dockCols[b];
+          if (find(i) === find(j)) continue; // already connected by some means
+          if (_pathExists(cols[i], cols[j], owner, (x, y) => isShallowSea(x, y))) union(i, j);
+        }
+      }
+
       // Final: colonyKey -> group root id.
       const groups = new Map();
       for (let i = 0; i < cols.length; i++) groups.set(_colonyKey(cols[i]), find(i));
@@ -2835,14 +3002,17 @@
       return sum;
     }
 
-    // Pay a transport segment's resource cost `seg` from source colony `col`'s
-    // storage (`pool` === col.stored), borrowing any per-resource shortfall from
-    // CONNECTED colonies (roads/monorails or a river/canal path) first. Borrows
-    // and pays only if the whole cost can be covered network-wide, so peers are
-    // never drained for a segment that still can't be afforded.
+    // Pay a resource cost `cost` from colony `col`'s storage (`pool` === its
+    // stored resources), borrowing any per-resource shortfall from CONNECTED
+    // colonies first (road/monorail, river/canal, sea lanes between docks, or
+    // Air Field links within range — see colonyConnectivity). Borrows and pays
+    // only if the whole cost can be covered network-wide, so peers are never
+    // drained for something that still can't be afforded.
     // Returns { paid:true } on success (pool debited, peers drained as needed),
     // or { paid:false, shortfall:label } with nothing changed.
-    function payColonySegmentCost(col, pool, seg) {
+    // The `turns` field of a cost object is ignored (build time, not a resource).
+    function payColonyCost(col, pool, cost) {
+      const seg = cost;
       const keys = ["food", "material", "energy", "wealth"];
       // Can the network cover every resource (own storage + connected supply)?
       for (const k of keys) {
@@ -3001,11 +3171,11 @@
 
       // --- air ---
       // Two colonies are air-linked when they EACH have an Air Field (building
-      // type 6) and are within 15 cells of each other.
+      // type 6) and are within buildingTypes[6].range of each other.
       const airLinked = new Set();
       if (colonyHasAirfield(col)) {
         for (const b of others) {
-          if (colonyHasAirfield(b) && hexDistance(col.x, col.y, b.x, b.y) <= 15) {
+          if (coloniesAirLinked(col, b)) {
             airLinked.add(_colonyKey(b));
           }
         }
@@ -3227,6 +3397,18 @@
         if (hexDistance(colony.x, colony.y, b.x, b.y) <= radius) return true;
       }
       return false;
+    }
+    // Max hex distance between two Air Field colonies for an air link, from
+    // buildingTypes[6].range (falls back to 16).
+    function airFieldRange() {
+      const bt = (CONFIG.buildingTypes && CONFIG.buildingTypes["6"]) || {};
+      return (bt.range != null) ? bt.range : 16;
+    }
+    // Two same-owner colonies are air-linked when they EACH have an Air Field
+    // and are within airFieldRange() of each other.
+    function coloniesAirLinked(a, b) {
+      return colonyHasAirfield(a) && colonyHasAirfield(b) &&
+        hexDistance(a.x, a.y, b.x, b.y) <= airFieldRange();
     }
     // Drop any worked cells that fall outside the colony's current control area
     // (e.g. after the radius shrinks because population dropped). The biodome
@@ -4608,6 +4790,7 @@
     const ctxRemove = document.getElementById("ctx-remove");
     const ctxRoad = document.getElementById("ctx-road");
     const ctxMonorail = document.getElementById("ctx-monorail");
+    const ctxRemoveTransport = document.getElementById("ctx-remove-transport");
     const ctxCanal = document.getElementById("ctx-canal");
     const ctxCanalRemove = document.getElementById("ctx-canal-remove");
     let ctxTarget = null;
@@ -4640,6 +4823,7 @@
         ctxRemove.hidden = true;
         ctxRoad.hidden = true;
         ctxMonorail.hidden = true;
+        ctxRemoveTransport.hidden = true;
         ctxCanal.hidden = false;
         ctxCanal.classList.remove("disabled");
         ctxCanal.textContent = "Build Canal";
@@ -4658,6 +4842,7 @@
         ctxRoad.hidden = true;
         ctxMonorail.hidden = true;
         ctxCanal.hidden = true;
+        ctxRemoveTransport.hidden = true;
         const c = canalRemovalCost();
         const turns = _turnsOf(c, 2);
         const removing = isCanalRemoving(a.x, a.y, b.x, b.y);
@@ -4774,6 +4959,30 @@
       ctxMonorail.hidden = !canBuildTransport;
       // (Canal is offered only on a legal canal-start vertex, handled above.)
 
+      // Remove Transportation: offered when the cell carries a road or monorail
+      // AND a same-owner colony is within minColonyDistance to pay for it, on the
+      // human's turn. Cost is drawn from that nearest colony, borrowing any
+      // shortfall from transport-connected colonies. Disabled (with reason) when
+      // the network can't pay, or "Removing…" if already scheduled.
+      let showRemoveTransport = false;
+      if (isHumanTurn() && hex && cellHasTransport(hex.x, hex.y)
+          && transportRemovalColony(hex.x, hex.y, 'human')) {
+        showRemoveTransport = true;
+        const removing = isTransportRemoving(hex.x, hex.y);
+        const canPay = canAffordTransportRemoval(hex.x, hex.y, 'human');
+        const turns = _turnsOf(transportRemovalCost(), 2);
+        let label;
+        if (removing) {
+          label = "Removing Transportation…";
+        } else {
+          label = `Remove Transportation (${transportRemovalCostLabel()}, ${turns} turn${turns === 1 ? '' : 's'})`;
+          if (!canPay) label += " — need " + transportRemovalShortfallLabel(hex.x, hex.y, 'human');
+        }
+        ctxRemoveTransport.textContent = label;
+        ctxRemoveTransport.classList.toggle("disabled", removing || !canPay);
+      }
+      ctxRemoveTransport.hidden = !showRemoveTransport;
+
       ctxMenu.style.left = clientX + "px";
       ctxMenu.style.top = clientY + "px";
       ctxMenu.hidden = false;
@@ -4794,6 +5003,12 @@
     });
     ctxMonorail.addEventListener("click", () => {
       if (!ctxTarget) return; const h = ctxTarget; hideContextMenu(); beginTransport('monorail', h.x, h.y);
+    });
+    ctxRemoveTransport.addEventListener("click", () => {
+      if (ctxRemoveTransport.classList.contains("disabled") || !ctxTarget) return;
+      const h = ctxTarget; hideContextMenu();
+      removeTransportAt(h.x, h.y, 'human');
+      maybeAutoEndHumanTurn();
     });
     ctxCanal.addEventListener("click", () => {
       if (!ctxTarget) return; const startVK = _ctxVertex; const h = ctxTarget; hideContextMenu();
