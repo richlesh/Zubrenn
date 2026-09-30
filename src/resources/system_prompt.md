@@ -79,7 +79,7 @@ found a new colony from it:
   a **Dock**, your paths may also cross **shallow-sea** tiles (sea adjacent to
   land), letting you reach islands and cross straits.
 - The target must be habitable land (2–7 or low frozen), empty, and at least
-  `minStartDistance` (20) cells from every existing colony. (You settle on land;
+  `minColonyDistance` (20) cells from every existing colony. (You settle on land;
   you may cross shallow sea to get there if you have a Dock.)
 
 **Launch action (LLM plan):** include a `launch` array in your plan:

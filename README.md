@@ -117,6 +117,7 @@ npm run dist:all         # everything
 | View home colony | Cmd/Ctrl + Opt + `H` |
 | View a location / colony / alien | View menu |
 | End turn | Cmd/Ctrl + Return |
+| Force-end a stuck AI turn | Ctrl + Esc |
 | Establish / build | Right-click a cell |
 | Colony work assignment | Double-click a colony |
 
@@ -172,7 +173,7 @@ without code changes:
   `biodomeMovementPerYear` (overland movement points per year),
   `riverCrossingMovementCost`, and `impassableFrozenAltitude` /
   `maxAltitudeMeters` (frozen cells above the altitude limit are impassable).
-- Game setup: `startingYear`, `maxAIs`, `minStartDistance`,
+- Game setup: `startingYear`, `maxAIs`, `minColonyDistance`,
   `aiPlacementMinTurns`/`aiPlacementMaxTurns`, and 100 alien `names`.
 
 **Population growth:** each colony builds up **stored happiness** from its food

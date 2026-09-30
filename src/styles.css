@@ -366,3 +366,25 @@ body.dark #turnstart-sub { color: #aaa; }
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 #build-tooltip[hidden] { display: none; }
+
+/* Tooltip for the colony work dialog: base tile yields + each bonus source.
+   Above the work overlay (z 10003); multi-line, so no nowrap. */
+#work-tooltip {
+  position: fixed;
+  z-index: 10008;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.88);
+  color: #fff;
+  font: 12px/1.45 Calibri, sans-serif;
+  padding: 7px 10px;
+  border-radius: 6px;
+  max-width: 260px;
+  white-space: normal;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+#work-tooltip[hidden] { display: none; }
+#work-tooltip .wt-title { font-weight: 700; margin-bottom: 3px; }
+#work-tooltip .wt-row { display: flex; justify-content: space-between; gap: 12px; }
+#work-tooltip .wt-src { color: #cfe8ff; }
+#work-tooltip .wt-val { color: #d6ffd6; white-space: nowrap; }
+#work-tooltip .wt-sep { border-top: 1px solid rgba(255,255,255,0.25); margin: 4px 0; }

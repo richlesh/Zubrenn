@@ -23,7 +23,7 @@ try {
 // Game config (max AIs, min starting distance, starting year, AI placement
 // turn range, and the pool of alien names). Falls back to sane defaults.
 let CONFIG = {
-  maxAIs: 40, minStartDistance: 20, startingYear: 2500,
+  maxAIs: 40, minColonyDistance: 20, startingYear: 2500,
   aiPlacementMinTurns: 3, aiPlacementMaxTurns: 200, names: []
 };
 try {

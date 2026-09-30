@@ -100,7 +100,7 @@
   "planningPathColor": { "h": 120, "s": 0.75, "l": 0.5 },
   "underConstructionColor": { "h": 0, "s": 0, "l": 0.5 },
   "maxAIs": 40,
-  "minStartDistance": 8,
+  "minColonyDistance": 7,
   "startingYear": 2500,
   "aiPlacementMinTurns": 3,
   "aiPlacementMaxTurns": 200,

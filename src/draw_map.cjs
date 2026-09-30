@@ -372,7 +372,7 @@ class HexMap {
     this.onHover = opts.onHover || null;      // (info) => void; overrides status write
     this.onHoverOut = opts.onHoverOut || null;
     this.onColonyDblClick = opts.onColonyDblClick || null; // (building) => void
-    this.cellInfo = opts.cellInfo || null;    // (x,y) => "F:.. P:.. H:.." string
+    this.cellInfo = opts.cellInfo || null;    // (x,y) => "E:.. F:.. M:.. W:.. H:.." string
     this.tooltipDelayMs = opts.tooltipDelayMs != null ? opts.tooltipDelayMs : 2000;
     this.resourcePath = opts.resourcePath || 'resources/terrain';
     this.typeface = opts.typeface || 'Calibri, sans-serif';
@@ -937,8 +937,29 @@ class HexMap {
 
     // Optional overlay (e.g. colony-launch path preview), drawn in the same
     // translated space so it can use getHexCenter(x, y, spacing) directly.
+    // The 4th argument exposes the visible cell range so overlays can shade
+    // cells (e.g. mark unsuitable colony sites) without rescanning the map.
+    //   forEach(cb): cb({ cellX, cellY, cx, cy }) for each visible cell, where
+    //     (cellX,cellY) is the wrapped map cell and (cx,cy) its pixel center.
+    //   fillHex(cx, cy): fill the hex at a pixel center with the current style.
     if (typeof this.onOverlay === 'function') {
-      try { this.onOverlay(ctx, spacing, (x, y) => getHexCenter(x, y, spacing)); } catch (e) {}
+      const W = this.worldSize.x;
+      const wrap = this.wrap;
+      const visible = {
+        forEach: (cb) => {
+          for (let x = x0; x < xMax; x++) {
+            const cellX = wrap ? wrapX(x, W) : x;
+            if (cellX < 0 || cellX >= W) continue;
+            for (let y = y0; y < yMax; y++) {
+              if (y < 0 || y >= this.worldSize.y) continue;
+              const c = getHexCenter(x, y, spacing);
+              cb({ cellX, cellY: y, cx: c.x, cy: c.y });
+            }
+          }
+        },
+        fillHex: (cx, cy) => { drawHexPath(ctx, cx, cy, spacing); ctx.fill(); },
+      };
+      try { this.onOverlay(ctx, spacing, (x, y) => getHexCenter(x, y, spacing), visible); } catch (e) {}
     }
 
     ctx.restore();
@@ -968,6 +989,10 @@ class HexMap {
     const monoSet = tr.monorails instanceof Set ? tr.monorails : new Set(tr.monorails || []);
     const canalSet = tr.canals instanceof Set ? tr.canals : new Set(tr.canals || []);
     const bridgeSet = tr.bridges instanceof Set ? tr.bridges : new Set(tr.bridges || []);
+    // Built-segment edge sets (keyed "x,y|x,y", endpoints sorted). Present on
+    // saves created after edge recording was added; empty for older saves.
+    const roadEdgeSet = tr.roadEdges instanceof Set ? tr.roadEdges : new Set(tr.roadEdges || []);
+    const monoEdgeSet = tr.monorailEdges instanceof Set ? tr.monorailEdges : new Set(tr.monorailEdges || []);
 
     // Helper: draw a line between two cell centers (exact center to center).
     const drawLink = (a, b, color, w) => {
@@ -981,9 +1006,25 @@ class HexMap {
       }
     };
     // For each road/monorail cell, connect to adjacent road/monorail cells.
-    // All segments of a kind use one uniform width.
-    const linkKind = (cellSet, color, w) => {
+    // Prefer the recorded built EDGES (roadEdges/monorailEdges) so we draw only
+    // the segments that were actually constructed — this avoids spurious
+    // "cross" edges where two strands converge at an acute angle and their
+    // cells become incidentally adjacent. Fall back to cell-adjacency for old
+    // saves that predate edge recording (their edge sets are empty).
+    const linkKind = (cellSet, edgeSet, color, w) => {
       const seenEdge = new Set();
+      if (edgeSet && edgeSet.size) {
+        for (const ek of edgeSet) {
+          const [ka, kb] = ek.split("|");
+          // Only draw if both endpoints still carry this kind (a cell may have
+          // been converted, e.g. a monorail replacing a road).
+          if (!cellSet.has(ka) || !cellSet.has(kb)) continue;
+          if (seenEdge.has(ek)) continue; seenEdge.add(ek);
+          drawLink(parseCell(ka), parseCell(kb), color, w);
+        }
+        return;
+      }
+      // Legacy fallback: connect every adjacent same-kind cell pair.
       for (const k of cellSet) {
         const a = parseCell(k);
         for (const n of hexNeighborsDraw(a.x, a.y)) {
@@ -999,8 +1040,48 @@ class HexMap {
     };
     // Roads brown, monorails silver — center-to-center, uniform width. A cell
     // never carries both (a monorail replaces a road on that cell).
-    linkKind(roadsSet, resolveColor(this.roadColor, "#8a5a2b"), lineW);   // road
-    linkKind(monoSet, resolveColor(this.monorailColor, "#c8cdd6"), lineW);    // monorail
+    linkKind(roadsSet, roadEdgeSet, resolveColor(this.roadColor, "#8a5a2b"), lineW);   // road
+    linkKind(monoSet, monoEdgeSet, resolveColor(this.monorailColor, "#c8cdd6"), lineW);    // monorail
+
+    // Road <-> monorail junctions. A cell carries only one kind, so where a
+    // road cell meets an adjacent monorail cell the two same-kind passes above
+    // leave a visible gap (each pass only links its own kind). The two networks
+    // ARE connected for movement/connectivity, so draw the junction here: each
+    // half of the center-to-center span is painted in its cell's own color so
+    // the link reads as continuous (brown fading to silver at the midpoint).
+    const roadColor = resolveColor(this.roadColor, "#8a5a2b");
+    const monoColor = resolveColor(this.monorailColor, "#c8cdd6");
+    const drawHalfLink = (from, to, color, w) => {
+      const cf = getHexCenter(from.x, from.y, spacing), ct = getHexCenter(to.x, to.y, spacing);
+      const mx = (cf.x + ct.x) / 2, my = (cf.y + ct.y) / 2;
+      // Butt cap (not round): each half must stop exactly at the shared-edge
+      // midpoint so its color stays within its own cell. A round cap would
+      // extend w/2 past the midpoint and bleed the second-drawn half's color
+      // over the first (making the road side look silver at the junction).
+      ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = "butt";
+      for (const ox of offsets) {
+        ctx.beginPath();
+        ctx.moveTo(cf.x + ox, cf.y);
+        ctx.lineTo(mx + ox, my);
+        ctx.stroke();
+      }
+    };
+    {
+      const seenCross = new Set();
+      for (const k of roadsSet) {
+        const a = parseCell(k);
+        for (const n of hexNeighborsDraw(a.x, a.y)) {
+          const nx = this.wrap ? wrapX(n.x, W) : n.x, ny = n.y;
+          if (ny < 0 || ny >= this.worldSize.y) continue;
+          const nk = nx + "," + ny;
+          if (!monoSet.has(nk)) continue;              // only road<->monorail junctions
+          const ek = (k < nk) ? (k + "|" + nk) : (nk + "|" + k);
+          if (seenCross.has(ek)) continue; seenCross.add(ek);
+          drawHalfLink(a, { x: nx, y: ny }, roadColor, lineW);   // road half (brown)
+          drawHalfLink({ x: nx, y: ny }, a, monoColor, lineW);   // monorail half (silver)
+        }
+      }
+    }
 
     // Canals drawn along the shared edge, in the same blue as rivers.
     ctx.strokeStyle = resolveColor(this.canalColor, resolveColor(this.riverColor, (typeof TERRAIN_COLORS !== 'undefined' && TERRAIN_COLORS[10]) || 'rgb(0,80,255)'));
@@ -1424,7 +1505,7 @@ class HexMap {
         const info = this.cellInfo(hex.x, hex.y);
         if (info) terrainLine += "  " + info;
       }
-      lines.push(terrainLine);                        // terrain type + F/P/H
+      lines.push(terrainLine);                        // terrain type + E/F/M/W/H
       lines.push(`${elevText} above sea level`);     // elevation
       lines.push(`(${hex.x}, ${hex.y})`);            // x,y
       const html = lines.join('<br>');

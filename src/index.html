@@ -124,6 +124,7 @@
         <div id="work-stats"></div>
       </div>
       <div class="work-row"><button id="work-close">Done</button></div>
+      <div id="work-tooltip" hidden></div>
     </div>
   </div>
 
@@ -263,7 +264,7 @@
 
     let hexMap = null;
     let _roundHadAction = false; // did a player place/act during the current round?
-    let CONFIG = { maxAIs: 40, minStartDistance: 20, startingYear: 2500,
+    let CONFIG = { maxAIs: 40, minColonyDistance: 20, startingYear: 2500,
                    aiPlacementMinTurns: 3, aiPlacementMaxTurns: 200,
                    buildingTypes: { "1": { name: "Biodome", startPopulation: 1000, growthRate: 0.01, buildCost: { turns: 0 }, bonus: { food: 1, material: 1, energy: 2, growth: 0, wealth: 1 } } },
                    names: [] };
@@ -321,6 +322,7 @@
       const arr = (s) => (s instanceof Set ? [...s] : (Array.isArray(s) ? s.slice() : []));
       return {
         roads: arr(tr.roads), monorails: arr(tr.monorails),
+        roadEdges: arr(tr.roadEdges), monorailEdges: arr(tr.monorailEdges),
         canals: arr(tr.canals), bridges: arr(tr.bridges),
         airports: arr(tr.airports),
         plans: (tr.plans || []).map((p) => {
@@ -532,31 +534,30 @@
       }
       return false;
     }
-    // River proximity (cell on/adjacent to a river path).
+    // Set of cells (encoded y*W + wrappedX) that lie ON a river path. Lazily
+    // built and reset on map load. Used by riverSegmentSet(); nearRiver() below
+    // no longer depends on it for its result (it is edge-precise).
     let _riverCellSet = null;
-    function nearRiver(x, y) {
+    function ensureRiverCellSet() {
+      if (_riverCellSet) return _riverCellSet;
       const W = gameState.map.terrain[0].length;
-      const H = gameState.map.terrain.length;
       const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
       const wrapX = (cx) => wrap ? ((cx % W) + W) % W : cx;
-      if (!_riverCellSet) {
-        _riverCellSet = new Set();
-        for (const path of (gameState.map.rivers || [])) {
-          for (const c of path) _riverCellSet.add(c.y * W + c.x);
-        }
+      _riverCellSet = new Set();
+      for (const path of (gameState.map.rivers || [])) {
+        for (const c of path) _riverCellSet.add(c.y * W + wrapX(c.x));
       }
-      if (_riverCellSet.has(y * W + wrapX(x))) return true;
+      return _riverCellSet;
+    }
+    // River proximity, EDGE-PRECISE: a cell is "near a river" only if one of its
+    // OWN six borders is a river segment or a built canal. A cell is NOT counted
+    // merely because a neighbor happens to be river-adjacent — the river/canal
+    // must run along a border of THIS cell.
+    function nearRiver(x, y) {
+      const H = gameState.map.terrain.length;
       for (const n of hexNeighborsRenderer(x, y)) {
         if (n.y < 0 || n.y >= H) continue;
-        if (_riverCellSet.has(n.y * W + wrapX(n.x))) return true;
-      }
-      // A built canal segment is equivalent to a river: a cell bordering a
-      // canal edge counts as river-adjacent.
-      if (gameState.transport && gameState.transport.canals) {
-        for (const n of hexNeighborsRenderer(x, y)) {
-          if (n.y < 0 || n.y >= H) continue;
-          if (hasCanalEdge(x, y, n.x, n.y)) return true;
-        }
+        if (borderIsRiverSegment(x, y, n.x, n.y)) return true;
       }
       return false;
     }
@@ -596,6 +597,12 @@
       }
       tr.roads = tr.roads instanceof Set ? tr.roads : new Set(tr.roads || []);
       tr.monorails = tr.monorails instanceof Set ? tr.monorails : new Set(tr.monorails || []);
+      // Built-segment edges (keyed "x,y|x,y", endpoints sorted) for roads and
+      // monorails. Recorded as segments are built so the renderer draws only
+      // real segments (not incidental cell adjacency, which produced spurious
+      // "cross" edges where two strands converge).
+      tr.roadEdges = tr.roadEdges instanceof Set ? tr.roadEdges : new Set(tr.roadEdges || []);
+      tr.monorailEdges = tr.monorailEdges instanceof Set ? tr.monorailEdges : new Set(tr.monorailEdges || []);
       tr.canals = tr.canals instanceof Set ? tr.canals : new Set(tr.canals || []);   // edge keys
       tr.bridges = tr.bridges instanceof Set ? tr.bridges : new Set(tr.bridges || []); // edge keys
       tr.airports = tr.airports instanceof Set ? tr.airports : new Set(tr.airports || []); // colony cell keys
@@ -1015,12 +1022,30 @@
     function planCanalPath(startVK, endVK) {
       if (!startVK || !endVK || startVK === endVK) return null;
       const dist = new Map([[startVK, 0]]);
+      const cart = new Map([[startVK, 0]]);   // accumulated straight-line length (tie-break)
       const prev = new Map();          // vkey -> { from, edge:{a,b} }
       const done = new Set();
-      const pq = [{ k: startVK, d: 0 }];
+      const pq = [{ k: startVK, d: 0, c: 0 }];
+      // Straight-line length between two vertices in reference space. Used only
+      // to break ties between equal-cost paths so canals run more directly
+      // instead of wandering along whichever equal-cost branch is found first.
+      const EPS = 1e-6;
+      const g = vertexGraph();
+      const edgeCart = (ka, kb) => {
+        const va = g.get(ka), vb = g.get(kb);
+        if (!va || !vb) return 0;
+        const dx = va.point.x - vb.point.x, dy = va.point.y - vb.point.y;
+        return Math.hypot(dx, dy);
+      };
       let guard = 0, cap = vertexGraph().size * 6 + 100;
       while (pq.length && guard++ < cap) {
-        let bi = 0; for (let i = 1; i < pq.length; i++) if (pq[i].d < pq[bi].d) bi = i;
+        // Pick the frontier node with the smallest (cost, then straight-line
+        // length) so equal-cost expansions prefer the more direct route.
+        let bi = 0;
+        for (let i = 1; i < pq.length; i++) {
+          if (pq[i].d < pq[bi].d - EPS ||
+              (Math.abs(pq[i].d - pq[bi].d) <= EPS && pq[i].c < pq[bi].c)) bi = i;
+        }
         const cur = pq.splice(bi, 1)[0];
         if (done.has(cur.k)) continue; done.add(cur.k);
         if (cur.k === endVK) break;
@@ -1030,9 +1055,15 @@
           const seg = canalSegmentCost(e.a.x, e.a.y, e.b.x, e.b.y);
           const w = (seg.material || 0) + (seg.food || 0) + (seg.energy || 0) + (seg.wealth || 0) + 0.01;
           const nd = cur.d + w;
-          if (!dist.has(nk) || nd < dist.get(nk)) {
-            dist.set(nk, nd); prev.set(nk, { from: cur.k, edge: { a: e.a, b: e.b } });
-            pq.push({ k: nk, d: nd });
+          const ncart = cur.c + edgeCart(cur.k, nk);
+          const od = dist.has(nk) ? dist.get(nk) : Infinity;
+          const oc = cart.has(nk) ? cart.get(nk) : Infinity;
+          // Relax on strictly-lower cost, or equal cost with a shorter
+          // straight-line path (the tie-break that straightens canals).
+          if (nd < od - EPS || (Math.abs(nd - od) <= EPS && ncart < oc - EPS)) {
+            dist.set(nk, nd); cart.set(nk, ncart);
+            prev.set(nk, { from: cur.k, edge: { a: e.a, b: e.b } });
+            pq.push({ k: nk, d: nd, c: ncart });
           }
         }
       }
@@ -1141,14 +1172,29 @@
         // A monorail replaces any road on these cells (removes the road).
         tr.monorails.add(cellKey(fx, fy)); tr.monorails.add(cellKey(tx, ty));
         tr.roads.delete(cellKey(fx, fy)); tr.roads.delete(cellKey(tx, ty));
+        // Record the built monorail segment edge; drop any road edges touching a
+        // cell that just became a monorail (those road cells no longer exist).
+        tr.monorailEdges.add(edgeKey(fx, fy, tx, ty));
+        _dropRoadEdgesAtCell(fx, fy); _dropRoadEdgesAtCell(tx, ty);
       } else { // road (+ bridge over river or sea)
         tr.roads.add(cellKey(fx, fy)); tr.roads.add(cellKey(tx, ty));
+        tr.roadEdges.add(edgeKey(fx, fy, tx, ty)); // record the built road segment
         // Bridge this segment only if THIS border is a river/canal (edge-
         // precise, so a road merely running beside a river isn't bridged), or
         // if the segment spans a sea tile (sea crossing).
         if (borderIsRiverSegment(fx, fy, tx, ty) || terrainAt(fx, fy) === 1 || terrainAt(tx, ty) === 1) {
           tr.bridges.add(edgeKey(fx, fy, tx, ty));
         }
+      }
+    }
+    // Remove any recorded road edges incident to cell (x,y) — used when that
+    // cell is converted to a monorail so stale road segments aren't drawn.
+    function _dropRoadEdgesAtCell(x, y) {
+      const tr = ensureTransport();
+      const ck = cellKey(x, y);
+      for (const ek of Array.from(tr.roadEdges)) {
+        const [ka, kb] = ek.split("|");
+        if (ka === ck || kb === ck) tr.roadEdges.delete(ek);
       }
     }
     // The resources (and how much more of each) a source colony's `pool` lacks
@@ -1311,8 +1357,7 @@
     // ---- movement / colony-launch pathfinding ------------------------------
     // Set of cells that are on a river segment (the river path itself).
     function riverSegmentSet() {
-      if (!_riverCellSet) { nearRiver(-999, -999); } // triggers lazy build in nearRiver
-      return _riverCellSet || new Set();
+      return ensureRiverCellSet();
     }
     // Mark a cell as a river cell (used when a canal is built — a canal becomes
     // a river for all purposes).
@@ -1753,16 +1798,76 @@
       return { food, prod, happ, energy, wealth };
     }
 
+    // Itemized version of cellBreakdown for the colony work-dialog tooltip.
+    // Returns the base tile yields plus a list of each bonus source and the
+    // resources it adds:
+    //   { terrainName, base:{food,material,energy,wealth,happiness},
+    //     bonuses:[{ label, food,material,energy,wealth,happiness }, ...] }
+    // Only non-zero resources are meaningful per entry; callers filter for
+    // display. Mirrors cellBreakdown's math so totals agree.
+    function cellContributions(gx, gy, isHome, owner) {
+      const terr = terrainAt(gx, gy);
+      const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terr)]) || {};
+      const tp = terrainProd(terr);
+      const tpp = tt.base || {};
+      const base = {
+        food: tp.food || 0,
+        material: tp.material || 0,
+        energy: 0,
+        wealth: 0,
+        happiness: tpp.happiness || 0,
+      };
+      const bonuses = [];
+      const add = (label, r) => {
+        const e = { label, food: 0, material: 0, energy: 0, wealth: 0, happiness: 0, ...r };
+        if (e.food || e.material || e.energy || e.wealth || e.happiness) bonuses.push(e);
+      };
+
+      // Water (river/sea) adjacency food bonus, and river-adjacent wealth bonus.
+      const wf = waterFoodBonus(gx, gy);
+      if (wf) add("Adjacent to water", { food: wf });
+      const rw = riverWealthBonus(gx, gy);
+      if (rw) add("Adjacent to river", { wealth: rw });
+
+      // Biodome base production on its home cell.
+      if (isHome) {
+        const n = bldgNet(1);
+        add(improvementName(1), { food: n.food, material: n.material, energy: n.energy, wealth: n.wealth, happiness: n.happiness });
+      }
+      // Owned, operational building standing on this cell (net of upkeep).
+      for (const b of gameState.buildings) {
+        if (b.type === 1) continue;
+        if (b.owner !== owner) continue;
+        if (b.x !== gx || b.y !== gy) continue;
+        if (!isOperational(b)) continue;
+        const n = bldgNet(b.type);
+        add(improvementName(b.type), { food: n.food, material: n.material, energy: n.energy, wealth: n.wealth, happiness: n.happiness });
+      }
+
+      return { terrainName: tt.name || `Terrain ${terr}`, base, bonuses };
+    }
     // ---- status / turn -----------------------------------------------------
     function currentYear() { return (CONFIG.startingYear || 2500) + (gameState.turn || 0); }
 
-    // "F:x+y, P:x+y, H:x+y" base+bonus string for a cell (for hover + modal).
+    // Cell property totals for the map hover tooltip, in the order
+    // E, F, M, W, H. Each value is the base+bonus TOTAL (not the split
+    // "base+bonus" form); any property that totals 0 is omitted.
     function cellInfoString(x, y) {
       if (!gameState.map) return "";
       const isHome = gameState.buildings.some((b) => b.type === 1 && b.x === x && b.y === y && b.owner === 'human');
       const bd = cellBreakdown(x, y, isHome, 'human');
-      const seg = (o) => `${o.base}+${o.bonus}`;
-      return `F:${seg(bd.food)}, P:${seg(bd.prod)}, H:${seg(bd.happ)}`;
+      const tot = (o) => (o.base || 0) + (o.bonus || 0);
+      const parts = [];
+      const push = (label, o) => {
+        const v = Math.round(tot(o) * 10) / 10;
+        if (v) parts.push(`${label}:${v}`);
+      };
+      push("E", bd.energy);
+      push("F", bd.food);
+      push("M", bd.prod);
+      push("W", bd.wealth);
+      push("H", bd.happ);
+      return parts.join(", ");
     }
     function updateStatus(hoverInfo) {
       const el = document.getElementById("status");
@@ -2013,7 +2118,11 @@
           });
           const pick = eligible.find((c) => c._justEstablished) || eligible[0];
           for (const c of _newWorkerColonies) delete c._justEstablished;
-          if (pick) openWorkModal(pick);
+          if (pick) {
+            // Center the large map on this colony as its detail dialog auto-opens.
+            if (hexMap) hexMap.centerOnCell(pick.x, pick.y);
+            openWorkModal(pick);
+          }
         });
       }
 
@@ -2103,9 +2212,15 @@
     // placed their colony, their turns auto-pass so the clock keeps advancing
     // (AIs place after their scheduled turn 3..200). If any AI still hasn't
     // placed, the game keeps ticking; otherwise it settles on the human's turn.
+    // Monotonic id bumped every time the turn advances. An in-flight aiTakeTurn
+    // captures the id at its start and only auto-advances in its finally if the
+    // id is unchanged — so a manually forced turn-end (Ctrl+Esc) can move the
+    // game on without a later-resuming stuck AI double-advancing.
+    let _turnStepId = 0;
     function advanceTurn() {
       const players = gameState.players || [];
       if (!players.length) return;
+      _turnStepId++;
       stopIdleWatch();        // the human's turn is over; drop any idle warning
       gameState.currentPlayer++;
       let roundCompleted = false;
@@ -2127,6 +2242,27 @@
         // auto-end flow via the turn-start dialog.
         startHumanTurn();
       }
+    }
+
+    // Escape hatch for a stuck AI turn (Ctrl+Esc): if it is currently an AI
+    // player's turn, force the game to move on. A hung LLM request or a stalled
+    // notification queue could otherwise leave the turn pending indefinitely.
+    // We clear any pending notifications/timers (so a queued turn step can't
+    // also fire) and advance; the _turnStepId guard in aiTakeTurn prevents a
+    // late-resuming AI from advancing a second time.
+    function forceEndAITurn() {
+      const players = gameState.players || [];
+      const p = players[gameState.currentPlayer];
+      if (!p || p.kind !== 'ai') return false; // only meaningful during an AI turn
+      // Flush the notification pipeline so nothing keeps processing paused.
+      if (_notifyTimer) { clearTimeout(_notifyTimer); _notifyTimer = null; }
+      _notifyQueue = [];
+      _notifyIdleCbs = [];
+      _notifyShowing = false;
+      if (typeof notifyOverlay !== 'undefined' && notifyOverlay) notifyOverlay.hidden = true;
+      advanceTurn(); // bumps _turnStepId, so the stuck AI's finally won't re-advance
+      notify(`Skipped ${p.name || 'the AI'}'s turn.`);
+      return true;
     }
 
     // Decide whether to auto-end the current HUMAN turn. Ends automatically when
@@ -2272,7 +2408,7 @@
           // Nothing to do: say so briefly, then end. No "take control" button,
           // since there is nothing to take control of.
           turnStartText.textContent = "Auto turn end is on";
-          turnStartSub.textContent = "You have no actions this turn — ending automatically…";
+          turnStartSub.innerHTML = "You have no actions this turn — ending automatically…<br>Press ESC to take control.";
           turnStartHandle.hidden = true;
           turnStartOverlay.hidden = false;
           _turnStartTimers.push(setTimeout(() => { _closeTurnStart(); advanceTurn(); }, NOTHING_MS));
@@ -3212,7 +3348,7 @@
     // ---- found a new colony from an existing one ---------------------------
     // Validity of a launch target for `owner` from host colony `host`:
     // land (2-8 or low frozen), empty, passable, reachable by land, and at
-    // least minStartDistance from every existing colony.
+    // least minColonyDistance from every existing colony.
     function foundColonyTargetValid(host, tx, ty) {
       if (!host) return { ok: false, reason: "no host" };
       // A colony must settle on land (not on a sea tile), so the target itself
@@ -3222,7 +3358,7 @@
       if (!isPassableCell(tx, ty, false)) return { ok: false, reason: "impassable" };
       if (tx === host.x && ty === host.y) return { ok: false, reason: "same cell" };
       if (cellHasBuilding(tx, ty)) return { ok: false, reason: "cell occupied" };
-      const minD = CONFIG.minStartDistance || 20;
+      const minD = CONFIG.minColonyDistance || 20;
       for (const b of gameState.buildings) {
         if (b.type !== 1) continue;
         if (hexDistance(b.x, b.y, tx, ty) < minD) return { ok: false, reason: `too close to a colony (min ${minD})` };
@@ -3231,6 +3367,24 @@
       const pf = findMovementPath(host.x, host.y, tx, ty, host.owner);
       if (!pf) return { ok: false, reason: "no reachable path" };
       return { ok: true, path: pf.path, cost: pf.cost, travelTurns: biodomeTravelTurns(pf.cost) };
+    }
+    // Cheap suitability test for shading the launch map: a cell is unsuitable
+    // for a new colony if its TERRAIN can't host one (sea, impassable, or
+    // already occupied) or it is within minColonyDistance of an existing colony.
+    // Deliberately excludes the (expensive) reachability pathfind — only the
+    // terrain/occupancy/spacing reasons the user asked to highlight.
+    function foundCellUnsuitableByTerrainOrDistance(host, tx, ty) {
+      const terr = terrainAt(tx, ty);
+      if (terr === 1) return true;                       // sea
+      if (!isPassableCell(tx, ty, false)) return true;   // impassable (e.g. high frozen)
+      if (cellHasBuilding(tx, ty)) return true;          // occupied
+      if (host && tx === host.x && ty === host.y) return true;
+      const minD = CONFIG.minColonyDistance || 20;
+      for (const b of gameState.buildings) {
+        if (b.type !== 1) continue;
+        if (hexDistance(b.x, b.y, tx, ty) < minD) return true; // too close to a colony
+      }
+      return false;
     }
     // Launch a new colony from `host` (a biodome) to (tx,ty) for `owner`. Pays
     // the biodome cost + transfers colonists from the host, and creates an
@@ -3292,24 +3446,37 @@
       if (hexMap) hexMap.setOverlay(foundOverlayDraw); // triggers redraw
     }
     // Overlay: draw a blue line connecting the midpoints of the path cells.
-    function foundOverlayDraw(ctx, spacing, hexCenter) {
-      if (!_foundMode || !_foundHoverPath || _foundHoverPath.length < 2) return;
+    function foundOverlayDraw(ctx, spacing, hexCenter, visible) {
+      if (!_foundMode) return;
       ctx.save();
-      // Path line color from config.launchPathColor (HSL), default green.
-      const c0 = CONFIG.launchPathColor || { h: 120, s: 0.7, l: 0.45 };
-      const hue = c0.h != null ? c0.h : 120;
-      const sat = Math.round((c0.s != null ? c0.s : 0.7) * 100);
-      const lig = Math.round((c0.l != null ? c0.l : 0.45) * 100);
-      ctx.strokeStyle = `hsla(${hue}, ${sat}%, ${lig}%, 0.9)`;
-      ctx.lineWidth = Math.max(2, spacing.y / 8);
-      ctx.lineJoin = "round"; ctx.lineCap = "round";
-      ctx.beginPath();
-      for (let i = 0; i < _foundHoverPath.length; i++) {
-        const p = _foundHoverPath[i];
-        const c = hexCenter(p.x, p.y);
-        if (i === 0) ctx.moveTo(c.x, c.y); else ctx.lineTo(c.x, c.y);
+      // Shade every visible cell that is unsuitable for a colony (bad terrain,
+      // occupied, or too close to another colony) in translucent light gray.
+      if (visible && typeof visible.forEach === 'function') {
+        ctx.fillStyle = "rgba(180, 180, 180, 0.55)";
+        visible.forEach(({ cellX, cellY, cx, cy }) => {
+          if (foundCellUnsuitableByTerrainOrDistance(_foundHost, cellX, cellY)) {
+            visible.fillHex(cx, cy);
+          }
+        });
       }
-      ctx.stroke();
+      // Path preview line (only once a reachable hover path exists).
+      if (_foundHoverPath && _foundHoverPath.length >= 2) {
+        // Path line color from config.launchPathColor (HSL), default green.
+        const c0 = CONFIG.launchPathColor || { h: 120, s: 0.7, l: 0.45 };
+        const hue = c0.h != null ? c0.h : 120;
+        const sat = Math.round((c0.s != null ? c0.s : 0.7) * 100);
+        const lig = Math.round((c0.l != null ? c0.l : 0.45) * 100);
+        ctx.strokeStyle = `hsla(${hue}, ${sat}%, ${lig}%, 0.9)`;
+        ctx.lineWidth = Math.max(2, spacing.y / 8);
+        ctx.lineJoin = "round"; ctx.lineCap = "round";
+        ctx.beginPath();
+        for (let i = 0; i < _foundHoverPath.length; i++) {
+          const p = _foundHoverPath[i];
+          const c = hexCenter(p.x, p.y);
+          if (i === 0) ctx.moveTo(c.x, c.y); else ctx.lineTo(c.x, c.y);
+        }
+        ctx.stroke();
+      }
       ctx.restore();
     }
     async function confirmFoundColony(tx, ty) {
@@ -3336,18 +3503,65 @@
     let _transportHoverPath = null;   // current hovered path (green)
     let _transportPlannedPaths = [];  // committed plans this session (lighter green)
     // A simple connected hex path from A to B, stepping to the neighbor closest
-    // to B each time (good enough for building along a corridor).
+    // to B each time (good enough for building along a corridor). Among neighbors
+    // tied on hex distance (all equally "shortest"), prefer the one whose CELL
+    // CENTER is closest to B in straight-line (cartesian) distance, so the path
+    // heads directly toward the target instead of drifting along whichever
+    // neighbor happens to come first in iteration order.
+    //
+    // Cartesian cell centers use the map's odd-q flat-top layout, matching the
+    // renderer's getHexCenter geometry (draw_map.cjs): columns are 0.75 apart
+    // horizontally and odd columns are shifted DOWN half a row. We also apply
+    // the renderer's per-axis cell spacing (HEX_SCALE) so the straight-line
+    // metric matches true on-screen distance, not just grid indices. Only
+    // relative distances matter here.
+    const _HEX_SCALE = { x: 1.15470053837925, y: 0.86602540378444 };
+    function _hexCenterPx(x, y) {
+      return {
+        px: (x * 0.75) * _HEX_SCALE.x,
+        py: (y + ((x & 1) ? 0.5 : 0)) * _HEX_SCALE.y,
+      };
+    }
+    // Squared cartesian distance between cell (x,y) and target (bx,by), honoring
+    // east-west wrap by choosing the smallest horizontal delta.
+    function _cartesianDist2To(x, y, bx, by) {
+      const a = _hexCenterPx(x, y);
+      const b = _hexCenterPx(bx, by);
+      let dx = a.px - b.px;
+      if (gameState.map.meta && gameState.map.meta.wrap) {
+        const W = gameState.map.terrain[0].length;
+        const spanPx = (W * 0.75) * _HEX_SCALE.x; // full cylinder width, same units
+        if (dx > spanPx / 2) dx -= spanPx;
+        else if (dx < -spanPx / 2) dx += spanPx;
+      }
+      const dy = a.py - b.py;
+      return dx * dx + dy * dy;
+    }
     function hexLinePath(ax, ay, bx, by) {
       const path = [{ x: ax, y: ay }];
       let cur = { x: ax, y: ay };
       let guard = 0;
       while ((cur.x !== bx || cur.y !== by) && guard++ < 500) {
-        let best = null, bestD = Infinity;
+        const curIsSea = terrainAt(cur.x, cur.y) === 1;
+        let best = null, bestD = Infinity, bestC = Infinity;
         for (const n of hexNeighborsRenderer(cur.x, cur.y)) {
           if (n.y < 0 || n.y >= gameState.map.terrain.length) continue;
           if (isImpassableFrozen(n.x, n.y) && !(n.x === bx && n.y === by)) continue; // can't build through frozen
+          // A bridge over sea may span only ONE sea tile (two segments:
+          // land->sea->land). So never step from a sea tile onto another sea
+          // tile — that would make a multi-tile sea bridge. This keeps every
+          // sea crossing exactly one tile wide (the walker routes around wider
+          // water). The target itself is exempted so a path can still terminate
+          // on it, mirroring the frozen exception above.
+          if (curIsSea && terrainAt(n.x, n.y) === 1 && !(n.x === bx && n.y === by)) continue;
           const d = hexDistance(n.x, n.y, bx, by);
-          if (d < bestD) { bestD = d; best = n; }
+          if (d > bestD) continue;
+          const c = _cartesianDist2To(n.x, n.y, bx, by);
+          // Primary key: hex distance (keeps the path shortest). Secondary key:
+          // straight-line distance to the target (straightens ties).
+          if (d < bestD || (d === bestD && c < bestC)) {
+            bestD = d; bestC = c; best = n;
+          }
         }
         if (!best) break;
         cur = { x: best.x, y: best.y };
@@ -3857,6 +4071,7 @@
 
     // ---- AI turn -----------------------------------------------------------
     async function aiTakeTurn(pi) {
+      const myStep = _turnStepId; // detect a manual force-advance during our await
       try {
         const p = gameState.players && gameState.players[pi];
         if (!p || p.kind !== 'ai') return;
@@ -3898,7 +4113,9 @@
       } catch (err) {
         console.error("[ai] aiTakeTurn error for player " + pi + ":", err);
       } finally {
-        advanceTurn();
+        // Only advance if the turn wasn't already force-advanced (Ctrl+Esc)
+        // while we were awaiting — otherwise we'd skip an extra player.
+        if (_turnStepId === myStep) advanceTurn();
       }
     }
 
@@ -4025,7 +4242,7 @@
         if ((col.population || 0) <= minPop) continue;
         if (!canAffordBuildingAt(1, col.x, col.y, 'human')) continue;
         // Any valid reachable site within a reasonable band?
-        const minD = CONFIG.minStartDistance || 20;
+        const minD = CONFIG.minColonyDistance || 20;
         const reachable = findMovementCostsFrom(col.x, col.y, col.owner);
         for (const c of cellsWithin(col.x, col.y, minD + 12)) {
           const terr = terrainAt(c.x, c.y);
@@ -4144,12 +4361,12 @@
       if (acted && hexMap) hexMap.setBuildings(gameState.buildings);
       return acted;
     }
-    // Best valid AI site: terrain 2-7, >= minStartDistance from every colony,
+    // Best valid AI site: terrain 2-7, >= minColonyDistance from every colony,
     // preferring near-river and within 3 cells of water.
     function aiChooseColonySite() {
       const t = gameState.map.terrain;
       const H = t.length, W = t[0].length;
-      const minD = CONFIG.minStartDistance || 20;
+      const minD = CONFIG.minColonyDistance || 20;
       let best = null, bestScore = -Infinity;
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
@@ -4346,11 +4563,11 @@
     }
 
     // Choose a launch target for an AI colony: a valid, reachable land cell at
-    // least minStartDistance from any colony, within a reasonable travel range,
+    // least minColonyDistance from any colony, within a reasonable travel range,
     // scored by terrain quality (near river/water, grassland). Returns {x,y} or
     // null. Keeps the search local so travel time stays modest.
     function aiChooseLaunchSite(host, pi) {
-      const minD = CONFIG.minStartDistance || 20;
+      const minD = CONFIG.minColonyDistance || 20;
       const SEARCH = minD + 12; // search a band beyond the min spacing
       const reachable = findMovementCostsFrom(host.x, host.y, host.owner);
       const W = gameState.map ? gameState.map.terrain[0].length : 0;
@@ -4642,6 +4859,8 @@
       const newCol = gameState.buildings.find((b) => b.type === 1 && b.x === hex.x && b.y === hex.y);
       if (newCol) {
         _advanceAfterWorkModal = true;
+        // Center the large map on the new colony as its detail dialog opens.
+        if (hexMap) hexMap.centerOnCell(newCol.x, newCol.y);
         openWorkModal(newCol);
       } else {
         advanceTurn();
@@ -4668,6 +4887,7 @@
     }
     function closeWorkModal() {
       workOverlay.hidden = true; workColony = null;
+      const wt = document.getElementById("work-tooltip"); if (wt) wt.hidden = true;
       if (_advanceAfterWorkModal) {
         _advanceAfterWorkModal = false;
         advanceTurn(); // hand the round to the AIs after the founding turn
@@ -4760,7 +4980,7 @@
         const header = [];
         if (bldgHere) { header.push(improvementName(bldgHere.type)); header.push(terrName); }
         else header.push(terrName);
-        const stats = [`F: ${seg(bd.food)}`, `M: ${seg(bd.prod)}`, `E: ${seg(bd.energy)}`,
+        const stats = [`E: ${seg(bd.energy)}`, `F: ${seg(bd.food)}`, `M: ${seg(bd.prod)}`,
                        `W: ${seg(bd.wealth)}`, `H: ${seg(bd.happ)}`];
         const lines = header.concat(stats);
         const smallPx = Math.max(5, Math.round(fontPx * 0.62)); // smaller text
@@ -4970,6 +5190,70 @@
       if (best && bestD <= (best.r * best.r)) toggleWorked(cellKey(best.x, best.y));
     });
 
+    // ---- work-dialog hover tooltip: base tile yields + each bonus source ----
+    const workTooltip = document.getElementById("work-tooltip");
+    // The work hex under a canvas mouse event, or null.
+    function _workHexAtEvent(e) {
+      const rect = workCanvas.getBoundingClientRect();
+      const px = (e.clientX - rect.left) * (workCanvas.width / rect.width);
+      const py = (e.clientY - rect.top) * (workCanvas.height / rect.height);
+      let best = null, bestD = Infinity;
+      for (const h of _workHexes) {
+        const d = (h.cx - px) ** 2 + (h.cy - py) ** 2;
+        if (d < bestD) { bestD = d; best = h; }
+      }
+      return (best && bestD <= (best.r * best.r)) ? best : null;
+    }
+    // Resources on one contribution entry, formatted "F +2, W +1" (signed,
+    // skips zeros; happiness shown as H).
+    function _fmtResources(o) {
+      const num = (v) => {
+        const r = Math.round(v * 10) / 10;
+        return (r > 0 ? "+" : "") + r;
+      };
+      const parts = [];
+      if (o.food)      parts.push(`F ${num(o.food)}`);
+      if (o.material)  parts.push(`M ${num(o.material)}`);
+      if (o.energy)    parts.push(`E ${num(o.energy)}`);
+      if (o.wealth)    parts.push(`W ${num(o.wealth)}`);
+      if (o.happiness) parts.push(`H ${num(o.happiness)}`);
+      return parts.join(", ");
+    }
+    function _workTooltipHTML(hex) {
+      const col = workColony; if (!col) return "";
+      const isHome = (hex.x === col.x && hex.y === col.y);
+      const c = cellContributions(hex.x, hex.y, isHome, col.owner);
+      const esc = (s) => String(s).replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[ch]));
+      const row = (src, val) =>
+        `<div class="wt-row"><span class="wt-src">${esc(src)}</span><span class="wt-val">${esc(val)}</span></div>`;
+      let html = `<div class="wt-title">${esc(c.terrainName)} (${hex.x},${hex.y})</div>`;
+      html += row("Base tile", _fmtResources(c.base) || "—");
+      if (c.bonuses.length) {
+        html += `<div class="wt-sep"></div>`;
+        for (const b of c.bonuses) html += row(b.label, _fmtResources(b));
+      }
+      return html;
+    }
+    function _positionWorkTooltip(e) {
+      // Keep the tooltip on-screen (flip left/up near the right/bottom edges).
+      const pad = 14;
+      workTooltip.style.left = "0px"; workTooltip.style.top = "0px";
+      const tw = workTooltip.offsetWidth, th = workTooltip.offsetHeight;
+      let x = e.clientX + pad, y = e.clientY + pad;
+      if (x + tw > window.innerWidth - 4) x = e.clientX - pad - tw;
+      if (y + th > window.innerHeight - 4) y = e.clientY - pad - th;
+      workTooltip.style.left = Math.max(4, x) + "px";
+      workTooltip.style.top = Math.max(4, y) + "px";
+    }
+    workCanvas.addEventListener("mousemove", (e) => {
+      const hex = _workHexAtEvent(e);
+      if (!hex) { workTooltip.hidden = true; return; }
+      workTooltip.innerHTML = _workTooltipHTML(hex);
+      workTooltip.hidden = false;
+      _positionWorkTooltip(e);
+    });
+    workCanvas.addEventListener("mouseleave", () => { workTooltip.hidden = true; });
+
     document.getElementById("work-close").addEventListener("click", closeWorkModal);
     workOverlay.addEventListener("click", (e) => { if (e.target === workOverlay) closeWorkModal(); });
 
@@ -5030,6 +5314,11 @@
     });
 
     document.addEventListener("keydown", (e) => {
+      // Ctrl+Esc: escape hatch to force-end a stuck AI turn so the game can
+      // progress. Ignored when it isn't an AI's turn.
+      if (e.key === "Escape" && e.ctrlKey) {
+        if (forceEndAITurn()) { e.preventDefault(); return; }
+      }
       if (e.key === "Enter") {
         const tag = e.target && e.target.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA" || (e.target && e.target.isContentEditable)) {
