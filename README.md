@@ -2,10 +2,12 @@
 .float-left {
   float: left;
   margin: 0 1em 0 0;
+  width: 128px;
 }
 .float-right {
   float: right;
   margin: 0 0 0 1em;
+  width: 128px;
 }
 </style>
 
@@ -153,7 +155,7 @@ npm run dist:all         # everything
 
 ### Buildings
 
-<span class="float-left">![biodome](src/resources/biodome.png){width=128}</span>
+<span class="float-left">![biodome](src/resources/biodome.png)</span>
 
 #### Biodome
 
