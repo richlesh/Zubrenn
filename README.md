@@ -31,13 +31,28 @@ with alien AI opponents for resources.
   shrinks it.
 - **Prerequisites** — some buildings require others first (e.g. a Factory needs
   a Solar Panel in the colony).
+- **Transport network** — build **Roads** and **Monorails** overland, dig
+  **Canals** along cell borders, and build **Docks** and **Air Fields**. Paths
+  are plotted cell-by-cell (choosing the most direct of equal-length routes);
+  road/monorail bridges may span a single sea tile. Right-click a
+  road/monorail tile to **Remove Transportation**.
+- **Connected colonies share resources** — colonies you own that are linked by
+  road/monorail, a river/canal path, a **sea** route (both have a Dock), or an
+  **air** route (both have an Air Field within its `range`) can cover each
+  other's shortfalls, borrowing from whichever connected colony stores the most
+  of a resource.
 - **Found new colonies** — a colony above a population threshold can launch a
   new biodome to a distant land cell; the materials travel overland (time based
   on terrain movement cost and river crossings), transferring colonists and
-  paying the biodome cost from the host colony.
+  paying the biodome cost from the host colony. During placement, cells that are
+  unsuitable (bad terrain or too close to an existing colony) are shaded gray.
 - **AI opponents** — configurable number of alien species establish and grow
-  their own colonies.
-- **Area-of-Control view**, minimap, hover tooltips, save/load, and a
+  their own colonies. If an AI turn stalls, **Ctrl+Esc** force-ends it.
+- **Background music** — a looping theme plays in the game window, with on/off
+  and volume controls in Settings ▸ Audio (paused while the Backstory is shown).
+- **Area-of-Control view**, minimap, hover tooltips (terrain yields as
+  `E/F/M/W/H`, plus any road/monorail and colony/building on the tile), a colony
+  work view with per-cell base + bonus tooltips, save/load, and a
   fully-`config.json`-driven ruleset.
 
 ## Getting started
@@ -87,7 +102,11 @@ npm run dist:all         # everything
    why (insufficient resources, missing prerequisite, or outside your zone).
    To tear a building down, right-click its cell and choose **Remove
    Improvement** (costs Energy + Food from the colony and takes a couple of
-   turns to complete).
+   turns to complete). Build **Roads**, **Monorails**, and **Canals** the same
+   way (right-click within a colony's zone), and right-click a road/monorail
+   tile to **Remove Transportation** — its cost (`removeTransportCost`) is paid
+   by the nearest colony (within `minColonyDistance`), borrowing from connected
+   colonies if needed.
 5. **Found new colonies** once a colony grows past the population threshold
    (3,000): right-click that biodome and choose **Found New Colony**, then click
    a distant land cell to plant it. A green line (color configurable via
@@ -146,14 +165,15 @@ Almost all rules and content live in `config.json`, so the game can be tuned
 without code changes:
 
 - `terrainTypes` — per terrain code: display name, tile icon, HSV color, a
-  `base` Food/Material yield (per 1,000 workers), and a `movement` cost array
-  `[unimproved, road, sea (or river), monorail, air]` — the movement-point cost
-  to enter that tile by each transport mode, used for overland travel (e.g. when
-  founding a colony). Lower is cheaper/faster; only the `unimproved` cost is used
-  today (road/sea/monorail/air are reserved for future transport infrastructure).
-- `buildingTypes` — for the Biodome, Farm, Solar Panel, and Factory:
-  - `buildCost` — one-time Material/Energy/Wealth cost to construct.
-  - `buildTurns` — turns until the building becomes operational.
+  `base` Food/Material yield (per 1,000 workers), a `movement` cost array
+  `[unimproved, road, sea (or river), monorail, air]` (the movement-point cost
+  to enter that tile by each mode; lower is cheaper/faster), and per-tile
+  transport build costs `roadCostPerTile`, `monorailCostPerTile`, and
+  `canalCostPerEdge`.
+- `buildingTypes` — for the Biodome, Farm, Solar Panel, Factory, Dock, and
+  Air Field:
+  - `buildCost` — one-time Material/Energy/Wealth cost to construct (its `turns`
+    is the build time, not a payable resource).
   - `costPerYear` — per-year upkeep (Material/Energy/Wealth) subtracted from output.
   - `bonus` — per-year production: `food`, `material`, `energy`, `wealth`, and
     `growth` (growth-rate modifier). Only applied when the building's cell is worked.
@@ -161,13 +181,21 @@ without code changes:
     hold; a colony's cap for each is the **sum** of its buildings' storage.
   - `prerequisiteBuildings` — building types that must already exist in the
     colony before this type can be built (e.g. the Factory requires a Solar Panel).
+  - `range` — for the **Air Field**, the maximum hex distance for an air link:
+    two colonies that each have an Air Field within this distance are connected
+    (and can share resources).
+- `bridgeCost`, `roadColor`, `monorailColor`, `riverColor`, `canalColor`,
+  `bridgeColor`, `planningPathColor`, `underConstructionColor`, `launchPathColor`,
+  `workedCellColor` — transport/overlay costs and colors.
 - `zoneOfControlSize` — population thresholds that expand a colony's control
   radius.
 - Economy constants: `foodPerColonistUnit` (food eaten per 1,000 colonists),
   `happinessGrowthPerUnit` and `maxHappinessGrowthBonus` (how food-driven
-  happiness converts to growth, capped), and `riverAdjacentFoodBonus`.
-- `removeImprovementCost` / `removeImprovementTurns` — the Energy/Food cost and
-  number of turns to remove a building via **Remove Improvement**.
+  happiness converts to growth, capped), `riverAdjacentFoodBonus`, and
+  `riverAdjacentWealthBonus`.
+- `removeImprovementCost` (remove a building), `removeCanalCost` (remove a
+  canal), and `removeTransportCost` (remove a road/monorail) — each an
+  Energy/Food cost plus a `turns` completion time.
 - Founding new colonies: `foundColonyMinPopulation` (population needed to launch),
   `foundColonyPopulationTransfer` (colonists moved to the new colony),
   `biodomeMovementPerYear` (overland movement points per year),

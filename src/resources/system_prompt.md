@@ -30,7 +30,12 @@ Habitable land (where colonies and buildings may go) is terrain **2–7**
 (grassland, hills, forest, jungle, desert, mountain-low).
 
 **Water food bonus:** grassland, hills, forest, jungle, and desert cells gain
-**+1 food** when adjacent to a river segment **or** a sea tile.
+**+`riverAdjacentFoodBonus` food** when a **sea tile is edge-adjacent** or a
+**river/canal runs along one of the cell's own borders**.
+
+**River wealth bonus:** any land cell whose own border carries a river/canal
+gains **+`riverAdjacentWealthBonus` wealth** (this one does not apply for plain
+sea adjacency).
 
 ## Colonies (Biodomes)
 
@@ -40,9 +45,9 @@ Habitable land (where colonies and buildings may go) is terrain **2–7**
 - New colonies begin with **1,000 colonists**.
 - The Biodome's own cell is always worked and adds **+1 food, +1 material,
   +1 energy, +1 wealth** on top of that cell's terrain production.
-- **Placement:** keep colonies at least **20 cells** apart from any other
-  colony (yours or a rival's). Prefer sites **near a river**, **within 3 cells
-  of water**, on good terrain (grassland/hills for food+material).
+- **Placement:** keep colonies at least **`minColonyDistance`** cells apart from
+  any other colony (yours or a rival's). Prefer sites **near a river**, **within
+  3 cells of water**, on good terrain (grassland/hills for food+material).
 
 ## Zone of control
 
@@ -79,7 +84,7 @@ found a new colony from it:
   a **Dock**, your paths may also cross **shallow-sea** tiles (sea adjacent to
   land), letting you reach islands and cross straits.
 - The target must be habitable land (2–7 or low frozen), empty, and at least
-  `minColonyDistance` (20) cells from every existing colony. (You settle on land;
+  `minColonyDistance` cells from every existing colony. (You settle on land;
   you may cross shallow sea to get there if you have a Dock.)
 
 **Launch action (LLM plan):** include a `launch` array in your plan:
@@ -109,7 +114,8 @@ idle building on an unworked cell does nothing but still provides storage.
 
 **Prerequisites:** a building type can only be built at a colony once its
 `prerequisiteBuildings` already exist there. Currently: Farm, Solar Panel and
-Dock require a Biodome; the Factory requires a Biodome **and** a Solar Panel.
+Dock require a Biodome; the Factory requires a Biodome **and** a Solar Panel;
+the **Air Field** requires a Factory.
 
 **Removing a building** (Remove Improvement) costs `removeImprovementCost`
 (Energy + Food from the colony) and takes `removeImprovementCost.turns` to
@@ -121,6 +127,13 @@ Canal**, which costs `removeCanalCost` (Energy + Food, paid by a colony
 controlling either adjacent cell). The border stops being a canal immediately;
 each adjacent cell stops counting as a river cell unless an original river or
 another canal still touches it.
+
+**Removing a road/monorail:** right-clicking a road/monorail tile offers
+**Remove Transportation**, which costs `removeTransportCost` (Energy + Food) and
+takes `removeTransportCost.turns` turns. It is allowed on any tile within
+`minColonyDistance` of one of your colonies; the nearest such colony pays,
+borrowing any shortfall from connected colonies. Removal clears the tile's road/
+monorail and any bridge on its segments.
 
 In every cost block, `turns` is the build/removal time, not a payable
 resource.
@@ -139,6 +152,7 @@ shallow sea**. Without a Dock, sea tiles are impassable and unworkable; deep sea
 | Solar Panel | 2 material, 2 energy, 2 wealth | 1 | 0.5 wealth | Biodome | +5 energy |
 | Factory | 5 material, 5 energy, 5 wealth | 3 | 2 material, 4 energy, 1 wealth | Biodome, Solar Panel | +5 material (net +3), −0.25% growth, +1 wealth (net 0) |
 | Dock | 1 material, 1 energy, 1 wealth | 2 | 1 energy, 1 wealth | Biodome | +1 food, +1 material, +1 wealth; on a shallow-sea tile; opens shallow sea to working and travel |
+| Air Field | 2 material, 2 energy, 2 wealth | 2 | 1 energy, 1 wealth | Factory | +2 wealth; connects to other Air Field colonies within `range` (16) for resource sharing |
 
 ### Storage capacity
 
@@ -152,7 +166,8 @@ provide (storage is per-colony for now):
 | Farm | 500 | 0 | 100 | 0 | 0 |
 | Solar Panel | 0 | 0 | 500 | 0 | 0 |
 | Factory | 0 | 500 | 200 | 0 | 0 |
-| Dock | 100 | 100 | 0 | 0 | 0 |
+| Dock | 300 | 300 | 0 | 0 | 0 |
+| Air Field | 300 | 300 | 0 | 0 | 0 |
 
 Stored Food/Material/Energy/Wealth are clamped to these totals; anything
 produced beyond the cap is lost. **Happiness** is clamped to the symmetric band
@@ -182,12 +197,18 @@ own stored resources. Each year it computes, from its **worked** cells only:
 
 **Connected colonies share resources.** If a colony's own storage can't cover a
 shortfall, it draws the difference from other colonies **you own that are
-connected to it** — either by a **road/monorail path** between their biodomes, or
-by a **connected river/canal path** touching a corner of each colony. It pulls
-from whichever connected colony currently **stores the most** of that resource.
-Only if no connected colony can cover it does the colony go over budget. So
-linking colonies with roads, monorails, or canals lets a rich colony prop up a
-struggling neighbour instead of forcing it to idle buildings.
+connected to it**. Two of your colonies are connected when any of these holds:
+
+- a **road/monorail path** links their biodomes, or
+- a **connected river/canal path** touches a corner of each colony, or
+- **both have a Dock** and a **shallow-sea route** links them (sea), or
+- **both have an Air Field** within **`buildingTypes[6].range`** of each other (air).
+
+It pulls from whichever connected colony currently **stores the most** of that
+resource. Only if no connected colony can cover it does the colony go over
+budget. So linking colonies with roads, monorails, canals, docks, or air fields
+lets a rich colony prop up a struggling neighbour instead of forcing it to idle
+buildings.
 
 If storage for any resource would drop **below 0**, the colony is **over
 budget** and cannot sustain its worked buildings. Reduce your yearly needs by

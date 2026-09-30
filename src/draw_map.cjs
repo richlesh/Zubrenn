@@ -1230,13 +1230,18 @@ class HexMap {
           ctx.restore();
         }
         // Name label above the icon with a subtle outline for legibility.
-        if (b.name) {
+        // Colonies carry their own name. Other buildings normally rely on their
+        // icon; but when the icon is MISSING (e.g. a new type without art yet)
+        // fall back to the configured type name so it isn't a blank square.
+        const bt = this.buildingTypes && this.buildingTypes[String(b.type)];
+        const label = b.name || (!icon && b.type !== 1 && bt && bt.name) || '';
+        if (label) {
           const ly = cy - size / 2 - 2;
           ctx.lineWidth = Math.max(2, fontPx / 6);
           ctx.strokeStyle = 'rgba(0,0,0,0.85)';
           ctx.fillStyle = '#fff';
-          ctx.strokeText(b.name, cx, ly);
-          ctx.fillText(b.name, cx, ly);
+          ctx.strokeText(label, cx, ly);
+          ctx.fillText(label, cx, ly);
         }
         // Population badge: a small circle showing floor(population / 1000),
         // i.e. the number of full "thousands" of colonists. Placed at the

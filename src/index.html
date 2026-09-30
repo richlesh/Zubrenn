@@ -3751,10 +3751,51 @@
       }
       return path;
     }
+    // The nearest same-owner colony connected to cell (x,y) THROUGH the
+    // road/monorail network (flooding the combined road∪monorail cell graph
+    // from the cell, then picking the closest attached colony). Used to bill a
+    // road/monorail extension started from an existing transport tile that no
+    // colony directly controls. Returns the colony or null.
+    function nearestColonyOnTransport(x, y, owner) {
+      const tr = ensureTransport();
+      const start = cellKey(x, y);
+      if (!tr.roads.has(start) && !tr.monorails.has(start)) return null;
+      const H = gameState.map.terrain.length;
+      // Flood the network component containing the start cell.
+      const comp = new Set([start]);
+      const stack = [{ x, y }];
+      while (stack.length) {
+        const c = stack.pop();
+        for (const n of hexNeighborsRenderer(c.x, c.y)) {
+          if (n.y < 0 || n.y >= H) continue;
+          const nk = cellKey(n.x, n.y);
+          if (comp.has(nk)) continue;
+          if (tr.roads.has(nk) || tr.monorails.has(nk)) { comp.add(nk); stack.push({ x: n.x, y: n.y }); }
+        }
+      }
+      // A colony attaches to the component via its biodome cell or a neighbour.
+      let best = null, bestD = Infinity;
+      for (const b of gameState.buildings) {
+        if (b.type !== 1 || b.owner !== owner || b.inTransit) continue;
+        let attached = comp.has(cellKey(b.x, b.y));
+        if (!attached) {
+          for (const n of hexNeighborsRenderer(b.x, b.y)) {
+            if (comp.has(cellKey(n.x, n.y))) { attached = true; break; }
+          }
+        }
+        if (!attached) continue;
+        const d = hexDistance(b.x, b.y, x, y);
+        if (d < bestD) { bestD = d; best = b; }
+      }
+      return best;
+    }
     function beginTransport(kind, x, y) {
-      // Source colony = the human colony controlling (or nearest to) the cell.
-      const col = colonyControlling(x, y, 'human') || colonyControllingByRadius(x, y, 'human');
-      if (!col) { notify("Build from within a colony's zone of control."); return; }
+      // Source colony = the human colony controlling (or nearest to) the cell,
+      // OR — when extending from an existing road/monorail tile outside any
+      // colony's control — the nearest colony connected through that network.
+      let col = colonyControlling(x, y, 'human') || colonyControllingByRadius(x, y, 'human');
+      if (!col) col = nearestColonyOnTransport(x, y, 'human');
+      if (!col) { notify("Build from within a colony's zone of control, or from a connected road/monorail tile."); return; }
       _transportMode = kind; _transportSource = { x, y };
       _transportOwner = 'human'; _transportSourceCol = col;
       _transportHoverPath = null;
@@ -4797,6 +4838,22 @@
     let _ctxVertex = null; // nearest hex-corner vertex key of the last right-click
     let _ctxCanalEdge = null; // {a:{x,y}, b:{x,y}} canal border of the last right-click
     function hideContextMenu() { ctxMenu.hidden = true; ctxTarget = null; _ctxCanalEdge = null; }
+    // Show the context menu at (clientX, clientY), then clamp it into the
+    // viewport: if it would bleed off the bottom, shift it up so its bottom
+    // aligns with the window bottom; likewise clamp the right edge. Must run
+    // AFTER the menu's items are set and it is unhidden so its size is known.
+    function positionContextMenu(clientX, clientY) {
+      const pad = 4;
+      ctxMenu.style.left = clientX + "px";
+      ctxMenu.style.top = clientY + "px";
+      ctxMenu.hidden = false;
+      const w = ctxMenu.offsetWidth, h = ctxMenu.offsetHeight;
+      let left = clientX, top = clientY;
+      if (left + w > window.innerWidth - pad) left = Math.max(pad, window.innerWidth - pad - w);
+      if (top + h > window.innerHeight - pad) top = Math.max(pad, window.innerHeight - pad - h);
+      ctxMenu.style.left = left + "px";
+      ctxMenu.style.top = top + "px";
+    }
     function humanCanPlace() {
       const p = gameState.players && gameState.players[gameState.currentPlayer];
       return p && p.kind === 'human' && (p.modules || 0) > 0; // need a colony module
@@ -4828,12 +4885,11 @@
         ctxCanal.classList.remove("disabled");
         ctxCanal.textContent = "Build Canal";
         ctxCanalRemove.hidden = true;
-        ctxMenu.style.left = clientX + "px";
-        ctxMenu.style.top = clientY + "px";
-        ctxMenu.hidden = false;
+        positionContextMenu(clientX, clientY);
         return;
       }
-      // A right-click on a built canal border offers only "Remove Canal".
+      // A right-click on a built canal border offers only "Remove Canal" —
+      // and only when it is actually actionable (not already removing, payable).
       if (isHumanTurn() && _ctxCanalEdge) {
         const a = _ctxCanalEdge.a, b = _ctxCanalEdge.b;
         ctxEstablish.hidden = true;
@@ -4847,19 +4903,11 @@
         const turns = _turnsOf(c, 2);
         const removing = isCanalRemoving(a.x, a.y, b.x, b.y);
         const canPay = canAffordCanalRemoval(a.x, a.y, b.x, b.y, 'human');
-        let label;
-        if (removing) {
-          label = "Removing Canal…";
-        } else {
-          label = `Remove Canal (${canalRemovalCostLabel()}, ${turns} turn${turns === 1 ? '' : 's'})`;
-          if (!canPay) label += " — need " + canalRemovalShortfallLabel(a.x, a.y, b.x, b.y, 'human');
-        }
-        ctxCanalRemove.textContent = label;
-        ctxCanalRemove.classList.toggle("disabled", removing || !canPay);
+        if (removing || !canPay) { hideContextMenu(); return; } // nothing actionable here
+        ctxCanalRemove.textContent = `Remove Canal (${canalRemovalCostLabel()}, ${turns} turn${turns === 1 ? '' : 's'})`;
+        ctxCanalRemove.classList.remove("disabled");
         ctxCanalRemove.hidden = false;
-        ctxMenu.style.left = clientX + "px";
-        ctxMenu.style.top = clientY + "px";
-        ctxMenu.hidden = false;
+        positionContextMenu(clientX, clientY);
         return;
       }
       // Otherwise neither canal option is offered in the cell popup.
@@ -4876,25 +4924,30 @@
         : null;
       ctxEstablish.dataset.mode = "";
       if (ownBio) {
-        // Launch Colony from this biodome.
+        // Launch Colony from this biodome — only when population and resources allow.
         const minPop = (CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3000;
         const enough = (ownBio.population || 0) > minPop;
         const canPay = canAffordBuildingAt(1, ownBio.x, ownBio.y, 'human');
-        let label = `Launch Colony (${buildingCostLabel(1)} + ${(CONFIG.foundColonyPopulationTransfer || 1000).toLocaleString()} colonists)`;
-        if (!enough) label += ` — needs > ${minPop.toLocaleString()} population`;
-        else if (!canPay) label += " — need " + buildingShortfallAtLabel(1, ownBio.x, ownBio.y, 'human');
-        ctxEstablish.textContent = label;
-        ctxEstablish.classList.toggle("disabled", !enough || !canPay);
-        ctxEstablish.dataset.mode = "launch";
-        ctxEstablish.hidden = false;
+        if (enough && canPay) {
+          ctxEstablish.textContent = `Launch Colony (${buildingCostLabel(1)} + ${(CONFIG.foundColonyPopulationTransfer || 1000).toLocaleString()} colonists)`;
+          ctxEstablish.classList.remove("disabled");
+          ctxEstablish.dataset.mode = "launch";
+          ctxEstablish.hidden = false;
+        } else {
+          ctxEstablish.hidden = true;
+        }
       } else {
-        // Establish the first/next colony on empty land (needs a colony module).
+        // Establish the first/next colony on empty land — only when it's actually
+        // possible (habitable empty land in control-range and a module available).
         const canEstablish = buildable && (gameState.players[gameState.currentPlayer].modules || 0) > 0;
-        ctxEstablish.textContent = "Establish Colony";
-        ctxEstablish.classList.toggle("disabled", !canEstablish);
-        ctxEstablish.dataset.mode = "establish";
-        // Only show it when a module is available (otherwise it's just noise).
-        ctxEstablish.hidden = !(isHumanTurn() && (gameState.players[gameState.currentPlayer].modules || 0) > 0);
+        if (canEstablish) {
+          ctxEstablish.textContent = "Establish Colony";
+          ctxEstablish.classList.remove("disabled");
+          ctxEstablish.dataset.mode = "establish";
+          ctxEstablish.hidden = false;
+        } else {
+          ctxEstablish.hidden = true;
+        }
       }
 
       // Build options for the other building types (2..N) from config. A
@@ -4907,22 +4960,16 @@
         if (type === 1) continue; // colony handled by Establish Colony
         const bt = CONFIG.buildingTypes[tk];
         const canTurn = isHumanTurn() && hex;
-        const place = canTurn ? canPlaceTypeAt(type, hex.x, hex.y, 'human') : { ok: false, reason: "" };
+        const place = canTurn ? canPlaceTypeAt(type, hex.x, hex.y, 'human') : { ok: false };
         const affordable = place.ok && canAffordBuildingAt(type, hex.x, hex.y, 'human');
         const prereqOk = place.ok && hasPrerequisitesAt(type, hex.x, hex.y, 'human');
-        const enabled = place.ok && affordable && prereqOk;
+        // Only offer buildings that can actually be built here right now.
+        if (!(place.ok && affordable && prereqOk)) continue;
         const item = document.createElement("div");
-        item.className = "ctx-item" + (enabled ? "" : " disabled");
-        let label = `Build ${bt.name || ("Type " + type)} (${buildingCostLabel(type)})`;
-        // Explain why a disabled item can't be built so it's clear it isn't a bug.
-        if (!enabled && canTurn) {
-          if (!place.ok) label += " — " + place.reason;
-          else if (!prereqOk) label += " — requires " + missingPrerequisiteNames(type, hex.x, hex.y, 'human').join(", ");
-          else if (!affordable) label += " — need " + buildingShortfallAtLabel(type, hex.x, hex.y, 'human');
-        }
-        item.textContent = label;
+        item.className = "ctx-item";
+        item.textContent = `Build ${bt.name || ("Type " + type)} (${buildingCostLabel(type)})`;
         item.addEventListener("click", () => {
-          if (item.classList.contains("disabled") || !ctxTarget) return;
+          if (!ctxTarget) return;
           const h = ctxTarget; hideContextMenu();
           placeBuilding(h.x, h.y, 'human', type);
           maybeAutoEndHumanTurn();
@@ -4931,61 +4978,59 @@
       }
 
       // Remove Improvement: only for a non-colony building the human owns on
-      // this cell that isn't already being removed. Shows the cost; disabled
-      // (with reason) if the controlling colony can't pay.
+      // this cell, shown only when it can actually be removed now (not already
+      // being removed, and the controlling colony can pay).
       let showRemove = false;
       if (isHumanTurn() && hex) {
         const b = gameState.buildings.find((bb) => bb.x === hex.x && bb.y === hex.y
           && bb.owner === 'human' && bb.type !== 1);
         if (b) {
-          showRemove = true;
           const already = b.removeTurns != null && b.removeTurns > 0;
           const canPay = canAffordRemovalAt(hex.x, hex.y, 'human');
-          const turns = _turnsOf(removalCost(), 2);
-          let label = `Remove Improvement (${removalCostLabel()}, ${turns} turn${turns === 1 ? '' : 's'})`;
-          if (already) label = `Removing… (${b.removeTurns} turn${b.removeTurns === 1 ? '' : 's'} left)`;
-          else if (!canPay) label += " — need " + removalShortfallLabel(hex.x, hex.y, 'human');
-          ctxRemove.textContent = label;
-          ctxRemove.classList.toggle("disabled", already || !canPay);
+          if (!already && canPay) {
+            showRemove = true;
+            const turns = _turnsOf(removalCost(), 2);
+            ctxRemove.textContent = `Remove Improvement (${removalCostLabel()}, ${turns} turn${turns === 1 ? '' : 's'})`;
+            ctxRemove.classList.remove("disabled");
+          }
         }
       }
       ctxRemove.hidden = !showRemove;
 
       // Build Road / Monorail / Canal: available on any cell within the human's
-      // zone of control, on their turn. (Source colony = controlling colony.)
+      // zone of control, on their turn (source colony = controlling colony).
+      // Additionally, "Build Road" is offered on any tile that ALREADY has a
+      // road, and "Build Monorail" on any tile that already has a monorail, to
+      // extend the network from there — the cost is billed to the nearest colony
+      // connected through that network.
       const canBuildTransport = isHumanTurn() && hex &&
         !!(colonyControlling(hex.x, hex.y, 'human') || colonyControllingByRadius(hex.x, hex.y, 'human'));
-      ctxRoad.hidden = !canBuildTransport;
-      ctxMonorail.hidden = !canBuildTransport;
+      ctxRoad.hidden = !(canBuildTransport || (isHumanTurn() && hex && hasRoad(hex.x, hex.y)));
+      ctxMonorail.hidden = !(canBuildTransport || (isHumanTurn() && hex && hasMonorail(hex.x, hex.y)));
       // (Canal is offered only on a legal canal-start vertex, handled above.)
 
-      // Remove Transportation: offered when the cell carries a road or monorail
-      // AND a same-owner colony is within minColonyDistance to pay for it, on the
-      // human's turn. Cost is drawn from that nearest colony, borrowing any
-      // shortfall from transport-connected colonies. Disabled (with reason) when
-      // the network can't pay, or "Removing…" if already scheduled.
+      // Remove Transportation: shown only when the cell carries a road/monorail,
+      // a colony within minColonyDistance can pay (borrowing from connected
+      // colonies), and it isn't already being removed — i.e. actionable now.
       let showRemoveTransport = false;
       if (isHumanTurn() && hex && cellHasTransport(hex.x, hex.y)
-          && transportRemovalColony(hex.x, hex.y, 'human')) {
+          && transportRemovalColony(hex.x, hex.y, 'human')
+          && !isTransportRemoving(hex.x, hex.y)
+          && canAffordTransportRemoval(hex.x, hex.y, 'human')) {
         showRemoveTransport = true;
-        const removing = isTransportRemoving(hex.x, hex.y);
-        const canPay = canAffordTransportRemoval(hex.x, hex.y, 'human');
         const turns = _turnsOf(transportRemovalCost(), 2);
-        let label;
-        if (removing) {
-          label = "Removing Transportation…";
-        } else {
-          label = `Remove Transportation (${transportRemovalCostLabel()}, ${turns} turn${turns === 1 ? '' : 's'})`;
-          if (!canPay) label += " — need " + transportRemovalShortfallLabel(hex.x, hex.y, 'human');
-        }
-        ctxRemoveTransport.textContent = label;
-        ctxRemoveTransport.classList.toggle("disabled", removing || !canPay);
+        ctxRemoveTransport.textContent = `Remove Transportation (${transportRemovalCostLabel()}, ${turns} turn${turns === 1 ? '' : 's'})`;
+        ctxRemoveTransport.classList.remove("disabled");
       }
       ctxRemoveTransport.hidden = !showRemoveTransport;
 
-      ctxMenu.style.left = clientX + "px";
-      ctxMenu.style.top = clientY + "px";
-      ctxMenu.hidden = false;
+      // If nothing is actionable on this cell, don't pop an empty menu.
+      const anyItem = !ctxEstablish.hidden || !ctxRemove.hidden || !ctxRoad.hidden ||
+        !ctxMonorail.hidden || !ctxRemoveTransport.hidden || !ctxCanal.hidden ||
+        !ctxCanalRemove.hidden || ctxBuildItems.children.length > 0;
+      if (!anyItem) { hideContextMenu(); return; }
+
+      positionContextMenu(clientX, clientY);
     }
     ctxEstablish.addEventListener("click", () => {
       if (ctxEstablish.classList.contains("disabled") || !ctxTarget) return;
