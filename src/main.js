@@ -67,6 +67,44 @@ app.setAboutPanelOptions({
 
 let mainWin, settingsWin;
 
+// --- Save-on-close prompt -------------------------------------------------
+// When the main window (or the app) is closing, ask whether to save the game
+// first. `_closeConfirmed` lets the async prompt re-issue the close once the
+// user has decided (the window 'close' event itself is synchronous).
+let _closeConfirmed = false;   // set true once the user has chosen to proceed
+let _closePromptOpen = false;  // guards against re-entrancy while prompting
+
+// Whether the renderer currently has a saveable game loaded.
+async function hasGameToSave() {
+  if (!mainWin || mainWin.isDestroyed()) return false;
+  try {
+    const gs = await mainWin.webContents.executeJavaScript(
+      "window.getGameState ? window.getGameState() : null", true);
+    return !!(gs && gs.map && gs.map.terrain);
+  } catch (e) {
+    return false;
+  }
+}
+
+// Ask the user whether to save before closing. Returns true if the caller
+// should proceed with closing, false to abort. If they choose Save, the Save
+// dialog is opened; cancelling that dialog aborts the close.
+async function promptSaveBeforeClose() {
+  if (!(await hasGameToSave())) return true; // nothing to save -> just close
+  const { response } = await dialog.showMessageBox(mainWin, {
+    type: "question",
+    buttons: ["Save…", "Don't Save", "Cancel"],
+    defaultId: 0,
+    cancelId: 2,
+    message: "Save game before closing?",
+    detail: "Your current game will be lost if you don't save it."
+  });
+  if (response === 2) return false;          // Cancel -> abort close
+  if (response === 1) return true;           // Don't Save -> close
+  const saved = await saveGame();            // Save… -> open the save dialog
+  return saved;                              // proceed only if the save completed
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1200,
@@ -87,10 +125,24 @@ function createWindow() {
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
     console.error(`[renderer] did-fail-load ${code} ${desc} ${url}`);
   });
+  // Ask to save the game before this window closes.
+  win.on("close", (e) => {
+    if (_closeConfirmed || win !== mainWin) return; // already confirmed, or a secondary window
+    e.preventDefault();
+    if (_closePromptOpen) return;                   // a prompt is already up
+    _closePromptOpen = true;
+    promptSaveBeforeClose().then((proceed) => {
+      _closePromptOpen = false;
+      if (proceed) { _closeConfirmed = true; win.close(); }
+    }).catch(() => { _closePromptOpen = false; });
+  });
   if (!mainWin) {
     mainWin = win;
     buildMenu();
   }
+  // A fresh window means a fresh session: allow the save-on-close prompt again.
+  _closeConfirmed = false;
+  _quitConfirmed = false;
   return win;
 }
 
@@ -224,6 +276,9 @@ function buildViewMenu() {
         enabled: alienSubmenu.length > 0,
         submenu: alienSubmenu.length ? alienSubmenu : [{ label: "(none yet)", enabled: false }]
       },
+      { type: "separator" },
+      { label: "View Rankings…", accelerator: "CmdOrCtrl+R", click: () => sendToMain("view-rankings") },
+      { label: "View Colonies…", accelerator: "CmdOrCtrl+Shift+O", enabled: ours.length > 0, click: () => sendToMain("view-colonies") },
       { type: "separator" },
       { label: "Toggle Terrain Textures", accelerator: "CmdOrCtrl+T", click: () => sendToMain("view-toggle-terrain") },
       { label: "Toggle Area of Control", accelerator: "CmdOrCtrl+Shift+C", click: () => sendToMain("view-toggle-control") },
@@ -629,7 +684,7 @@ async function saveGame() {
       detail: "Start a new game (File › New Game…) before saving.",
       buttons: ["OK"]
     });
-    return;
+    return false;
   }
 
   const { canceled, filePath } = await dialog.showSaveDialog(mainWin, {
@@ -640,11 +695,12 @@ async function saveGame() {
       { name: "All Files", extensions: ["*"] }
     ]
   });
-  if (canceled || !filePath) return;
+  if (canceled || !filePath) return false;
 
   try {
     const data = serializeSave(buildSaveObject(gameState));
     fs.writeFileSync(filePath, data, "utf8");
+    return true;
   } catch (err) {
     console.error("Save failed:", err);
     await dialog.showMessageBox(mainWin, {
@@ -653,6 +709,7 @@ async function saveGame() {
       detail: String(err && err.message || err),
       buttons: ["OK"]
     });
+    return false;
   }
 }
 
@@ -787,6 +844,21 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+// Ask to save before quitting (Cmd+Q / menu Quit / app exit). Mirrors the
+// window 'close' guard; skipped if a window close already confirmed the save.
+let _quitConfirmed = false;
+app.on("before-quit", (e) => {
+  if (_quitConfirmed || _closeConfirmed) return; // already handled by close/quit prompt
+  if (!mainWin || mainWin.isDestroyed()) return; // nothing to prompt about
+  e.preventDefault();
+  if (_closePromptOpen) return;
+  _closePromptOpen = true;
+  promptSaveBeforeClose().then((proceed) => {
+    _closePromptOpen = false;
+    if (proceed) { _quitConfirmed = true; _closeConfirmed = true; app.quit(); }
+  }).catch(() => { _closePromptOpen = false; });
 });
 
 app.on("activate", () => {

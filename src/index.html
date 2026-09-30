@@ -35,11 +35,7 @@
       </div>
       <div id="buildings-panel">
         <div class="bldg-panel-title">Buildings</div>
-        <div class="bldg-stat">Colonies: <span id="bldg-colonies">0</span></div>
-        <div class="bldg-stat">Solar Panels: <span id="bldg-solar-panels">0</span></div>
-        <div class="bldg-stat">Farms: <span id="bldg-farms">0</span></div>
-        <div class="bldg-stat">Factories: <span id="bldg-factories">0</span></div>
-        <div class="bldg-stat">Docks: <span id="bldg-docks">0</span></div>
+        <div id="buildings-list"></div>
       </div>
       <div id="instructions">
         <ul>
@@ -126,6 +122,35 @@
       </div>
       <div class="work-row"><button id="work-close">Done</button></div>
       <div id="work-tooltip" hidden></div>
+    </div>
+  </div>
+
+  <!-- Rankings modal (View ▸ View Rankings). -->
+  <div id="rankings-overlay" hidden>
+    <div id="rankings-dialog">
+      <h2>Rankings</h2>
+      <div id="rankings-table-wrap">
+        <table id="rankings-table">
+          <thead><tr id="rankings-head"></tr></thead>
+          <tbody id="rankings-body"></tbody>
+        </table>
+      </div>
+      <div class="work-row"><button id="rankings-close">Done</button></div>
+    </div>
+  </div>
+
+  <!-- Colonies modal (View ▸ View Colonies). -->
+  <div id="colonies-overlay" hidden>
+    <div id="colonies-dialog">
+      <h2>My Colonies</h2>
+      <div class="hint">Click a column to sort. Double-click a row to center the map and open the colony.</div>
+      <div id="colonies-table-wrap">
+        <table id="colonies-table">
+          <thead><tr id="colonies-head"></tr></thead>
+          <tbody id="colonies-body"></tbody>
+        </table>
+      </div>
+      <div class="work-row"><button id="colonies-close">Done</button></div>
     </div>
   </div>
 
@@ -2336,12 +2361,19 @@
       const bldgs = gameState.buildings || [];
       const humanBldgs = bldgs.filter((b) => b.owner === 'human' && !b.inTransit);
       const count = (type) => humanBldgs.filter((b) => b.type === type).length;
-      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-      set("bldg-colonies", count(1).toLocaleString());
-      set("bldg-solar-panels", count(3).toLocaleString());
-      set("bldg-farms", count(2).toLocaleString());
-      set("bldg-factories", count(4).toLocaleString());
-      set("bldg-docks", count(5).toLocaleString());
+      const list = document.getElementById("buildings-list");
+      if (!list) return;
+      // One row per configured building type, in numeric type order (Colonies
+      // first). Config-driven so new building types appear automatically.
+      const types = Object.keys(CONFIG.buildingTypes || { "1": {} })
+        .map((k) => parseInt(k, 10)).filter((n) => !isNaN(n)).sort((a, b) => a - b);
+      let html = "";
+      for (const type of types) {
+        const bt = (CONFIG.buildingTypes && CONFIG.buildingTypes[String(type)]) || {};
+        const name = type === 1 ? "Colonies" : (bt.name || ("Type " + type));
+        html += `<div class="bldg-stat">${name}: <span>${count(type).toLocaleString()}</span></div>`;
+      }
+      list.innerHTML = html;
     }
 
     // Advance to the next player; auto-resolve AI turns. Once the human has
@@ -5516,6 +5548,17 @@
 
     document.getElementById("work-close").addEventListener("click", closeWorkModal);
     workOverlay.addEventListener("click", (e) => { if (e.target === workOverlay) closeWorkModal(); });
+    // While the colony details dialog is open, Enter or Escape dismisses it.
+    // Registered in the capture phase so it takes precedence over the global
+    // Enter (end-turn) / Escape handlers, which otherwise ignore this modal.
+    document.addEventListener("keydown", (e) => {
+      if (workOverlay.hidden) return;
+      if (e.key === "Enter" || e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        closeWorkModal();
+      }
+    }, true);
 
     // ---- View menu IPCs ----------------------------------------------------
     ipcRenderer.on("view-center", (_e, pt) => {
@@ -5549,6 +5592,276 @@
     ipcRenderer.on("view-zoom-in", () => { if (hexMap) hexMap.zoomIn(); });
     ipcRenderer.on("view-zoom-out", () => { if (hexMap) hexMap.zoomOut(); });
     ipcRenderer.on("view-center-map", () => { if (hexMap) { hexMap.centerViewport(); hexMap.redraw(); } });
+
+    // ---- Rankings dialog (View ▸ View Rankings) ---------------------------
+    const rankingsOverlay = document.getElementById("rankings-overlay");
+    const rankingsHead = document.getElementById("rankings-head");
+    const rankingsBody = document.getElementById("rankings-body");
+    // Columns: first is the species name (text), the rest are numeric totals.
+    const RANK_COLUMNS = [
+      { key: "name", label: "Species", num: false },
+      { key: "population", label: "Population", num: true },
+      { key: "colonies", label: "Colonies", num: true },
+      { key: "buildings", label: "Buildings", num: true },
+      { key: "energy", label: "Energy", num: true },
+      { key: "food", label: "Food", num: true },
+      { key: "material", label: "Material", num: true },
+      { key: "wealth", label: "Wealth", num: true },
+      { key: "happiness", label: "Happiness", num: true },
+      { key: "power", label: "Power", num: true },
+    ];
+    // Default sort: decreasing Power.
+    let _rankSort = { key: "power", dir: -1 };
+
+    // Per-species (player) totals from the current game state.
+    function computeRankings() {
+      const players = gameState.players || [];
+      // owner ref for a player index: 'human' for player 0, else the index.
+      const rows = players.map((p, i) => ({
+        idx: i,
+        owner: (p.kind === "human") ? "human" : i,
+        me: p.kind === "human",
+        name: p.name || (p.kind === "human" ? "You" : "AI " + i),
+        colonies: 0, buildings: 0,
+        energy: 0, food: 0, material: 0, wealth: 0, happiness: 0,
+        _pop: 0,
+      }));
+      const byOwner = new Map(rows.map((r) => [r.owner, r]));
+      for (const b of (gameState.buildings || [])) {
+        const r = byOwner.get(b.owner);
+        if (!r) continue;
+        if (b.type === 1) {
+          r.colonies += 1;
+          r._pop += (b.population || 0);
+          const s = b.stored || {};
+          r.energy += (s.energy || 0);
+          r.food += (s.food || 0);
+          r.material += (s.material || 0);
+          r.wealth += (s.wealth || 0);
+          r.happiness += (b.storedHappiness || 0);
+        } else {
+          r.buildings += 1;
+        }
+      }
+      // Power = 1e-6 * population + 0.1 * (number of colonies).
+      for (const r of rows) { r.population = r._pop; r.power = 1e-5 * r._pop + 0.1 * r.colonies; }
+      return rows;
+    }
+
+    function _rankFmt(col, v) {
+      if (col.key === "name") return v;
+      return formatSI(v || 0); // all numeric quantities via the SI formatter
+    }
+
+    function renderRankings() {
+      const rows = computeRankings();
+      rows.sort((a, b) => {
+        const k = _rankSort.key;
+        let cmp;
+        if (k === "name") cmp = String(a.name).localeCompare(String(b.name));
+        else cmp = (a[k] || 0) - (b[k] || 0);
+        if (cmp === 0) cmp = (b.power || 0) - (a.power || 0); // stable-ish tiebreak by power
+        return cmp * _rankSort.dir;
+      });
+
+      // Header row with clickable sort + triangle indicator on the active column.
+      rankingsHead.innerHTML = "";
+      for (const col of RANK_COLUMNS) {
+        const th = document.createElement("th");
+        const active = _rankSort.key === col.key;
+        const tri = active ? (_rankSort.dir < 0 ? " \u25BC" : " \u25B2") : "";
+        th.innerHTML = `${col.label}<span class="sort-ind">${tri}</span>`;
+        th.addEventListener("click", () => {
+          if (_rankSort.key === col.key) {
+            _rankSort.dir = -_rankSort.dir;           // toggle order on the active column
+          } else {
+            _rankSort.key = col.key;
+            // Numeric columns default to descending; the name column ascending.
+            _rankSort.dir = col.num ? -1 : 1;
+          }
+          renderRankings();
+        });
+        rankingsHead.appendChild(th);
+      }
+
+      // Body rows.
+      rankingsBody.innerHTML = "";
+      for (const r of rows) {
+        const tr = document.createElement("tr");
+        if (r.me) tr.className = "me";
+        for (const col of RANK_COLUMNS) {
+          const td = document.createElement("td");
+          td.textContent = _rankFmt(col, r[col.key]);
+          tr.appendChild(td);
+        }
+        rankingsBody.appendChild(tr);
+      }
+    }
+
+    function openRankings() {
+      if (!gameState || !gameState.players) { notify("Start a game to view rankings."); return; }
+      _rankSort = { key: "power", dir: -1 };   // reset to default (decreasing Power) each open
+      renderRankings();
+      rankingsOverlay.hidden = false;
+    }
+    function closeRankings() { rankingsOverlay.hidden = true; }
+    ipcRenderer.on("view-rankings", openRankings);
+    document.getElementById("rankings-close").addEventListener("click", closeRankings);
+    rankingsOverlay.addEventListener("click", (e) => { if (e.target === rankingsOverlay) closeRankings(); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !rankingsOverlay.hidden) closeRankings();
+    });
+
+    // ---- Colonies dialog (View ▸ View Colonies) ---------------------------
+    const coloniesOverlay = document.getElementById("colonies-overlay");
+    const coloniesHead = document.getElementById("colonies-head");
+    const coloniesBody = document.getElementById("colonies-body");
+    const coloniesWrap = document.getElementById("colonies-table-wrap");
+    let _colScroll = { top: 0, left: 0 }; // remembered scroll position across opens
+    // Resource columns share the "total / max / rate" cell layout.
+    const COL_RES = [
+      { key: "energy", label: "Energy", rate: "energy", cap: "energy" },
+      { key: "food", label: "Food", rate: "food", cap: "food" },
+      { key: "material", label: "Material", rate: "material", cap: "material" },
+      { key: "wealth", label: "Wealth", rate: "wealthRate", cap: "wealth" },
+      { key: "happiness", label: "Happiness", rate: "happinessRate", cap: "happiness" },
+    ];
+    const COLONY_COLUMNS = [
+      { key: "name", label: "Colony", num: false },
+      { key: "population", label: "Pop / Growth", num: true },
+      { key: "buildings", label: "Buildings", num: true },
+      { key: "worked", label: "Tiles Worked", num: true },
+      ...COL_RES.map((r) => ({ key: r.key, label: r.label, num: true, res: r })),
+    ];
+    let _colSort = { key: "name", dir: 1 };
+
+    // Per-colony rows for the human's colonies (biodomes).
+    function computeColonyRows() {
+      const rows = [];
+      for (const b of (gameState.buildings || [])) {
+        if (b.type !== 1 || b.owner !== "human" || b.inTransit) continue;
+        ensureWorked(b);
+        const s = colonyStats(b);
+        // Buildings in the colony's control area, excluding the biodome itself.
+        const buildings = colonyBuildings(b).filter((x) => x.type !== 1).length;
+        // Worked vs workable: green if no spare worker can open another tile.
+        const workedCount = b.worked.length;
+        const controlCount = colonyControlCells(b).length;
+        const homeKey = cellKey(b.x, b.y);
+        const extras = b.worked.filter((k) => k !== homeKey).length;
+        const cap = workCap(b);
+        const canWorkMore = extras < cap && workedCount < controlCount;
+        rows.push({
+          col: b,
+          name: b.name || "Colony",
+          population: s.population,
+          growthRate: s.growthRate,
+          buildings,
+          worked: workedCount, workedControl: controlCount, canWorkMore,
+          energy: s.stored.energy || 0, energyMax: s.caps.energy || 0, energyRate: s.energy,
+          food: s.stored.food || 0, foodMax: s.caps.food || 0, foodRate: s.food,
+          material: s.stored.material || 0, materialMax: s.caps.material || 0, materialRate: s.material,
+          wealth: s.stored.wealth || 0, wealthMax: s.caps.wealth || 0, wealthRate: s.wealthRate,
+          happiness: s.storedHappiness || 0, happinessMax: s.happinessCap || 0, happinessRate: s.happinessRate,
+        });
+      }
+      return rows;
+    }
+
+    // A "total / max · rate" cell with the rate colored by sign.
+    function _resCell(total, max, rate) {
+      const rc = rate > 1e-9 ? "rate-pos" : (rate < -1e-9 ? "rate-neg" : "");
+      const rateStr = (rate > 0 ? "+" : "") + formatSI(rate) + "/yr";
+      return `${formatSI(total)} / ${formatSI(max)}` +
+        `<span class="sub ${rc}">${rateStr}</span>`;
+    }
+
+    function renderColonies() {
+      const rows = computeColonyRows();
+      rows.sort((a, b) => {
+        const k = _colSort.key;
+        let cmp;
+        if (k === "name") cmp = String(a.name).localeCompare(String(b.name));
+        else cmp = (a[k] || 0) - (b[k] || 0);
+        if (cmp === 0) cmp = String(a.name).localeCompare(String(b.name));
+        return cmp * _colSort.dir;
+      });
+
+      coloniesHead.innerHTML = "";
+      for (const col of COLONY_COLUMNS) {
+        const th = document.createElement("th");
+        const active = _colSort.key === col.key;
+        const tri = active ? (_colSort.dir < 0 ? " \u25BC" : " \u25B2") : "";
+        th.innerHTML = `${col.label}<span class="sort-ind">${tri}</span>`;
+        th.addEventListener("click", () => {
+          if (_colSort.key === col.key) _colSort.dir = -_colSort.dir;
+          else { _colSort.key = col.key; _colSort.dir = col.num ? -1 : 1; }
+          renderColonies();
+        });
+        coloniesHead.appendChild(th);
+      }
+
+      coloniesBody.innerHTML = "";
+      for (const r of rows) {
+        const tr = document.createElement("tr");
+        // Name.
+        const tdName = document.createElement("td");
+        tdName.textContent = r.name;
+        tr.appendChild(tdName);
+        // Population / growth%.
+        const tdPop = document.createElement("td");
+        const gr = r.growthRate * 100;
+        const grc = gr > 1e-9 ? "rate-pos" : (gr < -1e-9 ? "rate-neg" : "");
+        tdPop.innerHTML = `${formatSI(r.population)}` +
+          `<span class="sub ${grc}">${gr > 0 ? "+" : ""}${(Math.round(gr * 100) / 100)}%</span>`;
+        tr.appendChild(tdPop);
+        // Buildings.
+        const tdB = document.createElement("td");
+        tdB.textContent = formatSI(r.buildings);
+        tr.appendChild(tdB);
+        // Tiles worked (green if fully worked, red if a worker could open a tile).
+        const tdW = document.createElement("td");
+        tdW.innerHTML = `<span class="${r.canWorkMore ? "worked-idle" : "worked-ok"}">${r.worked} / ${r.workedControl}</span>`;
+        tr.appendChild(tdW);
+        // Resource columns: total / max · rate.
+        for (const res of COL_RES) {
+          const td = document.createElement("td");
+          td.innerHTML = _resCell(r[res.key], r[res.key + "Max"], r[res.rate]);
+          tr.appendChild(td);
+        }
+        // Double-click centers the map on the colony and opens its detail dialog.
+        tr.addEventListener("dblclick", () => {
+          closeColonies();
+          if (hexMap) hexMap.centerOnCell(r.col.x, r.col.y);
+          openWorkModal(r.col);
+        });
+        coloniesBody.appendChild(tr);
+      }
+    }
+
+    function openColonies() {
+      if (!gameState || !gameState.buildings) { notify("Start a game to view colonies."); return; }
+      const hasAny = gameState.buildings.some((b) => b.type === 1 && b.owner === "human" && !b.inTransit);
+      if (!hasAny) { notify("You have no colonies yet."); return; }
+      // Keep the last sort column/order (persisted in _colSort across opens).
+      renderColonies();
+      coloniesOverlay.hidden = false;
+      // Restore the remembered scroll position once the table is laid out.
+      const restore = () => { coloniesWrap.scrollTop = _colScroll.top; coloniesWrap.scrollLeft = _colScroll.left; };
+      restore();
+      requestAnimationFrame(restore); // again after layout, in case the first was pre-layout
+    }
+    function closeColonies() {
+      // Remember scroll position so reopening restores the same view.
+      _colScroll = { top: coloniesWrap.scrollTop, left: coloniesWrap.scrollLeft };
+      coloniesOverlay.hidden = true;
+    }
+    ipcRenderer.on("view-colonies", openColonies);
+    document.getElementById("colonies-close").addEventListener("click", closeColonies);
+    coloniesOverlay.addEventListener("click", (e) => { if (e.target === coloniesOverlay) closeColonies(); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !coloniesOverlay.hidden) closeColonies();
+    });
     document.getElementById("viewloc-cancel").addEventListener("click", closeViewLoc);
     document.getElementById("viewloc-ok").addEventListener("click", confirmViewLoc);
     [viewlocX, viewlocY].forEach((el) => el.addEventListener("keydown", (e) => {

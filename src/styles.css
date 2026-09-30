@@ -86,7 +86,7 @@ body.dark #welcome p { color: #aaa; }
 body.dark #status { background: #23331f; color: #cfe8c7; }
 
 #right_panel {
-  flex: 0 0 200px;
+  flex: 0 0 275px;
   background: #eef;
   padding: 8px;
   display: flex;
@@ -388,3 +388,70 @@ body.dark #turnstart-sub { color: #aaa; }
 #work-tooltip .wt-src { color: #cfe8ff; }
 #work-tooltip .wt-val { color: #d6ffd6; white-space: nowrap; }
 #work-tooltip .wt-sep { border-top: 1px solid rgba(255,255,255,0.25); margin: 4px 0; }
+
+/* Rankings dialog (View ▸ View Rankings): a sortable per-species totals table. */
+#rankings-overlay {
+  position: fixed; z-index: 10004; inset: 0;
+  background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+}
+#rankings-overlay[hidden] { display: none; }
+#rankings-dialog {
+  background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
+  max-width: 90vw; max-height: 90vh; display: flex; flex-direction: column;
+}
+body.dark #rankings-dialog { background: #2c2c2e; color: #e0e0e0; }
+#rankings-dialog h2 { font-size: 15px; margin-bottom: 10px; }
+#rankings-table-wrap { overflow: auto; }
+#rankings-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+#rankings-table th, #rankings-table td { padding: 6px 10px; text-align: right; white-space: nowrap; }
+#rankings-table th:first-child, #rankings-table td:first-child { text-align: left; }
+#rankings-table thead th {
+  position: sticky; top: 0; background: #e6e6ea; cursor: pointer; user-select: none;
+  border-bottom: 2px solid #bbb;
+}
+body.dark #rankings-table thead th { background: #3a3a3c; border-bottom-color: #555; }
+#rankings-table thead th:hover { background: #d8d8e0; }
+body.dark #rankings-table thead th:hover { background: #46464a; }
+#rankings-table th .sort-ind { display: inline-block; width: 1em; margin-left: 4px; color: #0a84ff; }
+#rankings-table tbody tr:nth-child(even) { background: rgba(0,0,0,0.04); }
+body.dark #rankings-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.05); }
+#rankings-table tbody tr.me { font-weight: 700; }
+#rankings-table tbody tr.me td:first-child { color: #0a84ff; }
+
+/* Colonies dialog (View ▸ View Colonies): sortable per-colony table. */
+#colonies-overlay {
+  position: fixed; z-index: 10004; inset: 0;
+  background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+}
+#colonies-overlay[hidden] { display: none; }
+#colonies-dialog {
+  background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
+  max-width: 92vw; max-height: 90vh; display: flex; flex-direction: column;
+}
+body.dark #colonies-dialog { background: #2c2c2e; color: #e0e0e0; }
+#colonies-dialog h2 { font-size: 15px; margin-bottom: 6px; }
+#colonies-dialog .hint { font-size: 11px; color: #888; margin-bottom: 10px; }
+#colonies-table-wrap { overflow: auto; }
+#colonies-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+#colonies-table th, #colonies-table td { padding: 5px 9px; text-align: right; white-space: nowrap; }
+#colonies-table th:first-child, #colonies-table td:first-child { text-align: left; }
+#colonies-table thead th {
+  position: sticky; top: 0; background: #e6e6ea; cursor: pointer; user-select: none;
+  border-bottom: 2px solid #bbb;
+}
+body.dark #colonies-table thead th { background: #3a3a3c; border-bottom-color: #555; }
+#colonies-table thead th:hover { background: #d8d8e0; }
+body.dark #colonies-table thead th:hover { background: #46464a; }
+#colonies-table th .sort-ind { display: inline-block; width: 1em; margin-left: 4px; color: #0a84ff; }
+#colonies-table tbody tr:nth-child(even) { background: rgba(0,0,0,0.04); }
+body.dark #colonies-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.05); }
+#colonies-table tbody tr { cursor: pointer; }
+#colonies-table tbody tr:hover { background: rgba(10,132,255,0.15); }
+#colonies-table .sub { display: block; font-size: 10px; color: #999; }
+body.dark #colonies-table .sub { color: #888; }
+#colonies-table .rate-pos { color: #1a9e1a; }
+#colonies-table .rate-neg { color: #d23b3b; }
+#colonies-table .worked-ok { color: #1a9e1a; font-weight: 600; }
+#colonies-table .worked-idle { color: #d23b3b; font-weight: 600; }
