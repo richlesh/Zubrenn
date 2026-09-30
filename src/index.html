@@ -3684,9 +3684,21 @@
         ctx.lineWidth = Math.max(2, spacing.y / 8);
         ctx.lineJoin = "round"; ctx.lineCap = "round";
         ctx.beginPath();
+        // Unwrap each successive point's x to the image nearest the previous one
+        // so a segment that crosses the seam draws as a short local line rather
+        // than a long stripe across the whole map.
+        const W = gameState.map.terrain[0].length;
+        const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+        let prevX = null;
         for (let i = 0; i < _foundHoverPath.length; i++) {
           const p = _foundHoverPath[i];
-          const c = hexCenter(p.x, p.y);
+          let dx = p.x;
+          if (wrap && prevX != null) {
+            while (dx - prevX > W / 2) dx -= W;
+            while (dx - prevX < -W / 2) dx += W;
+          }
+          prevX = dx;
+          const c = hexCenter(dx, p.y);
           if (i === 0) ctx.moveTo(c.x, c.y); else ctx.lineTo(c.x, c.y);
         }
         ctx.stroke();
@@ -3752,6 +3764,12 @@
       return dx * dx + dy * dy;
     }
     function hexLinePath(ax, ay, bx, by) {
+      // Normalize x into [0, W) so seam-crossing walks use canonical cells (so
+      // cell keys match, and the loop terminates when it reaches the target).
+      const W = gameState.map.terrain[0].length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const wxf = (x) => wrap ? ((x % W) + W) % W : x;
+      ax = wxf(ax); bx = wxf(bx);
       const path = [{ x: ax, y: ay }];
       let cur = { x: ax, y: ay };
       let guard = 0;
@@ -3759,22 +3777,23 @@
         const curIsSea = terrainAt(cur.x, cur.y) === 1;
         let best = null, bestD = Infinity, bestC = Infinity;
         for (const n of hexNeighborsRenderer(cur.x, cur.y)) {
-          if (n.y < 0 || n.y >= gameState.map.terrain.length) continue;
-          if (isImpassableFrozen(n.x, n.y) && !(n.x === bx && n.y === by)) continue; // can't build through frozen
+          const nx = wxf(n.x), ny = n.y;
+          if (ny < 0 || ny >= gameState.map.terrain.length) continue;
+          if (isImpassableFrozen(nx, ny) && !(nx === bx && ny === by)) continue; // can't build through frozen
           // A bridge over sea may span only ONE sea tile (two segments:
           // land->sea->land). So never step from a sea tile onto another sea
           // tile — that would make a multi-tile sea bridge. This keeps every
           // sea crossing exactly one tile wide (the walker routes around wider
           // water). The target itself is exempted so a path can still terminate
           // on it, mirroring the frozen exception above.
-          if (curIsSea && terrainAt(n.x, n.y) === 1 && !(n.x === bx && n.y === by)) continue;
-          const d = hexDistance(n.x, n.y, bx, by);
+          if (curIsSea && terrainAt(nx, ny) === 1 && !(nx === bx && ny === by)) continue;
+          const d = hexDistance(nx, ny, bx, by);
           if (d > bestD) continue;
-          const c = _cartesianDist2To(n.x, n.y, bx, by);
+          const c = _cartesianDist2To(nx, ny, bx, by);
           // Primary key: hex distance (keeps the path shortest). Secondary key:
           // straight-line distance to the target (straightens ties).
           if (d < bestD || (d === bestD && c < bestC)) {
-            bestD = d; bestC = c; best = n;
+            bestD = d; bestC = c; best = { x: nx, y: ny };
           }
         }
         if (!best) break;
@@ -4043,11 +4062,22 @@
       };
       const drawPath = (path, stroke, w) => {
         if (!path || path.length < 2) return;
+        const W = gameState.map.terrain[0].length;
+        const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
         ctx.save();
         ctx.strokeStyle = stroke; ctx.lineWidth = w; ctx.lineJoin = "round"; ctx.lineCap = "round";
         ctx.beginPath();
+        // Unwrap each successive x to the image nearest the previous point so a
+        // seam-crossing segment draws locally rather than across the whole map.
+        let prevX = null;
         for (let i = 0; i < path.length; i++) {
-          const c = hexCenter(path[i].x, path[i].y);
+          let dx = path[i].x;
+          if (wrap && prevX != null) {
+            while (dx - prevX > W / 2) dx -= W;
+            while (dx - prevX < -W / 2) dx += W;
+          }
+          prevX = dx;
+          const c = hexCenter(dx, path[i].y);
           if (i === 0) ctx.moveTo(c.x, c.y); else ctx.lineTo(c.x, c.y);
         }
         ctx.stroke(); ctx.restore();
@@ -5215,20 +5245,45 @@
       const cells = colonyControlCells(col);
       const cellSet = new Set(cells.map((c) => cellKey(c.x, c.y)));
 
+      // For wrapped maps a colony near the seam has control cells at both ends
+      // of the x range (e.g. W-1 and 0). Lay out using an UNWRAPPED x relative to
+      // the colony so those cells stay contiguous (otherwise min/max x spans the
+      // whole map and the grid collapses to nothing). Parity/terrain still use
+      // the real (wrapped) cell x. Requires an even map width for the seam to
+      // preserve odd-q column parity (the norm for cylindrical maps here).
+      const W = gameState.map.terrain[0].length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const unwrapX = (x) => {
+        if (!wrap) return x;
+        let d = x - col.x;
+        d = ((d % W) + W) % W;      // 0..W-1
+        if (d > W / 2) d -= W;      // choose the shortest signed offset
+        return col.x + d;
+      };
+
       // Lay out as a hex grid (same offset scheme as the map) centered in the
       // canvas. Compute a cell size that fits all control cells.
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      for (const c of cells) { minX=Math.min(minX,c.x);minY=Math.min(minY,c.y);maxX=Math.max(maxX,c.x);maxY=Math.max(maxY,c.y); }
+      for (const c of cells) {
+        const ux = unwrapX(c.x);
+        minX = Math.min(minX, ux); maxX = Math.max(maxX, ux);
+        minY = Math.min(minY, c.y); maxY = Math.max(maxY, c.y);
+      }
       const gw = (maxX - minX + 1), gh = (maxY - minY + 1);
       const ctx = workCanvas.getContext("2d");
       const CW = workCanvas.width, CH = workCanvas.height;
       // cell size so the grid fits with margin
       const cell = Math.min(CW / (gw * 0.75 + 1) / WORK_HEX_SCALE.x, CH / (gh + 1));
       const spacing = { x: cell * WORK_HEX_SCALE.x, y: cell };
-      const hexCenter = (x, y) => ({
-        x: (0.5 + (x - minX) * 0.75) * spacing.x,
-        y: (0.5 + ((y - minY) + (((x % 2) + 2) % 2) / 2)) * spacing.y
-      });
+      // hexCenter uses the UNWRAPPED x for horizontal placement, but the REAL
+      // cell x for the odd-q vertical offset parity.
+      const hexCenter = (realX, y) => {
+        const ux = unwrapX(realX);
+        return {
+          x: (0.5 + (ux - minX) * 0.75) * spacing.x,
+          y: (0.5 + ((y - minY) + (((realX % 2) + 2) % 2) / 2)) * spacing.y
+        };
+      };
       // center the whole layout in the canvas
       const layoutW = (gw * 0.75 + 0.25) * spacing.x;
       const layoutH = (gh + 0.5) * spacing.y;

@@ -1,3 +1,14 @@
+<style>
+.float-left {
+  float: left;
+  margin: 0 1em 0 0;
+}
+.float-right {
+  float: right;
+  margin: 0 0 0 1em;
+}
+</style>
+
 # Zubrenn
 
 Zubrenn is a turn-based, hex-grid 4X-style strategy game built with
@@ -140,6 +151,48 @@ npm run dist:all         # everything
 | Establish / build | Right-click a cell |
 | Colony work assignment | Double-click a colony |
 
+### Buildings
+
+<span class="float-left">![biodome](src/resources/biodome.png){width=128}</span>
+
+#### Biodome
+
+The Biodome is the heart of a colony: it establishes the colony center and initial zone of control. Its tile is always worked.  It contributes to the colony's baseline growth rate and starting storage for Food, Material, Energy, Wealth, and Happiness.
+
+#### Solar Panels
+
+<span class="float-right">![solar_panel](src/resources/solar_panel.png){width=128}</span>
+
+Solar Panels are advanced energy collectors. They cost 2 Material, 2 Energy and 2 Wealth to construct (takes 1 turn) and have a yearly upkeep of 0.5 Wealth. Each panel produces 6 Energy per year and adds 500 Energy storage to the colony, while providing no food, material, wealth or growth bonuses.
+ 
+#### Farm
+
+<span class="float-left">![farm](src/resources/farm.png){width=128}</style>
+
+The Farm is the advanced food production facility for your colony.  It can be built only after a Solar Panel is present. Construction requires **3 Material**, **2 Energy**, and **2 Wealth** and takes **1 turn**. Upkeep each year is **1 Material**, **1 Energy**, and **0.5 Wealth**. Each Farm yields **3 Food** per year, contributes **1 Wealth**, and provides a modest growth boost of **0.0025**. It also adds **500 Food** storage and **100 Energy** storage to the colony.
+
+**Factory**  
+
+<span class="float-right">![factory](src/resources/factory.png){width=128}</style>
+
+The Factory is a building that can create 3-D printed goods.  It requires a Solar Panel before it can be constructed. It costs **5 Material**, **5 Energy** and **5 Wealth** and takes **3 turns** to build. Each year it requires **2 Material**, **3 Energy** and **1 Wealth**. It produces **5 Material** per year, adds **1 Wealth**, reduces growth by **0.0025** and lowers happiness by **0.5**. It also expands the colony’s storage by **500 Material** and **200 Energy**.
+
+
+![dock](src/resources/dock.png){width=128}
+
+![air_field](src/resources/air_field.png){width=128}
+
+![barracks](src/resources/barracks.png){width=128}
+
+![grainery](src/resources/grainery.png){width=128}
+
+![warehouse](src/resources/warehouse.png){width=128}
+
+![bank](src/resources/bank.png){width=128}
+
+![caes](src/resources/caes.png){width=128}
+
+
 ## Project structure
 
 ```
@@ -187,8 +240,7 @@ without code changes:
 - `bridgeCost`, `roadColor`, `monorailColor`, `riverColor`, `canalColor`,
   `bridgeColor`, `planningPathColor`, `underConstructionColor`, `launchPathColor`,
   `workedCellColor` — transport/overlay costs and colors.
-- `zoneOfControlSize` — population thresholds that expand a colony's control
-  radius.
+- `zoneOfControlSize` — population thresholds that expand a colony's control radius.
 - Economy constants: `foodPerColonistUnit` (food eaten per 1,000 colonists),
   `happinessGrowthPerUnit` and `maxHappinessGrowthBonus` (how food-driven
   happiness converts to growth, capped), `riverAdjacentFoodBonus`, and
