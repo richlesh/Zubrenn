@@ -2,12 +2,10 @@
 .float-left {
   float: left;
   margin: 0 1em 0 0;
-  width: 128px;
 }
 .float-right {
   float: right;
   margin: 0 0 0 1em;
-  width: 128px;
 }
 </style>
 
@@ -169,31 +167,58 @@ Solar Panels are advanced energy collectors. They cost 2 Material, 2 Energy 
  
 #### Farm
 
-<span class="float-right">![farm](src/resources/farm_128.png)</style>
+<span class="float-right">![farm](src/resources/farm_128.png)</span>
 
 The Farm is the advanced food production facility for your colony.  It can be built only after a Solar Panel is present. Construction requires **3 Material**, **2 Energy**, and **2 Wealth** and takes **1 turn**. Upkeep each year is **1 Material**, **1 Energy**, and **0.5 Wealth**. Each Farm yields **3 Food** per year, contributes **1 Wealth**, and provides a modest growth boost of **0.0025**. It also adds **500 Food** storage and **100 Energy** storage to the colony.
 
-**Factory**  
+#### Factory
 
-<span class="float-right">![factory](src/resources/factory.png){width=128}</style>
+<span class="float-right">![factory](src/resources/factory.png){width=128}</span>
 
 The Factory is a building that can create 3-D printed goods.  It requires a Solar Panel before it can be constructed. It costs **5 Material**, **5 Energy** and **5 Wealth** and takes **3 turns** to build. Each year it requires **2 Material**, **3 Energy** and **1 Wealth**. It produces **5 Material** per year, adds **1 Wealth**, reduces growth by **0.0025** and lowers happiness by **0.5**. It also expands the colony’s storage by **500 Material** and **200 Energy**.
 
 
-![dock](src/resources/dock.png){width=128}
+#### Dock
 
-![air_field](src/resources/air_field.png){width=128}
+<span class="float-right">![dock](src/resources/dock_128.png)</span>
 
-![barracks](src/resources/barracks.png){width=128}
+The Dock creates a shallow‑sea transportation network, linking colonies that also have Docks so they can share resources across sea tiles. It requires a Solar Panel in the colony. Construction costs **1 Material**, **1 Energy** and **1 Wealth**, and takes **2 turns**. Each year it costs **1 Energy** and **1 Wealth** to maintain, provides **1 Food** and **1 Wealth**, and adds **300 Food** and **300 Material** storage.
 
-![grainery](src/resources/grainery.png){width=128}
+#### Air Field
 
-![warehouse](src/resources/warehouse.png){width=128}
+<span class="float-right">![air_field](src/resources/air_field_128.png)</span>
 
-![bank](src/resources/bank.png){width=128}
+The Air Field creates an air‑transportation network, linking colonies that also have Air Fields within **16 tiles** so they can share resources. It requires a **Factory** before it can be built. Construction costs **2 Material**, **2 Energy** and **2 Wealth** and takes **2 turns**. Each year it costs **1 Energy** and **1 Wealth** to maintain, provides **2 Wealth** per year, and adds **300 Food** and **300 Material** storage.
 
-![caes](src/resources/caes.png){width=128}
+#### Barracks
 
+<span class="float-right">![barracks](src/resources/barracks_128.png)</span>
+
+The Barracks train military battalions for defense and offense. It requires a **Factory** before it can be built. Construction costs **2 Material**, **2 Energy** and **2 Wealth**, and takes **2 turns**. Each year it consumes **1 Food**, **1 Energy** and **1 Wealth**, and provides a happiness bonus of **0.5**.
+ 
+ ### Grainery
+ 
+<span class="float-right">![grainery](src/resources/grainery_128.png)</span>
+
+The Grainery provides large‑scale food storage, increasing a colony’s food capacity by **1 000**. It can be built after a **Farm** and costs **2 Material**, **2 Energy** and **2 Wealth**, taking **2 turns** to construct. It has no upkeep or production bonuses.
+
+#### Warehouse
+
+<span class="float-right">![warehouse](src/resources/warehouse_128.png)</span>
+
+The Warehouse boosts material storage capacity by **1 000 Material**. It can be built after a **Factory**, costs **2 Material**, **2 Energy** and **2 Wealth**, and takes **2 turns** to construct. It has no upkeep or production bonuses, serving solely as a large material depot.
+
+#### Bank
+
+<span class="float-right">![bank](src/resources/bank_128.png)</span>
+
+The Bank speeds up the colony’s economy and enables more advanced building projects. It requires a **Solar Panel** before it can be built. Construction costs **2 Material**, **2 Energy** and **2 Wealth**, and takes **2 turns**. Each year it consumes **1 Energy** and **1 Wealth**, but generates **3 Wealth** per year, adds a happiness bonus of **0.5**, and provides **1 000 Wealth** storage.
+
+#### Compressed-Air Energy Storage
+
+<span class="float-right">![caes](src/resources/caes_128.png)</span>
+
+The Compressed‑Air Energy Storage (CAES) is an advanced energy storage facility. It requires a **Bank** before it can be built. Construction costs **4 Material**, **2 Energy** and **2 Wealth**, and takes **2 turns**. Each year it consumes **1 Energy** and **1 Wealth**, and provides **1 000 Energy** storage for the colony.
 
 ## Project structure
 
