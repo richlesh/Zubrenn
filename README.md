@@ -155,21 +155,21 @@ npm run dist:all         # everything
 
 ### Buildings
 
-<span class="float-left">![biodome](src/resources/biodome.png)</span>
-
 #### Biodome
+
+<span class="float-right">![biodome](src/resources/biodome_128.png)</span>
 
 The Biodome is the heart of a colony: it establishes the colony center and initial zone of control. Its tile is always worked.  It contributes to the colony's baseline growth rate and starting storage for Food, Material, Energy, Wealth, and Happiness.
 
 #### Solar Panels
 
-<span class="float-right">![solar_panel](src/resources/solar_panel.png){width=128}</span>
+<span class="float-right">![solar_panel](src/resources/solar_panel_128.png)</span>
 
 Solar Panels are advanced energy collectors. They cost 2 Material, 2 Energy and 2 Wealth to construct (takes 1 turn) and have a yearly upkeep of 0.5 Wealth. Each panel produces 6 Energy per year and adds 500 Energy storage to the colony, while providing no food, material, wealth or growth bonuses.
  
 #### Farm
 
-<span class="float-left">![farm](src/resources/farm.png){width=128}</style>
+<span class="float-right">![farm](src/resources/farm_128.png)</style>
 
 The Farm is the advanced food production facility for your colony.  It can be built only after a Solar Panel is present. Construction requires **3 Material**, **2 Energy**, and **2 Wealth** and takes **1 turn**. Upkeep each year is **1 Material**, **1 Energy**, and **0.5 Wealth**. Each Farm yields **3 Food** per year, contributes **1 Wealth**, and provides a modest growth boost of **0.0025**. It also adds **500 Food** storage and **100 Energy** storage to the colony.
 
