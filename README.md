@@ -28,15 +28,14 @@ with alien AI opponents for resources.
 - **Rivers** — flow downhill to the sea, follow cell borders, and give adjacent
   land extra food. Every mountain region gets at least two rivers.
 - **Colonies & buildings** — found colonies (Biodomes) and build Farms, Solar
-  Panels, Factories, and **Docks** within your zone of control. A Dock sits on a
-  shallow-sea tile, opens the colony's shallow-sea tiles to being worked, and
-  lets colony-launch paths cross shallow sea (to reach islands and cross straits).
+  Panels, Factories, and **Docks** within your zone of control.
 - **Economy** — each colony works surrounding tiles to produce Food, Material,
-  Energy, and Wealth, and keeps its **own stored resources**. Buildings only
-  produce (and only pay upkeep) when their cell is **worked**. Every year the
-  colony's excess production is stored (up to its buildings' storage caps) and
-  any shortfall is drawn from storage; if a resource runs out, buildings must be
-  **idled** (their cells deselected) to fit the budget.
+  Energy, and Wealth, and keeps its **own stored resources**. A building only
+  contributes — its production, upkeep, **and storage** — when its cell is
+  **worked**; an idle building does nothing and provides no storage. Every year
+  the colony's excess production is stored (up to its worked buildings' storage
+  caps) and any shortfall is drawn from storage; if a resource runs out,
+  buildings must be **idled** (their cells deselected) to fit the budget.
 - **Happiness & growth** — each colony accumulates **stored happiness** from its
   food balance; positive happiness grows the population and negative happiness
   shrinks it.
@@ -104,8 +103,9 @@ npm run dist:all         # everything
    each building's per-year bonuses (and whether it's idle). Click cells to
    assign workers (worked cells turn red). The biodome cell is always worked;
    you can work up to `floor(population / 1000)` additional cells. **A building
-   only produces while its cell is worked** — deselect a building's cell to
-   idle it and drop its upkeep.
+   only contributes while its cell is worked** (production, upkeep, and
+   storage) — deselect a building's cell to idle it: it drops its upkeep but
+   also stops producing and no longer provides storage.
 4. **Build** Farms, Solar Panels, and Factories by right-clicking a cell in your
    zone of control. Each costs Material/Energy/Wealth (paid from that colony's
    storage), adds storage and per-year upkeep, and may require **prerequisite
@@ -157,7 +157,7 @@ npm run dist:all         # everything
 
 <span class="float-right">![biodome](src/resources/biodome_128.png)</span>
 
-The Biodome is the heart of a colony: it establishes the colony center and initial zone of control. Its tile is always worked.  It contributes to the colony's baseline growth rate and starting storage for Food, Material, Energy, Wealth, and Happiness.
+The Biodome is the heart of a colony: it establishes the colony center and initial zone of control. Its tile is always worked.  The biodome provides all the living quarters for your growing colony. It contributes to the colony's baseline growth rate and starting storage for Food, Material, Energy, Wealth, and Happiness.
 
 #### Solar Panels
 
@@ -173,7 +173,7 @@ The Farm is the advanced food production facility for your colony.  It can be bu
 
 #### Factory
 
-<span class="float-right">![factory](src/resources/factory.png){width=128}</span>
+<span class="float-right">![factory](src/resources/factory_128.png)</span>
 
 The Factory is a building that can create 3-D printed goods.  It requires a Solar Panel before it can be constructed. It costs **5 Material**, **5 Energy** and **5 Wealth** and takes **3 turns** to build. Each year it requires **2 Material**, **3 Energy** and **1 Wealth**. It produces **5 Material** per year, adds **1 Wealth**, reduces growth by **0.0025** and lowers happiness by **0.5**. It also expands the colony’s storage by **500 Material** and **200 Energy**.
 
@@ -182,7 +182,9 @@ The Factory is a building that can create 3-D printed goods.  It requires a Sola
 
 <span class="float-right">![dock](src/resources/dock_128.png)</span>
 
-The Dock creates a shallow‑sea transportation network, linking colonies that also have Docks so they can share resources across sea tiles. It requires a Solar Panel in the colony. Construction costs **1 Material**, **1 Energy** and **1 Wealth**, and takes **2 turns**. Each year it costs **1 Energy** and **1 Wealth** to maintain, provides **1 Food** and **1 Wealth**, and adds **300 Food** and **300 Material** storage.
+The Dock creates a shallow‑sea transportation network, linking colonies that also have Docks so they can share resources across sea tiles. A Dock sits on a
+  shallow-sea tile, opens the colony's shallow-sea tiles to being worked, and
+  lets colony-launch paths cross shallow sea (to reach islands and cross straits). It requires a Solar Panel in the colony. Construction costs **1 Material**, **1 Energy** and **1 Wealth**, and takes **2 turns**. Each year it costs **1 Energy** and **1 Wealth** to maintain, provides **1 Food** and **1 Wealth**, and adds **300 Food** and **300 Material** storage.
 
 #### Air Field
 
@@ -200,13 +202,13 @@ The Barracks train military battalions for defense and offense. It requires a **
  
 <span class="float-right">![grainery](src/resources/grainery_128.png)</span>
 
-The Grainery provides large‑scale food storage, increasing a colony’s food capacity by **1 000**. It can be built after a **Farm** and costs **2 Material**, **2 Energy** and **2 Wealth**, taking **2 turns** to construct. It has no upkeep or production bonuses.
+The Grainery provides large‑scale food storage, increasing a colony’s food capacity by **1 000**. It can be built after a **Farm** is built.  It costs **2 Material**, **2 Energy** and **2 Wealth**, taking **2 turns** to construct. It has no upkeep or production bonuses.
 
 #### Warehouse
 
 <span class="float-right">![warehouse](src/resources/warehouse_128.png)</span>
 
-The Warehouse boosts material storage capacity by **1 000 Material**. It can be built after a **Factory**, costs **2 Material**, **2 Energy** and **2 Wealth**, and takes **2 turns** to construct. It has no upkeep or production bonuses, serving solely as a large material depot.
+The Warehouse boosts material storage capacity by **1 000 Material**. It can be built after a **Factory** is built, costs **2 Material**, **2 Energy** and **2 Wealth**, and takes **2 turns** to construct. It has no upkeep or production bonuses, serving solely as a large material depot.
 
 #### Bank
 
@@ -285,7 +287,7 @@ without code changes:
 
 **Population growth:** each colony builds up **stored happiness** from its food
 balance (`netFood` = food produced − colonists' consumption), clamped to
-**±(sum of building happiness storage)**. While stored happiness is positive the
+**±(sum of its worked buildings' happiness storage)** per colony. While stored happiness is positive the
 colony grows; when negative it shrinks. The per-year growth rate is the Biodome
 `growthRate` plus a happiness term (`happinessRate × happinessGrowthPerUnit`,
 capped at `maxHappinessGrowthBonus`) plus building `bonus.growth` modifiers.

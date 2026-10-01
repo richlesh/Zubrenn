@@ -945,21 +945,36 @@ class HexMap {
     if (typeof this.onOverlay === 'function') {
       const W = this.worldSize.x;
       const wrap = this.wrap;
-      const visible = {
-        forEach: (cb) => {
-          for (let x = x0; x < xMax; x++) {
-            const cellX = wrap ? wrapX(x, W) : x;
-            if (cellX < 0 || cellX >= W) continue;
-            for (let y = y0; y < yMax; y++) {
-              if (y < 0 || y >= this.worldSize.y) continue;
-              const c = getHexCenter(x, y, spacing);
-              cb({ cellX, cellY: y, cx: c.x, cy: c.y });
+      const wrapPx = W * 0.75 * spacing.x;
+      const ovOffsets = wrap ? [0, -wrapPx, wrapPx] : [0];
+      // Draw the overlay once per wrap image so path previews whose canonical x
+      // lies off the current viewport (because the seam is on-screen and the
+      // cell is only visible via an extended copy) still appear. Cell shading
+      // (via `visible.forEach`) is only emitted on the base pass to avoid
+      // triple-drawing it; path lines use the passed hexCenter and are drawn in
+      // every translated copy, so whichever image is in view shows.
+      for (const ox of ovOffsets) {
+        const base = ox === 0;
+        const visible = {
+          forEach: (cb) => {
+            if (!base) return; // shade once, on the untranslated pass
+            for (let x = x0; x < xMax; x++) {
+              const cellX = wrap ? wrapX(x, W) : x;
+              if (cellX < 0 || cellX >= W) continue;
+              for (let y = y0; y < yMax; y++) {
+                if (y < 0 || y >= this.worldSize.y) continue;
+                const c = getHexCenter(x, y, spacing);
+                cb({ cellX, cellY: y, cx: c.x, cy: c.y });
+              }
             }
-          }
-        },
-        fillHex: (cx, cy) => { drawHexPath(ctx, cx, cy, spacing); ctx.fill(); },
-      };
-      try { this.onOverlay(ctx, spacing, (x, y) => getHexCenter(x, y, spacing), visible); } catch (e) {}
+          },
+          fillHex: (cx, cy) => { drawHexPath(ctx, cx, cy, spacing); ctx.fill(); },
+        };
+        ctx.save();
+        if (ox !== 0) ctx.translate(ox, 0);
+        try { this.onOverlay(ctx, spacing, (x, y) => getHexCenter(x, y, spacing), visible); } catch (e) {}
+        ctx.restore();
+      }
     }
 
     ctx.restore();
@@ -996,7 +1011,16 @@ class HexMap {
 
     // Helper: draw a line between two cell centers (exact center to center).
     const drawLink = (a, b, color, w) => {
-      const ca = getHexCenter(a.x, a.y, spacing), cb = getHexCenter(b.x, b.y, spacing);
+      // For a wrapped map, if the two cells are adjacent across the seam
+      // (e.g. x=W-1 and x=0), draw b at the image nearest a so the segment is a
+      // short local line rather than a stripe across the whole map. The offset
+      // tiling below then reproduces it on both sides of the seam.
+      let bx = b.x;
+      if (this.wrap) {
+        while (bx - a.x > W / 2) bx -= W;
+        while (bx - a.x < -W / 2) bx += W;
+      }
+      const ca = getHexCenter(a.x, a.y, spacing), cb = getHexCenter(bx, b.y, spacing);
       ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = "round";
       for (const ox of offsets) {
         ctx.beginPath();
@@ -1052,7 +1076,14 @@ class HexMap {
     const roadColor = resolveColor(this.roadColor, "#8a5a2b");
     const monoColor = resolveColor(this.monorailColor, "#c8cdd6");
     const drawHalfLink = (from, to, color, w) => {
-      const cf = getHexCenter(from.x, from.y, spacing), ct = getHexCenter(to.x, to.y, spacing);
+      // Unwrap `to` to the image nearest `from` so a seam-adjacent junction is
+      // a short local span (otherwise the midpoint lands mid-map).
+      let tx = to.x;
+      if (this.wrap) {
+        while (tx - from.x > W / 2) tx -= W;
+        while (tx - from.x < -W / 2) tx += W;
+      }
+      const cf = getHexCenter(from.x, from.y, spacing), ct = getHexCenter(tx, to.y, spacing);
       const mx = (cf.x + ct.x) / 2, my = (cf.y + ct.y) / 2;
       // Butt cap (not round): each half must stop exactly at the shared-edge
       // midpoint so its color stays within its own cell. A round cap would
@@ -1111,7 +1142,12 @@ class HexMap {
       ctx.lineWidth = lineW; ctx.lineCap = "round";
       for (const ek of bridgeSet) {
         const [ka, kb] = ek.split("|"); const a = parseCell(ka), b = parseCell(kb);
-        const ca = getHexCenter(a.x, a.y, spacing), cb = getHexCenter(b.x, b.y, spacing);
+        let bx = b.x;
+        if (this.wrap) {
+          while (bx - a.x > W / 2) bx -= W;
+          while (bx - a.x < -W / 2) bx += W;
+        }
+        const ca = getHexCenter(a.x, a.y, spacing), cb = getHexCenter(bx, b.y, spacing);
         for (const ox of offsets) {
           ctx.beginPath();
           ctx.moveTo(ca.x + ox, ca.y);

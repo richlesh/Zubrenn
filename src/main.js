@@ -687,9 +687,15 @@ async function saveGame() {
     return false;
   }
 
+  // Default filename includes the current game year (startingYear + turn).
+  const startingYear = (gameState.map && gameState.map.meta && gameState.map.meta.startingYear != null)
+    ? gameState.map.meta.startingYear
+    : (CONFIG.startingYear != null ? CONFIG.startingYear : 2500);
+  const year = startingYear + (gameState.turn || 0);
+
   const { canceled, filePath } = await dialog.showSaveDialog(mainWin, {
     title: "Save Game",
-    defaultPath: `zubrenn-map.${SAVE_EXT}`,
+    defaultPath: `Zubrenn-${year}.${SAVE_EXT}`,
     filters: [
       { name: "Zubrenn Save", extensions: [SAVE_EXT] },
       { name: "All Files", extensions: ["*"] }

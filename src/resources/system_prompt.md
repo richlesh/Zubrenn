@@ -109,8 +109,8 @@ civilization.
 
 Build within your zone of control; each costs resources and takes time to
 become operational (it produces nothing until finished). **A building only
-produces its bonus (and only pays its upkeep) when its cell is worked** — an
-idle building on an unworked cell does nothing but still provides storage.
+contributes (its bonus, upkeep, AND storage) when its cell is worked** — an
+idle building on an unworked cell does nothing at all and provides no storage.
 
 **Prerequisites:** a building type can only be built at a colony once its
 `prerequisiteBuildings` already exist there. Currently: Farm, Solar Panel and
@@ -157,8 +157,8 @@ shallow sea**. Without a Dock, sea tiles are impassable and unworkable; deep sea
 ### Storage capacity
 
 Every building also provides **storage** that caps how much a colony can hold.
-A colony's cap for each resource is the **sum of the storage** its buildings
-provide (storage is per-colony for now):
+A colony's cap for each resource is the **sum of the storage** its **worked**
+buildings provide (an idle/unworked building provides no storage):
 
 | Building | Food | Material | Energy | Wealth | Happiness |
 | --- | --- | --- | --- | --- | --- |
@@ -170,9 +170,10 @@ provide (storage is per-colony for now):
 | Air Field | 300 | 300 | 0 | 0 | 0 |
 
 Stored Food/Material/Energy/Wealth are clamped to these totals; anything
-produced beyond the cap is lost. **Happiness** is clamped to the symmetric band
-**±(sum of happiness storage)** — so with only a Biodome a colony's happiness
-ranges from −100 to +100. Build more storage to hold larger stockpiles.
+produced beyond the cap is lost. **Happiness** is clamped per colony to the
+symmetric band **±(sum of its worked buildings' happiness storage)** — so with
+only a Biodome a colony's happiness ranges from −100 to +100; worked buildings
+with happiness storage widen that band.
 
 ## Resources (per year)
 
@@ -213,8 +214,8 @@ buildings.
 If storage for any resource would drop **below 0**, the colony is **over
 budget** and cannot sustain its worked buildings. Reduce your yearly needs by
 **idling buildings** — deselect (unwork) their cells so they stop consuming
-upkeep — until the budget balances. (Idle buildings still provide storage but
-produce nothing.)
+upkeep — until the budget balances. (Idle buildings contribute nothing —
+no production, no upkeep, and no storage.)
 
 ## Population growth each year
 
@@ -228,7 +229,7 @@ For each colony, per year:
 2. **Happiness rate** = `netFood` (surplus is positive, shortfall negative) plus
    any building happiness bonuses.
 3. **Stored happiness** += happiness rate, then **clamped** to
-   **±(sum of building happiness storage)** for that colony.
+   **±(sum of worked building happiness storage)** for that colony.
 4. **Growth direction** follows the **sign** of stored happiness:
    - Stored happiness **≥ 0** → the colony **grows**.
    - Stored happiness **< 0** → the population **declines**.
