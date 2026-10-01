@@ -302,7 +302,54 @@
                    aiPlacementMinTurns: 3, aiPlacementMaxTurns: 200,
                    buildingTypes: { "1": { name: "Biodome", startPopulation: 1000, growthRate: 0.01, buildCost: { turns: 0 }, bonus: { food: 1, material: 1, energy: 2, growth: 0, wealth: 1 } } },
                    names: [] };
-    ipcRenderer.invoke("config-get").then((c) => { if (c) CONFIG = c; }).catch(() => {});
+    // The unscaled config as loaded; CONFIG is derived from it per the current
+    // game's difficulty (see applyGameDifficulty).
+    let BASE_CONFIG = CONFIG;
+
+    // Difficulty factor d (1.0 easy .. 0.5 hard): MULTIPLY economy outputs
+    // (terrain base yields, building bonuses, river/water food & wealth bonuses,
+    // happinessGrowthPerUnit) by d; DIVIDE costs/efforts (movement, transport
+    // per-tile/edge costs, building buildCost, remove*Cost, foodPerColonistUnit)
+    // by d. Returns a deep-scaled copy of `raw`; leaves `raw` untouched.
+    function applyDifficulty(raw, d) {
+      const cfg = JSON.parse(JSON.stringify(raw || {}));
+      if (!(d > 0) || d === 1) return cfg;        // easy / invalid -> no scaling
+      const mul = (o, keys) => { if (o) for (const k of keys) if (typeof o[k] === 'number') o[k] *= d; };
+      const divAll = (o) => { if (o) for (const k of Object.keys(o)) if (typeof o[k] === 'number') o[k] /= d; };
+      const RES = ['food', 'material', 'energy', 'wealth', 'happiness', 'growth'];
+      // Terrain: ×base yields; ÷movement; ÷transport per-tile/edge costs.
+      for (const k of Object.keys(cfg.terrainTypes || {})) {
+        const t = cfg.terrainTypes[k];
+        mul(t.base, ['food', 'material']);
+        if (Array.isArray(t.movement)) t.movement = t.movement.map((v) => (typeof v === 'number' ? v / d : v));
+        divAll(t.roadCostPerTile); divAll(t.monorailCostPerTile); divAll(t.canalCostPerEdge);
+      }
+      // Buildings: ×bonus; ÷buildCost; (costPerYear/storage left as-is).
+      for (const k of Object.keys(cfg.buildingTypes || {})) {
+        const b = cfg.buildingTypes[k];
+        mul(b.bonus, RES);
+        divAll(b.buildCost);
+      }
+      // Global economy constants.
+      divAll(cfg.removeTransportCost);
+      divAll(cfg.removeCanalCost);
+      divAll(cfg.removeImprovementCost);
+      divAll(cfg.bridgeCost);
+      if (typeof cfg.foodPerColonistUnit === 'number') cfg.foodPerColonistUnit /= d;
+      if (typeof cfg.riverAdjacentFoodBonus === 'number') cfg.riverAdjacentFoodBonus *= d;
+      if (typeof cfg.riverAdjacentWealthBonus === 'number') cfg.riverAdjacentWealthBonus *= d;
+      if (typeof cfg.waterAdjacentFoodBonus === 'number') cfg.waterAdjacentFoodBonus *= d;
+      if (typeof cfg.happinessGrowthPerUnit === 'number') cfg.happinessGrowthPerUnit *= d;
+      return cfg;
+    }
+    // Re-derive CONFIG from BASE_CONFIG using the current game's difficulty
+    // (from the map meta; default 1.0). Call when a game is loaded/created.
+    function applyGameDifficulty() {
+      const d = (gameState && gameState.map && gameState.map.meta && gameState.map.meta.difficulty != null)
+        ? gameState.map.meta.difficulty : 1.0;
+      CONFIG = applyDifficulty(BASE_CONFIG, d);
+    }
+    ipcRenderer.invoke("config-get").then((c) => { if (c) { BASE_CONFIG = c; CONFIG = c; applyGameDifficulty(); } }).catch(() => {});
     let SYSTEM_PROMPT = "";
     ipcRenderer.invoke("system-prompt-get").then((s) => { if (s) SYSTEM_PROMPT = s; }).catch(() => {});
 
@@ -611,10 +658,13 @@
     function waterFoodBonus(x, y) {
       const terr = terrainAt(x, y);
       if (!WATER_FOOD_TERRAINS.has(terr)) return 0;
-      if (nearRiver(x, y) || nearSea(x, y)) {
-        return (CONFIG.riverAdjacentFoodBonus != null ? CONFIG.riverAdjacentFoodBonus : 1);
-      }
-      return 0;
+      // River/canal adjacency uses riverAdjacentFoodBonus; sea adjacency uses
+      // waterAdjacentFoodBonus. If adjacent to both, take the higher of the two.
+      const riverB = nearRiver(x, y)
+        ? (CONFIG.riverAdjacentFoodBonus != null ? CONFIG.riverAdjacentFoodBonus : 1) : 0;
+      const waterB = nearSea(x, y)
+        ? (CONFIG.waterAdjacentFoodBonus != null ? CONFIG.waterAdjacentFoodBonus : 1) : 0;
+      return Math.max(riverB, waterB);
     }
     // A land tile with an adjacent river side gains a base wealth bonus.
     function riverWealthBonus(x, y) {
@@ -2267,6 +2317,7 @@
 
       updatePlayerPanel();
       if (badgeChanged && hexMap) hexMap.setBuildings(gameState.buildings);
+      updateColonyAttention();
 
       // If a human colony gained a worker (and has an unworked zone cell), tell
       // the player and open that colony's work dialog. Do this once notifications
@@ -2475,7 +2526,11 @@
       if (workOverlay && !workOverlay.hidden) return;   // don't advance mid-dialog
       if (_foundMode) return;                           // mid colony-launch placement
       if (_skipAutoEndThisTurn) return;                 // player took manual control
-      const humanHasActions = humanHasWorkerToAssign() || humanCanLaunchColony() || humanCanImproveWorkedCell();
+      // Auto turn end is gated on the SAME condition as the flashing red
+      // "needs attention" indicator (see humanHasAnyAction): only an unassigned
+      // worker keeps the turn open. Being able to (optionally) build or launch
+      // does NOT block auto-end.
+      const humanHasActions = humanHasAnyAction();
       const aiPending = players.some((pl) => pl.kind === 'ai' && !pl.placed);
       if (!humanHasActions && (_autoTurnEnd || aiPending)) {
         stopIdleWatch();      // no stale warning once the turn is on its way out
@@ -2538,8 +2593,15 @@
       _idleArmed = false;
       if (_warningShowing) { _warningShowing = false; _closeTurnStart(); }
     }
+    // Whether the human still has an action that should keep the turn open.
+    // This mirrors the flashing red "needs attention" indicator: only an
+    // unassigned worker (a free slot with an unworked control cell) counts.
+    // Optional builds/launches do NOT block auto turn end, otherwise a
+    // developed empire almost always has something affordable to build and the
+    // turn would never auto-advance.
     function humanHasAnyAction() {
-      return humanHasWorkerToAssign() || humanCanLaunchColony() || humanCanImproveWorkedCell();
+      return (gameState.buildings || []).some(
+        (b) => b.type === 1 && b.owner === 'human' && colonyNeedsAttention(b));
     }
     // Begin (or restart) the quiet period that precedes the warning.
     function armIdleWatch() {
@@ -2737,6 +2799,21 @@
         }
       }
       return out;
+    }
+    // Count of a colony's NON-colony buildings currently under construction
+    // (turnsRemaining > 0) within its control area. Used to cap concurrent
+    // construction at two per colony.
+    function colonyBuildingsUnderConstruction(col) {
+      const control = new Set(colonyControlCells(col).map((c) => cellKey(c.x, c.y)));
+      let n = 0;
+      for (const b of gameState.buildings) {
+        if (b.owner !== col.owner) continue;
+        if (b.type === 1) continue;                         // colonies/biodomes don't count
+        if (!(b.turnsRemaining != null && b.turnsRemaining > 0)) continue; // not under construction
+        if (!control.has(cellKey(b.x, b.y))) continue;      // in this colony's control
+        n++;
+      }
+      return n;
     }
     // Whether a building's cell is currently worked by its colony. The biodome
     // (home) cell is always worked.
@@ -3492,6 +3569,37 @@
     // Max extra worked cells for a colony = floor(population / 1000).
     function workCap(colony) { return Math.floor((colony.population || 0) / 1000); }
 
+    // Whether a colony has spare worker capacity AND an unworked control cell —
+    // i.e. population is available to work another tile.
+    function colonyCanWorkMore(colony) {
+      ensureWorked(colony);
+      const homeKey = cellKey(colony.x, colony.y);
+      const extras = colony.worked.filter((k) => k !== homeKey).length;
+      if (extras >= workCap(colony)) return false;            // no spare worker capacity
+      const controlCount = colonyControlCells(colony).length;
+      return colony.worked.length < controlCount;             // an unworked control cell exists
+    }
+
+    // ---- colony "needs attention" indicator --------------------------------
+    // A reusable flag drawn as a flashing red circle on a colony's tile. Today
+    // it flags HUMAN colonies that can work another tile; other conditions can
+    // set it later. Recomputed whenever work/population/buildings change.
+    function colonyNeedsAttention(col) {
+      if (col.owner !== 'human' || col.inTransit) return false;
+      return colonyCanWorkMore(col);
+    }
+    function updateColonyAttention() {
+      let changed = false;
+      for (const b of (gameState.buildings || [])) {
+        if (b.type !== 1) continue;
+        const want = colonyNeedsAttention(b);
+        if (!!b.needsAttention !== want) { b.needsAttention = want; changed = true; }
+      }
+      if (changed && hexMap && typeof hexMap.setBuildings === 'function') {
+        hexMap.setBuildings(gameState.buildings);
+      }
+    }
+
     function placeColony(x, y, owner, name) {
       const players = gameState.players || [];
       const species = (owner === 'human')
@@ -3504,6 +3612,7 @@
       gameState.buildings.push(rec);
       gameState.colonies.push({ x, y, owner, name });
       if (hexMap) hexMap.setBuildings(gameState.buildings);
+      updateColonyAttention();
       if (owner === 'human') updatePlayerPanel();
       pushColoniesToMain();
     }
@@ -3528,6 +3637,7 @@
         if (owner === 'human') { recomputeHumanResourcePanel(); updatePlayerPanel(); }
       }
       if (hexMap) hexMap.setBuildings(gameState.buildings);
+      updateColonyAttention();
     }
     // A building is operational once its construction turns have elapsed and it
     // is not in the process of being removed.
@@ -3583,6 +3693,7 @@
       }
       if (owner === 'human') { recomputeHumanResourcePanel(); updatePlayerPanel(); }
       if (hexMap) hexMap.setBuildings(gameState.buildings);
+      updateColonyAttention();
       return true;
     }
 
@@ -3867,6 +3978,14 @@
       }
       return best;
     }
+    // True if `col` already has a road/monorail construction plan in progress
+    // (a path-based plan sourced at this colony; canal plans are edge-based and
+    // don't count). Used to limit a colony to one road/monorail build at a time.
+    function colonyHasRoadOrMonorailPlan(col) {
+      const tr = ensureTransport();
+      return (tr.plans || []).some((p) =>
+        p && !p.edges && p.path && p.source && p.source.x === col.x && p.source.y === col.y);
+    }
     function beginTransport(kind, x, y) {
       // Source colony = the human colony controlling (or nearest to) the cell,
       // OR — when extending from an existing road/monorail tile outside any
@@ -3874,6 +3993,12 @@
       let col = colonyControlling(x, y, 'human') || colonyControllingByRadius(x, y, 'human');
       if (!col) col = nearestColonyOnTransport(x, y, 'human');
       if (!col) { notify("Build from within a colony's zone of control, or from a connected road/monorail tile."); return; }
+      // One road/monorail construction at a time per colony: block a new plan
+      // while this colony already has a road/monorail plan under construction.
+      if (colonyHasRoadOrMonorailPlan(col)) {
+        notify(`${col.name || 'This colony'} is already building a road/monorail — finish it first.`);
+        return;
+      }
       _transportMode = kind; _transportSource = { x, y };
       _transportOwner = 'human'; _transportSourceCol = col;
       _transportHoverPath = null;
@@ -4274,13 +4399,22 @@
       if (type === 5) {
         if (terrainAt(x, y) !== 1) return { ok: false, reason: "docks must be built on sea" };
         if (!isShallowSea(x, y)) return { ok: false, reason: "docks need sea adjacent to land" };
-        if (!colonyControllingByRadius(x, y, owner)) return { ok: false, reason: "outside your zone of control" };
+        const dcol = colonyControllingByRadius(x, y, owner);
+        if (!dcol) return { ok: false, reason: "outside your zone of control" };
+        if (colonyBuildingsUnderConstruction(dcol) >= 2) {
+          return { ok: false, reason: "2 buildings already under construction" };
+        }
         return { ok: true };
       }
       const terr = terrainAt(x, y);
       if (terr < 2 || terr > 7) return { ok: false, reason: "must be land" };
       if (!(owner === 'human' ? humanControls(x, y) : colonyControlling(x, y, owner))) {
         return { ok: false, reason: "outside your zone of control" };
+      }
+      // At most two buildings may be under construction per colony at once.
+      const col = colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
+      if (col && colonyBuildingsUnderConstruction(col) >= 2) {
+        return { ok: false, reason: "2 buildings already under construction" };
       }
       return { ok: true };
     }
@@ -4835,7 +4969,8 @@
           else wantOrder = [4, 2, 3];                 // Factory, else Farm, else Solar
           for (const type of wantOrder) {
             const spot = controlEmpty[0];
-            // Respect prerequisites and pay from the colony's own storage.
+            // Respect prerequisites, placement limits, and pay from storage.
+            if (!canPlaceTypeAt(type, spot.x, spot.y, pi).ok) continue;
             if (!hasPrerequisitesAt(type, spot.x, spot.y, pi)) continue;
             if (!canAffordBuildingAt(type, spot.x, spot.y, pi)) continue;
             placeBuilding(spot.x, spot.y, pi, type);
@@ -4861,7 +4996,8 @@
             if (cellHasBuilding(c.x, c.y)) continue;
             seaSpot = c; break;
           }
-          if (seaSpot && hasPrerequisitesAt(5, seaSpot.x, seaSpot.y, pi)
+          if (seaSpot && canPlaceTypeAt(5, seaSpot.x, seaSpot.y, pi).ok
+              && hasPrerequisitesAt(5, seaSpot.x, seaSpot.y, pi)
               && canAffordBuildingAt(5, seaSpot.x, seaSpot.y, pi)) {
             placeBuilding(seaSpot.x, seaSpot.y, pi, 5);
             col.worked.push(cellKey(seaSpot.x, seaSpot.y)); // work the new sea tile
@@ -5102,8 +5238,17 @@
       // connected through that network.
       const canBuildTransport = isHumanTurn() && hex &&
         !!(colonyControlling(hex.x, hex.y, 'human') || colonyControllingByRadius(hex.x, hex.y, 'human'));
-      ctxRoad.hidden = !(canBuildTransport || (isHumanTurn() && hex && hasRoad(hex.x, hex.y)));
-      ctxMonorail.hidden = !(canBuildTransport || (isHumanTurn() && hex && hasMonorail(hex.x, hex.y)));
+      // The colony that would pay for a build started here (same resolution as
+      // beginTransport); hide the build items if it already has a road/monorail
+      // plan in progress — only one per colony at a time.
+      let _txCol = null;
+      if (isHumanTurn() && hex) {
+        _txCol = colonyControlling(hex.x, hex.y, 'human') || colonyControllingByRadius(hex.x, hex.y, 'human')
+          || nearestColonyOnTransport(hex.x, hex.y, 'human');
+      }
+      const _txBusy = _txCol ? colonyHasRoadOrMonorailPlan(_txCol) : false;
+      ctxRoad.hidden = _txBusy || !(canBuildTransport || (isHumanTurn() && hex && hasRoad(hex.x, hex.y)));
+      ctxMonorail.hidden = _txBusy || !(canBuildTransport || (isHumanTurn() && hex && hasMonorail(hex.x, hex.y)));
       // (Canal is offered only on a legal canal-start vertex, handled above.)
 
       // Remove Transportation: shown only when the cell carries a road/monorail,
@@ -5557,6 +5702,7 @@
         worked.push(k);
       }
       renderWorkModal();
+      updateColonyAttention();
     }
 
     // Canvas click -> hit-test the nearest hex and toggle it.
@@ -6058,6 +6204,8 @@
       if (gameState.players && gameState.players[0] && gameState.players[0].kind === 'human') {
         gameState.players[0].name = gameState.playerName;
       }
+      // Re-derive CONFIG from the base config for this game's difficulty.
+      applyGameDifficulty();
       _riverCellSet = null;
       _origRiverCells = null;
       _riverBorderEdges = null;
@@ -6238,6 +6386,7 @@
 
       // Sync the View menu with current colonies (may be empty for a new game).
       pushColoniesToMain();
+      updateColonyAttention();
     }
 
     // New Game.

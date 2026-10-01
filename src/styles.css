@@ -402,7 +402,7 @@ body.dark #turnstart-sub { color: #aaa; }
 }
 body.dark #rankings-dialog { background: #2c2c2e; color: #e0e0e0; }
 #rankings-dialog h2 { font-size: 15px; margin-bottom: 10px; }
-#rankings-table-wrap { overflow: auto; }
+#rankings-table-wrap { overflow: auto; flex: 1 1 auto; min-height: 0; }
 #rankings-table { border-collapse: collapse; width: 100%; font-size: 13px; }
 #rankings-table th, #rankings-table td { padding: 6px 10px; text-align: right; white-space: nowrap; }
 #rankings-table th:first-child, #rankings-table td:first-child { text-align: left; }
@@ -433,7 +433,7 @@ body.dark #rankings-table tbody tr:nth-child(even) { background: rgba(255,255,25
 body.dark #colonies-dialog { background: #2c2c2e; color: #e0e0e0; }
 #colonies-dialog h2 { font-size: 15px; margin-bottom: 6px; }
 #colonies-dialog .hint { font-size: 11px; color: #888; margin-bottom: 10px; }
-#colonies-table-wrap { overflow: auto; }
+#colonies-table-wrap { overflow: auto; flex: 1 1 auto; min-height: 0; }
 #colonies-table { border-collapse: collapse; width: 100%; font-size: 12px; }
 #colonies-table th, #colonies-table td { padding: 5px 9px; text-align: right; white-space: nowrap; }
 #colonies-table th:first-child, #colonies-table td:first-child { text-align: left; }

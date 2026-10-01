@@ -354,6 +354,8 @@ class HexMap {
     this.rivers = opts.rivers || [];         // array of paths [{x,y},...]
     this.wrap = !!opts.wrap;                  // horizontal cylindrical wrap
     this.buildings = opts.buildings || [];   // [{ x, y, type, owner, name }]
+    this._attnPulse = 0;                      // 0..1 pulse for the attention circle
+    this._attnRAF = null;                     // active requestAnimationFrame id, if flashing
     this.buildingTypes = opts.buildingTypes || null; // config building-type map
     this.terrainTypes = opts.terrainTypes || null;   // config terrain-type map (name+icon)
     this.bridgeColor = opts.bridgeColor || { h: 2, s: 0.746, l: 0.528 }; // bridge line color
@@ -449,6 +451,7 @@ class HexMap {
   }
 
   destroy() {
+    if (this._attnRAF) { cancelAnimationFrame(this._attnRAF); this._attnRAF = null; }
     this._detachEvents();
   }
 
@@ -577,11 +580,37 @@ class HexMap {
   setBuildings(buildings) {
     this.buildings = buildings || [];
     this._control = null; // invalidate control map
+    this._syncAttention();
     this._draw();
     if (this.controlMode) {
       try { this._renderMapFull(); } catch (e) {}
     }
     this._renderBirdseye();
+  }
+
+  // ---- "needs attention" flashing indicator ------------------------------
+  // Start a lightweight animation loop while ANY building needs attention, so
+  // the red circle pulses; stop it when none do (to avoid idle redraws).
+  _syncAttention() {
+    const any = (this.buildings || []).some((b) => b && b.needsAttention);
+    if (any && !this._attnRAF) {
+      const tick = () => {
+        // Pulse 0..1 at ~1.3 Hz using a sine of wall-clock time.
+        this._attnPulse = 0.5 + 0.5 * Math.sin(Date.now() / 1000 * 2 * Math.PI * 1.3);
+        this._draw();
+        this._renderBirdseye(); // flash on the minimap too
+        if ((this.buildings || []).some((b) => b && b.needsAttention)) {
+          this._attnRAF = requestAnimationFrame(tick);
+        } else {
+          this._attnRAF = null;
+          this._draw(); this._renderBirdseye(); // final redraw with the circles gone
+        }
+      };
+      this._attnRAF = requestAnimationFrame(tick);
+    } else if (!any && this._attnRAF) {
+      cancelAnimationFrame(this._attnRAF);
+      this._attnRAF = null;
+    }
   }
 
   // Public: toggle the Area-of-Control view.
@@ -1304,6 +1333,23 @@ class HexMap {
           ctx.textBaseline = 'alphabetic';
           ctx.font = `bold ${fontPx}px ${this.typeface}`;
         }
+        // "Needs attention" indicator: a flashing red filled circle centered on
+        // the tile. Alpha pulses via _attnPulse (0..1) driven by the animation
+        // loop started in setBuildings when any building needs attention.
+        if (b.needsAttention) {
+          const a = 0.25 + 0.6 * this._attnPulse; // pulse between ~0.25 and ~0.85
+          const rr = size * 0.28;
+          ctx.save();
+          ctx.globalAlpha = a;
+          ctx.fillStyle = '#ff2a2a';
+          ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+          ctx.lineWidth = Math.max(1, rr / 8);
+          ctx.beginPath();
+          ctx.arc(cx, cy, rr, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
       }
     }
     ctx.restore();
@@ -1351,6 +1397,28 @@ class HexMap {
     } else {
       const fx = vp.hOrigin.x / this.worldSize.x;
       bctx.strokeRect(dx + fx * dw, ry, fw * dw, rh);
+    }
+
+    // "Needs attention" markers: a pulsing red filled circle on the minimap at
+    // each flagged colony's position (same pulse as the main-map indicator).
+    const attn = (this.buildings || []).filter((b) => b && b.needsAttention);
+    if (attn.length) {
+      const a = 0.3 + 0.6 * (this._attnPulse || 0);
+      const rr = Math.max(2, Math.min(dw, dh) * 0.02);
+      bctx.save();
+      bctx.globalAlpha = a;
+      bctx.fillStyle = '#ff2a2a';
+      bctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      bctx.lineWidth = Math.max(0.5, rr / 4);
+      for (const b of attn) {
+        const px = dx + ((b.x + 0.5) / this.worldSize.x) * dw;
+        const py = dy + ((b.y + 0.5) / this.worldSize.y) * dh;
+        bctx.beginPath();
+        bctx.arc(px, py, rr, 0, 2 * Math.PI);
+        bctx.fill();
+        bctx.stroke();
+      }
+      bctx.restore();
     }
   }
 
@@ -1645,7 +1713,14 @@ class HexMap {
 
   _onBirdseyeClick(e) {
     if (!this._birdseyeRect) return;
-    const c = this._relCoords(this.birdseye, e);
+    // The birdseye canvas is displayed scaled (CSS width 100%), so convert the
+    // click from CSS pixels to the canvas's backing-store pixels — _birdseyeRect
+    // (dx/dy/dw/dh) is in backing-store space. Using raw CSS px made fx/fy fall
+    // outside [0,1] and the click was ignored.
+    const rect = this.birdseye.getBoundingClientRect();
+    const sx = rect.width ? (this.birdseye.width / rect.width) : 1;
+    const sy = rect.height ? (this.birdseye.height / rect.height) : 1;
+    const c = { x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy };
     const { dx, dy, dw, dh } = this._birdseyeRect;
     const fx = (c.x - dx) / dw;
     const fy = (c.y - dy) / dh;

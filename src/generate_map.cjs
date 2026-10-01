@@ -915,6 +915,10 @@ function generateMap(opts = {}) {
   const minRiverLength = Math.max(2, parseInt(o.minRiverLength, 10) || DEFAULTS.minRiverLength);
   const largestAreaWithoutRiver = clamp01(numOr(o.largestAreaWithoutRiver, DEFAULTS.largestAreaWithoutRiver));
   const aiOpponents = Math.max(2, Math.min(40, parseInt(o.aiOpponents, 10) || DEFAULTS.aiOpponents));
+  // Difficulty factor: 1.0 (easy) .. 0.5 (hard), one decimal. Scales game
+  // economy/costs when the renderer applies it to the config.
+  let difficulty = numOr(o.difficulty, 1.0);
+  difficulty = Math.max(0.5, Math.min(1.0, Math.round(difficulty * 10) / 10));
 
   const rng = makeRng(seed);
 
@@ -976,7 +980,7 @@ function generateMap(opts = {}) {
       width, height, algo, seed, island, water: waterFraction, octaves,
       roughness, erode, talus, biome, polar,
       rivers: doRivers, springElevation, maxRivers, cellsPerRiver, minRiverLength,
-      largestAreaWithoutRiver, wrap, seaLevel, aiOpponents
+      largestAreaWithoutRiver, wrap, seaLevel, aiOpponents, difficulty
     }
   };
 }

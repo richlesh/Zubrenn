@@ -181,6 +181,13 @@
     <div class="hint">Default ≈ floor(width × height × (1 − water) ÷ 900). Updates when width, height, or water change.</div>
   </div>
 
+  <div class="section-title">Difficulty</div>
+  <div class="field" id="difficulty-field">
+    <div class="labelrow"><label for="difficulty">Difficulty (1.0 easy … 0.5 hard)</label><span class="rangeval" id="difficulty-val">1.0</span></div>
+    <input id="difficulty" type="range" min="0.5" max="1.0" step="0.1" value="1.0">
+    <div class="hint">Lower = harder: decreases bonuses and increases costs.</div>
+  </div>
+
     </div><!-- /settings-col (right) -->
   </div><!-- /settings-columns -->
 
@@ -307,6 +314,13 @@
 
     aiOpp.addEventListener("input", () => { aiUserAdjusted = true; syncAiLabel(); });
 
+    // Difficulty slider: one-decimal label.
+    const difficulty = document.getElementById("difficulty");
+    const difficultyVal = document.getElementById("difficulty-val");
+    const syncDifficulty = () => { difficultyVal.textContent = parseFloat(difficulty.value).toFixed(1); };
+    difficulty.addEventListener("input", syncDifficulty);
+    syncDifficulty();
+
     // Recompute the default when width, height, or water ratio change.
     ["width", "height"].forEach((id) => {
       const el = document.getElementById(id);
@@ -338,7 +352,8 @@
         cellsPerRiver: parseInt(document.getElementById("cellsPerRiver").value, 10),
         minRiverLength: parseInt(document.getElementById("minRiverLength").value, 10),
         largestAreaWithoutRiver: parseFloat(document.getElementById("largestAreaWithoutRiver").value),
-        aiOpponents: parseInt(document.getElementById("aiOpponents").value, 10)
+        aiOpponents: parseInt(document.getElementById("aiOpponents").value, 10),
+        difficulty: parseFloat(document.getElementById("difficulty").value)
       };
     }
 
