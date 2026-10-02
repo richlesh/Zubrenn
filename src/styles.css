@@ -216,7 +216,7 @@ body.dark .work-cell { background: #3a3a3c; border-color: #555; }
 /* Right-click context menu. */
 #context-menu {
   position: fixed;
-  z-index: 10001;
+  z-index: 10006;
   min-width: 150px;
   background: #fff;
   color: #1e1e1e;
@@ -284,6 +284,8 @@ body.dark #viewloc-dialog { background: #2c2c2e; color: #e0e0e0; }
 .viewloc-row > div { flex: 1; }
 .viewloc-row label { display: block; font-size: 13px; color: #666; margin-bottom: 4px; }
 body.dark .viewloc-row label { color: #aaa; }
+.viewloc-hint { font-size: 11px; color: #999; margin-top: 3px; }
+body.dark .viewloc-hint { color: #777; }
 .viewloc-row input {
   width: 100%; padding: 8px 10px; font-size: 14px; border-radius: 8px;
   border: 1px solid #ccc; background: #fff; color: #1e1e1e; outline: none;
@@ -519,3 +521,50 @@ body.dark #bonusdebug-table td.zero { color: #777; }
 #bonusdebug-table tfoot td { border-top: 2px solid #bbb; font-weight: 600; }
 body.dark #bonusdebug-table tfoot td { border-top-color: #555; }
 #bonusdebug-ok { background: #0a84ff; color: #fff; }
+
+/* Reusable confirmation modal (Continue / Cancel). Above the work dialog. */
+#confirm-overlay {
+  position: fixed; z-index: 10010; inset: 0;
+  background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+}
+#confirm-overlay[hidden] { display: none; }
+#confirm-dialog {
+  background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 20px 22px;
+  width: 360px; max-width: 92vw; box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+  font: 14px -apple-system, sans-serif;
+}
+body.dark #confirm-dialog { background: #2c2c2e; color: #e0e0e0; }
+#confirm-dialog h2 { font-size: 16px; margin-bottom: 10px; }
+#confirm-text { font-size: 14px; line-height: 1.5; color: #333; }
+body.dark #confirm-text { color: #ccc; }
+#confirm-cancel { background: #ddd; color: #1e1e1e; }
+body.dark #confirm-cancel { background: #3a3a3c; color: #e0e0e0; }
+#confirm-ok { background: #0a84ff; color: #fff; }
+
+/* View Federation dialog. */
+#federation-overlay {
+  position: fixed; z-index: 10004; inset: 0;
+  background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+}
+#federation-overlay[hidden] { display: none; }
+#federation-dialog {
+  background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
+  width: 420px; max-width: 92vw; max-height: 90vh; overflow: auto;
+}
+body.dark #federation-dialog { background: #2c2c2e; color: #e0e0e0; }
+#federation-dialog h2 { font-size: 15px; margin-bottom: 6px; }
+#federation-dialog .hint { font-size: 11px; color: #888; margin-bottom: 10px; }
+#federation-table, #federation-proj { border-collapse: collapse; width: 100%; font-size: 13px; margin-bottom: 10px; }
+#federation-table td, #federation-proj td, #federation-proj th { padding: 4px 8px; text-align: right; white-space: nowrap; }
+#federation-table td:first-child, #federation-proj td:first-child, #federation-proj th:first-child { text-align: left; }
+#federation-proj thead th { border-bottom: 1px solid #bbb; color: #888; font-weight: 600; }
+body.dark #federation-proj thead th { border-bottom-color: #555; }
+#federation-proj tr.fed-net td { border-top: 1px solid #bbb; font-weight: 600; }
+body.dark #federation-proj tr.fed-net td { border-top-color: #555; }
+.fed-field { margin: 10px 0; }
+.fed-field label { display: block; font-size: 12px; color: #666; margin-bottom: 6px; }
+body.dark .fed-field label { color: #aaa; }
+.fed-field input[type="range"] { width: 100%; }
+.fed-warn { font-size: 12px; color: #d23b3b; margin: 6px 0; }
+#federation-close { background: #0a84ff; color: #fff; }

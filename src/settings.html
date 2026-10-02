@@ -59,6 +59,11 @@
     </select>
   </div>
 
+  <div class="field">
+    <label for="fontSize">Font size: <span id="fontSizeValue">Small</span></label>
+    <input id="fontSize" type="range" min="0" max="2" step="1" value="0">
+  </div>
+
   <div class="section-title">Gameplay</div>
   <div class="field" style="flex-direction: row; align-items: center; gap: 8px;">
     <input id="autoTurnEnd" type="checkbox" style="width:auto;">
@@ -150,6 +155,25 @@
     const musicVolumeIn = document.getElementById("musicVolume");
     const musicVolumeValue = document.getElementById("musicVolumeValue");
     const aiConfigDiv = document.getElementById("ai-config");
+    const fontSizeIn = document.getElementById("fontSize");
+    const fontSizeValue = document.getElementById("fontSizeValue");
+
+    // Font-size setting: slider index 0/1/2 <-> name small/medium/large <-> scale.
+    const FONT_SIZES = ["small", "medium", "large"];
+    const FONT_LABELS = { small: "Small", medium: "Medium", large: "Large" };
+    const FONT_SCALES = { small: 1, medium: 1.25, large: 1.5 };
+    function fontNameFromIndex(i) { return FONT_SIZES[Math.max(0, Math.min(2, i | 0))] || "small"; }
+    function fontIndexFromName(name) { const i = FONT_SIZES.indexOf(name); return i < 0 ? 0 : i; }
+    function applyFontPreview(name) {
+      // Live-preview the chosen size in this dialog by zooming its body.
+      document.body.style.zoom = String(FONT_SCALES[name] || 1);
+    }
+    function syncFontSizeUI() {
+      const name = fontNameFromIndex(parseInt(fontSizeIn.value, 10));
+      fontSizeValue.textContent = FONT_LABELS[name];
+      applyFontPreview(name);
+    }
+    fontSizeIn.addEventListener("input", syncFontSizeUI);
 
     // Enable/disable the vendor/model/API config based on the checkbox.
     function syncBuiltinAI() {
@@ -261,6 +285,11 @@
         musicVolumeIn.value = String(vol);
         musicVolumeValue.textContent = String(vol);
       }
+      {
+        const name = FONT_SIZES.includes(current.fontSize) ? current.fontSize : "small";
+        fontSizeIn.value = String(fontIndexFromName(name));
+        syncFontSizeUI();
+      }
 
       // Vendor dropdown (sorted by label).
       for (const [key, v] of Object.entries(vendors).sort((a, b) => a[1].label.localeCompare(b[1].label))) {
@@ -334,6 +363,7 @@
         autoTurnEnd: autoTurnEndChk.checked,
         musicEnabled: musicEnabledChk.checked,
         musicVolume: Math.max(0, Math.min(100, parseInt(musicVolumeIn.value, 10) || 0)),
+        fontSize: fontNameFromIndex(parseInt(fontSizeIn.value, 10)),
       });
     });
 

@@ -78,6 +78,7 @@ app.setAboutPanelOptions({
 });
 
 let mainWin, settingsWin;
+let _nagWin = null; // the modal donate/nag splash, when one is open
 
 // --- Save-on-close prompt -------------------------------------------------
 // When the main window (or the app) is closing, ask whether to save the game
@@ -291,6 +292,7 @@ function buildViewMenu() {
       { type: "separator" },
       { label: "View Rankings…", accelerator: "CmdOrCtrl+R", click: () => sendToMain("view-rankings") },
       { label: "View Colonies…", accelerator: "CmdOrCtrl+Shift+O", enabled: ours.length > 0, click: () => sendToMain("view-colonies") },
+      { label: "View Federation…", accelerator: "CmdOrCtrl+Shift+F", enabled: ours.length >= 2, click: () => sendToMain("view-federation") },
       { type: "separator" },
       { label: "Toggle Terrain Textures", accelerator: "CmdOrCtrl+T", click: () => sendToMain("view-toggle-terrain") },
       { label: "Toggle Area of Control", accelerator: "CmdOrCtrl+Shift+C", click: () => sendToMain("view-toggle-control") },
@@ -521,6 +523,18 @@ ipcMain.handle("settings-cancel", () => settingsWin?.close());
 ipcMain.handle("settings-close", () => settingsWin?.close());
 
 ipcMain.handle("open-external", (_e, url) => openExternal(url));
+
+// Renderer asks (e.g. at the start of every 50th year) to show the donate/nag
+// splash. We only actually show it when there is NO valid license, and never
+// stack more than one at a time. The license check stays authoritative here.
+ipcMain.handle("maybe-show-nag", () => {
+  const { licenseKey, userName } = load();
+  if (isValidLicense(licenseKey, userName)) return false; // licensed: never nag
+  if (_nagWin && !_nagWin.isDestroyed()) return false;    // one at a time
+  if (!mainWin || mainWin.isDestroyed()) return false;    // nothing to parent to
+  showSplash(true); // nag-only: modal child of the main window
+  return true;
+});
 
 // --- New Game dialog + terrain generation --------------------------------
 let newGameWin;
@@ -838,6 +852,10 @@ function showSplash(nagOnly) {
     modal: !!nagOnly,
     webPreferences: { nodeIntegration: true, contextIsolation: false }
   });
+  if (nagOnly) {
+    _nagWin = splash;
+    splash.on("closed", () => { if (_nagWin === splash) _nagWin = null; });
+  }
   splash.loadFile(path.join(__dirname, "splash.html"));
   splash.webContents.once("did-finish-load", () => {
     splash.webContents.send("icon-path", APP_ICON_PATH);

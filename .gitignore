@@ -5,3 +5,4 @@ dist/
 generate_license_key.py
 license.js
 .kiro/
+prompts/

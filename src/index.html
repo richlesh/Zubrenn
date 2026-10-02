@@ -93,8 +93,16 @@
     <div id="viewloc-dialog">
       <h2>View Location</h2>
       <div class="viewloc-row">
-        <div><label for="viewloc-x">X</label><input id="viewloc-x" type="number" min="0" /></div>
-        <div><label for="viewloc-y">Y</label><input id="viewloc-y" type="number" min="0" /></div>
+        <div>
+          <label for="viewloc-lat">Latitude (°, + N / − S)</label>
+          <input id="viewloc-lat" type="number" min="-70" max="70" step="0.1" />
+          <div class="viewloc-hint">-70 to 70</div>
+        </div>
+        <div>
+          <label for="viewloc-lon">Longitude (°, + E / − W)</label>
+          <input id="viewloc-lon" type="number" min="-180" max="180" step="0.1" />
+          <div class="viewloc-hint">-180 to 180</div>
+        </div>
       </div>
       <div class="name-row">
         <button id="viewloc-cancel">Cancel</button>
@@ -106,6 +114,18 @@
   <!-- Reusable notification toast/dialog (auto-dismiss 5s / click / Enter). -->
   <div id="notify-overlay" hidden>
     <div id="notify-dialog"><span id="notify-text"></span></div>
+  </div>
+
+  <!-- Reusable confirmation modal (Continue / Cancel). -->
+  <div id="confirm-overlay" hidden>
+    <div id="confirm-dialog">
+      <h2 id="confirm-title">Please confirm</h2>
+      <div id="confirm-text"></div>
+      <div class="name-row">
+        <button id="confirm-cancel">Cancel</button>
+        <button id="confirm-ok">Continue</button>
+      </div>
+    </div>
   </div>
 
   <!-- Debug: terrain-type cell counts for the freshly generated map. -->
@@ -196,6 +216,40 @@
     </div>
   </div>
 
+  <!-- View Federation dialog: treasury, colony count, tax-rate slider, and the
+       taxes/maintenance projected at end of turn. -->
+  <div id="federation-overlay" hidden>
+    <div id="federation-dialog">
+      <h2>Federation</h2>
+      <div class="hint">Your Federation taxes your colonies and maintains the road, monorail, and canal network.</div>
+      <table id="federation-table">
+        <tbody>
+          <tr><td>Colonies</td><td id="fed-colonies">0</td></tr>
+          <tr><td>Total population</td><td id="fed-population">0</td></tr>
+          <tr><td>Treasury</td><td id="fed-treasury">0</td></tr>
+        </tbody>
+      </table>
+      <div class="fed-field">
+        <label for="fed-taxrate">Tax rate: <span id="fed-taxrate-val">5</span> credits / 1000 citizens (and part thereof)</label>
+      <input id="fed-taxrate" type="range" min="0" max="20" step="0.5" value="5">
+        <div class="hint">Taxation lowers morale: <span id="fed-happen">−5</span> happiness per year to every colony.</div>
+      </div>
+      <table id="federation-proj">
+        <thead><tr><th>End of turn</th><th>Credits</th></tr></thead>
+        <tbody>
+          <tr><td>Taxes collected</td><td id="fed-taxes">0</td></tr>
+          <tr><td>Road maintenance (<span id="fed-roadn">0</span> seg)</td><td id="fed-roadcost">0</td></tr>
+          <tr><td>Monorail maintenance (<span id="fed-mononn">0</span> seg)</td><td id="fed-monocost">0</td></tr>
+          <tr><td>Canal maintenance (<span id="fed-canaln">0</span> sides)</td><td id="fed-canalcost">0</td></tr>
+          <tr><td>Total maintenance</td><td id="fed-maint">0</td></tr>
+          <tr class="fed-net"><td>Net to treasury</td><td id="fed-net">0</td></tr>
+          <tr><td>Projected treasury</td><td id="fed-proj-treasury">0</td></tr>
+        </tbody>
+      </table>
+      <div id="fed-warn" class="fed-warn" hidden></div>
+      <div class="work-row"><button id="federation-close">Done</button></div>
+    </div>
+  </div>
   <script>
     const { ipcRenderer } = require("electron");
 
@@ -315,9 +369,47 @@
     window.addEventListener("pointerdown", _bgmGestureStart);
     window.addEventListener("keydown", _bgmGestureStart);
 
+    // Apply the chosen font-size setting. "small" is the app's base size (1x);
+    // "medium" is 1.25x and "large" 1.5x. We deliberately do NOT zoom the whole
+    // body: that would scale the map layout past the window (hiding the right
+    // panel) and break hover-tooltip positioning (tooltips are placed with raw
+    // clientX/clientY). Instead we scale only the text-bearing UI regions that
+    // are independent of the map geometry, and widen the fixed right panel so it
+    // still fits. The map canvas keeps its natural scale.
+    function applyFontSize(settings) {
+      const scales = { small: 1, medium: 1.25, large: 1.5 };
+      const name = (settings && settings.fontSize) || "small";
+      const scale = scales[name] || 1;
+
+      const right = document.getElementById("right_panel");
+      // CSS zoom scales both the content and the space the element occupies, so
+      // the right panel grows to ~275px * scale on screen and the map (flex:1)
+      // shrinks to fill the rest — the whole #game row still fits the window.
+      if (right) right.style.zoom = String(scale);
+      const status = document.getElementById("status");
+      if (status) status.style.zoom = String(scale);
+
+      // Cursor-anchored tooltips: scale with transform (not zoom). They are
+      // positioned at the cursor via left/top; zoom would also scale that offset,
+      // pushing the tooltip away from the cell. transform-origin top-left grows
+      // them in place from the cursor.
+      ["tooltip", "build-tooltip"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.style.transformOrigin = "top left";
+        el.style.transform = scale === 1 ? "" : ("scale(" + scale + ")");
+      });
+      // Scale the centered dialog boxes themselves (not the full-screen overlay
+      // backdrops, whose inset:0 geometry would be distorted by zoom). The
+      // backdrop stays full-window; only its dialog grows.
+      document.querySelectorAll('[id$="-dialog"]').forEach((el) => {
+        el.style.zoom = String(scale);
+      });
+    }
     function applyTheme(settings) {
       document.body.classList.toggle("dark", (settings.theme || "dark") === "dark");
       _autoTurnEnd = settings.autoTurnEnd !== false; // default on
+      applyFontSize(settings);
       applyMusic(settings);
     }
     ipcRenderer.invoke("settings-get").then(applyTheme).catch(() => {});
@@ -533,31 +625,36 @@
     notifyDialog.addEventListener("click", dismissNotify);
     window.notify = notify; // expose for reuse
 
-    // Render a notification message, turning any "x,y" coordinate into an
-    // underlined hyperlink that centers the map on that cell when clicked.
+    // Render a notification message, turning any latitude/longitude reference
+    // (e.g. "52.3° N, 88.5° W", as produced by formatLatLon) into an underlined
+    // hyperlink that centers the map on that location when clicked.
     function renderNotifyMessage(message) {
       const esc = (s) => s.replace(/[&<>"']/g, (c) => (
         { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
       ));
-      // Match integer coordinate pairs like "40,20" or "40, 20".
-      const re = /\b(\d{1,4})\s*,\s*(\d{1,4})\b/g;
+      // Match a lat/lon pair like "52.3° N, 88.5° W" (degree sign optional spaces).
+      const re = /(\d+(?:\.\d+)?)\s*\u00b0\s*([NS])\s*,\s*(\d+(?:\.\d+)?)\s*\u00b0\s*([EW])/g;
       let html = "", last = 0, m;
       while ((m = re.exec(message)) !== null) {
         html += esc(message.slice(last, m.index));
-        const x = m[1], y = m[2];
-        html += `<a href="#" class="coord-link" data-x="${x}" data-y="${y}">${esc(m[0])}</a>`;
+        const lat = (m[2] === "S" ? -1 : 1) * parseFloat(m[1]);
+        const lon = (m[4] === "W" ? -1 : 1) * parseFloat(m[3]);
+        html += `<a href="#" class="coord-link" data-lat="${lat}" data-lon="${lon}">${esc(m[0])}</a>`;
         last = m.index + m[0].length;
       }
       html += esc(message.slice(last));
       notifyText.innerHTML = html;
-      // Wire each coordinate link to center the map (without dismissing).
+      // Wire each location link to center the map (without dismissing).
       notifyText.querySelectorAll("a.coord-link").forEach((a) => {
         a.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation(); // don't let the dialog's click dismiss it
-          const x = parseInt(a.getAttribute("data-x"), 10);
-          const y = parseInt(a.getAttribute("data-y"), 10);
-          if (hexMap && Number.isFinite(x) && Number.isFinite(y)) hexMap.centerOnCell(x, y);
+          const lat = parseFloat(a.getAttribute("data-lat"));
+          const lon = parseFloat(a.getAttribute("data-lon"));
+          if (hexMap && Number.isFinite(lat) && Number.isFinite(lon)) {
+            const { x, y } = latLonToCell(lat, lon);
+            hexMap.centerOnCell(x, y);
+          }
         });
       });
     }
@@ -1469,6 +1566,13 @@
       }
       return total;
     }
+    // The current Federation tax rate for a colony owner ('human' or an AI id).
+    // Used as the per-colony happiness penalty (−1 happiness per rate unit).
+    function federationTaxRateOf(owner) {
+      const player = (gameState.players || []).find((p) => p && (p.id === owner || (owner === 'human' && p.kind === 'human')));
+      if (!player) return 0;
+      return ensureFederation(player).taxRate || 0;
+    }
     // Estimated completion time (turns) for a plan: sum of per-segment turns
     // (does not model resource-shortfall pauses).
     function planEtaTurns(kind, path) {
@@ -1900,6 +2004,8 @@
       const key = (x, y) => y * W + wxf(x);
       const allowShallow = owner != null && ownerHasDock(owner);
       const startK = key(sx, sy);
+      // Never route through the area of control of a foreign colony.
+      const foreign = foreignControlCellSet(owner);
       const dist = new Map(), prev = new Map(), done = new Set();
       dist.set(startK, 0);
       const pq = [{ k: startK, x: wxf(sx), y: sy, d: 0 }];
@@ -1915,6 +2021,7 @@
           const nx = wxf(n.x), ny = n.y;
           if (ny < 0 || ny >= H) continue;
           if (!isPassableCell(nx, ny, allowShallow)) continue;
+          if (foreign.has(key(nx, ny))) continue; // skip foreign-controlled cells
           const nk = key(nx, ny);
           if (done.has(nk)) continue;
           const nd = cur.d + enterCost(nx, ny);
@@ -1940,6 +2047,9 @@
       // A Dock owned by `owner` opens shallow-sea tiles to travel.
       const allowShallow = owner != null && ownerHasDock(owner);
       if (!isPassableCell(tx, ty, allowShallow)) return null;
+      // Never route through (or into) the area of control of a foreign colony.
+      const foreign = foreignControlCellSet(owner);
+      if (foreign.has(key(tx, ty))) return null;
       const startK = key(sx, sy), targetK = key(tx, ty);
       const dist = new Map(), prev = new Map(), done = new Set();
       dist.set(startK, 0);
@@ -1957,6 +2067,7 @@
           const nx = wxf(n.x), ny = n.y;
           if (ny < 0 || ny >= H) continue;
           if (!isPassableCell(nx, ny, allowShallow)) continue;
+          if (foreign.has(key(nx, ny))) continue; // skip foreign-controlled cells
           const nk = key(nx, ny);
           if (done.has(nk)) continue;
           const nd = cur.d + enterCost(nx, ny);
@@ -2217,6 +2328,46 @@
     // ---- status / turn -----------------------------------------------------
     function currentYear() { return (CONFIG.startingYear || 2500) + (gameState.turn || 0); }
 
+    // Latitude/longitude of a cell center, mirroring draw_map.cjs _cellLatLon /
+    // _formatLatLon. The map spans +/-70 degrees latitude and -180..+180 longitude.
+    function cellLatLon(x, y) {
+      const t = gameState.map && gameState.map.terrain;
+      const w = (t && t[0] && t[0].length) || 1;
+      const h = (t && t.length) || 1;
+      const parity = ((x % 2) + 2) % 2;
+      const yc = y + parity / 2;
+      const latSpan = h > 1 ? (yc / (h - 1)) : 0;
+      const lat = 70 - latSpan * 140;
+      const lon = -180 + ((x + 0.5) / w) * 360;
+      return { lat, lon };
+    }
+    function formatLatLon(lat, lon) {
+      const ns = lat >= 0 ? 'N' : 'S';
+      const ew = lon >= 0 ? 'E' : 'W';
+      return `${Math.abs(lat).toFixed(1)}\u00b0 ${ns}, ${Math.abs(lon).toFixed(1)}\u00b0 ${ew}`;
+    }
+    function cellLatLonLabel(x, y) { const { lat, lon } = cellLatLon(x, y); return formatLatLon(lat, lon); }
+
+    // Inverse of cellLatLon: nearest cell (x, y) for a given latitude/longitude.
+    // Longitude +E/−W maps across columns; latitude +N (top) /−S (bottom) maps
+    // across rows. Clamped to the map; x wraps on cylindrical maps.
+    function latLonToCell(lat, lon) {
+      const t = gameState.map && gameState.map.terrain;
+      const w = (t && t[0] && t[0].length) || 1;
+      const h = (t && t.length) || 1;
+      const wrap = !!(gameState.map && gameState.map.meta && gameState.map.meta.wrap);
+      // Column from longitude.
+      let xf = ((lon + 180) / 360) * w - 0.5;
+      let x = Math.round(xf);
+      if (wrap) x = ((x % w) + w) % w; else x = Math.max(0, Math.min(w - 1, x));
+      // Row from latitude, accounting for the odd-column half-cell offset.
+      const parity = ((x % 2) + 2) % 2;
+      const yc = (h > 1) ? ((70 - lat) / 140) * (h - 1) : 0;
+      let y = Math.round(yc - parity / 2);
+      y = Math.max(0, Math.min(h - 1, y));
+      return { x, y };
+    }
+
     // Cell property totals for the map hover tooltip, in the order
     // E, F, M, W, H. Each value is the base+bonus TOTAL (not the split
     // "base+bonus" form); any property that totals 0 is omitted.
@@ -2245,8 +2396,8 @@
       if (p) s += `  |  ${p.kind === 'human' ? 'Your turn' : p.name + "'s turn"}`;
       if (hoverInfo) {
         if (hoverInfo.fogged) {
-          // Unexplored (fogged) cell: reveal nothing but the coordinates.
-          s += `  |  Unexplored  (${hoverInfo.x},${hoverInfo.y})`;
+          // Unexplored (fogged) cell: reveal nothing but the location.
+          s += `  |  Unexplored  ${cellLatLonLabel(hoverInfo.x, hoverInfo.y)}`;
           el.textContent = s;
           return;
         }
@@ -2259,7 +2410,7 @@
             : (players[b.owner] && players[b.owner].name) || 'Alien';
           s += `  |  ${b.name} (${owner}) — ${improvementName(b.type)}`;
         }
-        s += `  |  ${hoverInfo.name}  ${hoverInfo.elevText} ASL  (${hoverInfo.x},${hoverInfo.y})`;
+        s += `  |  ${hoverInfo.name}  ${hoverInfo.elevText} ASL  ${cellLatLonLabel(hoverInfo.x, hoverInfo.y)}`;
       }
       el.textContent = s;
     }
@@ -2305,7 +2456,7 @@
             const _lostArrivalBonus = destroyPristineBonusAt(b.x, b.y);
             if (_lostArrivalBonus && b.owner === 'human') notify(`${_lostArrivalBonus} was destroyed by founding a colony on its tile.`);
             if (b.owner === 'human') {
-              notify(`${b.name || 'A new colony'} has been established at ${b.x},${b.y}.`);
+              notify(`${b.name || 'A new colony'} has been established at ${cellLatLonLabel(b.x, b.y)}.`);
               // Fog of war: reveal a circle around the newly arrived colony.
               revealAroundColony(b.x, b.y);
               // Prompt the player to assign this colony's first worker.
@@ -2377,7 +2528,11 @@
         // shortfall lowers it, plus any building happiness bonuses. Stored
         // happiness accumulates and is clamped to +/- the colony's happiness
         // storage.
-        const happinessRate = netFood + happinessBonusInControl(col, control);
+        // Federation taxation lowers morale: −1 happiness per tax-rate unit
+        // (e.g. a 5-credit/1000 tax rate subtracts 5 from each colony's happiness
+        // rate). Applies to every colony in that owner's Federation.
+        const taxHappinessPenalty = federationTaxRateOf(col.owner);
+        const happinessRate = netFood + happinessBonusInControl(col, control) - taxHappinessPenalty;
         const happinessCap = colonyHappinessStorage(col);
         col.storedHappiness = Math.max(-happinessCap, Math.min(happinessCap,
           (col.storedHappiness || 0) + happinessRate));
@@ -2648,6 +2803,24 @@
       if (!players.length) return;
       _turnStepId++;
       stopIdleWatch();        // the human's turn is over; drop any idle warning
+      // Federation economy for the player whose turn is ENDING: collect taxes
+      // and pay road/monorail/canal maintenance (shortfall -> segment decay).
+      {
+        const ending = players[gameState.currentPlayer];
+        if (ending && ending.placed) {
+          const owner = ending.kind === 'human' ? 'human' : ending.id;
+          const sum = processFederationTurn(owner);
+          if (sum && ending.kind === 'human') {
+            if (sum.destroyedRoads || sum.destroyedMono) {
+              const parts = [];
+              if (sum.destroyedRoads) parts.push(`${sum.destroyedRoads} road segment${sum.destroyedRoads === 1 ? '' : 's'}`);
+              if (sum.destroyedMono) parts.push(`${sum.destroyedMono} monorail segment${sum.destroyedMono === 1 ? '' : 's'}`);
+              notify(`Federation treasury empty — ${parts.join(' and ')} fell into disrepair.`);
+            }
+            if (typeof updatePlayerPanel === 'function') updatePlayerPanel();
+          }
+        }
+      }
       gameState.currentPlayer++;
       let roundCompleted = false;
       if (gameState.currentPlayer >= players.length) {
@@ -2833,6 +3006,11 @@
       _skipAutoEndThisTurn = false;
       _clearTurnStartTimers();
       stopIdleWatch();
+      // Donate/nag splash: at the start of every 50th year, ask the main process
+      // to show the nag screen. Main shows it only if no valid license is set.
+      if (currentYear() % 50 === 0) {
+        ipcRenderer.invoke("maybe-show-nag").catch(() => {});
+      }
       turnStartText.textContent = `Year ${currentYear()} begins`;
       turnStartSub.textContent = "";
       turnStartHandle.hidden = true;
@@ -3571,6 +3749,21 @@
       }
       return sum;
     }
+    // Like happinessBonusInControl, but splits building happiness contributions
+    // into positive and negative sums (neg is a negative number). Lets the colony
+    // panel show separate Happiness (positive factors) and Unhappiness lines.
+    function happinessFactorsInControl(col, control) {
+      let pos = 0, neg = 0;
+      for (const b of gameState.buildings) {
+        if (b.type === 1) continue;
+        if (b.owner !== col.owner) continue;
+        if (!control.has(cellKey(b.x, b.y))) continue;
+        if (!isOperational(b)) continue;
+        const h = bldgNet(b.type).happiness || 0;
+        if (h > 0) pos += h; else if (h < 0) neg += h;
+      }
+      return { pos, neg };
+    }
 
     // Compute a colony's CURRENT per-year budget/happiness/growth for the stats
     // panel. Mirrors the math in growColonies but does not mutate state.
@@ -3588,7 +3781,17 @@
       const consumption = b.consumption;
       const netFood = b.net.food;
 
-      const happinessRate = netFood + happinessBonusInControl(col, control);
+      // Decompose the happiness rate into positive factors (Happiness) and
+      // negative factors (Unhappiness). Factors: food balance (surplus positive /
+      // shortfall negative), building happiness bonuses (e.g. Barracks/Bank +,
+      // Factory −), and the Federation tax penalty (always negative, −taxRate).
+      const bFactors = happinessFactorsInControl(col, control);
+      const taxPenalty = federationTaxRateOf(col.owner); // >= 0
+      let happinessPos = bFactors.pos;
+      let happinessNeg = bFactors.neg; // negative or 0
+      if (netFood >= 0) happinessPos += netFood; else happinessNeg += netFood;
+      if (taxPenalty > 0) happinessNeg -= taxPenalty;
+      const happinessRate = happinessPos + happinessNeg;
       const happinessCap = colonyHappinessStorage(col);
       // Show the stored total as it WILL be after clamping next turn.
       const storedHappiness = Math.max(-happinessCap, Math.min(happinessCap, col.storedHappiness || 0));
@@ -3615,6 +3818,7 @@
         food: b.net.food, material: b.net.material, energy: b.net.energy, wealthRate: b.net.wealth,
         consumption, netFood,
         happinessRate, storedHappiness,
+        happinessPos, happinessNeg,
         stored, caps, over,
         happinessCap,
       };
@@ -3657,6 +3861,10 @@
     // Hex geometry (unit cell spacing), mirroring getHexCenter in draw_map.cjs:
     // flat-topped, odd-q layout where odd columns sit half a row lower.
     const FOG_HEX_SCALE = { x: 1.15470053837925, y: 0.86602540378444 };
+    // The hex column packing makes a pure pixel-circle of cell centers render a
+    // little taller than wide on screen. Weight vertical distance by this factor
+    // (>1) so the revealed region looks visually circular.
+    const FOG_VERTICAL_SQUASH = 1.12;
     function hexCenterPx(x, y) {
       const parity = ((x % 2) + 2) % 2;
       return {
@@ -3694,7 +3902,8 @@
           // Distance uses the UNWRAPPED column so cells across the seam measure
           // their true (shortest) separation via this straddling copy.
           const p = hexCenterPx(colUnwrapped, row);
-          const ddx = p.x - origin.x, ddy = p.y - origin.y;
+          const ddx = p.x - origin.x;
+          const ddy = (p.y - origin.y) * FOG_VERTICAL_SQUASH;
           if (ddx * ddx + ddy * ddy > r2) continue;
           const k = row * W + col;
           if (seen.has(k)) continue;
@@ -3792,6 +4001,26 @@
         // Sea: only if the colony has a Dock AND this is a shallow-sea tile.
         return docked && isShallowSea(c.x, c.y);
       });
+    }
+    // Set of cell keys (y*W+x) covered by the area of control of every colony
+    // NOT owned by `owner` (i.e. alien zones when `owner` is 'human'). Used to
+    // forbid routing roads/monorails/colony paths through enemy territory.
+    // Matches the on-screen Area-of-Control view (uses colonyControlCells), and
+    // never blocks the colony's own foreign cells for its owner.
+    function foreignControlCellSet(owner) {
+      const map = gameState.map;
+      const set = new Set();
+      if (!map || !map.terrain) return set;
+      const W = map.terrain[0].length;
+      const wrap = !!(map.meta && map.meta.wrap);
+      const wxf = (x) => wrap ? ((x % W) + W) % W : x;
+      for (const b of gameState.buildings) {
+        if (b.type !== 1 || b.owner === owner || b.inTransit) continue;
+        for (const c of colonyControlCells(b)) {
+          set.add(c.y * W + wxf(c.x));
+        }
+      }
+      return set;
     }
     // Whether `colony` is the owner of cell (x,y) among all colonies whose
     // control radius covers it. A colony that is already WORKING the cell keeps
@@ -4232,6 +4461,10 @@
       const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
       const wxf = (x) => wrap ? ((x % W) + W) % W : x;
       ax = wxf(ax); bx = wxf(bx);
+      // Never route a road/monorail through the area of control of a foreign
+      // (non-human) colony. The destination itself is exempt so a path can still
+      // terminate on it (callers validate the endpoint separately).
+      const foreign = foreignControlCellSet('human');
       const path = [{ x: ax, y: ay }];
       let cur = { x: ax, y: ay };
       let guard = 0;
@@ -4242,6 +4475,10 @@
           const nx = wxf(n.x), ny = n.y;
           if (ny < 0 || ny >= gameState.map.terrain.length) continue;
           if (isImpassableFrozen(nx, ny) && !(nx === bx && ny === by)) continue; // can't build through frozen
+          // Skip foreign-controlled cells (destination exempt so routing can end
+          // on a clicked target even if it sits in enemy territory — the caller
+          // decides whether that is allowed).
+          if (foreign.has(ny * W + nx) && !(nx === bx && ny === by)) continue;
           // A bridge over sea may span only ONE sea tile (two segments:
           // land->sea->land). So never step from a sea tile onto another sea
           // tile — that would make a multi-tile sea bridge. This keeps every
@@ -4263,6 +4500,17 @@
         path.push(cur);
       }
       return path;
+    }
+    // Whether a plotted path actually ends on the target cell (bx,by), wrap-aware.
+    // A greedy walker that is blocked (e.g. by alien control) stops short, so its
+    // last cell will not match the target.
+    function pathReachesTarget(path, bx, by) {
+      if (!path || !path.length) return false;
+      const W = gameState.map.terrain[0].length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const wxf = (x) => wrap ? ((x % W) + W) % W : x;
+      const end = path[path.length - 1];
+      return end.y === by && wxf(end.x) === wxf(bx);
     }
     // The nearest same-owner colony connected to cell (x,y) THROUGH the
     // road/monorail network (flooding the combined road∪monorail cell graph
@@ -4310,6 +4558,20 @@
       return (tr.plans || []).some((p) =>
         p && !p.edges && p.path && p.source && p.source.x === col.x && p.source.y === col.y);
     }
+    // Minimum population a colony needs to build a given transport type (from
+    // config). road > 3000 (size 3+), canal > 5000 (size 5+), monorail > 10000
+    // (size 10+). The check uses strict ">", matching the "size N or greater"
+    // wording in the ruleset.
+    function transportMinPopulation(kind) {
+      if (kind === 'road') return (CONFIG.roadMinPopulation != null) ? CONFIG.roadMinPopulation : 3000;
+      if (kind === 'canal') return (CONFIG.canalMinPopulation != null) ? CONFIG.canalMinPopulation : 5000;
+      if (kind === 'monorail') return (CONFIG.monorailMinPopulation != null) ? CONFIG.monorailMinPopulation : 10000;
+      return 0;
+    }
+    // Whether a colony is large enough to build the given transport type.
+    function colonyCanBuildTransport(col, kind) {
+      return !!col && (col.population || 0) > transportMinPopulation(kind);
+    }
     function beginTransport(kind, x, y) {
       // Source colony = the human colony controlling (or nearest to) the cell,
       // OR — when extending from an existing road/monorail tile outside any
@@ -4317,6 +4579,12 @@
       let col = colonyControlling(x, y, 'human') || colonyControllingByRadius(x, y, 'human');
       if (!col) col = nearestColonyOnTransport(x, y, 'human');
       if (!col) { notify("Build from within a colony's zone of control, or from a connected road/monorail tile."); return; }
+      // Population gate: road needs size 3+ (>3000), monorail size 10+ (>10000).
+      if (!colonyCanBuildTransport(col, kind)) {
+        const need = transportMinPopulation(kind);
+        notify(`${col.name || 'This colony'} needs over ${need.toLocaleString()} population to build a ${kind}.`);
+        return;
+      }
       // One road/monorail construction at a time per colony: block a new plan
       // while this colony already has a road/monorail plan under construction.
       if (colonyHasRoadOrMonorailPlan(col)) {
@@ -4340,6 +4608,21 @@
       if (!_transportMode || !_transportSource) return;
       if (!hex) { _transportHoverPath = null; if (hexMap) hexMap.setOverlay(transportOverlayDraw); return; }
       _transportHoverPath = hexLinePath(_transportSource.x, _transportSource.y, hex.x, hex.y);
+      const reaches = pathReachesTarget(_transportHoverPath, hex.x, hex.y);
+      if (!reaches) {
+        // Route is blocked (e.g. by an alien colony's area of control): don't
+        // preview a misleading partial path, and say why in the tooltip.
+        _transportHoverPath = null;
+        const tipB = document.getElementById("build-tooltip");
+        if (tipB && clientX != null) {
+          tipB.innerHTML = `<b>Can't route there</b><br>A path would cross an alien colony's area of control.`;
+          tipB.style.left = (clientX + 16) + "px";
+          tipB.style.top = (clientY + 16) + "px";
+          tipB.hidden = false;
+        }
+        if (hexMap) hexMap.setOverlay(transportOverlayDraw);
+        return;
+      }
       // Tooltip: cost + ETA for the current path (dedicated element so the map's
       // hover tooltip doesn't hide it on every mouse move).
       const cost = planTotalCost(_transportMode, _transportHoverPath);
@@ -4415,6 +4698,13 @@
       if (!_transportMode || !_transportSource || !_transportSourceCol) return;
       const path = hexLinePath(_transportSource.x, _transportSource.y, x, y);
       if (path.length < 2) { cancelTransport(); return; }
+      // If the route can't reach the target without crossing a foreign colony's
+      // area of control, the greedy walker stops short — refuse to build it.
+      if (!pathReachesTarget(path, x, y)) {
+        notify("Can't route there — a path would have to cross an alien colony's area of control.");
+        cancelTransport();
+        return;
+      }
       const plan = planTransport('human', _transportMode, _transportSourceCol, path);
       _transportPlannedPaths.push({ kind: _transportMode, path, planId: plan && plan.id });
       const kind = _transportMode;
@@ -4622,6 +4912,22 @@
     let _canalSourceCol = null;    // paying colony
     let _canalHover = null;        // { vertices, edges, cost } to hovered vertex
     let _canalPlannedEdges = [];   // committed canal plans' edges (lighter green)
+    // The colony that would fund a canal built from cell (x,y): the controlling
+    // (or by-radius) human colony, else the nearest human colony. Mirrors the
+    // resolution in beginCanal so the menu's enable check matches the action.
+    function canalPayingColony(x, y) {
+      let col = colonyControlling(x, y, 'human') || colonyControllingByRadius(x, y, 'human');
+      if (!col) {
+        let best = null, bestD = Infinity;
+        for (const b of gameState.buildings) {
+          if (b.type !== 1 || b.owner !== 'human' || b.inTransit) continue;
+          const d = hexDistance(b.x, b.y, x, y);
+          if (d < bestD) { bestD = d; best = b; }
+        }
+        col = best;
+      }
+      return col;
+    }
     function beginCanal(startVK, sourceHex) {
       let col = colonyControlling(sourceHex.x, sourceHex.y, 'human') || colonyControllingByRadius(sourceHex.x, sourceHex.y, 'human');
       if (!col) {
@@ -4635,6 +4941,12 @@
         col = best;
       }
       if (!col) { notify("You need a colony to fund canal construction."); return; }
+      // Population gate: canals need size 5+ (>5000).
+      if (!colonyCanBuildTransport(col, 'canal')) {
+        const need = transportMinPopulation('canal');
+        notify(`${col.name || 'This colony'} needs over ${need.toLocaleString()} population to build a canal.`);
+        return;
+      }
       if (!vertexConnectable(startVK)) { notify("Canal must start at a sea/river/canal vertex."); return; }
       _canalMode = true; _canalStartVK = startVK; _canalSourceCol = col; _canalHover = null;
       notify("Building a canal — move to an end vertex and click to plan (Esc to cancel).");
@@ -4849,6 +5161,165 @@
       try { ipcRenderer.invoke("colonies-updated", list); } catch (e) {}
     }
 
+    // ---- Federation (per-player government: treasury + population tax) --------
+    // Each player (human + AIs) has a Federation uniting its colonies. The
+    // Federation taxes colonies by population (credits per 1000 citizens and part
+    // thereof) into a treasury, and pays yearly road/monorail/canal maintenance
+    // from it. State lives on the player object so it saves/loads with players[].
+    function federationDefaultTaxRate() {
+      const v = CONFIG.federationTaxRate;
+      return (typeof v === 'number' && isFinite(v)) ? Math.max(0, Math.min(20, v)) : 5;
+    }
+    function ensureFederation(player) {
+      if (!player) return { treasury: 0, taxRate: federationDefaultTaxRate() };
+      if (!player.federation || typeof player.federation !== 'object') {
+        player.federation = { treasury: 0, taxRate: federationDefaultTaxRate() };
+      }
+      if (typeof player.federation.treasury !== 'number' || !isFinite(player.federation.treasury)) player.federation.treasury = 0;
+      if (typeof player.federation.taxRate !== 'number' || !isFinite(player.federation.taxRate)) player.federation.taxRate = federationDefaultTaxRate();
+      player.federation.taxRate = Math.max(0, Math.min(20, player.federation.taxRate));
+      return player.federation;
+    }
+    // Operational (not in-transit) colonies owned by a player id/'human'.
+    function playerColonies(owner) {
+      return (gameState.buildings || []).filter((b) => b.type === 1 && b.owner === owner && !b.inTransit);
+    }
+    // Tax a rate collects from a player's colonies: per colony, ceil(pop/1000)
+    // (per-1000 "and part thereof") times the rate, summed.
+    function federationTaxFor(owner, rate) {
+      let total = 0;
+      for (const c of playerColonies(owner)) {
+        const units = Math.ceil((c.population || 0) / 1000);
+        total += units * rate;
+      }
+      return total;
+    }
+    // Transport the player maintains. Roads/monorails/canals are a single global
+    // network built only by the human, so they are attributed to 'human'; other
+    // players maintain none. Counts: road & monorail SEGMENTS (edges), canal
+    // SIDES (edges).
+    function federationTransportCounts(owner) {
+      if (owner !== 'human') return { roads: 0, monorails: 0, canals: 0 };
+      const tr = ensureTransport();
+      return {
+        roads: tr.roadEdges ? tr.roadEdges.size : 0,
+        monorails: tr.monorailEdges ? tr.monorailEdges.size : 0,
+        canals: tr.canals ? tr.canals.size : 0,
+      };
+    }
+    function _maintPer(kind) {
+      const c = CONFIG[kind + 'MaintenanceCost'];
+      return (c && typeof c.wealth === 'number') ? c.wealth : 0;
+    }
+    // Yearly maintenance owed by a player's Federation (in credits/wealth).
+    function federationMaintenance(owner) {
+      const n = federationTransportCounts(owner);
+      return {
+        road: n.roads * _maintPer('road'),
+        monorail: n.monorails * _maintPer('monorail'),
+        canal: n.canals * _maintPer('canal'),
+        get total() { return this.road + this.monorail + this.canal; }
+      };
+    }
+    // Remove `count` random road or monorail SEGMENTS (edges) from the network,
+    // pruning any cell left with no incident edges. kind: 'road' | 'monorail'.
+    // Returns the number actually destroyed.
+    function decayRandomSegments(kind, count) {
+      const tr = ensureTransport();
+      const edgeSet = kind === 'monorail' ? tr.monorailEdges : tr.roadEdges;
+      const cellSet = kind === 'monorail' ? tr.monorails : tr.roads;
+      const n = Math.min(count, edgeSet.size);
+      if (n <= 0) return 0;
+      const edges = Array.from(edgeSet);
+      // Fisher–Yates partial shuffle to pick n random distinct edges.
+      for (let i = 0; i < n; i++) {
+        const j = i + Math.floor(Math.random() * (edges.length - i));
+        const t = edges[i]; edges[i] = edges[j]; edges[j] = t;
+      }
+      const touched = new Set();
+      for (let i = 0; i < n; i++) {
+        const ek = edges[i];
+        edgeSet.delete(ek);
+        const [a, b] = ek.split("|");
+        touched.add(a); touched.add(b);
+        // Bridges belong to a crossing segment; drop any incident bridge.
+        for (const bk of Array.from(tr.bridges)) {
+          const [ba, bb] = bk.split("|");
+          if (ba === a || bb === a || ba === b || bb === b) {
+            if (!_edgeStillUsed(tr, bk)) tr.bridges.delete(bk);
+          }
+        }
+      }
+      // Prune cells that no longer have ANY incident edge of this kind.
+      for (const ck of touched) {
+        const stillUsed = Array.from(edgeSet).some((ek) => {
+          const [a, b] = ek.split("|"); return a === ck || b === ck;
+        });
+        if (!stillUsed) cellSet.delete(ck);
+      }
+      return n;
+    }
+    function _edgeStillUsed(tr, bridgeKey) {
+      return tr.roadEdges.has(bridgeKey) || tr.monorailEdges.has(bridgeKey);
+    }
+    // Run the Federation economy for the player whose turn is ENDING: collect
+    // taxes into the treasury, then pay yearly maintenance. If the treasury can't
+    // cover road/monorail maintenance, segments randomly decay at the configured
+    // rate (ceil(unfundedSegments * decayRate)). Canals are maintained from the
+    // same treasury but do not decay here (no monorail/road-style decay requested
+    // for canals in this pass). Returns a summary for notifications.
+    function processFederationTurn(owner) {
+      const player = (gameState.players || []).find((p) => p && p.id === owner)
+        || (owner === 'human' ? (gameState.players || []).find((p) => p.kind === 'human') : null);
+      if (!player) return null;
+      const fed = ensureFederation(player);
+      const cols = playerColonies(owner);
+      if (cols.length === 0) return null; // no federation without colonies
+
+      // 1) Collect taxes.
+      const tax = federationTaxFor(owner, fed.taxRate);
+      fed.treasury += tax;
+
+      // 2) Pay maintenance (roads + monorails + canals), each only as far as the
+      //    treasury allows. Pay canals first, then split remaining funds between
+      //    road and monorail proportionally so each has a defined "unfunded" count.
+      const counts = federationTransportCounts(owner);
+      const roadPer = _maintPer('road'), monoPer = _maintPer('monorail'), canalPer = _maintPer('canal');
+      const roadDue = counts.roads * roadPer;
+      const monoDue = counts.monorails * monoPer;
+      const canalDue = counts.canals * canalPer;
+      const totalDue = roadDue + monoDue + canalDue;
+
+      let destroyedRoads = 0, destroyedMono = 0;
+      if (fed.treasury >= totalDue) {
+        fed.treasury -= totalDue;
+      } else {
+        // Shortfall: pay what we can, then decay unfunded road/monorail segments.
+        let funds = Math.max(0, fed.treasury);
+        // Fund canals first (they don't decay here), then roads, then monorails.
+        const payCanal = Math.min(funds, canalDue); funds -= payCanal;
+        const payRoad = Math.min(funds, roadDue); funds -= payRoad;
+        const payMono = Math.min(funds, monoDue); funds -= payMono;
+        fed.treasury = 0;
+        // Unfunded SEGMENT counts (how many segments could not be maintained).
+        const unfundedRoad = roadPer > 0 ? Math.ceil((roadDue - payRoad) / roadPer) : 0;
+        const unfundedMono = monoPer > 0 ? Math.ceil((monoDue - payMono) / monoPer) : 0;
+        const roadDecay = (typeof CONFIG.roadDecayRate === 'number') ? CONFIG.roadDecayRate : 0.01;
+        const monoDecay = (typeof CONFIG.monorailDecayRate === 'number') ? CONFIG.monorailDecayRate : 0.01;
+        const roadKill = Math.ceil(unfundedRoad * roadDecay);
+        const monoKill = Math.ceil(unfundedMono * monoDecay);
+        if (roadKill > 0) destroyedRoads = decayRandomSegments('road', roadKill);
+        if (monoKill > 0) destroyedMono = decayRandomSegments('monorail', monoKill);
+        if ((destroyedRoads || destroyedMono) && typeof invalidateColonyConnectivity === 'function') {
+          invalidateColonyConnectivity();
+        }
+        if ((destroyedRoads || destroyedMono) && hexMap && typeof hexMap.setTransport === 'function') {
+          hexMap.setTransport(ensureTransport());
+        }
+      }
+      return { tax, maintenance: totalDue, treasury: fed.treasury, destroyedRoads, destroyedMono };
+    }
+
     // ---- AI turn -----------------------------------------------------------
     async function aiTakeTurn(pi) {
       const myStep = _turnStepId; // detect a manual force-advance during our await
@@ -4865,7 +5336,7 @@
             // Assign the new colony's first worker to the highest-food cell in
             // its zone of control.
             aiWorkHighestFoodCell(spot.x, spot.y, pi);
-            notify(`${p.name} established a colony at ${spot.x},${spot.y}`);
+            notify(`${p.name} established a colony at ${cellLatLonLabel(spot.x, spot.y)}`);
           } else { p.placeTurn = gameState.turn + 3; } // retry later
         } else if (p.placed) {
           // Skip the AI entirely (built-in or LLM) if there's nothing it could
@@ -5398,7 +5869,7 @@
     let ctxTarget = null;
     let _ctxVertex = null; // nearest hex-corner vertex key of the last right-click
     let _ctxCanalEdge = null; // {a:{x,y}, b:{x,y}} canal border of the last right-click
-    function hideContextMenu() { ctxMenu.hidden = true; ctxTarget = null; _ctxCanalEdge = null; }
+    function hideContextMenu() { ctxMenu.hidden = true; ctxTarget = null; _ctxCanalEdge = null; _ctxFromColonyView = false; }
     // Show the context menu at (clientX, clientY), then clamp it into the
     // viewport: if it would bleed off the bottom, shift it up so its bottom
     // aligns with the window bottom; likewise clamp the right edge. Must run
@@ -5426,15 +5897,23 @@
     function cellHasBuilding(x, y) {
       return gameState.buildings.some((b) => b.x === x && b.y === y);
     }
-    function showContextMenu(clientX, clientY, hex) {
+    // When true, the menu was opened from the colony work window: suppress all
+    // routing/launch options (Establish/Launch Colony, Road, Monorail, Canal,
+    // Remove Transportation/Canal) and refresh the work modal after an action.
+    let _ctxFromColonyView = false;
+    function showContextMenu(clientX, clientY, hex, fromColonyView) {
       ctxTarget = hex;
+      _ctxFromColonyView = !!fromColonyView;
+      // The colony view has no vertices/canal edges — never offer canal options.
+      if (_ctxFromColonyView) { _ctxVertex = null; _ctxCanalEdge = null; }
       const terr = hex ? terrainAt(hex.x, hex.y) : 0;
 
       // If the right-clicked VERTEX is a legal canal start, the ONLY option is
       // "Build Canal" (all other cell options are hidden).
       const canalStart = isHumanTurn() && hex && _ctxVertex &&
         vertexConnectable(_ctxVertex) &&
-        canalEdgesAtVertex(_ctxVertex).length >= 1;
+        canalEdgesAtVertex(_ctxVertex).length >= 1 &&
+        colonyCanBuildTransport(canalPayingColony(hex.x, hex.y), 'canal');
       if (canalStart) {
         ctxEstablish.hidden = true;
         ctxBuildItems.innerHTML = "";
@@ -5531,8 +6010,9 @@
         item.textContent = `Build ${bt.name || ("Type " + type)} (${buildingCostLabel(type)})`;
         item.addEventListener("click", () => {
           if (!ctxTarget) return;
-          const h = ctxTarget; hideContextMenu();
+          const h = ctxTarget; const fromColony = _ctxFromColonyView; hideContextMenu();
           placeBuilding(h.x, h.y, 'human', type);
+          if (fromColony) refreshWorkModalAfterBuild();
           maybeAutoEndHumanTurn();
         });
         ctxBuildItems.appendChild(item);
@@ -5575,8 +6055,11 @@
           || nearestColonyOnTransport(hex.x, hex.y, 'human');
       }
       const _txBusy = _txCol ? colonyHasRoadOrMonorailPlan(_txCol) : false;
-      ctxRoad.hidden = _txBusy || !(canBuildTransport || (isHumanTurn() && hex && hasRoad(hex.x, hex.y)));
-      ctxMonorail.hidden = _txBusy || !(canBuildTransport || (isHumanTurn() && hex && hasMonorail(hex.x, hex.y)));
+      // Also require the paying colony to be large enough for each type.
+      const _roadOK = colonyCanBuildTransport(_txCol, 'road');
+      const _monoOK = colonyCanBuildTransport(_txCol, 'monorail');
+      ctxRoad.hidden = _txBusy || !_roadOK || !(canBuildTransport || (isHumanTurn() && hex && hasRoad(hex.x, hex.y)));
+      ctxMonorail.hidden = _txBusy || !_monoOK || !(canBuildTransport || (isHumanTurn() && hex && hasMonorail(hex.x, hex.y)));
       // (Canal is offered only on a legal canal-start vertex, handled above.)
 
       // Remove Transportation: shown only when the cell carries a road/monorail,
@@ -5594,6 +6077,17 @@
       }
       ctxRemoveTransport.hidden = !showRemoveTransport;
 
+      // Colony work view: offer only building construction/removal — hide every
+      // option that involves routing or placing a new colony.
+      if (_ctxFromColonyView) {
+        ctxEstablish.hidden = true;
+        ctxRoad.hidden = true;
+        ctxMonorail.hidden = true;
+        ctxCanal.hidden = true;
+        ctxCanalRemove.hidden = true;
+        ctxRemoveTransport.hidden = true;
+      }
+
       // If nothing is actionable on this cell, don't pop an empty menu.
       const anyItem = !ctxEstablish.hidden || !ctxRemove.hidden || !ctxRoad.hidden ||
         !ctxMonorail.hidden || !ctxRemoveTransport.hidden || !ctxCanal.hidden ||
@@ -5610,7 +6104,9 @@
     });
     ctxRemove.addEventListener("click", () => {
       if (ctxRemove.classList.contains("disabled") || !ctxTarget) return;
-      const hex = ctxTarget; hideContextMenu(); removeImprovement(hex.x, hex.y, 'human');
+      const hex = ctxTarget; const fromColony = _ctxFromColonyView; hideContextMenu();
+      removeImprovement(hex.x, hex.y, 'human');
+      if (fromColony) refreshWorkModalAfterBuild();
       maybeAutoEndHumanTurn();
     });
     ctxRoad.addEventListener("click", () => {
@@ -5909,7 +6405,8 @@
         `<div class="stat-row"><span>Material</span><span>${nf(Math.round(res.material))} / ${nf(s.caps.material)} <span class="${cls(s.material)}">${sign(s.material)}${nf(s.material, 1)}/yr</span></span></div>`,
         `<div class="stat-row"><span>Energy</span><span>${nf(Math.round(res.energy))} / ${nf(s.caps.energy)} <span class="${cls(s.energy)}">${sign(s.energy)}${nf(s.energy, 1)}/yr</span></span></div>`,
         `<div class="stat-row"><span>Wealth</span><span>${nf(Math.round(res.wealth))} / ${nf(s.caps.wealth)} <span class="${cls(s.wealthRate)}">${sign(s.wealthRate)}${nf(s.wealthRate, 1)}/yr</span></span></div>`,
-        `<div class="stat-row"><span>Happiness</span><span>${fmtHappiness(s.storedHappiness)} / ±${fmtHappiness(s.happinessCap)} <span class="${cls(s.happinessRate)}">${sign(s.happinessRate)}${nf(s.happinessRate, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>Happiness</span><span>${fmtHappiness(s.storedHappiness)} / ±${fmtHappiness(s.happinessCap)} <span class="stat-pos">+${nf(s.happinessPos, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>Unhappiness</span><span><span class="${s.happinessNeg < 0 ? 'stat-neg' : ''}">${sign(s.happinessNeg)}${nf(s.happinessNeg, 1)}/yr</span></span></div>`,
         overNote,
         ...buildingsSection,
         ...networkSection,
@@ -6014,6 +6511,45 @@
       return `rgba(${to(r)},${to(g)},${to(b)},${a != null ? a : 1})`;
     }
 
+    // Reusable Continue/Cancel confirmation modal. Calls onContinue() if the user
+    // confirms; does nothing on cancel. Dismissable via buttons, backdrop click,
+    // Enter (continue) or Escape (cancel).
+    function showConfirm(message, onContinue, opts) {
+      const overlay = document.getElementById("confirm-overlay");
+      const textEl = document.getElementById("confirm-text");
+      const titleEl = document.getElementById("confirm-title");
+      const okBtn = document.getElementById("confirm-ok");
+      const cancelBtn = document.getElementById("confirm-cancel");
+      if (!overlay || !okBtn || !cancelBtn) { // fallback: no modal available
+        if (typeof onContinue === "function") onContinue();
+        return;
+      }
+      if (titleEl) titleEl.textContent = (opts && opts.title) || "Please confirm";
+      textEl.textContent = message || "";
+      okBtn.textContent = (opts && opts.okLabel) || "Continue";
+      cancelBtn.textContent = (opts && opts.cancelLabel) || "Cancel";
+
+      const close = () => {
+        overlay.hidden = true;
+        document.removeEventListener("keydown", onKey, true);
+        overlay.removeEventListener("mousedown", onBackdrop);
+        okBtn.onclick = null; cancelBtn.onclick = null;
+      };
+      const doContinue = () => { close(); if (typeof onContinue === "function") onContinue(); };
+      const doCancel = () => { close(); };
+      const onKey = (e) => {
+        if (e.key === "Enter") { e.preventDefault(); doContinue(); }
+        else if (e.key === "Escape") { e.preventDefault(); doCancel(); }
+      };
+      const onBackdrop = (e) => { if (e.target === overlay) doCancel(); };
+      okBtn.onclick = doContinue;
+      cancelBtn.onclick = doCancel;
+      overlay.addEventListener("mousedown", onBackdrop);
+      document.addEventListener("keydown", onKey, true);
+      overlay.hidden = false;
+      cancelBtn.focus();
+    }
+
     function toggleWorked(k) {
       const col = workColony; if (!col) return;
       if (workReadOnly) return; // alien colony view is read-only
@@ -6023,16 +6559,55 @@
       const idx = worked.indexOf(k);
       if (idx >= 0) {
         worked.splice(idx, 1);
+        _applyWorkedChange(col);
+        return;
       } else {
         const cap = workCap(col);
         const extras = worked.filter((w) => w !== homeKey).length;
         if (extras >= cap) { notify(`This colony can work at most ${cap} extra cell${cap === 1 ? "" : "s"} (need more population).`); return; }
+        // Working a cell that holds a PRISTINE terrain bonus will place a worker
+        // (and ultimately a building) there, destroying the bonus. Warn first and
+        // only proceed — destroying the bonus — if the player confirms.
+        const [cx, cy] = k.split(",").map(Number);
+        const tb = bonusDefAt(cx, cy);
+        if (bonusIsPristine(tb)) {
+          const bonusName = (tb && tb.name) || "pristine resource";
+          showConfirm(
+            `${bonusName} is a pristine resource. Working this cell and building on it will destroy ${bonusName} permanently. Continue?`,
+            () => {
+              // Re-validate: the dialog may still be open but state could change.
+              if (!workColony || workColony !== col) return;
+              if (worked.indexOf(k) >= 0) return;              // already worked
+              if (worked.filter((w) => w !== homeKey).length >= workCap(col)) return; // cap hit meanwhile
+              const destroyed = destroyPristineBonusAt(cx, cy);
+              if (destroyed) notify(`${destroyed} was destroyed.`);
+              worked.push(k);
+              _applyWorkedChange(col);
+            },
+            { title: "Destroy pristine resource?" }
+          );
+          return; // wait for the user's choice; do not mark worked yet
+        }
         worked.push(k);
       }
+      _applyWorkedChange(col);
+    }
+
+    // Shared post-change refresh for toggleWorked.
+    function _applyWorkedChange(col) {
       renderWorkModal();
       updateColonyAttention();
       // Reflect the changed worked-cell set in the main window's Buildings /
       // Resources panel immediately.
+      updatePlayerPanel();
+    }
+
+    // Refresh the open colony work window after a building was built/removed via
+    // its right-click menu (keeps the hex map, worker state, and panels in sync).
+    function refreshWorkModalAfterBuild() {
+      if (!workColony) return;
+      renderWorkModal();
+      updateColonyAttention();
       updatePlayerPanel();
     }
 
@@ -6047,6 +6622,17 @@
         if (d < bestD) { bestD = d; best = h; }
       }
       if (best && bestD <= (best.r * best.r)) toggleWorked(cellKey(best.x, best.y));
+    });
+
+    // Right-click a cell in the colony work window to get the same build menu as
+    // the main map, minus routing/launch options (handled by showContextMenu's
+    // fromColonyView mode). Read-only (alien) colony views don't offer it.
+    workCanvas.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      if (workReadOnly || !isHumanTurn()) return;
+      const best = _workHexAtEvent(e);
+      if (!best) return;
+      showContextMenu(e.clientX, e.clientY, { x: best.x, y: best.y }, true);
     });
 
     // ---- work-dialog hover tooltip: base tile yields + each bonus source ----
@@ -6134,24 +6720,31 @@
 
     // View Location overlay (enter x,y).
     const viewlocOverlay = document.getElementById("viewloc-overlay");
-    const viewlocX = document.getElementById("viewloc-x");
-    const viewlocY = document.getElementById("viewloc-y");
+    const viewlocLat = document.getElementById("viewloc-lat");
+    const viewlocLon = document.getElementById("viewloc-lon");
     function openViewLoc() {
       if (!gameState.map) return;
-      viewlocX.max = gameState.map.terrain[0].length - 1;
-      viewlocY.max = gameState.map.terrain.length - 1;
+      // Prefill with the current viewport center's latitude/longitude.
       const vp = hexMap && hexMap.viewport;
-      viewlocX.value = vp ? vp.hOrigin.x : 0;
-      viewlocY.value = vp ? vp.hOrigin.y : 0;
+      const cx = vp ? Math.round(vp.hOrigin.x + vp.hSize.x / 2) : 0;
+      const cy = vp ? Math.round(vp.hOrigin.y + vp.hSize.y / 2) : 0;
+      const { lat, lon } = cellLatLon(cx, cy);
+      viewlocLat.value = lat.toFixed(1);
+      viewlocLon.value = lon.toFixed(1);
       viewlocOverlay.hidden = false;
-      viewlocX.focus(); viewlocX.select();
+      viewlocLat.focus(); viewlocLat.select();
     }
     function closeViewLoc() { viewlocOverlay.hidden = true; }
     function confirmViewLoc() {
-      const x = parseInt(viewlocX.value, 10);
-      const y = parseInt(viewlocY.value, 10);
+      let lat = parseFloat(viewlocLat.value);
+      let lon = parseFloat(viewlocLon.value);
       closeViewLoc();
-      if (Number.isFinite(x) && Number.isFinite(y) && hexMap) hexMap.centerOnCell(x, y);
+      if (Number.isFinite(lat) && Number.isFinite(lon) && hexMap) {
+        lat = Math.max(-70, Math.min(70, lat));
+        lon = Math.max(-180, Math.min(180, lon));
+        const { x, y } = latLonToCell(lat, lon);
+        hexMap.centerOnCell(x, y);
+      }
     }
     ipcRenderer.on("view-location", () => openViewLoc());
     ipcRenderer.on("view-toggle-terrain", () => { if (hexMap) hexMap.toggleTextures(); });
@@ -6438,12 +7031,96 @@
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && !coloniesOverlay.hidden) closeColonies();
     });
+
+    // ---- View Federation dialog ---------------------------------------------
+    const federationOverlay = document.getElementById("federation-overlay");
+    const fedTaxRate = document.getElementById("fed-taxrate");
+    function _humanPlayer() {
+      return (gameState.players || []).find((p) => p && p.kind === 'human') || null;
+    }
+    function _fmtCredits(n) {
+      const r = Math.round(n * 10) / 10;
+      return (Number.isInteger(r) ? r.toLocaleString() : r.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
+    }
+    function renderFederation() {
+      const player = _humanPlayer();
+      if (!player) return;
+      const fed = ensureFederation(player);
+      const cols = playerColonies('human');
+      let pop = 0; for (const c of cols) pop += (c.population || 0);
+      document.getElementById("fed-colonies").textContent = cols.length.toLocaleString();
+      document.getElementById("fed-population").textContent = Math.round(pop).toLocaleString();
+      document.getElementById("fed-treasury").textContent = _fmtCredits(fed.treasury);
+
+      const rate = parseFloat(fedTaxRate.value) || 0;
+      document.getElementById("fed-taxrate-val").textContent = String(rate);
+      const happEl = document.getElementById("fed-happen");
+      if (happEl) happEl.textContent = "\u2212" + _fmtCredits(rate); // −rate happiness/colony
+      const taxes = federationTaxFor('human', rate);
+      const counts = federationTransportCounts('human');
+      const m = federationMaintenance('human');
+      document.getElementById("fed-taxes").textContent = _fmtCredits(taxes);
+      document.getElementById("fed-roadn").textContent = String(counts.roads);
+      document.getElementById("fed-roadcost").textContent = _fmtCredits(m.road);
+      document.getElementById("fed-mononn").textContent = String(counts.monorails);
+      document.getElementById("fed-monocost").textContent = _fmtCredits(m.monorail);
+      document.getElementById("fed-canaln").textContent = String(counts.canals);
+      document.getElementById("fed-canalcost").textContent = _fmtCredits(m.canal);
+      document.getElementById("fed-maint").textContent = _fmtCredits(m.total);
+      const net = taxes - m.total;
+      const netEl = document.getElementById("fed-net");
+      netEl.textContent = (net >= 0 ? "+" : "") + _fmtCredits(net);
+      netEl.style.color = net >= 0 ? "#1a9e1a" : "#d23b3b";
+      const projected = fed.treasury + net;
+      document.getElementById("fed-proj-treasury").textContent = _fmtCredits(projected);
+
+      // Warn if the projected treasury can't cover maintenance (segments decay).
+      const warn = document.getElementById("fed-warn");
+      if (fed.treasury + taxes < m.total) {
+        warn.hidden = false;
+        warn.textContent = "Treasury won't cover maintenance — some road/monorail segments will decay at end of turn.";
+      } else {
+        warn.hidden = true;
+      }
+    }
+    function openFederation() {
+      const player = _humanPlayer();
+      if (!player) { notify("Start a game to view your Federation."); return; }
+      if (playerColonies('human').length < 2) { notify("Your Federation forms once you have two or more colonies."); return; }
+      const fed = ensureFederation(player);
+      // Snap the saved rate to the nearest 0.5 within [0,20] for the slider.
+      const snapped = Math.max(0, Math.min(20, Math.round(fed.taxRate * 2) / 2));
+      fedTaxRate.value = String(snapped);
+      renderFederation();
+      federationOverlay.hidden = false;
+    }
+    function closeFederation() { federationOverlay.hidden = true; }
+    // Moving the slider commits the tax rate immediately (used at end of turn).
+    fedTaxRate.addEventListener("input", () => {
+      const player = _humanPlayer();
+      if (player) ensureFederation(player).taxRate = parseFloat(fedTaxRate.value) || 0;
+      renderFederation();
+    });
+    ipcRenderer.on("view-federation", openFederation);
+    document.getElementById("federation-close").addEventListener("click", closeFederation);
+    federationOverlay.addEventListener("click", (e) => { if (e.target === federationOverlay) closeFederation(); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !federationOverlay.hidden) closeFederation();
+    });
     document.getElementById("viewloc-cancel").addEventListener("click", closeViewLoc);
     document.getElementById("viewloc-ok").addEventListener("click", confirmViewLoc);
-    [viewlocX, viewlocY].forEach((el) => el.addEventListener("keydown", (e) => {
+    [viewlocLat, viewlocLon].forEach((el) => el.addEventListener("keydown", (e) => {
       if (e.key === "Enter") confirmViewLoc();
       else if (e.key === "Escape") closeViewLoc();
     }));
+    // Clamp lat/lon to their legal ranges when the user finishes editing a field.
+    function _clampField(el, lo, hi) {
+      const v = parseFloat(el.value);
+      if (!Number.isFinite(v)) return;
+      el.value = String(Math.max(lo, Math.min(hi, v)));
+    }
+    viewlocLat.addEventListener("change", () => _clampField(viewlocLat, -70, 70));
+    viewlocLon.addEventListener("change", () => _clampField(viewlocLon, -180, 180));
 
     // ---- Turn menu: End Turn ----------------------------------------------
     // The human ends their turn. Dismisses any active timeout dialogs (such as
@@ -6600,6 +7277,7 @@
         wrap: !!(map.meta && map.meta.wrap),
         buildings: gameState.buildings,
         visible: _visibleSet,
+        debug: !!(CONFIG && CONFIG.debug),
         buildingTypes: CONFIG.buildingTypes || null,
         terrainTypes: CONFIG.terrainTypes || null,
         terrainBonus: CONFIG.terrainBonus || null,

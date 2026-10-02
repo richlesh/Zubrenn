@@ -393,6 +393,10 @@ class HexMap {
       : (Array.isArray(opts.visible) ? new Set(opts.visible) : null);
     this.fogColor = opts.fogColor || 'rgb(205,205,205)';
 
+    // When true, developer-only details are shown (e.g. raw cell coords in the
+    // hover tooltip). Driven by config.json "debug".
+    this.debug = !!opts.debug;
+
 
     this.worldSize = {
       x: this.terrain[0].length,
@@ -742,7 +746,17 @@ class HexMap {
 
   _loadTiles() {
     const promises = [];
-    for (let i = 0; i < TERRAIN_IMAGES.length; i++) {
+    // Cover both the built-in TERRAIN_IMAGES indices and any higher terrain ids
+    // defined only in config.terrainTypes (e.g. Plains 10, Wetlands 11), so each
+    // gets a texture pattern when terrain textures are enabled.
+    let maxId = TERRAIN_IMAGES.length - 1;
+    if (this.terrainTypes) {
+      for (const k of Object.keys(this.terrainTypes)) {
+        const n = parseInt(k, 10);
+        if (Number.isFinite(n) && n > maxId) maxId = n;
+      }
+    }
+    for (let i = 0; i <= maxId; i++) {
       const file = this._terrainIcon(i);
       if (!file) continue;
       const img = new Image();
@@ -860,15 +874,12 @@ class HexMap {
             const owner = this._controlOwnerAt(x, y);
             ctx.fillStyle = (owner == null) ? UNCONTROLLED_LAND : controlColor(owner, this.aiCount);
           }
-        } else if (this.useTextures && this.tilePatterns[type] && type !== 11) {
-          ctx.fillStyle = this.tilePatterns[type];
         } else {
+          // Minimap always uses the solid terrain color (never tile textures).
           ctx.fillStyle = this._terrainColor(type);
         }
         ctx.fill();
-        ctx.strokeStyle = rgba(0.5, 0.5, 0.5, 1.0);
-        ctx.lineWidth = Math.max(1, Math.floor(spacing.y / 20));
-        ctx.stroke();
+        // No cell borders and no terrain-bonus icons on the minimap.
       }
     }
     ctx.restore();
@@ -994,7 +1005,7 @@ class HexMap {
             const owner = this._controlOwnerAt(tx, y);
             ctx.fillStyle = (owner == null) ? UNCONTROLLED_LAND : controlColor(owner, this.aiCount);
           }
-        } else if (this.useTextures && this.tilePatterns[type] && type !== 11) {
+        } else if (this.useTextures && this.tilePatterns[type]) {
           ctx.fillStyle = this.tilePatterns[type];
         } else {
           ctx.fillStyle = this._terrainColor(type);
@@ -1472,18 +1483,18 @@ class HexMap {
   _renderBirdseye() {
     if (!this.birdseye || !this.offscreen) return;
     const bctx = this.birdseye.getContext('2d');
+    // Match the canvas's backing-store HEIGHT to the map's aspect ratio for its
+    // current width, so the map fills the canvas exactly with no letterbox bars.
+    // CSS (#birdseye { width:100%; height:auto }) then displays it at the panel
+    // width and a proportional height.
+    const mapAspect = this.offscreen.width / this.offscreen.height;
     const bw = this.birdseye.width;
+    const wantH = Math.max(1, Math.round(bw / mapAspect));
+    if (this.birdseye.height !== wantH) this.birdseye.height = wantH;
     const bh = this.birdseye.height;
     bctx.clearRect(0, 0, bw, bh);
-    // Fit the whole offscreen map into the birdseye canvas (letterboxed).
-    const mapAspect = this.offscreen.width / this.offscreen.height;
-    const boxAspect = bw / bh;
-    let dw, dh, dx, dy;
-    if (mapAspect > boxAspect) {
-      dw = bw; dh = bw / mapAspect; dx = 0; dy = (bh - dh) / 2;
-    } else {
-      dh = bh; dw = bh * mapAspect; dy = 0; dx = (bw - dw) / 2;
-    }
+    // The map now fills the whole canvas (no centering offsets needed).
+    const dx = 0, dy = 0, dw = bw, dh = bh;
     this._birdseyeRect = { dx, dy, dw, dh };
     bctx.drawImage(this.offscreen, 0, 0, this.offscreen.width, this.offscreen.height, dx, dy, dw, dh);
 
@@ -1751,7 +1762,7 @@ class HexMap {
         }
       }
       lines.push(`${elevText} above sea level`);     // elevation
-      lines.push(`(${hex.x}, ${hex.y})`);            // x,y
+      if (this.debug) lines.push(`(${hex.x}, ${hex.y})`); // x,y (debug only)
       const { lat, lon } = this._cellLatLon(hex.x, hex.y);
       lines.push(this._formatLatLon(lat, lon));      // latitude N/S, longitude E/W
       const html = lines.join('<br>');

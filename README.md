@@ -227,6 +227,309 @@ The Bank speeds up the colony’s economy and enables more advanced building pro
 
 The Compressed‑Air Energy Storage (CAES) is an advanced energy storage facility. It requires a **Bank** before it can be built. Construction costs **4 Material**, **2 Energy** and **2 Wealth**, and takes **2 turns**. Each year it consumes **1 Energy** and **1 Wealth**, and provides **1 000 Energy** storage for the colony.
 
+## Terrain
+
+The continent of Zubrenn is a patchwork of eleven terrain types. Each type sets
+a cell's base Food/Material yield (per 1,000 workers), how costly it is to cross
+by foot, road, sea/river, monorail, or air, and whether colonists can live and
+build there. The eleven types below correspond to terrain codes `1`–`11` in
+`config.json`.
+
+#### Sea
+
+<span class="float-right">![sea](src/resources/terrain/Port%20of%20Taganrog.png)</span>
+
+The Sea blankets the lowlands between the continents, a cold cobalt expanse stirred by the pull of Zubrenn's twin stars. It yields a single unit of Food from the shoals and plankton drifting near the surface but no Material, and it cannot be settled directly. Shallow stretches become highways once a colony raises a Dock, and road or monorail bridges can leap a single sea tile to stitch neighboring lands together.
+
+#### Grassland
+
+<span class="float-right">![grassland](src/resources/terrain/Open%20Square%20Path%20Grass.png)</span>
+
+Rolling Grassland is the gentle heart of the continent, carpeted in soft blue-green turf that ripples under the wind. It is the most generous starting ground, offering 2 Food and 1 Material and an easy crossing for travelers and transport alike. Flat, fertile, and welcoming, grassland is where most colonies first take root and spread their earliest farms.
+
+#### Hills
+
+<span class="float-right">![hills](src/resources/terrain/Just%20Add%20Bison.png)</span>
+
+The Hills rise in long, grass-stubbled ridges where the land begins to buckle toward the mountains. They trade a little fertility for mineral wealth, yielding 1 Food and 2 Material as ores press close to the surface. The uneven ground slows foot travel and makes roadbuilding a touch more laborious, but the ridges reward colonies willing to dig for what lies beneath.
+
+#### Forest
+
+<span class="float-right">![forest](src/resources/terrain/Shrub%20Cover.png)</span>
+
+Dense Forest cloaks the temperate belts in towering, slow-growing canopy. The shaded understory offers modest 1 Food but a steady 2 Material in timber and fiber, making forests a dependable source of building stock. The thick growth hampers movement and makes clearing a path time-consuming, so transport lines through the woods are built slowly and deliberately.
+
+#### Jungle
+
+<span class="float-right">![jungle](src/resources/terrain/Deep%20Forest.png)</span>
+
+The Jungle chokes the equatorial lowlands in riotous, humid overgrowth where strange alien flora climbs over itself in competition for light. It gives 1 Food and 2 Material but is the hardest land to traverse, swallowing roads and swallowing time as crews hack through the tangle. Beneath the dripping canopy, however, lie some of the planet's most prized biological curiosities.
+
+#### Desert
+
+<span class="float-right">![desert](src/resources/terrain/Slush.png)</span>
+
+The Desert stretches in sun-cracked flats and dune seas where the twin stars scorch the ground and little water remains. On its own it is barren, yielding neither Food nor Material, yet its open, firm terrain is quick to cross and cheap to road. What the desert withholds in sustenance it can repay in exotic deposits that only form in bone-dry conditions.
+
+#### Mountain-Low
+
+<span class="float-right">![mountain-low](src/resources/terrain/Dense%20Pine%20Forest.png)</span>
+
+The lower Mountains climb in pine-shadowed slopes and stony benches where the air thins and the stone turns rich. They produce no Food but a strong 3 Material as veins of ore break through the crust. Steep and demanding, they slow every traveler and make transport costly to build, and no sea or river route may pass through them — but their mineral bounty makes the effort worthwhile.
+
+#### Mountain-High
+
+<span class="float-right">![mountain-high](src/resources/terrain/Age%20of%20the%20Canyon.png)</span>
+
+The high peaks of Mountain-High tower above the snow line in jagged, wind-scoured ridges. They are the richest source of raw Material on the planet at 4 per worked unit, but they grow no Food and cannot be settled or built upon. Treacherous and slow to cross, these summits are prized only for what can be hauled down from them to the colonies below.
+
+#### Frozen
+
+<span class="float-right">![frozen](src/resources/terrain/Polar%20Zone.png)</span>
+
+The Frozen wastes seal the poles and high altitudes beneath blinding sheets of ice. They offer neither Food nor Material and, above the altitude limit, are wholly impassable. Yet surprising life clings to the margins of the thaw, and colonies that endure the cold may find the ice itself harbors unexpected harvests when the brief seasons turn.
+
+#### Plains
+
+<span class="float-right">![plains](src/resources/terrain/Sage%20Stone.png)</span>
+
+The Plains are the pale, upland cousins of the grasslands, forming where higher, drier ground gives way to open sage-colored steppe. Balanced and easily crossed, they provide 1 Food and 1 Material and lay out broad, level ground ideal for expansion. Their wide horizons make them natural corridors for roads, monorails, and the herds that roam them.
+
+#### Wetlands
+
+<span class="float-right">![wetlands](src/resources/terrain/Dodders%20Marsh.png)</span>
+
+The Wetlands form where sea and river meet the land, a glistening maze of marsh, reed, and standing water. They produce no base Food but 1 Material, and uniquely they lift colonist spirits with a small built-in happiness bonus thanks to their serene, teeming beauty. Soggy and slow to road, the marshes nonetheless brim with life and reward colonies that learn to work the water's edge.
+
+## Terrain Bonus
+
+Scattered across the continent are special resource deposits — the `terrainBonus`
+entries in `config.json` — that enrich the cells they occupy. Each appears only
+on certain terrain, within set latitude or altitude bands and sometimes beside
+water, rivers, or on pristine ground, and each is rarer or more common according
+to its `abundancy`. When a colony works a cell holding one of these, it adds the
+listed Food, Material, Energy, Wealth, and/or Happiness to that cell's output.
+
+### Food
+
+#### Myco-Tower Grove
+
+<span class="float-right">![myco-tower](src/resources/myco-tower.png)</span>
+
+The Myco-Tower Grove rises in the twilight band near the poles, where towering fractal fungi flourish in the long, dim seasons on grassland, hills, and even the edges of the ice, always within reach of water. Their branching, cathedral-like forms are farmed in the half-light, and their spores are threshed and refined into protein and starch. A worked grove adds **2–3 Food**, making the cold frontier far more survivable than it first appears.
+
+#### Microalgae Lattice
+
+<span class="float-right">![microalgae](src/resources/microalgea.png)</span>
+
+The Microalgae Lattice spreads across sheltered coastal seas within the temperate latitudes, a vast floating mesh of engineered microalgae clinging to the water near land. Skimmed and pressed, it becomes a reliable source of protein and carbohydrates for nearby colonies. A worked lattice contributes **3 Food**, turning quiet shallows into productive aquatic farmland.
+
+#### Substrate Slime
+
+<span class="float-right">![substrate_slime](src/resources/substrate_slime.png)</span>
+
+Substrate Slime is a Zubrenn-native organism that films the banks of warmer rivers across grassland, hills, forest, jungle, and desert. Harvested from the riverside mud, the slime is processed into a dense, nutritious protein paste. A worked deposit yields **2–3 Food**, rewarding colonies that settle along the planet's inland waterways.
+
+#### Glacial Bloom
+
+<span class="float-right">![glacial_bloom](src/resources/glacial_bloom.png)</span>
+
+The Glacial Bloom is a rare wonder of the frozen zones: with each seasonal thaw the ice releases edible cryo-lichens that shimmer and glow softly through the polar night. Exceptionally scarce, these blooms are gathered quickly before the freeze returns. A worked bloom provides **2–3 Food**, a precious lifeline in otherwise barren ice.
+
+#### Chemosynthetic Vent Colonies
+
+<span class="float-right">![chemosyntheic_vent](src/resources/chemosyntheic_vent.png)</span>
+
+Clustered around geothermal seeps in the low and high mountains, Chemosynthetic Vent Colonies are thickets of tube-worm analogs that feed on mineral-rich heat rather than sunlight. Entirely self-sustaining, they offer a dependable harvest even in the harshest stone. A worked vent field adds **1–2 Food**, letting mountain colonies draw sustenance from the depths.
+
+#### Veyra Pods
+
+<span class="float-right">![veyra_pods](src/resources/veyra_pods.png)</span>
+
+Veyra Pods grow on hardy native plants that dot the grasslands and hills, bearing dense clusters of protein-rich seed pods. Tough and widely distributed, they are among the easiest wild foods for a young colony to gather. A worked stand provides **1–2 Food**, a modest but steady supplement to early agriculture.
+
+#### Cloudkelp Beds
+
+<span class="float-right">![cloudkelp_beds](src/resources/cloudkelp_beds.png)</span>
+
+Cloudkelp Beds drift in the coastal seas near land, where buoyant fronds spread into dense floating canopies above nutritious underwater bulbs. Both the surface growth and the submerged tubers are harvested in turn. A worked bed yields **1–2 Food**, giving seaside colonies another reason to look to the water.
+
+#### Morrowback Herds
+
+<span class="float-right">![morrowback_herds](src/resources/morrowback_herds.png)</span>
+
+Morrowback Herds roam the open grasslands and plains, great bovine-like grazers whose swollen nutrient sacs can be tapped and harvested without harming the animals. Herded rather than hunted, they provide a renewable, humane source of rich sustenance. A worked range contributes **2–4 Food**, among the most generous food bonuses on the continent.
+
+#### Bugalo Grazing Range
+
+<span class="float-right">![bugalo_range](src/resources/bugalo_range.png)</span>
+
+The massive, bison-sized beetle *Bugalo zubrennensis* migrates in slow herds across the twilight steppes of the grasslands, hills, and plains. The meat is perfection: buttery, marbled, and objectively tastes like Kobe beef. The problem is the color. The green iridescent carapace pigment bleeds through the muscle, leaving the meat a vivid, unappetizing chartreuse no matter how it is cooked. Colonists will eat it, but chefs hate it. A worked range contributes **2–4 Food**, **1–2 Happiness**, and **1–2 Wealth**.
+
+#### Thousandseed Basin
+
+<span class="float-right">![thousandseed_basin](src/resources/thousandseed_basin.png)</span>
+
+The Thousandseed Basin forms in the wetlands, where seasonal floods trigger extraordinary blooms of fast-growing, seed-bearing organisms. When the waters recede, colonists gather the countless seeds in a brief, bountiful harvest. A worked basin provides **2–4 Food**, turning the marshes into one of the planet's richest larders.
+
+### Material
+
+#### Ferric Strata Veins
+
+<span class="float-right">![ferric_strata](src/resources/ferric_strata.png)</span>
+
+Ferric Strata Veins are banded iron-silicate seams laid bare by relentless stellar winds, common across hills and both mountain tiers where basalt shelves break the surface. Easily located and widely spread, they are the backbone of early industry. A worked vein adds **1–3 Material**, feeding the forges of any mining colony.
+
+#### Kinetite Crystals
+
+<span class="float-right">![kinetite_crystals](src/resources/kinetite_crystals.png)</span>
+
+Kinetite Crystals are piezoelectric minerals that form only in the natural vibration fields of hills and low mountains, growing slowly and sparsely over ages. Their charge-holding structure makes them invaluable for both electronics and resilient construction. A worked deposit yields **1–3 Material**, a rare but prized find.
+
+#### Fossilized Chitin Reefs
+
+<span class="float-right">![fossilized_chitin](src/resources/fossilized_chitin.png)</span>
+
+Fossilized Chitin Reefs are the mineralized remains of ancient megafauna, now entombed in shallow seas near land. Mined and refined, their chitinous matrix becomes high-grade carbon composite. A worked reef provides **1–3 Material** and **1–2 Wealth**, pairing structural value with a tidy profit from the exotic compounds it yields.
+
+#### Aero-Silk Nests
+
+<span class="float-right">![aero-silk_nests](src/resources/aero-silk_nests.png)</span>
+
+Aero-Silk Nests are spun by alien arachnoid creatures that thrive in the low-humidity air of the deserts, where they draw out high-tensile fiber across the dunes. The harvested silk is both a construction marvel and a luxury export. A worked nest yields **1–3 Material** and **1–2 Wealth**, letting arid colonies turn emptiness into advantage.
+
+#### Starfall Alloy Crater
+
+<span class="float-right">![starfall_alloy](src/resources/starfall_alloy.png)</span>
+
+A Starfall Alloy Crater marks where a meteor struck Zubrenn, scattering rare earths and nickel-iron across grassland, hills, forest, jungle, desert, and both mountain tiers. These impact sites are extraordinarily rare but staggeringly rich. A worked crater provides **3–4 Material**, a windfall of refined-grade metal for any colony fortunate enough to claim one.
+
+#### Threadstone Seam
+
+<span class="float-right">![threadstone_seam](src/resources/threadstone_seam.png)</span>
+
+The Threadstone Seam runs through grassland, low mountains, and plains, a naturally fibrous rock that cleaves into long, useful construction strands with little processing. Reasonably common, it is a staple of large-scale building. A worked seam yields **3–4 Material**, giving industrial colonies a steady supply of ready-to-use structural fiber.
+
+#### Hexabark Grove
+
+<span class="float-right">![hexabark_grove](src/resources/hexabark_grove.png)</span>
+
+The Hexabark Grove is a stand of towering organisms that armor their trunks in lightweight, honeycombed plating, found across grassland, low mountains, and plains. Harvested like timber but strong as alloy, hexabark is a prized building material. A worked grove contributes **3–4 Material**, blending the ease of forestry with the strength of metal.
+
+#### Gravalloy Veins
+
+<span class="float-right">![gravalloy_vein](src/resources/gravalloy_vein.png)</span>
+
+Gravalloy Veins thread through the low and high mountains, carrying an unusually dense metallic ore prized for heavy machinery and orbital infrastructure. Mining it is demanding, but the payoff is substantial. A worked vein provides **3–4 Material**, the metal of choice for a colony's most ambitious engineering.
+
+#### Titanlace Deposit
+
+<span class="float-right">![titanlace_deposit](src/resources/titanlace_deposit.png)</span>
+
+Titanlace Deposits form only in the high mountains, where rare mineral lattices can be processed into an exceptionally strong structural mesh. Reaching them means braving the planet's most forbidding peaks. A worked deposit yields **3–4 Material**, rewarding high-altitude mining with some of the finest building stock on Zubrenn.
+
+### Energy
+
+#### Tidal Dynamo Basin
+
+<span class="float-right">![tidal_dynamo](src/resources/tidal_dynamo.png)</span>
+
+A Tidal Dynamo Basin captures the powerful coastal flows driven by the orbits of Zubrenn's twin stars, where sea meets land. Rare and site-specific, these basins drive turbines around the clock. A worked basin provides **3–4 Energy**, a clean and relentless power source for seaside industry.
+
+#### Geothermal Plume
+
+<span class="float-right">![geothermal_plume](src/resources/geothermal_plume.png)</span>
+
+A Geothermal Plume vents the deep heat of the planet beneath the crustal plates of the low and high mountains. Reliable and potent, it demands careful cooling infrastructure to tap safely. A worked plume yields **3–4 Energy**, anchoring mountain colonies with dependable baseload power.
+
+#### Sunshard Flats
+
+<span class="float-right">![sunshard_flats](src/resources/sunshard_flats.png)</span>
+
+Sunshard Flats glitter across the open deserts, where naturally photovoltaic crystals carpet the ground and convert starlight directly into harvestable current. Common where the suns beat hardest, they turn the desert's greatest hardship into its chief asset. A worked flat provides **3–4 Energy**, electrifying arid colonies with ease.
+
+#### Pyrogel Pool
+
+<span class="float-right">![pyrogel_pool](src/resources/pyrogel_pool.png)</span>
+
+Pyrogel Pools lie beneath sealed surface crusts in the warmer wetlands, where native microbes brew a stable, energy-rich gel. Carefully extracted, the gel burns clean and steady. A worked pool yields **3–4 Energy**, giving marshland colonies a surprising powerhouse hidden just below the surface.
+
+#### Aurora Spires
+
+<span class="float-right">![aurora_spires](src/resources/aurora_spires.png)</span>
+
+Aurora Spires are conductive mineral towers rising from the frozen polar zones, where they channel powerful atmospheric currents down into fixed collection sites. Born of the same forces that paint the polar skies, they shine with captured charge. A worked spire provides **3–4 Energy**, lighting the colonies that dare to settle the ice.
+
+### Wealth
+
+#### Vaelis Resin
+
+<span class="float-right">![vaelis_resin](src/resources/vaelis_resin.png)</span>
+
+Vaelis Resin is a fragrant secretion drawn from native forest organisms, treasured for its use in luxury perfumes and precision manufacturing alike. Its scent and purity command premium prices across the stars. A worked source provides **2–4 Wealth** and **1–3 Happiness**, enriching both a colony's coffers and the spirits of its people.
+
+#### Lightningfly Venom
+
+<span class="float-right">![lightningfly_venom](src/resources/lightningfly_venom.png)</span>
+
+Lightningfly Venom is milked from darting insect analogs that swarm the forests and jungles of the mid-latitudes. A potent biologic, it forms the basis of a wide range of medicines. A worked colony of lightningflies yields **2–4 Wealth** and **1–3 Happiness**, as cures and comforts flow from the harvest.
+
+#### Memory Opals
+
+<span class="float-right">![memory_opals](src/resources/Memory_opals.png)</span>
+
+Memory Opals are layered crystals found in the hills and low mountains of the temperate zones, each capable of retaining intricate optical patterns within its strata. Prized as both jewelry and archival media, they hold the colony's stories as readily as its wealth. A worked seam provides **2–4 Wealth** and **1–3 Happiness**, uniting beauty, utility, and profit.
+
+#### Starveil Filaments
+
+<span class="float-right">![starveil_filaments](src/resources/starveil_filaments.png)</span>
+
+Starveil Filaments are fine biological fibers gathered from forest and jungle organisms in the mid-latitudes, woven into shimmering, temperature-regulating garments. Elegant and functional, they are coveted across colonized worlds. A worked source yields **2–4 Wealth** and **1–3 Happiness**, clothing colonists in comfort while filling the treasury.
+
+#### Crownfire Geodes
+
+<span class="float-right">![crownfire_geodes](src/resources/crownfire_geodes.png)</span>
+
+Crownfire Geodes are extraordinarily rare crystals hidden in the low and high mountains, their luminous interiors flickering like miniature stellar flares. To open one is to glimpse a captured star. A worked geode provides **2–4 Wealth** and **1–3 Happiness**, a treasure that enriches and delights in equal measure.
+
+### Happiness
+
+#### Aurelian Sky Mirrors
+
+<span class="float-right">![sky_mirror](src/resources/sky_mirror.png)</span>
+
+Aurelian Sky Mirrors are shimmering mineral pools scattered rarely across grassland, hills, forest, jungle, and desert, their glassy surfaces reflecting the colors of the binary sunset. They must be kept pristine; any despoiling of their surroundings dims their magic. A worked, undisturbed mirror provides **1–3 Happiness**, a quiet wonder that lifts the colony's morale.
+
+#### Chorus Gardens
+
+<span class="float-right">![chorus_gardens](src/resources/chorus_gardens.png)</span>
+
+Chorus Gardens are tracts of sonic-reactive jungle flora engineered to hum in harmony with the frequencies of colonist life. Walking among them is to be serenaded by the land itself, so long as the groves remain pristine. A worked garden yields **2–3 Happiness**, filling nearby settlements with living music.
+
+#### Echo Monolith
+
+<span class="float-right">![echo_monolith](src/resources/echo_monolith.png)</span>
+
+An Echo Monolith is an ancient standing stone left on the dry grasslands by a vanished alien race, resonant with cultural and historical significance. Exceptionally rare and sacred, it must be preserved pristine to retain its meaning. A worked, protected monolith provides **3–4 Happiness** and **2–3 Wealth**, drawing pilgrims and prosperity alike.
+
+#### Jaba Grove
+
+<span class="float-right">![jaba_grove](src/resources/jaba_grove.png)</span>
+
+A Jaba Grove is a stand of forest fruit trees whose produce nourishes colonists and whose resonant wood yields a gentle sonic energy. Rare and delicate, it rewards only those who keep its surroundings pristine. A worked grove provides **3–4 Happiness** and **1–2 Energy**, feeding both body and spirit.
+
+#### Dreamblossom Field
+
+<span class="float-right">![dreamblossom_field](src/resources/dreamblossom_field.png)</span>
+
+Dreamblossom Fields spread across the plains of the mid-latitudes, their vast blooms releasing a soothing fragrance that drifts for miles. When they flower, colonies gather for seasonal festivals held in their honor, provided the fields stay pristine. A worked field yields **3–4 Happiness**, anchoring a colony's cultural calendar.
+
+#### Dancing Veil Falls
+
+<span class="float-right">![dancing_veil_falls](src/resources/dancing_veil_falls.png)</span>
+
+Dancing Veil Falls tumble from the low and high mountains where rivers plunge in the cooler latitudes, their charged mist forming drifting curtains of colored light. Breathtaking and serene, they must be kept pristine to preserve their shifting glow. A worked falls provides **3–4 Happiness**, a natural spectacle that renews the colony's spirit.
+
 ## Project structure
 
 ```

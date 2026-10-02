@@ -208,6 +208,8 @@
     // Apply saved theme.
     ipcRenderer.invoke("settings-get").then((settings) => {
       document.body.classList.toggle("dark", (settings.theme || "dark") === "dark");
+      const scales = { small: 1, medium: 1.25, large: 1.5 };
+      document.body.style.zoom = String(scales[(settings && settings.fontSize) || "small"] || 1);
     });
 
     // Live-update range value labels.

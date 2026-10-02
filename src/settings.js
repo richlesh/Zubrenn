@@ -14,6 +14,7 @@ const DEFAULTS = {
   autoTurnEnd: true,
   musicEnabled: true,
   musicVolume: 50, // 0–100
+  fontSize: "small", // "small" (1x) | "medium" (1.25x) | "large" (1.5x)
 };
 
 function load() {

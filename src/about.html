@@ -57,6 +57,8 @@
 
     ipcRenderer.invoke("settings-get").then((settings) => {
       if ((settings.theme || "dark") === "dark") document.body.classList.add("dark");
+      const scales = { small: 1, medium: 1.25, large: 1.5 };
+      document.body.style.zoom = String(scales[(settings && settings.fontSize) || "small"] || 1);
     });
 
     document.getElementById("electron-version").textContent = process.versions.electron;

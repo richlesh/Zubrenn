@@ -365,14 +365,23 @@ function buildMoisture(width, height, rng, wrap) {
   return out;
 }
 
+// Latitude bands (absolute degrees) that steer temperate vegetation. Jungle is
+// confined to the tropics; forest dominates the temperate zone. The map spans
+// +/-maxLatDeg (see maxLatDeg below and the terrain-bonus latitude math), so the
+// normalized 0..1 latitude is scaled to degrees before comparing.
+const JUNGLE_MAX_LAT_DEG = 25;   // jungle only occurs within +/-25 degrees
+const FOREST_MAX_LAT_DEG = 50;   // forest primarily in the 25..50 temperate band
+
 function assignBiomes(tiers, width, height, rng, polar, wrap) {
   const moisture = buildMoisture(width, height, rng, wrap);
   const cy = (height - 1) / 2;
   const maxLat = cy || 1;
+  const maxLatDeg = 70; // map spans +/-70 degrees (matches terrain-bonus latitude)
 
   const grid = [];
   for (let y = 0; y < height; y++) {
-    const latitude = Math.abs(y - cy) / maxLat;
+    const latitude = Math.abs(y - cy) / maxLat; // 0 at equator .. 1 at pole
+    const latDeg = latitude * maxLatDeg;         // absolute latitude in degrees
     const row = new Array(width);
     for (let x = 0; x < width; x++) {
       const tier = tiers[y][x];
@@ -389,12 +398,25 @@ function assignBiomes(tiers, width, height, rng, polar, wrap) {
           row[x] = 2; // grassland
         }
       } else if (tier <= 6) {
-        if (m < 0.38) {
-          row[x] = 3; // hills
-        } else if (m < 0.68) {
-          row[x] = 4; // forest
+        // Mid-elevation vegetated band. LATITUDE is the primary driver so that
+        // jungle stays equatorial and forest stays temperate; moisture then
+        // decides how lush each cell is within its band:
+        //   - tropics (|lat| <= 25 deg): wettest -> jungle, mid -> grassland,
+        //     dry -> hills (forest is NOT the tropical default)
+        //   - temperate (25..50 deg): forest dominates; dry cells are hills
+        //   - sub-polar (> 50 deg): mostly hills; only the very wettest are forest
+        if (latDeg <= JUNGLE_MAX_LAT_DEG) {
+          if (m < 0.38) {
+            row[x] = 3; // hills
+          } else if (m < 0.68) {
+            row[x] = 2; // grassland (tropical, non-jungle)
+          } else {
+            row[x] = 5; // jungle
+          }
+        } else if (latDeg <= FOREST_MAX_LAT_DEG) {
+          row[x] = (m < 0.38) ? 3 : 4; // temperate: hills or forest, no jungle
         } else {
-          row[x] = 5; // jungle
+          row[x] = (m < 0.80) ? 3 : 4; // sub-polar: mostly hills, only wettest forest
         }
       } else {
         row[x] = tier; // 7,8,9
