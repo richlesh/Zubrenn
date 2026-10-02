@@ -12,6 +12,18 @@ const ROOT_DIR = path.join(__dirname, "..");
 const pkg = require("../package.json");
 const APP_ICON_PATH = path.join(__dirname, "resources", "app_icon.png");
 
+// config.json is authored with `//` documentation comments (full-line notes
+// describing the terrainBonus schema, etc). JSON.parse rejects those, so strip
+// lines whose first non-whitespace characters are `//` before parsing. Only
+// whole-line comments are removed, so `//` inside string values is preserved.
+function parseJsonc(text) {
+  const cleaned = String(text)
+    .split(/\r?\n/)
+    .map((line) => (/^\s*\/\//.test(line) ? "" : line))
+    .join("\n");
+  return JSON.parse(cleaned);
+}
+
 // AI vendor catalog (labels, static model lists, API-key URLs).
 let VENDORS = {};
 try {
@@ -28,7 +40,7 @@ let CONFIG = {
 };
 try {
   CONFIG = Object.assign(CONFIG,
-    JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8")));
+    parseJsonc(fs.readFileSync(path.join(__dirname, "config.json"), "utf8")));
 } catch (e) {
   console.error("Failed to load config.json:", e && e.message);
 }
@@ -532,7 +544,11 @@ function openNewGame() {
 ipcMain.handle("newgame-create", (_e, options) => {
   let result;
   try {
-    result = generateMap(options || {});
+    // Supply the terrain-bonus ruleset from config so the generator can place
+    // bonuses; the renderer resolves each bonus's resources/icon by name.
+    const genOpts = Object.assign({}, options || {});
+    if (CONFIG && CONFIG.terrainBonus) genOpts.terrainBonus = CONFIG.terrainBonus;
+    result = generateMap(genOpts);
   } catch (err) {
     console.error("Map generation failed:", err);
     throw err; // propagate to the dialog's await so it can show the error
@@ -598,7 +614,8 @@ function buildSaveObject(gameState) {
       meta: map.meta || null,
       terrain: map.terrain || null,
       elevation: map.elevation || null,
-      rivers: map.rivers || []
+      rivers: map.rivers || [],
+      bonuses: map.bonuses || {}
     },
     // Reserved for future features; pass through whatever the renderer sends.
     improvements: (gameState && gameState.improvements) || [],
@@ -785,6 +802,7 @@ async function loadGame() {
     terrain: map.terrain,
     elevation: map.elevation || null,
     rivers: map.rivers || [],
+    bonuses: map.bonuses || {},
     improvements: parsed.improvements || [],
     pieces: parsed.pieces || [],
     buildings: parsed.buildings || [],

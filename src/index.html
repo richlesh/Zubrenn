@@ -34,8 +34,16 @@
         <div class="player-stat"><span>Happiness: <span id="player-happiness">0</span> / <span id="player-happiness-max">0</span></span> <span id="player-happiness-rate" class="player-rate">+0/yr</span></div>
       </div>
       <div id="buildings-panel">
-        <div class="bldg-panel-title">Buildings</div>
-        <div id="buildings-list"></div>
+        <div class="bldg-cols">
+          <div class="bldg-col">
+            <div class="bldg-panel-title">Buildings</div>
+            <div id="buildings-list"></div>
+          </div>
+          <div class="bldg-col">
+            <div class="bldg-panel-title">Resources</div>
+            <div id="resources-list"></div>
+          </div>
+        </div>
       </div>
       <div id="instructions">
         <ul>
@@ -98,6 +106,40 @@
   <!-- Reusable notification toast/dialog (auto-dismiss 5s / click / Enter). -->
   <div id="notify-overlay" hidden>
     <div id="notify-dialog"><span id="notify-text"></span></div>
+  </div>
+
+  <!-- Debug: terrain-type cell counts for the freshly generated map. -->
+  <div id="terraindebug-overlay" hidden>
+    <div id="terraindebug-dialog">
+      <h2>Terrain Types (debug)</h2>
+      <div class="hint" id="terraindebug-sub"></div>
+      <div id="terraindebug-table-wrap">
+        <table id="terraindebug-table">
+          <thead><tr><th>Terrain</th><th>Cells</th><th>% of map</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="name-row">
+        <button id="terraindebug-ok">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Debug: terrain-bonus counts for the freshly generated map. -->
+  <div id="bonusdebug-overlay" hidden>
+    <div id="bonusdebug-dialog">
+      <h2>Terrain Bonuses (debug)</h2>
+      <div class="hint" id="bonusdebug-sub"></div>
+      <div id="bonusdebug-table-wrap">
+        <table id="bonusdebug-table">
+          <thead><tr><th>Terrain Bonus</th><th>Count</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="name-row">
+        <button id="bonusdebug-ok">Close</button>
+      </div>
+    </div>
   </div>
 
   <!-- Start-of-turn dialog: new-year announcement + optional auto-end notice. -->
@@ -298,6 +340,11 @@
 
     let hexMap = null;
     let _roundHadAction = false; // did a player place/act during the current round?
+    // Fog of war: the set of cell keys (y*W+x) the human player has revealed.
+    // Null when fog is inactive. Persisted via gameState.map.meta.visible.
+    let _visibleSet = null;
+    const FOG_INITIAL_RADIUS = 20; // revealed circle around the random start tile
+    const FOG_COLONY_RADIUS = 15;  // revealed circle around each human colony
     let CONFIG = { maxAIs: 40, minColonyDistance: 20, startingYear: 2500,
                    aiPlacementMinTurns: 3, aiPlacementMaxTurns: 200,
                    buildingTypes: { "1": { name: "Biodome", startPopulation: 1000, growthRate: 0.01, buildCost: { turns: 0 }, bonus: { food: 1, material: 1, energy: 2, growth: 0, wealth: 1 } } },
@@ -371,6 +418,8 @@
     // Exposed for the main process (Save Game) to read the current state.
     window.getGameState = function () {
       if (!gameState.map || !gameState.map.terrain) return null;
+      // Make sure the fog-of-war visible set is current in meta before saving.
+      syncVisibleToMeta();
       const nameEl = document.getElementById("player-name");
       const input = nameEl ? nameEl.querySelector("input") : null;
       if (input && input.value.trim()) {
@@ -554,6 +603,87 @@
       if (yy < 0 || yy >= t.length || xx < 0 || xx >= W) return 0;
       return t[yy][xx];
     }
+    // Terrain bonus placed on a cell (sparse map keyed by y*W+x in map.bonuses).
+    // Returns the config definition merged with its display name, or null.
+    function bonusDefAt(x, y) {
+      if (!gameState.map || !gameState.map.terrain) return null;
+      const bonuses = gameState.map.bonuses;
+      if (!bonuses) return null;
+      const t = gameState.map.terrain;
+      const W = t[0].length, H = t.length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const yy = y, xx = wrap ? ((x % W) + W) % W : x;
+      if (yy < 0 || yy >= H || xx < 0 || xx >= W) return null;
+      const entry = bonuses[yy * W + xx];
+      if (!entry || !entry.name) return null;
+      const defs = (CONFIG && CONFIG.terrainBonus) || null;
+      const def = defs ? defs[entry.name] : null;
+      if (!def) {
+        return entry.bonus ? { name: entry.name, bonus: entry.bonus } : { name: entry.name };
+      }
+      const merged = Object.assign({ name: entry.name }, def);
+      // Prefer the concrete bonus stored on the cell (ranges like "1-3" are
+      // resolved at map generation). Fall back to resolving the config bonus
+      // for older saves/entries that stored only a name.
+      merged.bonus = entry.bonus ? entry.bonus : resolveBonusSpec(def.bonus);
+      return merged;
+    }
+    // Resolve a config bonus object that may contain range strings ("1-3") into
+    // concrete numbers. Used only as a fallback when a cell has no stored bonus
+    // (e.g. a save made before bonuses were stored per-cell). Non-deterministic,
+    // but such entries are legacy; freshly generated maps always store a bonus.
+    function resolveBonusSpec(spec) {
+      if (!spec || typeof spec !== 'object') return {};
+      const out = {};
+      for (const k of Object.keys(spec)) {
+        const v = spec[k];
+        if (typeof v === 'number') { out[k] = v; continue; }
+        if (typeof v === 'string') {
+          const m = v.match(/^\s*(-?\d+(?:\.\d+)?)\s*-\s*(-?\d+(?:\.\d+)?)\s*$/);
+          if (m) {
+            let lo = parseFloat(m[1]), hi = parseFloat(m[2]);
+            if (lo > hi) { const t = lo; lo = hi; hi = t; }
+            const STEP = 0.25;
+            const steps = Math.floor((hi - lo) / STEP + 1e-9);
+            const pick = Math.floor(Math.random() * (steps + 1));
+            out[k] = Math.round((lo + pick * STEP) * 100) / 100;
+          } else {
+            const n = parseFloat(v);
+            out[k] = Number.isFinite(n) ? n : 0;
+          }
+        } else {
+          out[k] = 0;
+        }
+      }
+      return out;
+    }
+    // A terrain bonus is "pristine" if its config definition lists "pristine" in
+    // its `other` array. A pristine bonus yields only while worked and is
+    // destroyed permanently the moment any building is built on its tile.
+    function bonusIsPristine(tb) {
+      return !!(tb && Array.isArray(tb.other) && tb.other.includes('pristine'));
+    }
+    // If the cell holds a PRISTINE terrain bonus, remove it from the game for
+    // good (it cannot coexist with a building). Returns the destroyed bonus's
+    // display name, or null if nothing was destroyed. Safe to call on any cell.
+    function destroyPristineBonusAt(x, y) {
+      if (!gameState.map || !gameState.map.terrain || !gameState.map.bonuses) return null;
+      const t = gameState.map.terrain;
+      const W = t[0].length, H = t.length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const yy = y, xx = wrap ? ((x % W) + W) % W : x;
+      if (yy < 0 || yy >= H || xx < 0 || xx >= W) return null;
+      const idx = yy * W + xx;
+      const entry = gameState.map.bonuses[idx];
+      if (!entry || !entry.name) return null;
+      const tb = bonusDefAt(xx, yy);
+      if (!bonusIsPristine(tb)) return null;
+      delete gameState.map.bonuses[idx];           // gone permanently (persists via save)
+      if (hexMap && typeof hexMap.setBonuses === 'function') {
+        hexMap.setBonuses(gameState.map.bonuses);  // drop its icon from the map
+      }
+      return entry.name;
+    }
     // odd-q offset -> cube coords, for hex distance.
     function offsetToCube(x, y) {
       const q = x;
@@ -652,9 +782,10 @@
       }
       return false;
     }
-    // Desert, grassland, hills, forest, jungle get +1 food when adjacent to a
-    // river segment OR a sea tile.
-    const WATER_FOOD_TERRAINS = new Set([2, 3, 4, 5, 6]); // grassland,hills,forest,jungle,desert
+    // Grassland, hills, forest, jungle, desert, and plains get +1 food when
+    // adjacent to a river segment OR a sea tile. (Wetlands are intentionally
+    // excluded — they already carry their own happiness bonus.)
+    const WATER_FOOD_TERRAINS = new Set([2, 3, 4, 5, 6, 10]); // + plains (10)
     function waterFoodBonus(x, y) {
       const terr = terrainAt(x, y);
       if (!WATER_FOOD_TERRAINS.has(terr)) return 0;
@@ -669,7 +800,7 @@
     // A land tile with an adjacent river side gains a base wealth bonus.
     function riverWealthBonus(x, y) {
       const terr = terrainAt(x, y);
-      if (terr < 2 || terr > 9) return 0;        // land only
+      if (terr < 2 || terr > 11) return 0;       // land only (2-11, incl. Plains/Wetlands)
       if (!nearRiver(x, y)) return 0;
       return (CONFIG.riverAdjacentWealthBonus != null ? CONFIG.riverAdjacentWealthBonus : 1);
     }
@@ -1160,7 +1291,7 @@
     }
     function canalSegmentAllowed(ax, ay, bx, by) {
       const ta = terrainAt(ax, ay), tb = terrainAt(bx, by);
-      if (ta < 2 || ta > 9 || tb < 2 || tb > 9) return false;   // both must be land
+      if (ta < 2 || ta > 11 || tb < 2 || tb > 11) return false;   // both must be land (2-11)
       // Disallow if either adjacent cell is of a config-listed terrain code.
       const disallowed = CONFIG.canalDisallowedTerrain || [];
       if (disallowed.includes(ta) || disallowed.includes(tb)) return false;
@@ -1734,7 +1865,7 @@
     function isPassableCell(x, y, allowShallowSea) {
       const terr = terrainAt(x, y);
       if (terr === 1) return !!allowShallowSea && isShallowSea(x, y);
-      if (terr < 2 || terr > 9) return false;          // off-map
+      if (terr < 2 || terr > 11) return false;         // off-map (land is 2-11)
       if (isImpassableFrozen(x, y)) return false;      // frozen too high
       return true;
     }
@@ -1999,6 +2130,16 @@
       // River-adjacent tiles also gain a wealth bonus.
       wealth.bonus += riverWealthBonus(gx, gy);
 
+      // Terrain bonus feature on this cell adds its configured resources.
+      const tb = bonusDefAt(gx, gy);
+      if (tb && tb.bonus) {
+        food.bonus += tb.bonus.food || 0;
+        prod.bonus += tb.bonus.material || 0;
+        energy.bonus += tb.bonus.energy || 0;
+        wealth.bonus += tb.bonus.wealth || 0;
+        happ.bonus += tb.bonus.happiness || 0;
+      }
+
       // Biodome base production on its home cell (uses the config `bonus`).
       if (isHome) {
         const n = bldgNet(1);
@@ -2086,8 +2227,9 @@
       const tot = (o) => (o.base || 0) + (o.bonus || 0);
       const parts = [];
       const push = (label, o) => {
-        const v = Math.round(tot(o) * 10) / 10;
-        if (v) parts.push(`${label}:${v}`);
+        const v = Math.round(tot(o) * 100) / 100;
+        // Show up to 2 decimals, trimming trailing zeros (e.g. 2, 1.5, 1.25).
+        if (v) parts.push(`${label}:${parseFloat(v.toFixed(2))}`);
       };
       push("E", bd.energy);
       push("F", bd.food);
@@ -2102,6 +2244,12 @@
       let s = `Year: ${currentYear()}`;
       if (p) s += `  |  ${p.kind === 'human' ? 'Your turn' : p.name + "'s turn"}`;
       if (hoverInfo) {
+        if (hoverInfo.fogged) {
+          // Unexplored (fogged) cell: reveal nothing but the coordinates.
+          s += `  |  Unexplored  (${hoverInfo.x},${hoverInfo.y})`;
+          el.textContent = s;
+          return;
+        }
         // If a colony occupies the hovered cell, show its owner + improvement
         // BEFORE the terrain / elevation / coordinates.
         const b = colonyAt(hoverInfo.x, hoverInfo.y);
@@ -2153,8 +2301,13 @@
             b.pendingColonists = 0;
             b.turnsRemaining = 0;
             badgeChanged = true;
+            // The biodome now occupies the tile: a pristine bonus here is lost.
+            const _lostArrivalBonus = destroyPristineBonusAt(b.x, b.y);
+            if (_lostArrivalBonus && b.owner === 'human') notify(`${_lostArrivalBonus} was destroyed by founding a colony on its tile.`);
             if (b.owner === 'human') {
               notify(`${b.name || 'A new colony'} has been established at ${b.x},${b.y}.`);
+              // Fog of war: reveal a circle around the newly arrived colony.
+              revealAroundColony(b.x, b.y);
               // Prompt the player to assign this colony's first worker.
               b._justEstablished = true;
               if (!_newWorkerColonies.includes(b)) _newWorkerColonies.push(b);
@@ -2451,6 +2604,34 @@
         html += `<div class="bldg-stat">${name}: <span>${count(type).toLocaleString()}</span></div>`;
       }
       list.innerHTML = html;
+      updateResourcesPanel();
+    }
+
+    // Resources column of the Buildings panel: count the TILE BONUSES on every
+    // cell the human is currently working, grouped by the terrain-bonus NAME
+    // (e.g. "Starfall Alloy Crater: 2"). Only worked cells count — an idle /
+    // unworked bonus tile contributes nothing, matching how the economy credits
+    // terrain-bonus yields.
+    function updateResourcesPanel() {
+      const el = document.getElementById("resources-list");
+      if (!el) return;
+      const counts = new Map(); // bonus name -> number of worked tiles
+      const colonies = (gameState.buildings || [])
+        .filter((b) => b.owner === 'human' && b.type === 1 && !b.inTransit);
+      for (const col of colonies) {
+        for (const k of (col.worked || [])) {
+          const [cx, cy] = String(k).split(",").map(Number);
+          if (!Number.isFinite(cx) || !Number.isFinite(cy)) continue;
+          const tb = bonusDefAt(cx, cy);
+          if (!tb || !tb.name) continue;
+          counts.set(tb.name, (counts.get(tb.name) || 0) + 1);
+        }
+      }
+      // Alphabetical by bonus name.
+      const rows = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+      el.innerHTML = rows.length
+        ? rows.map(([name, n]) => `<div class="bldg-stat">${name}: <span>${n.toLocaleString()}</span></div>`).join("")
+        : `<div class="bldg-none">None</div>`;
     }
 
     // Advance to the next player; auto-resolve AI turns. Once the human has
@@ -2878,6 +3059,17 @@
         production.food += tp.food + waterFoodBonus(wx, wy);
         production.material += tp.material;
         production.wealth += riverWealthBonus(wx, wy); // river-adjacent wealth
+        // Terrain-bonus feature on a WORKED cell adds its resources (pristine
+        // bonuses included). Only worked cells yield; an idle bonus tile gives
+        // nothing, and a pristine bonus destroyed by a building is already gone.
+        const tb = bonusDefAt(wx, wy);
+        if (tb && tb.bonus) {
+          production.food += tb.bonus.food || 0;
+          production.material += tb.bonus.material || 0;
+          production.energy += tb.bonus.energy || 0;
+          production.wealth += tb.bonus.wealth || 0;
+          growthBonus += tb.bonus.growth || 0;
+        }
       }
       // Buildings contribute production + upkeep ONLY when their cell is worked.
       for (const b of colonyBuildings(col)) {
@@ -3450,6 +3642,130 @@
       }
       return out;
     }
+
+    // ---- Fog of war ---------------------------------------------------------
+    // Visibility is a Set of cell keys (y*W+x). The human starts seeing only a
+    // circle around a random land tile; founding a colony reveals a circle
+    // around it. The set is mirrored into gameState.map.meta.visible so it is
+    // saved and restored.
+    function fogWidth() {
+      return (gameState.map && gameState.map.terrain && gameState.map.terrain[0])
+        ? gameState.map.terrain[0].length : 0;
+    }
+    function fogKey(x, y) { return y * fogWidth() + x; }
+
+    // Hex geometry (unit cell spacing), mirroring getHexCenter in draw_map.cjs:
+    // flat-topped, odd-q layout where odd columns sit half a row lower.
+    const FOG_HEX_SCALE = { x: 1.15470053837925, y: 0.86602540378444 };
+    function hexCenterPx(x, y) {
+      const parity = ((x % 2) + 2) % 2;
+      return {
+        x: (0.5 + x * 0.75) * FOG_HEX_SCALE.x,
+        y: (0.5 + y + parity / 2) * FOG_HEX_SCALE.y
+      };
+    }
+    // Collect every cell whose CENTER lies within a true Cartesian (Euclidean)
+    // radius of the center of cell (cx,cy). `radius` is measured in cells (one
+    // cell = one row height), so radius R reveals a round disk R cells across in
+    // every direction — not the hexagon that hex-distance produces. Wrap-aware
+    // in x (the seam distance is handled by testing shifted column copies).
+    function cellsWithinCartesian(cx, cy, radius) {
+      const t = gameState.map && gameState.map.terrain;
+      if (!t || !t.length) return [];
+      const H = t.length, W = t[0].length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const wx = (x) => wrap ? ((x % W) + W) % W : x;
+      const origin = hexCenterPx(cx, cy);
+      // Radius in the same (row-height) units used by hexCenterPx.
+      const rPx = radius * FOG_HEX_SCALE.y;
+      const r2 = rPx * rPx;
+      // Bounding box of candidate cells (a little padding for hex offsets).
+      const colSpan = Math.ceil(rPx / (0.75 * FOG_HEX_SCALE.x)) + 2;
+      const rowSpan = Math.ceil(rPx / FOG_HEX_SCALE.y) + 2;
+      const out = [];
+      const seen = new Set();
+      for (let dxCol = -colSpan; dxCol <= colSpan; dxCol++) {
+        const colUnwrapped = cx + dxCol;      // used for pixel distance (seam-correct)
+        const col = wrap ? wx(colUnwrapped) : colUnwrapped;
+        if (!wrap && (col < 0 || col >= W)) continue;
+        for (let dyRow = -rowSpan; dyRow <= rowSpan; dyRow++) {
+          const row = cy + dyRow;
+          if (row < 0 || row >= H) continue;
+          // Distance uses the UNWRAPPED column so cells across the seam measure
+          // their true (shortest) separation via this straddling copy.
+          const p = hexCenterPx(colUnwrapped, row);
+          const ddx = p.x - origin.x, ddy = p.y - origin.y;
+          if (ddx * ddx + ddy * ddy > r2) continue;
+          const k = row * W + col;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          out.push({ x: col, y: row });
+        }
+      }
+      return out;
+    }
+
+    // Persist the current visible set back into map.meta (as a plain array).
+    function syncVisibleToMeta() {
+      if (!gameState.map) return;
+      if (!gameState.map.meta) gameState.map.meta = {};
+      gameState.map.meta.visible = _visibleSet ? Array.from(_visibleSet) : null;
+    }
+
+    // Add every cell whose center lies within the Cartesian `radius` (in cells)
+    // of (cx,cy) to the visible set. Returns the number of newly revealed cells.
+    // Does not redraw.
+    function addVisibleAround(cx, cy, radius) {
+      if (!_visibleSet) _visibleSet = new Set();
+      let added = 0;
+      for (const c of cellsWithinCartesian(cx, cy, radius)) {
+        const k = fogKey(c.x, c.y);
+        if (!_visibleSet.has(k)) { _visibleSet.add(k); added++; }
+      }
+      return added;
+    }
+
+    // Pick a random non-polar land tile (terrain 2..11, excluding Frozen 9).
+    // Falls back to map center if none is found (all-ocean/all-frozen maps).
+    // Returns { x, y }.
+    function randomLandTile() {
+      const t = gameState.map && gameState.map.terrain;
+      if (!t || !t.length) return { x: 0, y: 0 };
+      const H = t.length, W = t[0].length;
+      const land = [];
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const v = t[y][x];
+          if (v >= 2 && v <= 11 && v !== 9) land.push({ x, y }); // land, not Frozen
+        }
+      }
+      if (!land.length) return { x: Math.floor(W / 2), y: Math.floor(H / 2) };
+      return land[Math.floor(Math.random() * land.length)];
+    }
+
+    // Seed initial fog: everything hidden except a circle of radius
+    // FOG_INITIAL_RADIUS around a random land tile. Stores the start tile in
+    // meta so it can be reported/debugged.
+    function initVisibility() {
+      _visibleSet = new Set();
+      const start = randomLandTile();
+      addVisibleAround(start.x, start.y, FOG_INITIAL_RADIUS);
+      if (gameState.map && gameState.map.meta) {
+        gameState.map.meta.fogStart = { x: start.x, y: start.y };
+      }
+      syncVisibleToMeta();
+    }
+
+    // Reveal a circle of radius FOG_COLONY_RADIUS around a (human) colony and
+    // refresh the map if anything new became visible.
+    function revealAroundColony(x, y) {
+      if (!_visibleSet) return;            // fog inactive (e.g. legacy save)
+      const added = addVisibleAround(x, y, FOG_COLONY_RADIUS);
+      if (added > 0) {
+        syncVisibleToMeta();
+        if (hexMap) hexMap.setVisible(_visibleSet);
+      }
+    }
     // Area-of-control cells for a colony (its own control radius, land only).
     // Control radius grows with population per config.zoneOfControlSize: an
     // array of population thresholds; index+1 is the radius once population
@@ -3510,7 +3826,7 @@
       if (terrainAt(x, y) !== 1) return false;
       for (const n of hexNeighborsRenderer(x, y)) {
         const tt = terrainAt(n.x, n.y);
-        if (tt >= 2 && tt <= 9) return true;         // any land tile
+        if (tt >= 2 && tt <= 11) return true;        // any land tile (2-9, Plains 10, Wetlands 11)
       }
       return false;
     }
@@ -3611,6 +3927,11 @@
                     worked: [cellKey(x, y)] };
       gameState.buildings.push(rec);
       gameState.colonies.push({ x, y, owner, name });
+      // Building on a pristine-bonus tile destroys that bonus permanently.
+      const _lostColonyBonus = destroyPristineBonusAt(x, y);
+      if (_lostColonyBonus && owner === 'human') notify(`${_lostColonyBonus} was destroyed by founding a colony on its tile.`);
+      // Fog of war: a human colony reveals a circle around it.
+      if (owner === 'human') revealAroundColony(x, y);
       if (hexMap) hexMap.setBuildings(gameState.buildings);
       updateColonyAttention();
       if (owner === 'human') updatePlayerPanel();
@@ -3627,6 +3948,9 @@
       const rec = { x, y, type, owner, ownerName: species, improvement: improvementName(type),
                     turnsRemaining: buildTurnsOf(bt) };
       gameState.buildings.push(rec);
+      // Building on a pristine-bonus tile destroys that bonus permanently.
+      const _lostBuildBonus = destroyPristineBonusAt(x, y);
+      if (_lostBuildBonus && owner === 'human') notify(`${_lostBuildBonus} was destroyed by building on its tile.`);
       // Pay the build cost from the owner's resource pool (human uses
       // gameState.resources; each AI uses its own player.resources).
       // Pay the build cost from the CONTROLLING colony's stored resources,
@@ -4407,7 +4731,9 @@
         return { ok: true };
       }
       const terr = terrainAt(x, y);
-      if (terr < 2 || terr > 7) return { ok: false, reason: "must be land" };
+      if (!((terr >= 2 && terr <= 7) || terr === 10 || terr === 11)) {
+        return { ok: false, reason: "must be land" };
+      }
       if (!(owner === 'human' ? humanControls(x, y) : colonyControlling(x, y, owner))) {
         return { ok: false, reason: "outside your zone of control" };
       }
@@ -4594,7 +4920,8 @@
         //     controlled land cell (paid from the colony's own storage).
         for (const c of control) {
           if (cellKey(c.x, c.y) === homeKey) continue;
-          if (terrainAt(c.x, c.y) < 2 || terrainAt(c.x, c.y) > 7) continue;
+          const bt = terrainAt(c.x, c.y);
+          if (!((bt >= 2 && bt <= 7) || bt === 10 || bt === 11)) continue;
           if (gameState.buildings.some((b) => b.x === c.x && b.y === c.y)) continue;
           for (const type of types) {
             if (hasPrerequisitesAt(type, c.x, c.y, pi) && canAffordBuildingAt(type, c.x, c.y, pi)) return true;
@@ -4700,7 +5027,7 @@
         const reachable = findMovementCostsFrom(col.x, col.y, col.owner);
         for (const c of cellsWithin(col.x, col.y, minD + 12)) {
           const terr = terrainAt(c.x, c.y);
-          if (terr < 2 || terr > 7) continue;
+          if (!((terr >= 2 && terr <= 7) || terr === 10 || terr === 11)) continue;
           if (c.x === col.x && c.y === col.y) continue;
           if (hexDistance(col.x, col.y, c.x, c.y) < minD) continue;
           if (cellHasBuilding(c.x, c.y)) continue;
@@ -4815,7 +5142,8 @@
       if (acted && hexMap) hexMap.setBuildings(gameState.buildings);
       return acted;
     }
-    // Best valid AI site: terrain 2-7, >= minColonyDistance from every colony,
+    // Best valid AI site: habitable land (2-7, Plains 10, Wetlands 11),
+    // >= minColonyDistance from every colony,
     // preferring near-river and within 3 cells of water.
     function aiChooseColonySite() {
       const t = gameState.map.terrain;
@@ -4825,12 +5153,12 @@
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
           const terr = t[y][x];
-          if (terr < 2 || terr > 7) continue;
+          if (!((terr >= 2 && terr <= 7) || terr === 10 || terr === 11)) continue;
           if (distanceToNearestColony(x, y) < minD) continue;
           let score = 0;
           if (nearRiver(x, y)) score += 100;
           if (withinCellsOfWater(x, y, 3)) score += 50;
-          if (terr === 2) score += 10;
+          if (terr === 2 || terr === 10) score += 10; // grassland / plains: good food
           score += Math.random() * 5;
           if (score > bestScore) { bestScore = score; best = { x, y }; }
         }
@@ -5033,7 +5361,7 @@
       let best = null, bestScore = -Infinity;
       for (const c of cellsWithin(host.x, host.y, SEARCH)) {
         const terr = terrainAt(c.x, c.y);
-        if (terr < 2 || terr > 7) continue;
+        if (!((terr >= 2 && terr <= 7) || terr === 10 || terr === 11)) continue;
         if (!isPassableCell(c.x, c.y, false)) continue;
         if (c.x === host.x && c.y === host.y) continue;
         if (cellHasBuilding(c.x, c.y)) continue;
@@ -5147,7 +5475,7 @@
       ctxCanal.hidden = true;
       ctxCanalRemove.hidden = true;
 
-      const buildable = isHumanTurn() && hex && terr >= 2 && terr <= 7 && !cellHasBuilding(hex.x, hex.y);
+      const buildable = isHumanTurn() && hex && ((terr >= 2 && terr <= 7) || terr === 10 || terr === 11) && !cellHasBuilding(hex.x, hex.y);
 
       // The colony action item (ctx-establish) is dual-purpose:
       //  • On your own biodome -> "Launch Colony" (found a new colony from here).
@@ -5703,6 +6031,9 @@
       }
       renderWorkModal();
       updateColonyAttention();
+      // Reflect the changed worked-cell set in the main window's Buildings /
+      // Resources panel immediately.
+      updatePlayerPanel();
     }
 
     // Canvas click -> hit-test the nearest hex and toggle it.
@@ -6187,7 +6518,8 @@
       gameState = {
         map: {
           meta: map.meta || null, terrain: terrain,
-          elevation: map.elevation || null, rivers: map.rivers || [], seaLevel: seaLevel
+          elevation: map.elevation || null, rivers: map.rivers || [], seaLevel: seaLevel,
+          bonuses: map.bonuses || {}
         },
         improvements: (extra && extra.improvements) || [],
         pieces: (extra && extra.pieces) || [],
@@ -6203,6 +6535,20 @@
       };
       if (gameState.players && gameState.players[0] && gameState.players[0].kind === 'human') {
         gameState.players[0].name = gameState.playerName;
+      }
+
+      // Fog of war. Restore a saved visible set if present; otherwise seed a
+      // fresh circle around a random land tile for a NEW game (no buildings yet).
+      // Legacy saves with no stored visibility and existing colonies keep fog
+      // off (null = fully visible) so they aren't suddenly re-fogged.
+      const savedVisible = gameState.map.meta && Array.isArray(gameState.map.meta.visible)
+        ? gameState.map.meta.visible : null;
+      if (savedVisible) {
+        _visibleSet = new Set(savedVisible);
+      } else if (!gameState.buildings || gameState.buildings.length === 0) {
+        initVisibility();
+      } else {
+        _visibleSet = null; // legacy save without fog -> show everything
       }
       // Re-derive CONFIG from the base config for this game's difficulty.
       applyGameDifficulty();
@@ -6253,8 +6599,11 @@
         seaLevel: seaLevel,
         wrap: !!(map.meta && map.meta.wrap),
         buildings: gameState.buildings,
+        visible: _visibleSet,
         buildingTypes: CONFIG.buildingTypes || null,
         terrainTypes: CONFIG.terrainTypes || null,
+        terrainBonus: CONFIG.terrainBonus || null,
+        bonuses: (map.bonuses || {}),
         bridgeColor: CONFIG.bridgeColor,
         roadColor: CONFIG.roadColor,
         monorailColor: CONFIG.monorailColor,
@@ -6268,7 +6617,11 @@
         onHover: (info) => updateStatus(info),
         onHoverOut: () => updateStatus(null),
         onColonyDblClick: (b) => openWorkModal(b),
-        cellInfo: (x, y) => cellInfoString(x, y)
+        cellInfo: (x, y) => cellInfoString(x, y),
+        cellBonus: (x, y) => {
+          const tb = bonusDefAt(x, y);
+          return tb ? { name: tb.name, desc: tb.desc || '' } : null;
+        }
       });
       hexMap.start();
       updateStatus(null);
@@ -6389,9 +6742,160 @@
       updateColonyAttention();
     }
 
+    // Debug dialog: list terrain types 1..11 by name with the number of cells of
+    // each on the current map and that count as a percentage of all map cells
+    // (e.g. "Sea: 200 / 30%"). Shown once right after a new map is first
+    // displayed, before the terrain-bonus debug dialog.
+    function showTerrainTypeDebug(onClose) {
+      const overlay = document.getElementById("terraindebug-overlay");
+      const tbody = overlay && overlay.querySelector("#terraindebug-table tbody");
+      if (!overlay || !tbody) { if (typeof onClose === "function") onClose(); return; }
+
+      // Fallback display names if a terrain id is missing from CONFIG.terrainTypes.
+      const FALLBACK = {
+        1: "Sea", 2: "Grassland", 3: "Hills", 4: "Forest", 5: "Jungle",
+        6: "Desert", 7: "Mountain-Low", 8: "Mountain-High", 9: "Frozen",
+        10: "Plains", 11: "Wetlands"
+      };
+      const nameOf = (id) => {
+        const tt = CONFIG && CONFIG.terrainTypes && CONFIG.terrainTypes[String(id)];
+        return (tt && tt.name) || FALLBACK[id] || ("Type " + id);
+      };
+
+      // Count cells per terrain id across the whole map.
+      const terrain = (gameState.map && gameState.map.terrain) || [];
+      const counts = {};
+      for (let id = 1; id <= 11; id++) counts[id] = 0;
+      let total = 0;
+      for (const row of terrain) {
+        for (const v of row) {
+          if (counts[v] == null) counts[v] = 0; // tolerate any out-of-range id
+          counts[v]++;
+          total++;
+        }
+      }
+
+      // Render ids 1..11 in numeric order (plus any unexpected extra ids after).
+      const ids = Object.keys(counts).map(Number).sort((a, b) => a - b);
+      tbody.innerHTML = "";
+      for (const id of ids) {
+        const c = counts[id];
+        const pct = total > 0 ? (c / total) * 100 : 0;
+        const tr = document.createElement("tr");
+        const nameTd = document.createElement("td");
+        nameTd.textContent = nameOf(id);
+        const cntTd = document.createElement("td");
+        cntTd.textContent = String(c);
+        if (!c) cntTd.className = "zero";
+        const pctTd = document.createElement("td");
+        pctTd.textContent = pct.toFixed(1) + "%";
+        if (!c) pctTd.className = "zero";
+        tr.appendChild(nameTd);
+        tr.appendChild(cntTd);
+        tr.appendChild(pctTd);
+        tbody.appendChild(tr);
+      }
+
+      const sub = document.getElementById("terraindebug-sub");
+      if (sub) sub.textContent = `${total.toLocaleString()} total cells`;
+
+      // Dismiss handlers (click Close, click backdrop, or Enter/Escape).
+      const hide = () => {
+        overlay.hidden = true;
+        document.removeEventListener("keydown", onKey, true);
+        overlay.removeEventListener("mousedown", onBackdrop);
+        if (typeof onClose === "function") onClose();
+      };
+      const onKey = (e) => {
+        if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); hide(); }
+      };
+      const onBackdrop = (e) => { if (e.target === overlay) hide(); };
+      const okBtn = document.getElementById("terraindebug-ok");
+      if (okBtn) okBtn.onclick = hide;
+      overlay.addEventListener("mousedown", onBackdrop);
+      document.addEventListener("keydown", onKey, true);
+
+      overlay.hidden = false;
+      if (okBtn) okBtn.focus();
+    }
+
+    // Debug dialog: list every configured terrainBonus type and how many of each
+    // was placed on the current map. Includes types with a count of 0, sorted
+    // alphabetically (case-insensitive). Shown once right after a new map is
+    // first displayed.
+    function showTerrainBonusDebug() {
+      const overlay = document.getElementById("bonusdebug-overlay");
+      const tbody = overlay && overlay.querySelector("#bonusdebug-table tbody");
+      if (!overlay || !tbody) return;
+
+      // All configured bonus type names (so zero-count types still appear).
+      const defs = (CONFIG && CONFIG.terrainBonus) || {};
+      const counts = {};
+      for (const name of Object.keys(defs)) counts[name] = 0;
+
+      // Count placements from the sparse bonuses map (entries store their type
+      // `name`). Tolerate a placed name that isn't (or is no longer) in config.
+      const placed = (gameState.map && gameState.map.bonuses) || {};
+      let total = 0;
+      for (const k of Object.keys(placed)) {
+        const entry = placed[k];
+        const name = entry && entry.name;
+        if (!name) continue;
+        counts[name] = (counts[name] || 0) + 1;
+        total++;
+      }
+
+      // Alphabetize (case-insensitive) and render.
+      const names = Object.keys(counts).sort((a, b) =>
+        a.toLowerCase().localeCompare(b.toLowerCase()));
+      tbody.innerHTML = "";
+      for (const name of names) {
+        const tr = document.createElement("tr");
+        const nameTd = document.createElement("td");
+        nameTd.textContent = name;
+        const cntTd = document.createElement("td");
+        cntTd.textContent = String(counts[name]);
+        if (!counts[name]) cntTd.className = "zero";
+        tr.appendChild(nameTd);
+        tr.appendChild(cntTd);
+        tbody.appendChild(tr);
+      }
+
+      const sub = document.getElementById("bonusdebug-sub");
+      if (sub) sub.textContent = `${names.length} bonus type${names.length === 1 ? "" : "s"} · ${total} placed on map`;
+
+      // Dismiss handlers (click Close, click backdrop, or Enter/Escape).
+      const hide = () => {
+        overlay.hidden = true;
+        document.removeEventListener("keydown", onKey, true);
+        overlay.removeEventListener("mousedown", onBackdrop);
+      };
+      const onKey = (e) => {
+        if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); hide(); }
+      };
+      const onBackdrop = (e) => { if (e.target === overlay) hide(); };
+      const okBtn = document.getElementById("bonusdebug-ok");
+      if (okBtn) okBtn.onclick = hide;
+      overlay.addEventListener("mousedown", onBackdrop);
+      document.addEventListener("keydown", onKey, true);
+
+      overlay.hidden = false;
+      if (okBtn) okBtn.focus();
+    }
+
     // New Game.
     ipcRenderer.on("new-map", (_e, result) => {
-      try { showMap(result, null); }
+      try {
+        showMap(result, null);
+        // Debug (only when config.json "debug" is true): after the freshly
+        // generated map is first shown, report the cell count/percentage of each
+        // terrain type, then how many of each configured terrain-bonus type were
+        // placed (zeros included). The terrain-bonus dialog chains after the
+        // terrain-type dialog is closed.
+        if (CONFIG && CONFIG.debug) {
+          showTerrainTypeDebug(showTerrainBonusDebug);
+        }
+      }
       catch (err) { console.error("[index] failed to render new map:", err && err.stack || err); }
     });
 
@@ -6400,7 +6904,8 @@
       try {
         showMap(
           { meta: payload.meta, terrain: payload.terrain,
-            elevation: payload.elevation || null, rivers: payload.rivers || [] },
+            elevation: payload.elevation || null, rivers: payload.rivers || [],
+            bonuses: payload.bonuses || {} },
           {
             improvements: payload.improvements, pieces: payload.pieces,
             buildings: payload.buildings || [], colonies: payload.colonies || [],

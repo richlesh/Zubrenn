@@ -18,6 +18,14 @@
  *     const terrain = generateMap({ width: 120, height: 80, biome: true });
  */
 
+// Shared river geometry: normalizes a river CELL PATH into the contiguous chain
+// of cell BORDERS it occupies. Terrain-bonus river adjacency must agree with the
+// rules/renderer (edge-precise), so we use the same module rather than a looser
+// neighbor-of-path-cell heuristic. Loaded defensively so the generator still
+// works if the module is unavailable.
+let RiverEdges = null;
+try { RiverEdges = require('./river_edges.cjs'); } catch (e) { RiverEdges = null; }
+
 // ---------------------------------------------------------------------------
 // Seedable RNG (mulberry32) - lets `seed` produce repeatable maps
 // ---------------------------------------------------------------------------
@@ -848,6 +856,332 @@ function coastalDesertsToGrassland(terrain, width, height, wrap) {
   for (const [x, y] of toConvert) terrain[y][x] = 2; // desert -> grassland
 }
 
+// Convert upper-elevation grassland (tile 2) into Plains (tile 10). Grassland is
+// assigned on the lowland tiers (<= 3); the UPPER band of that range (tier 3) is
+// the drier, higher plateau that becomes open plains. `tiers` is the integer
+// elevation-tier grid captured BEFORE biome assignment (1..9), so tier 3 is the
+// highest lowland tier that can still be grassland.
+function upperGrasslandsToPlains(terrain, tiers, width, height) {
+  if (!tiers) return;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (terrain[y][x] === 2 && tiers[y][x] >= 3) {
+        terrain[y][x] = 10; // grassland -> plains
+      }
+    }
+  }
+}
+
+// Convert land tiles that are BOTH sea-adjacent and river-adjacent into Wetlands
+// (tile 11). Sea-adjacency is a hex neighbor that is sea (tile 1). River-adjacency
+// uses the edge-precise river geometry (river_edges.cjs), matching the economy /
+// renderer rule: the river must run along a BORDER of this cell (so both cells
+// sharing a river edge are river-adjacent), not merely touch a river cell.
+function seaAndRiverLandToWetlands(terrain, rivers, width, height, wrap) {
+  const inBounds = wrap
+    ? (x, y) => y >= 0 && y < height
+    : (x, y) => x >= 0 && y >= 0 && x < width && y < height;
+  const key = (x, y) => y * width + x;
+
+  // River-adjacent cells (edge-precise), with a looser fallback if the shared
+  // river-edge module is unavailable.
+  const riverAdj = new Set();
+  if (RiverEdges && typeof RiverEdges.riverEdgeChain === 'function') {
+    for (const path of (rivers || [])) {
+      let chain;
+      try {
+        chain = RiverEdges.riverEdgeChain(path, { wrap, width });
+      } catch (e) {
+        chain = null;
+      }
+      if (!chain) continue;
+      for (const e of chain) {
+        for (const c of [e.a, e.b]) {
+          const xx = wrap ? (((c.x % width) + width) % width) : c.x;
+          if (inBounds(xx, c.y)) riverAdj.add(key(xx, c.y));
+        }
+      }
+    }
+  } else {
+    for (const path of (rivers || [])) {
+      for (const c of path) {
+        const xx = wrap ? (((c.x % width) + width) % width) : c.x;
+        if (inBounds(xx, c.y)) riverAdj.add(key(xx, c.y));
+      }
+    }
+  }
+
+  const hasSeaNeighbor = (x, y) => {
+    for (const n of hexNeighbors(x, y, width, wrap)) {
+      if (!inBounds(n.x, n.y)) continue;
+      if (terrain[n.y][n.x] === 1) return true; // sea
+    }
+    return false;
+  };
+
+  // Collect first, then apply, so newly-made wetlands don't affect the sea/river
+  // tests of other cells within this pass.
+  const toConvert = [];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const t = terrain[y][x];
+      if (t === 1) continue;                 // not land
+      if (!riverAdj.has(key(x, y))) continue; // must be river-adjacent
+      if (!hasSeaNeighbor(x, y)) continue;    // must be sea-adjacent
+      toConvert.push([x, y]);
+    }
+  }
+  for (const [x, y] of toConvert) terrain[y][x] = 11; // land -> wetlands
+}
+
+// ---------------------------------------------------------------------------
+// Terrain bonuses
+// ---------------------------------------------------------------------------
+//
+// Scatter special "terrain bonus" features across the map per the config
+// `terrainBonus` ruleset. `abundancy` (0..1 Sparse..Abundant) selects a target
+// fraction of the map's cells (5%..35%); that many cells are chosen at random,
+// and each empty one is assigned a bonus whose placement rules it satisfies,
+// weighted by each candidate bonus's own `abundancy` value.
+//
+// Returns a sparse map { "y*width+x": { name } } of placed bonuses (empty when
+// no bonuses are configured). Resource amounts / icons stay in config and are
+// resolved by name at render/economy time.
+function assignTerrainBonuses(terrain, elevation, rivers, width, height, rng, opts) {
+  const result = {};
+  const defs = opts.terrainBonus || null;
+  if (!defs) return result;
+  const names = Object.keys(defs);
+  if (names.length === 0) return result;
+
+  const wrap = !!opts.wrap;
+  const seaLevel = opts.seaLevel || 0;
+  const polarDeg = opts.polarDeg;     // polar latitude expressed in degrees
+  const maxLatDeg = opts.maxLatDeg != null ? opts.maxLatDeg : 70;
+
+  const inBounds = wrap
+    ? (x, y) => y >= 0 && y < height
+    : (x, y) => x >= 0 && y >= 0 && x < width && y < height;
+  const key = (x, y) => y * width + x;
+
+  // Cells whose OWN border is a river segment ("near a river"), matching the
+  // edge-precise rule the economy and renderer use (river_edges.cjs). A cell is
+  // NOT river-adjacent merely because a neighbor is: the river must run along a
+  // border of THIS cell. Each normalized edge is the shared border of a cell
+  // pair {a,b}, so both a and b are river-adjacent.
+  const riverAdj = new Set();
+  if (RiverEdges && typeof RiverEdges.riverEdgeChain === 'function') {
+    for (const path of (rivers || [])) {
+      let chain;
+      try {
+        chain = RiverEdges.riverEdgeChain(path, { wrap, width });
+      } catch (e) {
+        chain = null;
+      }
+      if (!chain) continue;
+      for (const e of chain) {
+        for (const c of [e.a, e.b]) {
+          const xx = wrap ? (((c.x % width) + width) % width) : c.x;
+          if (inBounds(xx, c.y)) riverAdj.add(key(xx, c.y));
+        }
+      }
+    }
+  } else {
+    // Fallback (module unavailable): the river's own cells only — still tighter
+    // than the old all-neighbors heuristic.
+    for (const path of (rivers || [])) {
+      for (const c of path) {
+        const xx = wrap ? (((c.x % width) + width) % width) : c.x;
+        if (inBounds(xx, c.y)) riverAdj.add(key(xx, c.y));
+      }
+    }
+  }
+
+  // Absolute latitude in degrees for a cell CENTER (odd columns sit a half-cell
+  // lower). 0 at the equator, up to maxLatDeg at the poles.
+  const latOf = (x, y) => {
+    const parity = ((x % 2) + 2) % 2;
+    const yc = y + parity / 2;
+    const span = height > 1 ? (yc / (height - 1)) : 0.5; // 0 top .. 1 bottom
+    const signed = maxLatDeg - span * (2 * maxLatDeg);    // +max top .. -max bottom
+    return Math.abs(signed);
+  };
+  // Altitude in meters above sea level, matching the hover tooltip's convention.
+  const altOf = (x, y) => (elevation ? (elevation[y][x] - seaLevel) * 10000 : 0);
+
+  // Does a cell have a neighbor matching a predicate on its terrain tile id?
+  const hasNeighbor = (x, y, pred) => {
+    for (const n of hexNeighbors(x, y, width, wrap)) {
+      if (!inBounds(n.x, n.y)) continue;
+      if (pred(terrain[n.y][n.x])) return true;
+    }
+    return false;
+  };
+
+  // Resolve a latitude bound that may be the string "polar".
+  const resolveLat = (v) => {
+    if (v === 'polar') return (polarDeg != null ? polarDeg : maxLatDeg);
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  // Is `def` legal on cell (x,y)?
+  const legal = (def, x, y) => {
+    const terr = terrain[y][x];
+    if (Array.isArray(def.terrain) && def.terrain.length) {
+      if (!def.terrain.includes(terr)) return false;
+    }
+    if (def.latitude) {
+      const lat = latOf(x, y);
+      const lo = resolveLat(def.latitude.min);
+      const hi = resolveLat(def.latitude.max);
+      if (lo != null && lat < lo) return false;
+      if (hi != null && lat > hi) return false;
+    }
+    if (def.altitude) {
+      const alt = altOf(x, y);
+      const lo = (def.altitude.min != null) ? parseFloat(def.altitude.min) : null;
+      const hi = (def.altitude.max != null) ? parseFloat(def.altitude.max) : null;
+      if (lo != null && Number.isFinite(lo) && alt < lo) return false;
+      if (hi != null && Number.isFinite(hi) && alt > hi) return false;
+    }
+    if (Array.isArray(def.other)) {
+      for (const req of def.other) {
+        switch (req) {
+          case 'river':
+            if (!riverAdj.has(key(x, y))) return false;
+            break;
+          case 'sea':
+            if (!hasNeighbor(x, y, (t) => t === 1)) return false;
+            break;
+          case 'water':
+            if (!(riverAdj.has(key(x, y)) || hasNeighbor(x, y, (t) => t === 1))) return false;
+            break;
+          case 'dry':
+            // Inverse of "water": the cell must be neither river-adjacent nor
+            // sea-adjacent.
+            if (riverAdj.has(key(x, y)) || hasNeighbor(x, y, (t) => t === 1)) return false;
+            break;
+          case 'ice':
+            if (!hasNeighbor(x, y, (t) => t === 9)) return false;
+            break;
+          case 'land':
+            if (!hasNeighbor(x, y, (t) => t >= 2 && t <= 11)) return false;
+            break;
+          case 'pristine':
+            // Not a placement constraint but a RUNTIME behavior flag: the bonus
+            // must be worked to yield, and is destroyed permanently if any
+            // building is ever built on its tile (handled by the renderer).
+            break;
+          default:
+            break; // unknown requirement -> ignore
+        }
+      }
+    }
+    return true;
+  };
+
+  // Resolve a single bonus-value spec to a concrete number. Plain numbers pass
+  // through; a string like "1-3" (or "1 - 3") picks a random value in the
+  // inclusive range in STEPS of 0.25 (e.g. 1.0, 1.25, ... 3.0), uniformly,
+  // using the seeded rng so a cell's stored bonus is deterministic for a given
+  // map seed. A single-number string ("2") resolves to that number. Reversed
+  // ranges ("3-1") are normalized.
+  const STEP = 0.25;
+  const resolveValue = (v) => {
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string') {
+      const m = v.match(/^\s*(-?\d+(?:\.\d+)?)\s*-\s*(-?\d+(?:\.\d+)?)\s*$/);
+      if (m) {
+        let lo = parseFloat(m[1]);
+        let hi = parseFloat(m[2]);
+        if (!Number.isFinite(lo) || !Number.isFinite(hi)) return 0;
+        if (lo > hi) { const t = lo; lo = hi; hi = t; }
+        // Number of 0.25 steps spanning [lo, hi] inclusive.
+        const steps = Math.floor((hi - lo) / STEP + 1e-9);
+        const pick = Math.floor(rng() * (steps + 1)); // 0..steps inclusive
+        return Math.round((lo + pick * STEP) * 100) / 100;
+      }
+      const n = parseFloat(v);
+      return Number.isFinite(n) ? n : 0;
+    }
+    return 0;
+  };
+  // Build a concrete, range-resolved bonus object for a chosen definition.
+  const resolveBonus = (def) => {
+    const out = {};
+    const src = (def && def.bonus) || {};
+    for (const k of Object.keys(src)) out[k] = resolveValue(src[k]);
+    return out;
+  };
+
+  // Collect the ELIGIBLE cells first: those where at least one bonus with a
+  // positive abundancy weight is legal. Sizing the target off these (rather
+  // than off every cell on the map, including sea and ineligible land) keeps
+  // the abundancy fraction meaningful and prevents bonuses from overcrowding.
+  const eligible = [];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      for (const name of names) {
+        const def = defs[name];
+        if (def && numOr(def.abundancy, 0) > 0 && legal(def, x, y)) {
+          eligible.push(y * width + x);
+          break;
+        }
+      }
+    }
+  }
+  if (eligible.length === 0) return result;
+
+  // Target number of bonus cells from the abundancy fraction (1%..20% of the
+  // eligible cells).
+  const abund = clamp01(numOr(opts.bonusAbundancy, 0));
+  const fraction = 0.01 + abund * 0.19;
+  const target = Math.round(eligible.length * fraction);
+  if (target <= 0) return result;
+
+  // Random order of the eligible cell indices (Fisher-Yates, seeded rng).
+  for (let i = eligible.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    const tmp = eligible[i]; eligible[i] = eligible[j]; eligible[j] = tmp;
+  }
+
+  let placed = 0;
+  for (let oi = 0; oi < eligible.length && placed < target; oi++) {
+    const idx = eligible[oi];
+    const x = idx % width;
+    const y = (idx - x) / width;
+    if (result[idx]) continue;                  // already has a bonus
+
+    // Candidate bonuses legal here, with their abundancy weights.
+    const candidates = [];
+    let totalAbund = 0;
+    for (const name of names) {
+      const def = defs[name];
+      if (!def || !legal(def, x, y)) continue;
+      const w = Math.max(0, numOr(def.abundancy, 0));
+      if (w <= 0) continue;
+      candidates.push({ name, w });
+      totalAbund += w;
+    }
+    if (candidates.length === 0 || totalAbund <= 0) continue;
+
+    // Weighted pick in [0, totalAbund): walk the cumulative abundancy.
+    let r = rng() * totalAbund;
+    let chosen = candidates[candidates.length - 1].name;
+    for (const c of candidates) {
+      if (r < c.w) { chosen = c.name; break; }
+      r -= c.w;
+    }
+    // Store the name AND a concrete, range-resolved bonus with the cell so the
+    // chosen values (e.g. "food": "1-3" -> 2) are fixed for this map/save.
+    result[idx] = { name: chosen, bonus: resolveBonus(defs[chosen]) };
+    placed++;
+  }
+
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -865,6 +1199,8 @@ const DEFAULTS = {
   talus: 0.06,     // erosion slope threshold
   biome: true,     // map elevation tiers -> biome tile IDs
   polar: 0.82,     // latitude beyond which lowlands freeze (biome mode)
+  bonusAbundancy: 0.25, // 0..1 Sparse->Abundant; fraction of map cells seeded
+                        //  with terrain bonuses ranges 5%..35% of map area.
   rivers: true,          // generate rivers flowing high -> sea
   springElevation: 0.7,  // min normalized elevation (0..1) for a river source
   maxRivers: 40,         // hard cap on number of rivers
@@ -908,6 +1244,7 @@ function generateMap(opts = {}) {
   const talus = clamp01(numOr(o.talus, DEFAULTS.talus));
   const biome = o.biome === true || o.biome === 'true' || o.biome === 1;
   const polar = clamp01(numOr(o.polar, DEFAULTS.polar));
+  const bonusAbundancy = clamp01(numOr(o.bonusAbundancy, DEFAULTS.bonusAbundancy));
   const doRivers = o.rivers === true || o.rivers === 'true' || o.rivers === 1 || o.rivers === undefined;
   const springElevation = clamp01(numOr(o.springElevation, DEFAULTS.springElevation));
   const maxRivers = Math.max(0, parseInt(o.maxRivers, 10) || DEFAULTS.maxRivers);
@@ -950,6 +1287,15 @@ function generateMap(opts = {}) {
   let grid = quantized.grid;
   const seaLevel = quantized.seaLevel;
 
+  // Snapshot the integer elevation-tier grid (1..9) BEFORE biome assignment
+  // overwrites `grid`. Used to detect upper-elevation grassland for Plains.
+  const tiers = [];
+  for (let y = 0; y < height; y++) {
+    const row = new Array(width);
+    for (let x = 0; x < width; x++) row[x] = grid[y][x];
+    tiers.push(row);
+  }
+
   if (biome) {
     grid = assignBiomes(grid, width, height, rng, polar, wrap);
   }
@@ -971,16 +1317,41 @@ function generateMap(opts = {}) {
     coastalDesertsToGrassland(grid, width, height, wrap);
   }
 
+  // Upper-elevation grasslands become Plains (tile 10). Done after the desert
+  // conversions so river/coastal grassland created above can also upgrade.
+  if (biome) {
+    upperGrasslandsToPlains(grid, tiers, width, height);
+  }
+
+  // Land that is BOTH sea-adjacent and river-adjacent becomes Wetlands (tile
+  // 11). Done last so it takes precedence over the Plains conversion on cells
+  // that qualify for both.
+  if (biome && doRivers) {
+    seaAndRiverLandToWetlands(grid, rivers, width, height, wrap);
+  }
+
+  // Scatter terrain bonuses per the config ruleset. Latitude bounds in the rules
+  // are degrees; "polar" resolves to the map's polar latitude in degrees. The
+  // map is assumed to span +/-70 degrees (see draw_map tooltip), and the polar
+  // slider maps 0..1 -> 25..70 degrees.
+  const maxLatDeg = 70;
+  const polarDeg = 25 + polar * 45;
+  const bonuses = assignTerrainBonuses(grid, elevation, rivers, width, height, rng, {
+    terrainBonus: o.terrainBonus || null,
+    bonusAbundancy, wrap, seaLevel, polarDeg, maxLatDeg
+  });
+
   return {
     terrain: grid,
     elevation,
     rivers,
     seaLevel,
+    bonuses,
     meta: {
       width, height, algo, seed, island, water: waterFraction, octaves,
       roughness, erode, talus, biome, polar,
       rivers: doRivers, springElevation, maxRivers, cellsPerRiver, minRiverLength,
-      largestAreaWithoutRiver, wrap, seaLevel, aiOpponents, difficulty
+      largestAreaWithoutRiver, wrap, seaLevel, aiOpponents, difficulty, bonusAbundancy
     }
   };
 }

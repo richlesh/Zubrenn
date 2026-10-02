@@ -21,7 +21,8 @@ with alien AI opponents for resources.
 ## Features
 
 - **Procedural hex-map generation** — fractal terrain (diamond-square / fBm),
-  biomes (sea, grassland, hills, forest, jungle, desert, mountains, frozen),
+  biomes (sea, grassland, plains, hills, forest, jungle, desert, wetlands,
+  mountains, frozen),
   elevation, and rivers that flow from mountains to the sea.
 - **Cylindrical (east–west) wrapping** — the map can wrap so the left and right
   edges meet; you can scroll continuously around the world.
@@ -58,6 +59,10 @@ with alien AI opponents for resources.
   unsuitable (bad terrain or too close to an existing colony) are shaded gray.
 - **AI opponents** — configurable number of alien species establish and grow
   their own colonies. If an AI turn stalls, **Ctrl+Esc** force-ends it.
+- **Fog of war** — the map starts hidden under light-gray fog except a
+  radius-20 circle around a random land tile. Founding one of your colonies
+  reveals a radius-15 circle around it. Explored visibility is saved and
+  restored with the game.
 - **Background music** — a looping theme plays in the game window, with on/off
   and volume controls in Settings ▸ Audio (paused while the Backstory is shown).
 - **Area-of-Control view**, minimap, hover tooltips (terrain yields as
@@ -94,8 +99,8 @@ npm run dist:all         # everything
 1. **New Game** (File ▸ New Game…): choose map size, water, rivers, wrapping,
    number of AI opponents, and more, then **Create Map**.
 2. On your turn, **right-click** a habitable land cell (grassland, hills,
-   forest, jungle, desert, or mountains) and choose **Establish Colony**. You
-   start with one colony module.
+   plains, forest, jungle, desert, wetlands, or mountains) and choose
+   **Establish Colony**. You start with one colony module.
 3. **Double-click your biodome** to open the colony view: a hex map of your
    zone of control showing each cell's Food / Material / Energy / Happiness
    (as `base+bonus`), plus a **statistics panel** with population, growth rate,
@@ -252,6 +257,13 @@ without code changes:
   to enter that tile by each mode; lower is cheaper/faster), and per-tile
   transport build costs `roadCostPerTile`, `monorailCostPerTile`, and
   `canalCostPerEdge`.
+  Terrain codes are `1` Sea, `2` Grassland, `3` Hills, `4` Forest, `5` Jungle,
+  `6` Desert, `7` Mountain-Low, `8` Mountain-High, `9` Frozen, `10` Plains, and
+  `11` Wetlands (Marsh). All of `2–11` count as **land**; everything except
+  Mountain-High (8) and Frozen (9) is **habitable/buildable**. During
+  generation, upper-elevation grassland is converted to **Plains (10)**, and
+  land that is **both sea-adjacent and river-adjacent** is converted to
+  **Wetlands (11)** (which also grants a small happiness bonus).
 - `buildingTypes` — for the Biodome, Farm, Solar Panel, Factory, Dock, and
   Air Field:
   - `buildCost` — one-time Material/Energy/Wealth cost to construct (its `turns`
@@ -284,6 +296,10 @@ without code changes:
   `maxAltitudeMeters` (frozen cells above the altitude limit are impassable).
 - Game setup: `startingYear`, `maxAIs`, `minColonyDistance`,
   `aiPlacementMinTurns`/`aiPlacementMaxTurns`, and 100 alien `names`.
+- `debug` — when `true`, after creating a new map two debug dialogs are shown:
+  a terrain-type breakdown (cells and % of map per terrain type) followed by a
+  terrain-bonus count (how many of each `terrainBonus` type were placed,
+  including zeros). Set to `false` to disable.
 
 **Population growth:** each colony builds up **stored happiness** from its food
 balance (`netFood` = food produced − colonists' consumption), clamped to

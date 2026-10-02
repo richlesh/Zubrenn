@@ -141,8 +141,14 @@
     <label for="biome">Map elevation tiers to realistic biome tiles</label>
   </div>
   <div class="field" id="polar-field">
-    <div class="labelrow"><label for="polar">Polar latitude (freeze lowlands beyond)</label><span class="rangeval" id="polar-val">0.82</span></div>
+    <div class="labelrow"><label for="polar">Polar latitude (freeze lowlands beyond)</label><span class="rangeval" id="polar-val">61.9&deg;</span></div>
     <input id="polar" type="range" min="0" max="1" step="0.01" value="0.82">
+  </div>
+
+  <div class="field" id="bonusAbundancy-field">
+    <div class="labelrow"><label for="bonusAbundancy">Terrain Bonus Abundancy</label><span class="rangeval" id="bonusAbundancy-val">Sparse</span></div>
+    <input id="bonusAbundancy" type="range" min="0" max="1" step="0.01" value="0.25">
+    <div class="hint">Share of the map seeded with special terrain bonuses: Sparse (1%) &rarr; Abundant (20%).</div>
   </div>
 
   <div class="section-title">Rivers</div>
@@ -205,7 +211,7 @@
     });
 
     // Live-update range value labels.
-    const ranges = ["water", "island", "roughness", "talus", "polar", "springElevation"];
+    const ranges = ["water", "island", "roughness", "talus", "springElevation"];
     ranges.forEach((id) => {
       const input = document.getElementById(id);
       const out = document.getElementById(id + "-val");
@@ -213,6 +219,36 @@
       input.addEventListener("input", sync);
       sync();
     });
+
+    // The polar slider stores a normalized 0..1 value (fed to map generation),
+    // but is displayed as a latitude in degrees: 0.0 -> 25deg, 1.0 -> 70deg.
+    (() => {
+      const input = document.getElementById("polar");
+      const out = document.getElementById("polar-val");
+      const sync = () => {
+        const deg = 25 + parseFloat(input.value) * 45;
+        out.textContent = deg.toFixed(1) + "\u00b0";
+      };
+      input.addEventListener("input", sync);
+      sync();
+    })();
+
+    // Terrain Bonus Abundancy slider: 0..1 stored value, displayed as a
+    // Sparse->Abundant label with the matching % of map area (1%..20%).
+    (() => {
+      const input = document.getElementById("bonusAbundancy");
+      const out = document.getElementById("bonusAbundancy-val");
+      const sync = () => {
+        const v = parseFloat(input.value);
+        const pct = Math.round(1 + v * 19);
+        let word = "Moderate";
+        if (v <= 0.1) word = "Sparse";
+        else if (v >= 0.9) word = "Abundant";
+        out.textContent = `${word} (${pct}%)`;
+      };
+      input.addEventListener("input", sync);
+      sync();
+    })();
 
     // Enable/disable algorithm- and biome-specific fields.
     const algo = document.getElementById("algo");
@@ -346,6 +382,7 @@
         talus: parseFloat(document.getElementById("talus").value),
         biome: document.getElementById("biome").checked,
         polar: parseFloat(document.getElementById("polar").value),
+        bonusAbundancy: parseFloat(document.getElementById("bonusAbundancy").value),
         rivers: document.getElementById("rivers").checked,
         springElevation: parseFloat(document.getElementById("springElevation").value),
         maxRivers: parseInt(document.getElementById("maxRivers").value, 10),

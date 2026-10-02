@@ -25,11 +25,17 @@ Hex tiles have a terrain type:
 | 7 | Mountain-Low | 0 food / 3 material |
 | 8 | Mountain-High | 0 food / 4 material |
 | 9 | Frozen | 0 food / 0 material |
+| 10 | Plains | 1 food / 1 material |
+| 11 | Wetlands (Marsh) | 0 food / 1 material (+1 happiness) |
 
-Habitable land (where colonies and buildings may go) is terrain **2–7**
-(grassland, hills, forest, jungle, desert, mountain-low).
+Habitable land (where colonies and buildings may go) is terrain **2–11**
+(grassland, hills, forest, jungle, desert, mountain-low, plains, and wetlands;
+mountain-high (8) and frozen (9) are land but not buildable).
 
-**Water food bonus:** grassland, hills, forest, jungle, and desert cells gain
+Plains (10) are drier, upper-elevation grasslands. Wetlands (11) are low land
+that is both sea-adjacent and river-adjacent, and give a small happiness bonus.
+
+**Water food bonus:** grassland, hills, forest, jungle, desert, and plains cells gain
 **+`riverAdjacentFoodBonus` food** when a **sea tile is edge-adjacent** or a
 **river/canal runs along one of the cell's own borders**.
 
@@ -41,7 +47,7 @@ sea adjacency).
 
 - You start each game with **one colony module**. Establishing a colony (a
   Biodome) consumes a module. You can only found a colony on habitable land
-  (terrain 2–7).
+  (terrain 2–7, plus Plains 10 and Wetlands 11).
 - New colonies begin with **1,000 colonists**.
 - The Biodome's own cell is always worked and adds **+1 food, +1 material,
   +1 energy, +1 wealth** on top of that cell's terrain production.
@@ -83,7 +89,7 @@ found a new colony from it:
   cells above `impassableFrozenAltitude` (5,000 m) are impassable**. If you own
   a **Dock**, your paths may also cross **shallow-sea** tiles (sea adjacent to
   land), letting you reach islands and cross straits.
-- The target must be habitable land (2–7 or low frozen), empty, and at least
+- The target must be habitable land (2–7, Plains 10, Wetlands 11, or low frozen), empty, and at least
   `minColonyDistance` cells from every existing colony. (You settle on land;
   you may cross shallow sea to get there if you have a Dock.)
 

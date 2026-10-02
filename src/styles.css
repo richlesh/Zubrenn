@@ -151,6 +151,10 @@ body.dark #player-panel .player-rate { color: #6d9; }
 body.dark #buildings-panel { background: #2c2c2e; color: #ddd; border-color: #444; }
 #buildings-panel .bldg-panel-title { font-weight: 700; margin-bottom: 4px; }
 #buildings-panel .bldg-stat { font-variant-numeric: tabular-nums; }
+#buildings-panel .bldg-cols { display: flex; gap: 12px; }
+#buildings-panel .bldg-col { flex: 1 1 0; min-width: 0; }
+#buildings-panel .bldg-none { color: #999; font-style: italic; }
+body.dark #buildings-panel .bldg-none { color: #888; }
 
 
 /* Work-assignment modal (double-click a biodome). */
@@ -455,3 +459,63 @@ body.dark #colonies-table .sub { color: #888; }
 #colonies-table .rate-neg { color: #d23b3b; }
 #colonies-table .worked-ok { color: #1a9e1a; font-weight: 600; }
 #colonies-table .worked-idle { color: #d23b3b; font-weight: 600; }
+
+/* Debug: terrain-type cell-count dialog (reuses the colonies-table look). */
+#terraindebug-overlay {
+  position: fixed; z-index: 10005; inset: 0;
+  background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+}
+#terraindebug-overlay[hidden] { display: none; }
+#terraindebug-dialog {
+  background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
+  width: 360px; max-width: 92vw; max-height: 90vh; display: flex; flex-direction: column;
+}
+body.dark #terraindebug-dialog { background: #2c2c2e; color: #e0e0e0; }
+#terraindebug-dialog h2 { font-size: 15px; margin-bottom: 6px; }
+#terraindebug-dialog .hint { font-size: 11px; color: #888; margin-bottom: 10px; }
+#terraindebug-table-wrap { overflow: auto; flex: 1 1 auto; min-height: 0; }
+#terraindebug-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+#terraindebug-table th, #terraindebug-table td { padding: 5px 9px; text-align: right; white-space: nowrap; }
+#terraindebug-table th:first-child, #terraindebug-table td:first-child { text-align: left; white-space: normal; }
+#terraindebug-table thead th {
+  position: sticky; top: 0; background: #e6e6ea; border-bottom: 2px solid #bbb;
+}
+body.dark #terraindebug-table thead th { background: #3a3a3c; border-bottom-color: #555; }
+#terraindebug-table tbody tr:nth-child(even) { background: rgba(0,0,0,0.04); }
+body.dark #terraindebug-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.05); }
+#terraindebug-table td.zero { color: #999; }
+body.dark #terraindebug-table td.zero { color: #777; }
+#terraindebug-table tfoot td { border-top: 2px solid #bbb; font-weight: 600; }
+body.dark #terraindebug-table tfoot td { border-top-color: #555; }
+#terraindebug-ok { background: #0a84ff; color: #fff; }
+
+/* Debug: terrain-bonus counts dialog (reuses the colonies-table look). */
+#bonusdebug-overlay {
+  position: fixed; z-index: 10005; inset: 0;
+  background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+}
+#bonusdebug-overlay[hidden] { display: none; }
+#bonusdebug-dialog {
+  background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
+  width: 360px; max-width: 92vw; max-height: 90vh; display: flex; flex-direction: column;
+}
+body.dark #bonusdebug-dialog { background: #2c2c2e; color: #e0e0e0; }
+#bonusdebug-dialog h2 { font-size: 15px; margin-bottom: 6px; }
+#bonusdebug-dialog .hint { font-size: 11px; color: #888; margin-bottom: 10px; }
+#bonusdebug-table-wrap { overflow: auto; flex: 1 1 auto; min-height: 0; }
+#bonusdebug-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+#bonusdebug-table th, #bonusdebug-table td { padding: 5px 9px; text-align: right; white-space: nowrap; }
+#bonusdebug-table th:first-child, #bonusdebug-table td:first-child { text-align: left; white-space: normal; }
+#bonusdebug-table thead th {
+  position: sticky; top: 0; background: #e6e6ea; border-bottom: 2px solid #bbb;
+}
+body.dark #bonusdebug-table thead th { background: #3a3a3c; border-bottom-color: #555; }
+#bonusdebug-table tbody tr:nth-child(even) { background: rgba(0,0,0,0.04); }
+body.dark #bonusdebug-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.05); }
+#bonusdebug-table td.zero { color: #999; }
+body.dark #bonusdebug-table td.zero { color: #777; }
+#bonusdebug-table tfoot td { border-top: 2px solid #bbb; font-weight: 600; }
+body.dark #bonusdebug-table tfoot td { border-top-color: #555; }
+#bonusdebug-ok { background: #0a84ff; color: #fff; }

@@ -375,10 +375,24 @@ class HexMap {
     this.onHoverOut = opts.onHoverOut || null;
     this.onColonyDblClick = opts.onColonyDblClick || null; // (building) => void
     this.cellInfo = opts.cellInfo || null;    // (x,y) => "E:.. F:.. M:.. W:.. H:.." string
+    this.cellBonus = opts.cellBonus || null;  // (x,y) => { name, desc } | null for the hover tooltip
+    this.terrainBonus = opts.terrainBonus || null; // config terrainBonus map (name -> { icon, ... })
+    this.bonuses = opts.bonuses || null;      // sparse { "y*W+x": { name } } of placed bonuses
+    this.bonusIcons = {};                     // bonus name -> loaded Image
     this.tooltipDelayMs = opts.tooltipDelayMs != null ? opts.tooltipDelayMs : 2000;
     this.resourcePath = opts.resourcePath || 'resources/terrain';
     this.typeface = opts.typeface || 'Calibri, sans-serif';
     this.defaultScale = opts.defaultScale || 15; // vertical hexes shown
+
+    // Fog of war: `visible` is a Set of visible cell keys (y*worldWidth+x). When
+    // null, the whole map is visible (fog disabled). Cells not in the set are
+    // drawn as opaque light-gray fog, hiding terrain and all overlays, and are
+    // not revealed on hover.
+    this.visible = (opts.visible instanceof Set)
+      ? opts.visible
+      : (Array.isArray(opts.visible) ? new Set(opts.visible) : null);
+    this.fogColor = opts.fogColor || 'rgb(205,205,205)';
+
 
     this.worldSize = {
       x: this.terrain[0].length,
@@ -588,6 +602,16 @@ class HexMap {
     this._renderBirdseye();
   }
 
+  // Replace the sparse terrain-bonus map and redraw. Used when a bonus is
+  // removed at runtime (e.g. a PRISTINE bonus destroyed by building on its
+  // tile). Icons are resolved by name from the already-loaded bonusIcons, so
+  // no reload is needed for removal.
+  setBonuses(bonuses) {
+    this.bonuses = bonuses || null;
+    this._draw();
+    this._renderBirdseye();
+  }
+
   // ---- "needs attention" flashing indicator ------------------------------
   // Start a lightweight animation loop while ANY building needs attention, so
   // the red circle pulses; stop it when none do (to avoid idle redraws).
@@ -764,6 +788,26 @@ class HexMap {
       img.src = `${resRoot}/${file}`;
       promises.push(ip);
     }
+
+    // Terrain-bonus icons live in the resources root too. Load one per unique
+    // icon referenced by the configured terrainBonus definitions.
+    if (this.terrainBonus) {
+      const seen = {};
+      for (const name of Object.keys(this.terrainBonus)) {
+        const def = this.terrainBonus[name];
+        const file = def && def.icon;
+        if (!file || seen[name]) continue;
+        seen[name] = true;
+        const img = new Image();
+        const bn = name;
+        const bp = new Promise((resolve) => {
+          img.onload = () => { this.bonusIcons[bn] = img; this._draw(); resolve(); };
+          img.onerror = () => resolve(); // missing icon -> no overlay
+        });
+        img.src = `${resRoot}/${file}`;
+        promises.push(bp);
+      }
+    }
     return Promise.all(promises);
   }
 
@@ -807,14 +851,16 @@ class HexMap {
         const c = getHexCenter(x, y, spacing);
         drawHexPath(ctx, c.x, c.y, spacing);
         const type = this.terrain[y][x];
-        if (this.controlMode) {
+        if (this.visible && !this._isVisible(x, y)) {
+          ctx.fillStyle = this.fogColor; // fog of war
+        } else if (this.controlMode) {
           if (type === 1) {
             ctx.fillStyle = this._terrainColor(1);
           } else {
             const owner = this._controlOwnerAt(x, y);
             ctx.fillStyle = (owner == null) ? UNCONTROLLED_LAND : controlColor(owner, this.aiCount);
           }
-        } else if (this.useTextures && this.tilePatterns[type]) {
+        } else if (this.useTextures && this.tilePatterns[type] && type !== 11) {
           ctx.fillStyle = this.tilePatterns[type];
         } else {
           ctx.fillStyle = this._terrainColor(type);
@@ -948,7 +994,7 @@ class HexMap {
             const owner = this._controlOwnerAt(tx, y);
             ctx.fillStyle = (owner == null) ? UNCONTROLLED_LAND : controlColor(owner, this.aiCount);
           }
-        } else if (this.useTextures && this.tilePatterns[type]) {
+        } else if (this.useTextures && this.tilePatterns[type] && type !== 11) {
           ctx.fillStyle = this.tilePatterns[type];
         } else {
           ctx.fillStyle = this._terrainColor(type);
@@ -962,6 +1008,7 @@ class HexMap {
 
     this._drawRivers(ctx, spacing);
     this._drawTransport(ctx, spacing);
+    this._drawBonuses(ctx, spacing);
     this._drawBuildings(ctx, spacing);
 
     // Optional overlay (e.g. colony-launch path preview), drawn in the same
@@ -1006,6 +1053,26 @@ class HexMap {
       }
     }
 
+    // Fog of war: paint opaque fog over every on-screen cell that is not in the
+    // visible set. Drawn last so it covers terrain and all overlays (rivers,
+    // transport, bonuses, buildings, launch-path previews) on hidden cells.
+    if (this.visible) {
+      ctx.fillStyle = this.fogColor;
+      ctx.strokeStyle = rgba(0.5, 0.5, 0.5, 1.0);
+      ctx.lineWidth = lineW;
+      for (let x = x0; x < xMax; x++) {
+        const tx = this.wrap ? wrapX(x, W) : x;
+        for (let y = y0; y < yMax; y++) {
+          if (y < 0 || y >= this.worldSize.y) continue;
+          if (this._isVisible(tx, y)) continue;
+          const c = getHexCenter(x, y, spacing);
+          drawHexPath(ctx, c.x, c.y, spacing);
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+    }
+
     ctx.restore();
   }
 
@@ -1014,6 +1081,24 @@ class HexMap {
   setTransport(tr) {
     this.transport = tr || null;
     this._draw();
+  }
+
+  // Public: replace the fog-of-war visible set (Set or array of y*W+x keys, or
+  // null to disable fog) and redraw the map and minimap.
+  setVisible(visible) {
+    this.visible = (visible instanceof Set)
+      ? visible
+      : (Array.isArray(visible) ? new Set(visible) : null);
+    if (this.offscreen) this._renderMapFull(); // refresh minimap fog
+    this._draw();
+    this._renderBirdseye();
+  }
+
+  // Whether a map cell is currently visible (not fogged). With no visible set,
+  // everything is visible. `x` is a wrapped map column, `y` a map row.
+  _isVisible(x, y) {
+    if (!this.visible) return true;
+    return this.visible.has(y * this.worldSize.x + x);
   }
 
   // Draw roads (brown) and monorails (silver) as lines between adjacent cell
@@ -1235,6 +1320,35 @@ class HexMap {
           for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x + ox, poly[i].y);
           ctx.stroke();
         }
+      }
+    }
+    ctx.restore();
+  }
+
+  // Draw terrain-bonus icons as a small overlay centered on each bonus cell.
+  // Bonuses are a sparse map keyed by y*worldWidth+x; icons are resolved by the
+  // bonus name through the terrainBonus config and loaded in _loadTiles.
+  _drawBonuses(ctx, spacing) {
+    if (!this.bonuses) return;
+    const keys = Object.keys(this.bonuses);
+    if (!keys.length) return;
+    const W = this.worldSize.x;
+    const wrapPx = W * 0.75 * spacing.x;
+    const offsets = this.wrap ? [-wrapPx, 0, wrapPx] : [0];
+    const size = spacing.x * 0.55;   // smaller than a building icon
+    ctx.save();
+    for (const k of keys) {
+      const entry = this.bonuses[k];
+      if (!entry || !entry.name) continue;
+      const icon = this.bonusIcons[entry.name];
+      if (!icon) continue;           // no icon loaded -> nothing to draw
+      const idx = parseInt(k, 10);
+      if (!Number.isFinite(idx)) continue;
+      const x = idx % W;
+      const y = (idx - x) / W;
+      const c = getHexCenter(x, y, spacing);
+      for (const ox of offsets) {
+        ctx.drawImage(icon, c.x + ox - size / 2, c.y - size / 2, size, size);
       }
     }
     ctx.restore();
@@ -1575,6 +1689,14 @@ class HexMap {
       return;
     }
 
+    // Fogged (unexplored) cell: don't reveal terrain/elevation/colony details.
+    if (!this._isVisible(hex.x, hex.y)) {
+      if (this.onHover) this.onHover({ x: hex.x, y: hex.y, terrain: null, name: 'Unexplored', elevText: 'n/a', meters: null, fogged: true });
+      else if (this.statusEl) this.statusEl.textContent = `Location: ${hex.x},${hex.y}  Terrain: Unexplored`;
+      this._hideTooltip();
+      return;
+    }
+
     const name = this._terrainName(this.terrain[hex.y][hex.x]);
     // Elevation is stored normalized 0..1. Report it relative to sea level:
     // (elevation - seaLevel) * 10000 m, so ocean is negative and land positive.
@@ -1621,8 +1743,17 @@ class HexMap {
         if (info) terrainLine += "  " + info;
       }
       lines.push(terrainLine);                        // terrain type + E/F/M/W/H
+      // Terrain bonus feature on this cell (name only).
+      if (this.cellBonus) {
+        const tb = this.cellBonus(hex.x, hex.y);
+        if (tb && tb.name) {
+          lines.push(tb.name);
+        }
+      }
       lines.push(`${elevText} above sea level`);     // elevation
       lines.push(`(${hex.x}, ${hex.y})`);            // x,y
+      const { lat, lon } = this._cellLatLon(hex.x, hex.y);
+      lines.push(this._formatLatLon(lat, lon));      // latitude N/S, longitude E/W
       const html = lines.join('<br>');
       const cx = e.clientX, cy = e.clientY;
       this._dwellTimer = setTimeout(() => {
@@ -1670,6 +1801,32 @@ class HexMap {
   _hideTooltip() {
     if (this._dwellTimer) { clearTimeout(this._dwellTimer); this._dwellTimer = null; }
     if (this.tooltipEl) this.tooltipEl.style.display = 'none';
+  }
+
+  // Geographic latitude/longitude for a cell, computed from the cell's CENTER
+  // point. The map is assumed to span latitudes +70 (north, top row) to -70
+  // (south, bottom row), and longitudes -180 (west, column 0) to +180 (east,
+  // the map's right edge). Odd columns are drawn a half-cell lower, so the
+  // center row uses that same half-cell parity offset.
+  _cellLatLon(x, y) {
+    const w = this.worldSize.x || 1;
+    const h = this.worldSize.y || 1;
+    // Vertical cell-center row, including the odd-column half-cell offset.
+    const parity = ((x % 2) + 2) % 2;
+    const yc = y + parity / 2;
+    // Latitude: +70 at yc=0 (top) down to -70 at yc=h-1 (bottom).
+    const latSpan = h > 1 ? (yc / (h - 1)) : 0;
+    const lat = 70 - latSpan * 140;
+    // Longitude: cell center column fraction mapped from -180 to +180.
+    const lon = -180 + ((x + 0.5) / w) * 360;
+    return { lat, lon };
+  }
+
+  // Format a lat/lon pair as "12.3\u00b0 N, 45.6\u00b0 W".
+  _formatLatLon(lat, lon) {
+    const ns = lat >= 0 ? 'N' : 'S';
+    const ew = lon >= 0 ? 'E' : 'W';
+    return `${Math.abs(lat).toFixed(1)}\u00b0 ${ns}, ${Math.abs(lon).toFixed(1)}\u00b0 ${ew}`;
   }
 
   // Mouse wheel / trackpad: pan the map left-right (deltaX) and up-down
