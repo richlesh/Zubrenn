@@ -4,5 +4,6 @@ dist/
 .idea/
 generate_license_key.py
 license.js
+license.cjs
 .kiro/
 prompts/

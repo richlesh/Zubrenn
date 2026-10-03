@@ -73,7 +73,7 @@
   <script>
     const { ipcRenderer } = require("electron");
     const nodeCrypto = require("crypto");
-    const { LICENSE_SALT } = require("./license.js");
+    const { LICENSE_SALT } = require("./license.cjs");
 
     ipcRenderer.invoke("settings-get").then((settings) => {
       if ((settings.theme || "dark") === "dark") document.body.classList.add("dark");

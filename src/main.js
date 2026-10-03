@@ -4,7 +4,7 @@ const fs = require("fs");
 const { spawn } = require("child_process");
 const nodeCrypto = require("crypto");
 const { load, save } = require("./settings");
-const { LICENSE_SALT } = require("./license.js");
+const { LICENSE_SALT } = require("./license.cjs");
 const { generateMap } = require("./generate_map.cjs");
 
 // Project root (one level up from src/). package.json lives there.
