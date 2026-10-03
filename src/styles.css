@@ -193,6 +193,10 @@ body.dark #work-stats .stat-sec { border-bottom-color: #444; }
 }
 #work-stats .stat-row > span:first-child { color: #666; }
 body.dark #work-stats .stat-row > span:first-child { color: #aaa; }
+/* Indented component breakdown rows (e.g. growth-rate factors). */
+#work-stats .stat-subrow { padding-left: 16px; font-size: 11px; }
+#work-stats .stat-subrow > span:first-child { color: #888; }
+body.dark #work-stats .stat-subrow > span:first-child { color: #999; }
 #work-stats .stat-pos { color: #1a9c4c; }
 #work-stats .stat-neg { color: #d0342c; }
 #work-stats .stat-note { margin-top: 10px; font-size: 11px; color: #888; line-height: 1.4; }
