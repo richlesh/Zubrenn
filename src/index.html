@@ -4231,6 +4231,19 @@
       if (terrainHappiness >= 0) happinessPos += terrainHappiness; else happinessNeg += terrainHappiness;
       if (taxPenalty > 0) happinessNeg -= taxPenalty;
       const happinessRate = happinessPos + happinessNeg;
+      // Itemized happiness components for the Resources-panel hover tooltip.
+      // These four signed values reconcile to happinessRate (they are exactly
+      // the terms folded into happinessPos/happinessNeg above): food balance
+      // (netFood), net building happiness (Bank/Barracks +, Factory −), worked
+      // terrain happiness (e.g. Wetlands + happiness deposits), and the always-
+      // negative Federation tax penalty. Attach to the shared breakdown object
+      // that colonyStats returns as rateBreakdown.
+      b.breakdown.happiness = {};
+      if (netFood) b.breakdown.happiness['Food balance'] = netFood;
+      const bldgHappiness = bFactors.pos + bFactors.neg;
+      if (bldgHappiness) b.breakdown.happiness['Buildings'] = bldgHappiness;
+      if (terrainHappiness) b.breakdown.happiness['Terrain'] = terrainHappiness;
+      if (taxPenalty > 0) b.breakdown.happiness['Federation tax'] = -taxPenalty;
       const happinessCap = colonyHappinessStorage(col);
       // Show the stored total as it WILL be after clamping next turn.
       const storedHappiness = Math.max(-happinessCap, Math.min(happinessCap, col.storedHappiness || 0));
@@ -7030,7 +7043,7 @@
         `<div class="stat-row"><span>${resName("material")}</span><span>${resVal("material", res.material)} / ${resVal("material", s.caps.material)} <span class="${cls(s.material)}" title="${esc(rateTip("material", s.material))}">${sign(s.material)}${nf(s.material, 1)}/yr</span></span></div>`,
         `<div class="stat-row"><span>${resName("water")}</span><span>${resVal("water", res.water)} / ${resVal("water", s.caps.water)} <span class="${cls(s.water)}" title="${esc(rateTip("water", s.water))}">${sign(s.water)}${nf(s.water, 1)}/yr</span></span></div>`,
         `<div class="stat-row"><span>${resName("wealth")}</span><span>${resVal("wealth", res.wealth)} / ${resVal("wealth", s.caps.wealth)} <span class="${cls(s.wealthRate)}" title="${esc(rateTip("wealth", s.wealthRate))}">${sign(s.wealthRate)}${nf(s.wealthRate, 1)}/yr</span></span></div>`,
-        `<div class="stat-row"><span>Happiness</span><span>${fmtHappiness(s.storedHappiness)} / ±${fmtHappiness(s.happinessCap)} <span class="${cls(s.happinessRate)}">${sign(s.happinessRate)}${nf(s.happinessRate, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>Happiness</span><span>${fmtHappiness(s.storedHappiness)} / ±${fmtHappiness(s.happinessCap)} <span class="${cls(s.happinessRate)}" title="${esc(rateTip("happiness", s.happinessRate))}">${sign(s.happinessRate)}${nf(s.happinessRate, 1)}/yr</span></span></div>`,
         overNote,
         ...buildingsSection,
         ...networkSection,
