@@ -242,6 +242,7 @@
           <tr><td>Road maintenance (<span id="fed-roadn">0</span> seg)</td><td id="fed-roadcost">0</td></tr>
           <tr><td>Monorail maintenance (<span id="fed-mononn">0</span> seg)</td><td id="fed-monocost">0</td></tr>
           <tr><td>Canal maintenance (<span id="fed-canaln">0</span> sides)</td><td id="fed-canalcost">0</td></tr>
+          <tr><td>Bridge maintenance (<span id="fed-bridgen">0</span> seg)</td><td id="fed-bridgecost">0</td></tr>
           <tr><td>Total maintenance</td><td id="fed-maint">0</td></tr>
           <tr class="fed-net"><td>Net to treasury</td><td id="fed-net">0</td></tr>
           <tr><td>Projected treasury</td><td id="fed-proj-treasury">0</td></tr>
@@ -5733,13 +5734,30 @@
     // players maintain none. Counts: road & monorail SEGMENTS (edges), canal
     // SIDES (edges).
     function federationTransportCounts(owner) {
-      if (owner !== 'human') return { roads: 0, monorails: 0, canals: 0 };
+      if (owner !== 'human') return { roads: 0, monorails: 0, canals: 0, bridges: 0 };
       const tr = ensureTransport();
       return {
         roads: tr.roadEdges ? tr.roadEdges.size : 0,
         monorails: tr.monorailEdges ? tr.monorailEdges.size : 0,
         canals: tr.canals ? tr.canals.size : 0,
+        bridges: _bridgeMaintUnits(tr),
       };
+    }
+    // Count billable bridge UNITS. A single-sea-tile crossing is built as a
+    // DOUBLE bridge (one span in, one span out), so it counts as 2; a
+    // river/canal crossing is a single bridge and counts as 1. Each entry in
+    // tr.bridges is one road/monorail edge key "x1,y1|x2,y2".
+    function _bridgeMaintUnits(tr) {
+      if (!tr || !tr.bridges) return 0;
+      let units = 0;
+      for (const ek of tr.bridges) {
+        const [a, b] = ek.split("|");
+        const [ax, ay] = a.split(",").map(Number);
+        const [bx, by] = b.split(",").map(Number);
+        const seaCrossing = (terrainAt(ax, ay) === 1) || (terrainAt(bx, by) === 1);
+        units += seaCrossing ? 2 : 1;
+      }
+      return units;
     }
     function _maintPer(kind) {
       const c = CONFIG[kind + 'MaintenanceCost'];
@@ -5752,7 +5770,8 @@
         road: n.roads * _maintPer('road'),
         monorail: n.monorails * _maintPer('monorail'),
         canal: n.canals * _maintPer('canal'),
-        get total() { return this.road + this.monorail + this.canal; }
+        bridge: n.bridges * _maintPer('bridge'),
+        get total() { return this.road + this.monorail + this.canal + this.bridge; }
       };
     }
     // Remove `count` random road or monorail SEGMENTS (edges) from the network,
@@ -5814,15 +5833,17 @@
       const tax = federationTaxFor(owner, fed.taxRate);
       fed.treasury += tax;
 
-      // 2) Pay maintenance (roads + monorails + canals), each only as far as the
-      //    treasury allows. Pay canals first, then split remaining funds between
-      //    road and monorail proportionally so each has a defined "unfunded" count.
+      // 2) Pay maintenance (roads + monorails + canals + bridges), each only as
+      //    far as the treasury allows. Pay canals and bridges first (neither
+      //    decays here), then split remaining funds between road and monorail so
+      //    each has a defined "unfunded" count.
       const counts = federationTransportCounts(owner);
-      const roadPer = _maintPer('road'), monoPer = _maintPer('monorail'), canalPer = _maintPer('canal');
+      const roadPer = _maintPer('road'), monoPer = _maintPer('monorail'), canalPer = _maintPer('canal'), bridgePer = _maintPer('bridge');
       const roadDue = counts.roads * roadPer;
       const monoDue = counts.monorails * monoPer;
       const canalDue = counts.canals * canalPer;
-      const totalDue = roadDue + monoDue + canalDue;
+      const bridgeDue = counts.bridges * bridgePer;
+      const totalDue = roadDue + monoDue + canalDue + bridgeDue;
 
       let destroyedRoads = 0, destroyedMono = 0;
       if (fed.treasury >= totalDue) {
@@ -5830,8 +5851,9 @@
       } else {
         // Shortfall: pay what we can, then decay unfunded road/monorail segments.
         let funds = Math.max(0, fed.treasury);
-        // Fund canals first (they don't decay here), then roads, then monorails.
+        // Fund canals first, then bridges (neither decays here), then roads, then monorails.
         const payCanal = Math.min(funds, canalDue); funds -= payCanal;
+        const payBridge = Math.min(funds, bridgeDue); funds -= payBridge;
         const payRoad = Math.min(funds, roadDue); funds -= payRoad;
         const payMono = Math.min(funds, monoDue); funds -= payMono;
         fed.treasury = 0;
@@ -7681,6 +7703,8 @@
       document.getElementById("fed-monocost").textContent = _fmtCredits(m.monorail);
       document.getElementById("fed-canaln").textContent = String(counts.canals);
       document.getElementById("fed-canalcost").textContent = _fmtCredits(m.canal);
+      document.getElementById("fed-bridgen").textContent = String(counts.bridges);
+      document.getElementById("fed-bridgecost").textContent = _fmtCredits(m.bridge);
       document.getElementById("fed-maint").textContent = _fmtCredits(m.total);
       const net = taxes - m.total;
       const netEl = document.getElementById("fed-net");

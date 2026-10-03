@@ -17,7 +17,7 @@
     // US income is roughly $ 80 million per 1,000.  $10 is one credit so ¤8M credit /1000
 
     // population costs are per 1000 population
-    "population": { "unitSize": 1000, "food": 1, "material": 10, "energy": 5, "water": 0.2, "wealth": 8 },
+    "population": { "unitSize": 1000, "food": 1, "material": 10, "energy": 5, "water": 0.2, "wealth": 1 },
     "infantry": { "unitSize": 1000, "food": 1, "material": 10, "energy": 6, "water": 0.2, "wealth": 10 },
     "tank": { "food": 2, "material": 2, "energy": 2, "water": 0.1, "wealth": 2 },
     "fighter": { "food": 1, "material": 1, "energy": 1, "water": 0.1, "wealth": 1 },
@@ -32,20 +32,19 @@
       "icon": "Port of Taganrog.png",
       "color": { "h": 240, "s": 1, "l": 0.25 },
       "movement": [1000, 1, 0.75, 0.2, 0.1],
-      "bonus": { "food": 0.25, "material": 0, "water": 0, "energy": -0.01, "wealth": 0 },
-      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
-      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
-      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 2 }
+      "bonus": { "food": 0.25, "material": 0, "water": 0, "energy": -0.01, "wealth": -0.025 },
+      "roadCostPerTile": { "energy": 3, "material": 800, "water": 0.2, "wealth": 130, "turns": 4 },
+      "monorailCostPerTile": { "energy": 4, "material": 950, "water": 0.2, "wealth": 180, "turns": 4 },
     },
     "2": {
       "name": "Grassland",
       "icon": "Open Square Path Grass.png",
       "color": { "h": 120, "s": 1, "l": 0.6 },
       "movement": [2, 1, 0.75, 0.2, 0.1],
-      "bonus": { "food": 2, "material": 1 },
-      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
-      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
-      "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 2 }
+      "bonus": {  "food": 10, "material": 3, "water": 0, "energy": -1, "wealth": -0.25 },
+      "roadCostPerTile": { "energy": 0.3, "material": 180, "water": 0.05, "wealth": 3, "turns": 1 },
+      "monorailCostPerTile": { "energy": 2, "material": 600, "water": 0.2, "wealth": 60, "turns": 2 },
+      "canalCostPerEdge": { "energy": 0.5, "material": 40, "water": 1.5, "wealth": 20, "turns": 3 },
     },
     "3": {
       "name": "Hills",
@@ -472,7 +471,6 @@
     //    1: Sea, 2: Grassland, 3: Hills, 4: Forest, 5: Jungle, 6: Desert, 7: Mountain-Low, 8: Mountain-High, 9: Frozen, 10 plains, 11 wetlands
 
   },
-  "bridgeCost": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 1 },
   "bridgeColor": { "h": 0, "s": 0.75, "l": 0.5 },
   "roadColor": { "h": 30, "s": 0.5, "l": 0.35 },
   "monorailColor": { "h": 40, "s": 1.0, "l": 0.5 },
@@ -497,13 +495,17 @@
   "removeCanalCost": { "energy": 2, "food": 1, "turns": 2 },
   "removeTransportCost": { "energy": 2, "food": 1, "turns": 2 },
   "roadMinPopulation": 3000,
-  "roadMaintenanceCost": { "wealth": 0.5 },
+
+  "roadMaintenanceCost": { "energy": 0, "material": 2, "water": 0, "wealth": 0.03 },
+  "monorailMaintenanceCost": { "energy": 0.5, "material": 1, "water": 0, "wealth": 1 },
+  "canalMaintenanceCost": { "energy": 0.1, "material": 0.5, "water": 1, "wealth": 0.3 },
+  "bridgeCost": { "energy": 0.3, "material": 60, "water": 0.01, "wealth": 15, "turns": 2 },
+  "bridgeMaintenanceCost": { "energy": 0, "material": 0.3, "water": 0, "wealth": 0.1 },
+
   "roadDecayRate": 0.01,
   "canalMinPopulation": 5000,
-  "canalMaintenanceCost": { "wealth": 1 },
   "canalDecayRate": 0.5,
   "monorailMinPopulation": 10000,
-  "monorailMaintenanceCost": { "wealth": 0.25 },
   "monorailDecayRate": 0.01,
   "federationTaxRate": 0,
   "foundColonyMinPopulation": 3000,
@@ -527,46 +529,46 @@
 //      "growthRate": 0.01,
       "prerequisiteBuildings": [],
       "buildCost": { "material": 3, "wealth": 5, "turns": 2 },
-      "costPerYear": { "material": 0, "energy": 1, "water": 0.1, "wealth": 0 },
-      "bonus": { "food": 1, "material": 1, "energy": 1, "population": 1, "water": 0.5, "wealth": 1 },
-      "storage": { "food": 20, "material": 20, "energy": 20, "water":  0.5, "wealth": 50, "happiness": 25, "population": 5000 },
+      "costPerYear": { },
+      "bonus": { "food": 10, "material": 5, "energy": 10, "water": 0.3, "wealth": 5, "population": 1 },
+      "storage": { "food": 20, "material": 20, "energy": 20, "water":  1, "wealth": 50, "happiness": 25, "population": 5000 },
       "federationStorage": { "food": 20, "material": 20, "energy": 20, "water":  2, "wealth": 50, "happiness": 25 }
     },
     "2": {
       "name": "Farm",
       "icon": "farm.png",
       "prerequisiteBuildings": [1,3],
-      "buildCost": { "material": 3, "energy": 2, "wealth": 2, "turns": 1 },
-      "costPerYear": { "material": 1, "energy": 1, "water": 0.5, "wealth": 0.5 },
-      "bonus": { "food": 3, "material": 0, "energy": 0, "population": 0.25, "wealth": 1 },
-      "storage": { "food": 30, "material": 0, "energy": 0, "wealth": 0, "happiness": 0 }
+      "buildCost":   { "energy": 1, "material": 2, "water": 0, "wealth": 10, "turns": 1 },
+      "costPerYear": { "energy": 0.2, "material": 5, "water": 10, "wealth": 5 },
+      "bonus":       { "energy": 0, "food": 60, "material": 30, "water": 0, "wealth": 20 },
+      "storage": { "food": 60 }
     },
     "3": {
       "name": "Solar Panel",
       "icon": "solar_panel.png",
       "prerequisiteBuildings": [1],
-      "buildCost": { "material": 2, "energy": 2, "wealth": 2, "turns": 1 },
-      "costPerYear": { "material": 0, "energy": 0, "wealth": 0.5 },
-      "bonus": { "food": 0, "material": 0, "energy": 6, "population": 0, "wealth": 0 },
-      "storage": { "food": 0, "material": 0, "energy": 0, "wealth": 0, "happiness": 0 }
+      "buildCost": { "material": 20, "energy": 750, "wealth": 28, "turns": 1 },
+      "costPerYear": { },
+      "bonus": { "energy": 500 },
+      "storage": { }
     },
     "4": {
       "name": "Factory",
       "icon": "factory.png",
       "prerequisiteBuildings": [3],
-      "buildCost": { "material": 5, "energy": 5, "wealth": 5, "turns": 3 },
-      "costPerYear": { "material": 2, "energy": 3, "water": 1, "wealth": 1 },
-      "bonus": { "food": 0, "material": 5, "energy": 0, "population": -0.25, "wealth": 1, "happiness": -0.5 },
-      "storage": { "food": 0, "material": 50, "energy": 10, "wealth": 0, "happiness": 0 }
+      "buildCost": { "material": 75, "energy": 1000, "wealth": 150, "turns": 3 },
+      "costPerYear": { "material": 400, "energy": 600, "water": 1, "wealth": 150 },
+      "bonus": { "material": 400, "energy": 0, "population": -0.25, "wealth": 1, "happiness": -0.5 },
+      "storage": { "material": 500, "energy": 10, "wealth": 0, "happiness": 0 }
     },
     "5": {
       "name": "Dock",
       "icon": "dock.png",
       "prerequisiteBuildings": [3],
-      "buildCost": { "material": 2, "energy": 1, "wealth": 1, "turns": 2 },
-      "costPerYear": { "material": 0, "energy": 1, "wealth": 1 },
-      "bonus": { "food": 1, "material": 0, "energy": 0, "population": 0, "wealth": 1 },
-      "storage": { "food": 10, "material": 10, "energy": 0, "wealth": 0, "happiness": 0 }
+      "buildCost": { "energy": 3, "material": 5, "water": 0.01, "wealth": 0.8, "turns": 1 },
+      "costPerYear": { "energy": 5, "material": 0,  "water": 0.05,"wealth": 0.6 },
+      "bonus": { "energy": 0, "food": 1.5, "material": 0.1, "water": 0, "wealth": 0.9 },
+      "storage": { "energy": 0, "food": 5, "material": 0, "water": 0, "wealth": 0, "happiness": 0 }
     },
     "6": {
       "name": "Air Field",
