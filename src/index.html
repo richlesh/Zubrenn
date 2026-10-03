@@ -483,7 +483,7 @@
       // Terrain: ×base yields; ÷movement; ÷transport per-tile/edge costs.
       for (const k of Object.keys(cfg.terrainTypes || {})) {
         const t = cfg.terrainTypes[k];
-        mul(t.base, ['food', 'material']);
+        mul(t.bonus, ['food', 'material']);
         if (Array.isArray(t.movement)) t.movement = t.movement.map((v) => (typeof v === 'number' ? v / d : v));
         divAll(t.roadCostPerTile); divAll(t.monorailCostPerTile); divAll(t.canalCostPerEdge);
       }
@@ -2274,7 +2274,7 @@
     function cellBreakdown(gx, gy, isHome, owner) {
       const terr = terrainAt(gx, gy);
       const tp = terrainProd(terr);
-      const tpp = ((CONFIG.terrainTypes && CONFIG.terrainTypes[String(terr)]) || {}).base || {};
+      const tpp = ((CONFIG.terrainTypes && CONFIG.terrainTypes[String(terr)]) || {}).bonus || {};
       const food = { base: tp.food, bonus: 0 };
       const prod = { base: tp.material, bonus: 0 };
       const happ = { base: tpp.happiness || 0, bonus: 0 };
@@ -2337,7 +2337,7 @@
       const terr = terrainAt(gx, gy);
       const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terr)]) || {};
       const tp = terrainProd(terr);
-      const tpp = tt.base || {};
+      const tpp = tt.bonus || {};
       const base = {
         food: tp.food || 0,
         material: tp.material || 0,
@@ -3422,7 +3422,10 @@
       // by the colony's population units and subtract as yearly needs. (Food and
       // water have no building upkeep of their own; material/energy/wealth add to
       // the buildings' upkeep already accumulated above.)
-      const popUnits = Math.floor((col.population || 0) / 1000);
+      // Population "units" for consumption: fractional population / unitSize
+      // (no flooring, so partial units pay proportionally).
+      const popUnitSize = (popCost.unitSize && popCost.unitSize > 0) ? popCost.unitSize : 1000;
+      const popUnits = (col.population || 0) / popUnitSize;
       needs.food += popUnits * popCostOf('food', 1);
       needs.material += popUnits * popCostOf('material', 0);
       needs.energy += popUnits * popCostOf('energy', 0);
@@ -3729,7 +3732,7 @@
     function cellResourceNet(col, x, y, resource) {
       let v = 0;
       const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(x, y))]) || {};
-      v += readResMap(tt.base)[resource];
+      v += readResMap(tt.bonus)[resource];
       const tb = bonusDefAt(x, y);
       if (tb && tb.bonus) v += readResMap(tb.bonus)[resource];
       for (const b of gameState.buildings) {
@@ -4133,7 +4136,7 @@
     // ---- economy helpers ---------------------------------------------------
     function terrainProd(type) {
       const tt = CONFIG.terrainTypes && CONFIG.terrainTypes[String(type)];
-      const b = tt && tt.base;
+      const b = tt && tt.bonus;
       return b
         ? { food: b.food || 0, material: b.material || 0, water: b.water || 0, happiness: b.happiness || 0 }
         : { food: 0, material: 0, water: 0, happiness: 0 };
@@ -4183,7 +4186,7 @@
       for (const k of worked) {
         const [wx, wy] = k.split(",").map(Number);
         const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(wx, wy))]) || {};
-        pct += readResMap(tt.base).population;
+        pct += readResMap(tt.bonus).population;
         const tb = bonusDefAt(wx, wy);
         if (tb && tb.bonus) pct += readResMap(tb.bonus).population;
       }

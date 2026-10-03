@@ -25,14 +25,14 @@
     "submarine": { "food": 1, "material": 1, "energy": 1, "water": 0.1, "wealth": 1 },
     "carrier": { "food": 2, "material": 2, "energy": 2, "water": 0.1, "wealth": 2 }
   },
-  // terrain cells are 10km diameter
+  // terrain cells are 10km diameter across flats  A = 86.6 km², S = 5.77 km
   "terrainTypes": {
     "1": {
       "name": "Sea",
       "icon": "Port of Taganrog.png",
       "color": { "h": 240, "s": 1, "l": 0.25 },
       "movement": [1000, 1, 0.75, 0.2, 0.1],
-      "base": { "food": 1, "material": 0, "water": 0.5},
+      "bonus": { "food": 0.25, "material": 0, "water": 0, "energy": -0.01, "wealth": 0 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
       "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 2 }
@@ -42,7 +42,7 @@
       "icon": "Open Square Path Grass.png",
       "color": { "h": 120, "s": 1, "l": 0.6 },
       "movement": [2, 1, 0.75, 0.2, 0.1],
-      "base": { "food": 2, "material": 1 },
+      "bonus": { "food": 2, "material": 1 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
       "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 2 }
@@ -52,7 +52,7 @@
       "icon": "Just Add Bison.png",
       "color": { "h": 90, "s": 0.583, "l": 0.52 },
       "movement": [3, 1, 0.75, 0.2, 0.1],
-      "base": { "food": 1, "material": 2 },
+      "bonus": { "food": 1, "material": 2 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.75 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.75 },
       "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 2 }
@@ -62,7 +62,7 @@
       "icon": "Shrub Cover.png",
       "color": { "h": 120, "s": 1, "l": 0.3 },
       "movement": [4, 1, 0.75, 0.2, 0.1],
-      "base": { "food": 1, "material": 2 },
+      "bonus": { "food": 1, "material": 2 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 1 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 1 },
       "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 2 }
@@ -72,7 +72,7 @@
       "icon": "Deep Forest.png",
       "color": { "h": 120, "s": 1, "l": 0.15 },
       "movement": [5, 1, 0.75, 0.2, 0.1],
-      "base": { "food": 1, "material": 2, "water": 0.5},
+      "bonus": { "food": 1, "material": 2, "water": 0.5},
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 1 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 1 },
       "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 2 }
@@ -82,7 +82,7 @@
       "icon": "Slush.png",
       "color": { "h": 60, "s": 0.6, "l": 0.469 },
       "movement": [2, 1, 0.75, 0.2, 0.1],
-      "base": { "food": 0, "material": 0 },
+      "bonus": { "food": 0, "material": 0 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
       "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 2 }
@@ -92,7 +92,7 @@
       "icon": "Dense Pine Forest.png",
       "color": { "h": 120, "s": 0.818, "l": 0.275 },
       "movement": [4, 1, 1000, 0.2, 0.1],
-      "base": { "food": 0, "material": 3 },
+      "bonus": { "food": 0, "material": 3 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 1.5 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 1.5 },
       "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 2 }
@@ -102,7 +102,7 @@
       "icon": "Age of the Canyon.png",
       "color": { "h": 30, "s": 0.333, "l": 0.225 },
       "movement": [5, 1, 1000, 0.2, 0.1],
-      "base": { "food": 0, "material": 4 },
+      "bonus": { "food": 0, "material": 4 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 2 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 2 },
       "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 2 }
@@ -112,7 +112,7 @@
       "icon": "Polar Zone.png",
       "color": { "h": 0, "s": 0, "l": 1 },
       "movement": [2, 1, 1000, 0.2, 0.1],
-      "base": { "food": 0, "material": 0 },
+      "bonus": { "food": 0, "material": 0 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
       "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 2 }
@@ -122,7 +122,7 @@
       "icon": "Sage Stone.png",
       "color": { "h": 120, "s": 1, "l": 0.8 },
       "movement": [2, 1, 0.75, 0.2, 0.1],
-      "base": { "food": 1, "material": 1 },
+      "bonus": { "food": 1, "material": 1 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
       "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 2 }
@@ -132,7 +132,7 @@
       "icon": "Dodders Marsh.png",
       "color": { "h": 120, "s": 1, "l": 0.4 },
       "movement": [3, 1, 0.75, 0.2, 0.1],
-      "base": { "food": 0, "material": 1, "water": 0.5, "happiness": 1 },
+      "bonus": { "food": 0, "material": 1, "water": 0.5, "happiness": 1 },
       "roadCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 1 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 1 },
       "canalCostPerEdge": { "food": 3, "material": 3, "energy": 3, "wealth": 3, "turns": 2 }
