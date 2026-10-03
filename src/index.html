@@ -725,6 +725,35 @@
 
     // ---- helpers -----------------------------------------------------------
     const WATER = 1;
+    // ---- terrain id <-> name mapping --------------------------------------
+    // The terrain GRID stores numeric ids (1..11). config.json keys
+    // terrainTypes by lowercase NAME, each entry carrying a numeric `code`
+    // (the grid id). These helpers map between the two. Maps are rebuilt
+    // whenever the CONFIG.terrainTypes object identity changes.
+    let _ttCacheSrc = null, _ttById = null, _ttNameToId = null, _ttIdToName = null;
+    function _ensureTerrainMaps() {
+      const tt = (CONFIG && CONFIG.terrainTypes) || null;
+      if (tt === _ttCacheSrc && _ttById) return;
+      _ttCacheSrc = tt;
+      _ttById = {}; _ttNameToId = {}; _ttIdToName = {};
+      if (tt) {
+        for (const key of Object.keys(tt)) {
+          const entry = tt[key];
+          const code = entry && typeof entry.code === 'number' ? entry.code : parseInt(key, 10);
+          if (Number.isFinite(code)) {
+            _ttById[code] = entry;
+            _ttNameToId[key] = code;
+            _ttIdToName[code] = key;
+          }
+        }
+      }
+    }
+    // Terrain-type config entry for a numeric grid id (or null).
+    function terrainTypeById(id) { _ensureTerrainMaps(); return _ttById[id] || null; }
+    // Lowercase name key for a numeric grid id (or null).
+    function terrainNameOf(id) { _ensureTerrainMaps(); return _ttIdToName[id] || null; }
+    // Numeric grid id for a lowercase name key (or null).
+    function terrainIdOf(name) { _ensureTerrainMaps(); const v = _ttNameToId[name]; return (v == null) ? null : v; }
     function terrainAt(x, y) {
       const t = gameState.map.terrain;
       const W = t[0].length;
@@ -912,6 +941,53 @@
       }
       return false;
     }
+    // True if any edge-adjacent cell is wetlands/marsh.
+    function nearWetlands(x, y) {
+      const WL = terrainIdOf('wetlands');
+      if (WL == null) return false;
+      for (const n of hexNeighborsRenderer(x, y)) {
+        if (terrainAt(n.x, n.y) === WL) return true;
+      }
+      return false;
+    }
+    // The map's polar latitude in degrees. Mirrors generate_map.cjs:
+    // polarDeg = 25 + polar * 45, where `polar` (0..1) is stored in map meta.
+    function polarLatDeg() {
+      const m = gameState.map && gameState.map.meta;
+      const p = (m && typeof m.polar === 'number') ? m.polar : 0.5;
+      return 25 + p * 45;
+    }
+    // True if a cell lies at or beyond the polar line (|latitude| >= polarDeg).
+    function cellIsPolar(x, y) {
+      const { lat } = cellLatLon(x, y);
+      return Math.abs(lat) >= polarLatDeg();
+    }
+    // Climate band of a cell, mirroring generate_map.cjs climateBand(). The
+    // interior dividing lines scale with the polar line by the fractions in
+    // config.json `climateBands` ({ tropicalFraction, subpolarFraction }); these
+    // defaults are used only when config omits them. Returns 'tropical',
+    // 'temperate', 'subpolar', or 'polar'.
+    const DEFAULT_CLIMATE_BANDS = { tropicalFraction: 0.35, subpolarFraction: 0.85 };
+    function climateBandFractions() {
+      const cb = (CONFIG && CONFIG.climateBands && typeof CONFIG.climateBands === 'object')
+        ? CONFIG.climateBands : {};
+      const num = (v, d) => (typeof v === 'number' && Number.isFinite(v)) ? v : d;
+      return {
+        tropicalFraction: num(cb.tropicalFraction, DEFAULT_CLIMATE_BANDS.tropicalFraction),
+        subpolarFraction: num(cb.subpolarFraction, DEFAULT_CLIMATE_BANDS.subpolarFraction)
+      };
+    }
+    function cellClimateBand(x, y) {
+      const polarDeg = polarLatDeg();
+      const { lat } = cellLatLon(x, y);
+      const latDeg = Math.abs(lat);
+      if (!(polarDeg > 0)) return 'temperate';
+      const b = climateBandFractions();
+      if (latDeg >= polarDeg) return 'polar';
+      if (latDeg <= b.tropicalFraction * polarDeg) return 'tropical';
+      if (latDeg <= (1 - b.subpolarFraction) * polarDeg) return 'temperate';
+      return 'subpolar';
+    }
     // Grassland, hills, forest, jungle, desert, and plains get a food bonus when
     // adjacent to a river segment OR a sea tile. (Wetlands are intentionally
     // excluded — they already carry their own happiness bonus.)
@@ -1022,15 +1098,15 @@
       return 0;
     }
     function roadCostAt(x, y) {
-      const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(x, y))]) || {};
+      const tt = (terrainTypeById(terrainAt(x, y))) || {};
       return tt.roadCostPerTile || _emptyCost();
     }
     function monorailCostAt(x, y) {
-      const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(x, y))]) || {};
+      const tt = (terrainTypeById(terrainAt(x, y))) || {};
       return tt.monorailCostPerTile || _emptyCost();
     }
     function canalCostAt(x, y) {
-      const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(x, y))]) || {};
+      const tt = (terrainTypeById(terrainAt(x, y))) || {};
       return tt.canalCostPerEdge || tt.canalCostPerTile || _emptyCost();
     }
     function bridgeCostVal() { return CONFIG.bridgeCost || _emptyCost(); }
@@ -1439,7 +1515,7 @@
       const disallowed = CONFIG.canalDisallowedTerrain || [];
       if (disallowed.includes(ta) || disallowed.includes(tb)) return false;
       // Not through/adjacent to impassable frozen: neither cell the canal runs
-      // between may be frozen above the altitude limit.
+      // between may be Frozen (terrain 9).
       if (isImpassableFrozen(ax, ay) || isImpassableFrozen(bx, by)) return false;
       // Reject only if THIS specific border already carries a river or canal
       // (edge-precise — a river on a different border of a cell is fine).
@@ -1844,7 +1920,7 @@
     // The fastest (lowest movement[] cost) mode available in a cell for `owner`.
     // Returns { mode, cost } or null if the cell has no usable mode.
     function cellFastest(x, y, owner) {
-      const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(x, y))]) || {};
+      const tt = (terrainTypeById(terrainAt(x, y))) || {};
       const mv = Array.isArray(tt.movement) ? tt.movement : [1, 1, 1, 1, 1];
       let best = null;
       for (const m of cellModes(x, y, owner)) {
@@ -1979,6 +2055,19 @@
       _riverVertexCounts = m;
       return m;
     }
+    // Signed altitude in meters relative to sea level (ASL) for a cell:
+    // positive above sea level, negative below (depth). Matches the generator's
+    // altOf and the hover tooltip convention: (elevation - seaLevel) * 10000.
+    // Used by the "deep"/"shallow"/"lowland" placement bands.
+    function cellAslMeters(x, y) {
+      const map = gameState.map; if (!map || !map.elevation) return 0;
+      const W = map.terrain[0].length;
+      const wrap = !!(map.meta && map.meta.wrap);
+      const xx = wrap ? ((x % W) + W) % W : x;
+      if (y < 0 || y >= map.elevation.length || xx < 0 || xx >= W) return 0;
+      const sl = (map.seaLevel != null) ? map.seaLevel : 0;
+      return (map.elevation[y][xx] - sl) * 10000;
+    }
     // Approximate altitude in meters above sea level for a cell, from the
     // normalized elevation map and sea level.
     function altitudeMeters(x, y) {
@@ -2002,21 +2091,50 @@
       return false;
     }
     // Whether a cell can be traversed/settled by land movement. Sea is normally
-    // impassable; frozen cells above the altitude threshold are impassable.
+    // impassable; every Frozen (terrain 9) cell is impassable.
     // With `allowShallowSea` (owner has a Dock), shallow-sea tiles (sea adjacent
     // to land) become traversable.
-    // A frozen (terrain 9) cell above the configured altitude is impassable —
-    // for movement, and for building roads/monorails/canals.
+    // A Frozen (terrain 9) cell is impassable — for movement, and for building
+    // roads/monorails/canals.
+    // Impassable cells are the mountain TOPS: elevation tier 9 (the highest
+    // quantized band), computed during map generation and carried in
+    // map.impassable. They cannot be planned across (roads/monorails/canals/
+    // colony paths), worked, built upon, or hold a terrain bonus. This is driven
+    // by ELEVATION, not terrain id — low-elevation polar ice (Frozen terrain at
+    // a low tier) remains fully passable.
+    //
+    // Fallback for older saves without a stored impassable grid: recompute
+    // tier 9 from the elevation field using the generator's quantize formula
+    // (tier = 2 + floor(pow((e-seaLevel)/(1-seaLevel), 1.3) * 8), clamped <= 9;
+    // tier 9 <=> pow(t,1.3) >= 0.875).
+    function _elevationIsTier9(x, y) {
+      const map = gameState.map; if (!map || !map.elevation) return false;
+      const t = map.terrain;
+      const W = t[0].length;
+      const wrap = !!(map.meta && map.meta.wrap);
+      const xx = wrap ? ((x % W) + W) % W : x;
+      if (y < 0 || y >= map.elevation.length || xx < 0 || xx >= W) return false;
+      const e = map.elevation[y][xx];
+      const sl = (map.seaLevel != null) ? map.seaLevel : 0;
+      if (e <= sl) return false;
+      const tt = (e - sl) / ((1 - sl) || 1);
+      return Math.pow(tt, 1.3) >= 0.875;
+    }
     function isImpassableFrozen(x, y) {
-      if (terrainAt(x, y) !== 9) return false;
-      const lim = (CONFIG.impassableFrozenAltitude != null) ? CONFIG.impassableFrozenAltitude : 5000;
-      return altitudeMeters(x, y) > lim;
+      const map = gameState.map; if (!map) return false;
+      const W = map.terrain[0].length;
+      const wrap = !!(map.meta && map.meta.wrap);
+      const xx = wrap ? ((x % W) + W) % W : x;
+      if (map.impassable && map.impassable[y]) {
+        return !!map.impassable[y][xx];
+      }
+      return _elevationIsTier9(xx, y); // legacy save fallback
     }
     function isPassableCell(x, y, allowShallowSea) {
       const terr = terrainAt(x, y);
       if (terr === 1) return !!allowShallowSea && isShallowSea(x, y);
       if (terr < 2 || terr > 11) return false;         // off-map (land is 2-11)
-      if (isImpassableFrozen(x, y)) return false;      // frozen too high
+      if (isImpassableFrozen(x, y)) return false;      // tier-9 mountain top
       return true;
     }
     // Movement cost to ENTER cell (x,y) on unimproved terrain, plus the
@@ -2028,7 +2146,7 @@
     // today; the road/sea/monorail/air entries are reserved for future
     // transport infrastructure.
     function enterCost(x, y) {
-      const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(x, y))]) || {};
+      const tt = (terrainTypeById(terrainAt(x, y))) || {};
       const mv = Array.isArray(tt.movement) ? tt.movement[0] : 1; // [0] = unimproved
       let cost = (mv != null ? mv : 1);
       const W = gameState.map.terrain[0].length;
@@ -2275,7 +2393,7 @@
     function cellBreakdown(gx, gy, isHome, owner) {
       const terr = terrainAt(gx, gy);
       const tp = terrainProd(terr);
-      const tpp = ((CONFIG.terrainTypes && CONFIG.terrainTypes[String(terr)]) || {}).bonus || {};
+      const tpp = ((terrainTypeById(terr)) || {}).bonus || {};
       const food = { base: tp.food, bonus: 0 };
       const prod = { base: tp.material, bonus: 0 };
       const happ = { base: tpp.happiness || 0, bonus: 0 };
@@ -2336,7 +2454,7 @@
     // display. Mirrors cellBreakdown's math so totals agree.
     function cellContributions(gx, gy, isHome, owner) {
       const terr = terrainAt(gx, gy);
-      const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terr)]) || {};
+      const tt = (terrainTypeById(terr)) || {};
       const tp = terrainProd(terr);
       const tpp = tt.bonus || {};
       const base = {
@@ -2933,6 +3051,7 @@
     const turnStartHandle = document.getElementById("turnstart-handle");
     let _turnStartTimers = [];
     let _skipAutoEndThisTurn = false; // "Let me handle it" was clicked this turn
+    let _autoEndNoticeShown = false; // show the "no actions" auto-end notice once per auto-mode session
     function _clearTurnStartTimers() {
       for (const t of _turnStartTimers) clearTimeout(t);
       _turnStartTimers = [];
@@ -2957,7 +3076,7 @@
     // with no input at all.
     const IDLE_MS = 30000;       // quiet time before the warning appears
     const WARN_MS = 30000;       // warning visible before the turn auto-ends
-    const NEW_YEAR_MS = 2000;    // "Year N begins" announcement
+    const NEW_YEAR_MS = 500;    // "Year N begins" announcement
     const NOTHING_MS = 2000;     // "no actions" notice before ending
 
     let _idleTimer = null;       // pending warning
@@ -3048,8 +3167,11 @@
         _closeTurnStart();
         if (!_autoTurnEnd) return;                  // player controls the turn
         if (!humanHasAnyAction()) {
-          // Nothing to do: say so briefly, then end. No "take control" button,
-          // since there is nothing to take control of.
+          // Nothing to do this turn. Show the "ending automatically" notice only
+          // ONCE per auto-end session (until the player enters manual mode via ESC
+          // and returns to auto-end). On subsequent no-action turns, end at once.
+          if (_autoEndNoticeShown) { _closeTurnStart(); advanceTurn(); return; }
+          _autoEndNoticeShown = true;
           turnStartText.textContent = "Auto turn end is on";
           turnStartSub.innerHTML = "You have no actions this turn — ending automatically…<br>Press ESC to take control.";
           turnStartHandle.hidden = true;
@@ -3073,6 +3195,7 @@
     function takeManualControlThisTurn() {
       if (_skipAutoEndThisTurn) return false;
       _skipAutoEndThisTurn = true;
+      _autoEndNoticeShown = false;
       _warningShowing = false;
       stopIdleWatch();
       _closeTurnStart();
@@ -3094,6 +3217,59 @@
     // Type 1 = colony (Biodome); 2 = Farm; 3 = Solar Panel; 4 = Factory.
     function buildingType(type) {
       return (CONFIG.buildingTypes && CONFIG.buildingTypes[String(type)]) || null;
+    }
+    // Default terrain set a building may occupy when its config entry omits a
+    // `terrain` list: all habitable land (grassland, hills, forest, jungle,
+    // desert, mountain-low, plains, wetlands). Mirrors the former hard-coded
+    // rule. Sea and the uninhabitable high mountains / frozen are excluded by
+    // default. Values are terrain NAME keys (config now keys terrain by name).
+    const DEFAULT_BUILDING_TERRAIN = ["grassland", "hills", "forest", "jungle", "desert", "mountain-low", "plains", "wetlands"];
+    // The terrain NAME keys a building type may be placed on, taken from
+    // config.json buildingTypes[type].terrain (same convention as
+    // terrainBonus.terrain). Falls back to the habitable-land default.
+    function buildingTerrains(type) {
+      const bt = buildingType(type);
+      const list = bt && Array.isArray(bt.terrain) ? bt.terrain : null;
+      return (list && list.length) ? list : DEFAULT_BUILDING_TERRAIN;
+    }
+    // Terrain GROUP selectors expand to a set of terrain names. Groups come from
+    // config.json `terrainGroups`; the canonical built-in groups are the
+    // fallback. A `terrain` entry may be a terrain name or a group name.
+    const DEFAULT_TERRAIN_GROUPS = {
+      flatland: ["grassland", "plains", "desert", "wetlands"],
+      trees: ["jungle", "forest", "mountain-low"],
+      mountain: ["mountain-low", "mountain-high"]
+    };
+    function terrainGroupsCfg() {
+      return (CONFIG && CONFIG.terrainGroups && typeof CONFIG.terrainGroups === 'object')
+        ? CONFIG.terrainGroups : DEFAULT_TERRAIN_GROUPS;
+    }
+    // Expand a list of terrain tokens (names and/or group names) into a flat
+    // Set of terrain NAME keys.
+    function expandTerrainTokens(list) {
+      const groups = terrainGroupsCfg();
+      const out = new Set();
+      for (const tok of (list || [])) {
+        if (Array.isArray(groups[tok])) {
+          for (const n of groups[tok]) out.add(n);
+        } else {
+          out.add(tok);
+        }
+      }
+      return out;
+    }
+    // Whether a given terrain tile id is allowed for a building type. The cell's
+    // numeric id is mapped to its name key, then checked against the building's
+    // terrain list with any group selectors expanded.
+    function terrainAllowedForBuilding(type, terr) {
+      const name = terrainNameOf(terr);
+      return name != null && expandTerrainTokens(buildingTerrains(type)).has(name);
+    }
+    // General "habitable land" predicate (building-agnostic), driven by the
+    // Biodome's terrain list so colony establishment / launch targeting and the
+    // build-menu land pre-filters all follow one config-defined rule.
+    function isHabitableLandTerrain(terr) {
+      return terrainAllowedForBuilding(1, terr);
     }
     function improvementName(type) {
       const bt = buildingType(type);
@@ -3262,7 +3438,7 @@
       const workedSet = new Set([homeKey, ...(col.worked || [])]);
       for (const k of workedSet) {
         const [wx, wy] = k.split(",").map(Number);
-        const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(wx, wy))]) || {};
+        const tt = (terrainTypeById(terrainAt(wx, wy))) || {};
         addMap(tt.storage);
         const tb = bonusDefAt(wx, wy);
         if (tb && tb.storage) addMap(tb.storage);
@@ -3732,7 +3908,7 @@
     // (that is colony-wide, not per-cell).
     function cellResourceNet(col, x, y, resource) {
       let v = 0;
-      const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(x, y))]) || {};
+      const tt = (terrainTypeById(terrainAt(x, y))) || {};
       v += readResMap(tt.bonus)[resource];
       const tb = bonusDefAt(x, y);
       if (tb && tb.bonus) v += readResMap(tb.bonus)[resource];
@@ -4136,7 +4312,7 @@
 
     // ---- economy helpers ---------------------------------------------------
     function terrainProd(type) {
-      const tt = CONFIG.terrainTypes && CONFIG.terrainTypes[String(type)];
+      const tt = terrainTypeById(type);
       const b = tt && tt.bonus;
       return b
         ? { food: b.food || 0, material: b.material || 0, water: b.water || 0, happiness: b.happiness || 0 }
@@ -4186,7 +4362,7 @@
       // Terrain base + terrain-bonus population on each worked cell.
       for (const k of worked) {
         const [wx, wy] = k.split(",").map(Number);
-        const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(wx, wy))]) || {};
+        const tt = (terrainTypeById(terrainAt(wx, wy))) || {};
         pct += readResMap(tt.bonus).population;
         const tb = bonusDefAt(wx, wy);
         if (tb && tb.bonus) pct += readResMap(tb.bonus).population;
@@ -4476,6 +4652,9 @@
         const terr = terrainAt(c.x, c.y);
         // Overlapping zones: a cell belongs to only ONE colony (the nearest).
         if (!ownsCell(colony, c.x, c.y)) return false;
+        // Impassable (Frozen) cells can't be worked or built upon, so they are
+        // not part of a colony's usable control set.
+        if (isImpassableFrozen(c.x, c.y)) return false;
         if (terr !== 1) return true;                 // land it owns is in control
         // Sea: only if the colony has a Dock AND this is a shallow-sea tile.
         return docked && isShallowSea(c.x, c.y);
@@ -4736,10 +4915,13 @@
     // least minColonyDistance from every existing colony.
     function foundColonyTargetValid(host, tx, ty) {
       if (!host) return { ok: false, reason: "no host" };
-      // A colony must settle on land (not on a sea tile), so the target itself
-      // is validated without the shallow-sea allowance.
+      // A colony must settle on terrain the Biodome (building type 1) allows,
+      // per config.json buildingTypes[1].terrain. Validated without the
+      // shallow-sea allowance.
       const tterr = terrainAt(tx, ty);
-      if (tterr === 1) return { ok: false, reason: "can't settle on water" };
+      if (!terrainAllowedForBuilding(1, tterr)) {
+        return { ok: false, reason: (tterr === WATER) ? "can't settle on water" : "unsuitable terrain" };
+      }
       if (!isPassableCell(tx, ty, false)) return { ok: false, reason: "impassable" };
       if (tx === host.x && ty === host.y) return { ok: false, reason: "same cell" };
       if (cellHasBuilding(tx, ty)) return { ok: false, reason: "cell occupied" };
@@ -4760,7 +4942,7 @@
     // terrain/occupancy/spacing reasons the user asked to highlight.
     function foundCellUnsuitableByTerrainOrDistance(host, tx, ty) {
       const terr = terrainAt(tx, ty);
-      if (terr === 1) return true;                       // sea
+      if (!terrainAllowedForBuilding(1, terr)) return true;  // terrain can't host a Biodome
       if (!isPassableCell(tx, ty, false)) return true;   // impassable (e.g. high frozen)
       if (cellHasBuilding(tx, ty)) return true;          // occupied
       if (host && tx === host.x && ty === host.y) return true;
@@ -5507,38 +5689,89 @@
       }
       return null;
     }
-    // Where a building type may be placed, honoring terrain. Docks (type 5) go
-    // on shallow-sea tiles within a colony's radius; all others go on empty land
-    // (2-7) within the owner's control. Returns { ok, reason }.
+    // Where a building type may be placed, honoring the per-building `terrain`
+    // list and `other` tags in config.json (no per-type hard-coding). Sea
+    // buildings (terrain includes 1, e.g. Dock / Desalination) go on shallow-sea
+    // tiles within a colony's radius; land buildings go on an empty allowed-
+    // terrain cell within the owner's control. Returns { ok, reason }.
     function canPlaceTypeAt(type, x, y, owner) {
       if (cellHasBuilding(x, y)) return { ok: false, reason: "cell occupied" };
-      if (type === 5) {
-        if (terrainAt(x, y) !== 1) return { ok: false, reason: "docks must be built on sea" };
-        if (!isShallowSea(x, y)) return { ok: false, reason: "docks need sea adjacent to land" };
-        const dcol = colonyControllingByRadius(x, y, owner);
-        if (!dcol) return { ok: false, reason: "outside your zone of control" };
-        if (colonyBuildingsUnderConstruction(dcol) >= 2) {
-          return { ok: false, reason: "2 buildings already under construction" };
-        }
-        return { ok: true };
-      }
+      if (isImpassableFrozen(x, y)) return { ok: false, reason: "impassable terrain" };
+      // Placement is driven entirely by the building's `other` tags in
+      // config.json — no per-type hard-coding. Supported tags (shared with
+      // terrainBonus): "sea" (built ON a shallow-sea tile, e.g. Dock /
+      // Desalination), "river" (on land, river/canal-adjacent), "water" (on
+      // land, river/canal- OR sea-adjacent), "dry" (on land, neither), "land"
+      // (on a habitable land tile — the implicit default), and "polar" (cell at
+      // or beyond the map's polar latitude). "pristine" is a runtime flag and
+      // is ignored for placement.
+      //
+      // The set of terrain tiles a building may occupy comes from
+      // buildingTypes[type].terrain in config.json (same convention as
+      // terrainBonus.terrain); it defaults to habitable land when omitted.
+      const bt = buildingType(type) || {};
+      const tags = Array.isArray(bt.other) ? bt.other : [];
       const terr = terrainAt(x, y);
-      if (!((terr >= 2 && terr <= 7) || terr === 10 || terr === 11)) {
-        return { ok: false, reason: "must be land" };
+
+      // Terrain gate: the cell's tile must be in the building's allowed set.
+      if (!terrainAllowedForBuilding(type, terr)) {
+        return { ok: false, reason: (terr === WATER) ? "must be built on sea" : "must be land" };
       }
-      if (!(owner === 'human' ? humanControls(x, y) : colonyControlling(x, y, owner))) {
-        return { ok: false, reason: "outside your zone of control" };
+      // When a building sits on the water (its terrain set allows sea), it must
+      // be a shallow-sea tile (sea adjacent to land) — as Docks required.
+      const onSea = (terr === WATER);
+      if (onSea && !isShallowSea(x, y)) {
+        return { ok: false, reason: "needs sea adjacent to land" };
       }
+
+      // Zone-of-control check. Sea tiles are not "controlled" the same way, so
+      // (as Docks did) fall back to the radius-based controlling colony.
+      const controlled = onSea
+        ? !!colonyControllingByRadius(x, y, owner)
+        : (owner === 'human' ? humanControls(x, y) : !!colonyControlling(x, y, owner));
+      if (!controlled) return { ok: false, reason: "outside your zone of control" };
+
       // At most two buildings may be under construction per colony at once.
       const col = colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
       if (col && colonyBuildingsUnderConstruction(col) >= 2) {
         return { ok: false, reason: "2 buildings already under construction" };
       }
-      // Water Treatment Plant (type 12) must sit next to water: either a
-      // river/canal segment on one of its borders (nearRiver counts built
-      // canals) or an edge-adjacent sea tile.
-      if (type === 12 && !(nearRiver(x, y) || nearSea(x, y))) {
-        return { ok: false, reason: "must be adjacent to a river, canal, or sea" };
+
+      // Remaining water/latitude requirements from `other`.
+      for (const tag of tags) {
+        switch (tag) {
+          case 'river':
+            if (!nearRiver(x, y)) return { ok: false, reason: "must be adjacent to a river or canal" };
+            break;
+          case 'water':
+            if (!(nearRiver(x, y) || nearSea(x, y) || nearWetlands(x, y))) return { ok: false, reason: "must be adjacent to a river, canal, sea, or wetlands" };
+            break;
+          case 'dry':
+            if (nearRiver(x, y) || nearSea(x, y) || nearWetlands(x, y)) return { ok: false, reason: "must not be adjacent to water" };
+            break;
+          case 'deep': {
+            const a = cellAslMeters(x, y);
+            if (!(a < -1000)) return { ok: false, reason: "must be deep water (below -1000 m)" };
+            break;
+          }
+          case 'shallow': {
+            const a = cellAslMeters(x, y);
+            if (!(a >= -1000 && a <= 0)) return { ok: false, reason: "must be shallow water (-1000..0 m)" };
+            break;
+          }
+          case 'lowland': {
+            const a = cellAslMeters(x, y);
+            if (!(a >= 0 && a <= 2000)) return { ok: false, reason: "must be low land (0..2000 m)" };
+            break;
+          }
+          case 'land':
+            // Implicit for non-sea buildings; nothing extra to check.
+            break;
+          case 'sea':
+          case 'pristine':
+          default:
+            break; // handled above / runtime-only / unknown -> ignore
+        }
       }
       return { ok: true };
     }
@@ -5961,7 +6194,7 @@
         for (const c of control) {
           if (cellKey(c.x, c.y) === homeKey) continue;
           const bt = terrainAt(c.x, c.y);
-          if (!((bt >= 2 && bt <= 7) || bt === 10 || bt === 11)) continue;
+          if (!isHabitableLandTerrain(bt)) continue;
           if (gameState.buildings.some((b) => b.x === c.x && b.y === c.y)) continue;
           for (const type of types) {
             if (hasPrerequisitesAt(type, c.x, c.y, pi) && canAffordBuildingAt(type, c.x, c.y, pi)) return true;
@@ -6067,7 +6300,7 @@
         const reachable = findMovementCostsFrom(col.x, col.y, col.owner);
         for (const c of cellsWithin(col.x, col.y, minD + 12)) {
           const terr = terrainAt(c.x, c.y);
-          if (!((terr >= 2 && terr <= 7) || terr === 10 || terr === 11)) continue;
+          if (!isHabitableLandTerrain(terr)) continue;
           if (c.x === col.x && c.y === col.y) continue;
           if (hexDistance(col.x, col.y, c.x, c.y) < minD) continue;
           if (cellHasBuilding(c.x, c.y)) continue;
@@ -6193,7 +6426,7 @@
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
           const terr = t[y][x];
-          if (!((terr >= 2 && terr <= 7) || terr === 10 || terr === 11)) continue;
+          if (!isHabitableLandTerrain(terr)) continue;
           if (distanceToNearestColony(x, y) < minD) continue;
           let score = 0;
           if (nearRiver(x, y)) score += 100;
@@ -6401,7 +6634,7 @@
       let best = null, bestScore = -Infinity;
       for (const c of cellsWithin(host.x, host.y, SEARCH)) {
         const terr = terrainAt(c.x, c.y);
-        if (!((terr >= 2 && terr <= 7) || terr === 10 || terr === 11)) continue;
+        if (!isHabitableLandTerrain(terr)) continue;
         if (!isPassableCell(c.x, c.y, false)) continue;
         if (c.x === host.x && c.y === host.y) continue;
         if (cellHasBuilding(c.x, c.y)) continue;
@@ -6523,7 +6756,7 @@
       ctxCanal.hidden = true;
       ctxCanalRemove.hidden = true;
 
-      const buildable = isHumanTurn() && hex && ((terr >= 2 && terr <= 7) || terr === 10 || terr === 11) && !cellHasBuilding(hex.x, hex.y);
+      const buildable = isHumanTurn() && hex && isHabitableLandTerrain(terr) && !cellHasBuilding(hex.x, hex.y);
 
       // The colony action item (ctx-establish) is dual-purpose:
       //  • On your own biodome -> "Launch Colony" (found a new colony from here).
@@ -6903,7 +7136,7 @@
         const tot = (o) => ((o && o.base) || 0) + ((o && o.bonus) || 0);
         const fr = (key, o) => formatResource(key, tot(o), true);
         const bldgHere = gameState.buildings.find((b) => b.x === c.x && b.y === c.y && b.owner === col.owner);
-        const terrName = ((CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(c.x, c.y))]) || {}).name || "";
+        const terrName = ((terrainTypeById(terrainAt(c.x, c.y))) || {}).name || "";
         const header = [];
         if (bldgHere) { header.push(improvementName(bldgHere.type)); header.push(terrName); }
         else header.push(terrName);
@@ -7055,7 +7288,7 @@
     // Terrain color from config (HSL) lightened by `factor` (0.5 = +50%), as a
     // css rgb string. Falls back to the map's terrain color if config lacks it.
     function terrainColorLightened(id, factor) {
-      const tt = CONFIG.terrainTypes && CONFIG.terrainTypes[String(id)];
+      const tt = terrainTypeById(id);
       const c = tt && tt.color;
       if (c && typeof c === 'object' && c.h != null) {
         if (c.l != null) {
@@ -7192,6 +7425,8 @@
       if (workReadOnly) return; // alien colony view is read-only
       const homeKey = cellKey(col.x, col.y);
       if (k === homeKey) return; // biodome always worked
+      const [tx, ty] = k.split(",").map(Number);
+      if (isImpassableFrozen(tx, ty)) return; // impassable cells can't be worked
       const worked = ensureWorked(col);
       const idx = worked.indexOf(k);
       if (idx >= 0) {
@@ -7848,7 +8083,8 @@
         map: {
           meta: map.meta || null, terrain: terrain,
           elevation: map.elevation || null, rivers: map.rivers || [], seaLevel: seaLevel,
-          bonuses: map.bonuses || {}
+          bonuses: map.bonuses || {},
+          impassable: map.impassable || null
         },
         improvements: (extra && extra.improvements) || [],
         pieces: (extra && extra.pieces) || [],
@@ -7872,9 +8108,12 @@
       // fresh circle around a random land tile for a NEW game (no buildings yet).
       // Legacy saves with no stored visibility and existing colonies keep fog
       // off (null = fully visible) so they aren't suddenly re-fogged.
+      // In debug mode the whole map is revealed from the start (no fog).
       const savedVisible = gameState.map.meta && Array.isArray(gameState.map.meta.visible)
         ? gameState.map.meta.visible : null;
-      if (savedVisible) {
+      if (CONFIG && CONFIG.debug) {
+        _visibleSet = null; // debug: everything visible
+      } else if (savedVisible) {
         _visibleSet = new Set(savedVisible);
       } else if (!gameState.buildings || gameState.buildings.length === 0) {
         initVisibility();
@@ -8090,7 +8329,7 @@
         10: "Plains", 11: "Wetlands"
       };
       const nameOf = (id) => {
-        const tt = CONFIG && CONFIG.terrainTypes && CONFIG.terrainTypes[String(id)];
+        const tt = CONFIG && terrainTypeById(id);
         return (tt && tt.name) || FALLBACK[id] || ("Type " + id);
       };
 
@@ -8237,7 +8476,7 @@
         showMap(
           { meta: payload.meta, terrain: payload.terrain,
             elevation: payload.elevation || null, rivers: payload.rivers || [],
-            bonuses: payload.bonuses || {} },
+            bonuses: payload.bonuses || {}, impassable: payload.impassable || null },
           {
             improvements: payload.improvements, pieces: payload.pieces,
             buildings: payload.buildings || [], colonies: payload.colonies || [],

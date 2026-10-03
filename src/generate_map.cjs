@@ -365,18 +365,55 @@ function buildMoisture(width, height, rng, wrap) {
   return out;
 }
 
-// Latitude bands (absolute degrees) that steer temperate vegetation. Jungle is
-// confined to the tropics; forest dominates the temperate zone. The map spans
-// +/-maxLatDeg (see maxLatDeg below and the terrain-bonus latitude math), so the
+// Latitude bands that steer vegetation. Jungle is confined to the tropics;
+// forest dominates the temperate zone. The map spans +/-maxLatDeg, so the
 // normalized 0..1 latitude is scaled to degrees before comparing.
-const JUNGLE_MAX_LAT_DEG = 25;   // jungle only occurs within +/-25 degrees
-const FOREST_MAX_LAT_DEG = 50;   // forest primarily in the 25..50 temperate band
+//
+// The band dividing lines SCALE with the user-selected polar line
+// (polarDeg = 25 + polar*45, i.e. 25..70 deg):
+//   - tropical / temperate   line = tropicalFraction * polar line
+//   - temperate / subpolar  line = subpolarFraction * polar line
+// and the subpolar / polar (frozen) line is the polar line itself. The two
+// fractions come from config.json `climateBands`
+// ({ tropicalFraction, subpolarFraction }); these defaults are used only when
+// config does not supply them.
+const DEFAULT_CLIMATE_BANDS = { tropicalFraction: 0.35, subpolarFraction: 0.15 };
+// Normalize a config climateBands object to concrete fractions, applying
+// defaults for any missing/invalid values.
+function resolveClimateBands(cb) {
+  const src = (cb && typeof cb === 'object') ? cb : {};
+  const num = (v, d) => (typeof v === 'number' && Number.isFinite(v)) ? v : d;
+  return {
+    tropicalFraction: num(src.tropicalFraction, DEFAULT_CLIMATE_BANDS.tropicalFraction),
+    subpolarFraction: num(src.subpolarFraction, DEFAULT_CLIMATE_BANDS.subpolarFraction)
+  };
+}
 
-function assignBiomes(tiers, width, height, rng, polar, wrap) {
+// Classify an absolute latitude (degrees) into a climate band, given the map's
+// polar line (degrees). Returns 'tropical', 'temperate', 'subpolar', or
+// 'polar'. The interior dividing lines scale with the polar line per the
+// fractions above; the polar line itself is the subpolar/polar boundary.
+function climateBand(latDeg, polarDeg, bands) {
+  if (!(polarDeg > 0)) return 'temperate';
+  const b = resolveClimateBands(bands);
+  if (latDeg >= polarDeg) return 'polar';
+  if (latDeg <= b.tropicalFraction * polarDeg) return 'tropical';
+  // Temperate extends up to (1 - subpolarFraction) of the polar line; the
+  // subpolar band is the outer `subpolarFraction` of P nearest the pole.
+  if (latDeg <= (1 - b.subpolarFraction) * polarDeg) return 'temperate';
+  return 'subpolar';
+}
+
+function assignBiomes(tiers, width, height, rng, polar, wrap, climateBands) {
   const moisture = buildMoisture(width, height, rng, wrap);
   const cy = (height - 1) / 2;
   const maxLat = cy || 1;
   const maxLatDeg = 70; // map spans +/-70 degrees (matches terrain-bonus latitude)
+  // Polar line and the two interior dividing lines, all in absolute degrees.
+  const polarDeg = 25 + polar * 45;
+  const _cb = resolveClimateBands(climateBands);
+  const tropicalMaxDeg = _cb.tropicalFraction * polarDeg; // jungle only below this
+  const temperateMaxDeg = (1 - _cb.subpolarFraction) * polarDeg; // forest band ends here
 
   const grid = [];
   for (let y = 0; y < height; y++) {
@@ -390,7 +427,7 @@ function assignBiomes(tiers, width, height, rng, polar, wrap) {
       if (tier === 1) {
         row[x] = 1; // sea
       } else if (tier <= 3) {
-        if (latitude >= polar) {
+        if (latDeg >= polarDeg) {
           row[x] = 9; // frozen
         } else if (m < 0.42) {
           row[x] = 6; // desert
@@ -400,12 +437,14 @@ function assignBiomes(tiers, width, height, rng, polar, wrap) {
       } else if (tier <= 6) {
         // Mid-elevation vegetated band. LATITUDE is the primary driver so that
         // jungle stays equatorial and forest stays temperate; moisture then
-        // decides how lush each cell is within its band:
-        //   - tropics (|lat| <= 25 deg): wettest -> jungle, mid -> grassland,
-        //     dry -> hills (forest is NOT the tropical default)
-        //   - temperate (25..50 deg): forest dominates; dry cells are hills
-        //   - sub-polar (> 50 deg): mostly hills; only the very wettest are forest
-        if (latDeg <= JUNGLE_MAX_LAT_DEG) {
+        // decides how lush each cell is within its band. The band boundaries
+        // scale with the polar line (tropicalMaxDeg = tropicalFraction, 
+        // temperateMaxDeg = subpolarFraction, of polarDeg — from config climateBands):
+        //   - tropics (|lat| <= tropicalMaxDeg): wettest -> jungle, mid ->
+        //     grassland, dry -> hills (forest is NOT the tropical default)
+        //   - temperate (.. temperateMaxDeg): forest dominates; dry cells are hills
+        //   - subpolar (.. polarDeg): mostly hills; only the very wettest are forest
+        if (latDeg <= tropicalMaxDeg) {
           if (m < 0.38) {
             row[x] = 3; // hills
           } else if (m < 0.68) {
@@ -413,13 +452,17 @@ function assignBiomes(tiers, width, height, rng, polar, wrap) {
           } else {
             row[x] = 5; // jungle
           }
-        } else if (latDeg <= FOREST_MAX_LAT_DEG) {
+        } else if (latDeg <= temperateMaxDeg) {
           row[x] = (m < 0.38) ? 3 : 4; // temperate: hills or forest, no jungle
         } else {
-          row[x] = (m < 0.80) ? 3 : 4; // sub-polar: mostly hills, only wettest forest
+          row[x] = (m < 0.80) ? 3 : 4; // subpolar: mostly hills, only wettest forest
         }
+      } else if (tier === 7) {
+        row[x] = 7;    // Mountain-Low
+      } else if (tier === 8) {
+        row[x] = 8;    // Mountain-High — ALWAYS, even in polar regions
       } else {
-        row[x] = tier; // 7,8,9
+        row[x] = 9;    // tier 9 -> Frozen (mountain tops; flagged impassable)
       }
     }
     grid.push(row);
@@ -980,6 +1023,47 @@ function assignTerrainBonuses(terrain, elevation, rivers, width, height, rng, op
   const seaLevel = opts.seaLevel || 0;
   const polarDeg = opts.polarDeg;     // polar latitude expressed in degrees
   const maxLatDeg = opts.maxLatDeg != null ? opts.maxLatDeg : 70;
+  const impassableGrid = opts.impassable || null; // tier-9 mountain tops
+  const climateBands = resolveClimateBands(opts.climateBands); // band fractions
+
+  // terrainBonus `terrain` lists are terrain NAME keys (config keys terrainTypes
+  // by name, each carrying a numeric `code` = grid id). Build a name -> id map
+  // from the passed terrainTypes; fall back to the canonical built-in mapping
+  // when terrainTypes isn't supplied (e.g. standalone/CLI usage).
+  const nameToId = {};
+  if (opts.terrainTypes) {
+    for (const key of Object.keys(opts.terrainTypes)) {
+      const entry = opts.terrainTypes[key];
+      const code = entry && typeof entry.code === 'number' ? entry.code : parseInt(key, 10);
+      if (Number.isFinite(code)) nameToId[key] = code;
+    }
+  } else {
+    Object.assign(nameToId, {
+      sea: 1, grassland: 2, hills: 3, forest: 4, jungle: 5, desert: 6,
+      'mountain-low': 7, 'mountain-high': 8, frozen: 9, plains: 10, wetlands: 11
+    });
+  }
+  // Terrain GROUP selectors expand to a set of terrain names. Groups may be
+  // supplied in config (opts.terrainGroups); otherwise the canonical built-in
+  // groups are used. A `terrain` entry may be a terrain name, a group name, or
+  // a legacy numeric id.
+  const DEFAULT_TERRAIN_GROUPS = {
+    flatland: ['grassland', 'plains', 'desert', 'wetlands'],
+    trees: ['jungle', 'forest', 'mountain-low'],
+    mountain: ['mountain-low', 'mountain-high']
+  };
+  const terrainGroups = (opts.terrainGroups && typeof opts.terrainGroups === 'object')
+    ? opts.terrainGroups : DEFAULT_TERRAIN_GROUPS;
+  // Resolve a def.terrain entry (terrain name, group name, or legacy numeric id)
+  // to an array of grid ids (groups expand to their members).
+  const terrainTokenToIds = (v) => {
+    if (typeof v === 'number') return [v];
+    if (Array.isArray(terrainGroups[v])) {
+      return terrainGroups[v].map((n) => nameToId[n]).filter((n) => n != null);
+    }
+    const id = nameToId[v];
+    return (id != null) ? [id] : [];
+  };
 
   const inBounds = wrap
     ? (x, y) => y >= 0 && y < height
@@ -1039,26 +1123,28 @@ function assignTerrainBonuses(terrain, elevation, rivers, width, height, rng, op
     }
     return false;
   };
-
-  // Resolve a latitude bound that may be the string "polar".
-  const resolveLat = (v) => {
-    if (v === 'polar') return (polarDeg != null ? polarDeg : maxLatDeg);
-    const n = parseFloat(v);
-    return Number.isFinite(n) ? n : null;
-  };
-
   // Is `def` legal on cell (x,y)?
   const legal = (def, x, y) => {
     const terr = terrain[y][x];
+    // Impassable cells (elevation tier 9 — the mountain tops) can never hold a
+    // terrain bonus. Driven by the generation-time impassable grid, not terrain
+    // id, so low-elevation polar ice stays eligible.
+    if (impassableGrid && impassableGrid[y] && impassableGrid[y][x]) return false;
     if (Array.isArray(def.terrain) && def.terrain.length) {
-      if (!def.terrain.includes(terr)) return false;
+      // def.terrain is a list of terrain NAMES, GROUP names (e.g. "flatland"),
+      // or legacy numeric ids; expand each to grid ids and compare the cell.
+      const allowed = [];
+      for (const tok of def.terrain) for (const id of terrainTokenToIds(tok)) allowed.push(id);
+      if (!allowed.includes(terr)) return false;
     }
-    if (def.latitude) {
-      const lat = latOf(x, y);
-      const lo = resolveLat(def.latitude.min);
-      const hi = resolveLat(def.latitude.max);
-      if (lo != null && lat < lo) return false;
-      if (hi != null && lat > hi) return false;
+    // Climate restriction: `climate` is a list of band names the bonus may
+    // appear in — any of "tropical", "temperate", "subpolar", or "polar". The
+    // cell's band is computed from its latitude and the polar line (same
+    // classifier as the placement tags).
+    if (Array.isArray(def.climate) && def.climate.length) {
+      if (polarDeg == null) return false;
+      const band = climateBand(latOf(x, y), polarDeg, climateBands);
+      if (!def.climate.includes(band)) return false;
     }
     if (def.altitude) {
       const alt = altOf(x, y);
@@ -1077,15 +1163,26 @@ function assignTerrainBonuses(terrain, elevation, rivers, width, height, rng, op
             if (!hasNeighbor(x, y, (t) => t === 1)) return false;
             break;
           case 'water':
-            if (!(riverAdj.has(key(x, y)) || hasNeighbor(x, y, (t) => t === 1))) return false;
+            // River/canal-adjacent, sea-adjacent (tile 1), OR wetlands-adjacent
+            // (tile 11).
+            if (!(riverAdj.has(key(x, y)) || hasNeighbor(x, y, (t) => t === 1 || t === 11))) return false;
             break;
           case 'dry':
             // Inverse of "water": the cell must be neither river-adjacent nor
-            // sea-adjacent.
-            if (riverAdj.has(key(x, y)) || hasNeighbor(x, y, (t) => t === 1)) return false;
+            // sea-adjacent nor wetlands-adjacent.
+            if (riverAdj.has(key(x, y)) || hasNeighbor(x, y, (t) => t === 1 || t === 11)) return false;
             break;
-          case 'ice':
-            if (!hasNeighbor(x, y, (t) => t === 9)) return false;
+          case 'deep':
+            // Deep water: depth below -1000 m ASL.
+            if (!(altOf(x, y) < -1000)) return false;
+            break;
+          case 'shallow':
+            // Shallow water: depth -1000 .. 0 m ASL.
+            { const a = altOf(x, y); if (!(a >= -1000 && a <= 0)) return false; }
+            break;
+          case 'lowland':
+            // Low land: altitude 0 .. 2000 m ASL.
+            { const a = altOf(x, y); if (!(a >= 0 && a <= 2000)) return false; }
             break;
           case 'land':
             if (!hasNeighbor(x, y, (t) => t >= 2 && t <= 11)) return false;
@@ -1267,6 +1364,8 @@ function generateMap(opts = {}) {
   const biome = o.biome === true || o.biome === 'true' || o.biome === 1;
   const polar = clamp01(numOr(o.polar, DEFAULTS.polar));
   const bonusAbundancy = clamp01(numOr(o.bonusAbundancy, DEFAULTS.bonusAbundancy));
+  // Climate-band dividing-line fractions (of the polar line), from config.
+  const climateBands = resolveClimateBands(o.climateBands);
   const doRivers = o.rivers === true || o.rivers === 'true' || o.rivers === 1 || o.rivers === undefined;
   const springElevation = clamp01(numOr(o.springElevation, DEFAULTS.springElevation));
   const maxRivers = Math.max(0, parseInt(o.maxRivers, 10) || DEFAULTS.maxRivers);
@@ -1318,8 +1417,20 @@ function generateMap(opts = {}) {
     tiers.push(row);
   }
 
+  // Impassable cells are the highest elevation tier (tier 9) — the true
+  // mountain tops. This is driven by ELEVATION, not terrain id: low-elevation
+  // polar ice (Frozen terrain at tier <= 3) is NOT impassable. The flag is
+  // computed here and threaded through save/load + renderer so the two never
+  // diverge.
+  const impassable = [];
+  for (let y = 0; y < height; y++) {
+    const row = new Array(width);
+    for (let x = 0; x < width; x++) row[x] = (tiers[y][x] === 9);
+    impassable.push(row);
+  }
+
   if (biome) {
-    grid = assignBiomes(grid, width, height, rng, polar, wrap);
+    grid = assignBiomes(grid, width, height, rng, polar, wrap, climateBands);
   }
 
   // Rivers require sea cells (tile === 1) to flow into, which exist after
@@ -1360,12 +1471,17 @@ function generateMap(opts = {}) {
   const polarDeg = 25 + polar * 45;
   const bonuses = assignTerrainBonuses(grid, elevation, rivers, width, height, rng, {
     terrainBonus: o.terrainBonus || null,
+    terrainTypes: o.terrainTypes || null,
+    terrainGroups: o.terrainGroups || null,
+    climateBands,
+    impassable,
     bonusAbundancy, wrap, seaLevel, polarDeg, maxLatDeg
   });
 
   return {
     terrain: grid,
     elevation,
+    impassable,
     rivers,
     seaLevel,
     bonuses,

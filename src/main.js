@@ -562,6 +562,18 @@ ipcMain.handle("newgame-create", (_e, options) => {
     // bonuses; the renderer resolves each bonus's resources/icon by name.
     const genOpts = Object.assign({}, options || {});
     if (CONFIG && CONFIG.terrainBonus) genOpts.terrainBonus = CONFIG.terrainBonus;
+    // Terrain-type map (keyed by name, each with a numeric `code`) lets the
+    // generator translate terrainBonus `terrain` name lists to grid ids.
+    if (CONFIG && CONFIG.terrainTypes) genOpts.terrainTypes = CONFIG.terrainTypes;
+    // Terrain group selectors (e.g. "flatland") used by terrainBonus `terrain`
+    // lists; expanded to member terrains by the generator.
+    if (CONFIG && CONFIG.terrainGroups) genOpts.terrainGroups = CONFIG.terrainGroups;
+    // Climate-band dividing-line fractions (tropical/temperate, temperate/subpolar).
+    // Prefer the per-map values chosen in the New Game dialog (already copied
+    // from `options`); fall back to the config defaults only when absent.
+    if (!genOpts.climateBands && CONFIG && CONFIG.climateBands) {
+      genOpts.climateBands = CONFIG.climateBands;
+    }
     result = generateMap(genOpts);
   } catch (err) {
     console.error("Map generation failed:", err);
@@ -629,7 +641,8 @@ function buildSaveObject(gameState) {
       terrain: map.terrain || null,
       elevation: map.elevation || null,
       rivers: map.rivers || [],
-      bonuses: map.bonuses || {}
+      bonuses: map.bonuses || {},
+      impassable: map.impassable || null
     },
     // Reserved for future features; pass through whatever the renderer sends.
     improvements: (gameState && gameState.improvements) || [],
@@ -817,6 +830,7 @@ async function loadGame() {
     elevation: map.elevation || null,
     rivers: map.rivers || [],
     bonuses: map.bonuses || {},
+    impassable: map.impassable || null,
     improvements: parsed.improvements || [],
     pieces: parsed.pieces || [],
     buildings: parsed.buildings || [],

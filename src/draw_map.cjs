@@ -717,23 +717,39 @@ class HexMap {
     this._renderBirdseye();
   }
 
+  // config.terrainTypes is keyed by lowercase NAME; each entry carries a
+  // numeric `code` (the grid tile id). Build/cache a code -> entry map so the
+  // renderer can look terrain config up by the numeric id it draws with.
+  _terrainTypeById(id) {
+    if (!this.terrainTypes) return null;
+    if (this._ttByCodeSrc !== this.terrainTypes || !this._ttByCode) {
+      this._ttByCodeSrc = this.terrainTypes;
+      this._ttByCode = {};
+      for (const key of Object.keys(this.terrainTypes)) {
+        const entry = this.terrainTypes[key];
+        const code = entry && typeof entry.code === 'number' ? entry.code : parseInt(key, 10);
+        if (Number.isFinite(code)) this._ttByCode[code] = entry;
+      }
+    }
+    return this._ttByCode[id] || null;
+  }
   // Terrain display name for a tile id — from config.terrainTypes if provided,
   // else the built-in TERRAIN_NAMES.
   _terrainName(id) {
-    const tt = this.terrainTypes && this.terrainTypes[String(id)];
+    const tt = this._terrainTypeById(id);
     return (tt && tt.name) || TERRAIN_NAMES[id] || 'unknown';
   }
   // Terrain tile icon filename for a tile id — from config.terrainTypes if
   // provided, else the built-in TERRAIN_IMAGES.
   _terrainIcon(id) {
-    const tt = this.terrainTypes && this.terrainTypes[String(id)];
+    const tt = this._terrainTypeById(id);
     return (tt && tt.icon) || TERRAIN_IMAGES[id] || null;
   }
   // Terrain fill color (css string) for a tile id. config.terrainTypes[id].color
   // is an HSL object { h, s, l } (or HSV { h, s, v }); convert via resolveColor().
   // Falls back to the built-in TERRAIN_COLORS. (A plain string color is also accepted for flexibility.)
   _terrainColor(id) {
-    const tt = this.terrainTypes && this.terrainTypes[String(id)];
+    const tt = this._terrainTypeById(id);
     const c = tt && tt.color;
     if (c && typeof c === 'object' && c.h != null) {
       return resolveColor(c, TERRAIN_COLORS[id] || TERRAIN_COLORS[0]);
@@ -752,7 +768,8 @@ class HexMap {
     let maxId = TERRAIN_IMAGES.length - 1;
     if (this.terrainTypes) {
       for (const k of Object.keys(this.terrainTypes)) {
-        const n = parseInt(k, 10);
+        const entry = this.terrainTypes[k];
+        const n = entry && typeof entry.code === 'number' ? entry.code : parseInt(k, 10);
         if (Number.isFinite(n) && n > maxId) maxId = n;
       }
     }
