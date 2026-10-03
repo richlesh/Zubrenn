@@ -1,8 +1,9 @@
 {
   // Food 1 = 1k t, material 1 = 1k t, water 1 = 1 G L, energy 1 = 1 G WHr
-  // wealth 1 = 1M credits where 1 credit = $10 USD.  
-  // One cell of land is 86.6 km².  One road/monorail segment is 10 km.
-  // One river/canal segment is 5.77 km.  Happiness is a percent 0-100%
+  // wealth 1 = 1M credits where 1 credit = $10 USD.
+  // Cells are 10km across flats.  One cell of land is 86.6 km².
+  // One road/monorail segment is 10 km. One river/canal segment is 5.77 km.
+  // Happiness is a percent 0-100%
 
   // "terrain" restrictions can be a list of specific terrains:
   //    "sea", "grassland",  "hills", "forest", "jungle", "desert", "mountain-low",
@@ -40,6 +41,13 @@
     "mountain": ["mountain-low", "mountain-high"]
   },
 
+  // Per terrain type (keyed by name, each with a numeric `code` = grid id):
+  // display name, tile icon, HSV/HSL color, a `bonus` base Food/Material/Water
+  // yield per 1,000 workers, a `movement` cost array
+  // [unimproved, road, sea/river, monorail, air], and per-tile transport build
+  // costs (roadCostPerTile, monorailCostPerTile, canalCostPerEdge). Codes:
+  // 1 Sea, 2 Grassland, 3 Hills, 4 Forest, 5 Jungle, 6 Desert, 7 Mountain-Low,
+  // 8 Mountain-High, 9 Frozen, 10 Plains, 11 Wetlands.
   "terrainTypes": {
     "sea": {
       "code": 1,
@@ -163,6 +171,10 @@
     }
   },
 
+  // Per-UNIT yearly resource consumption. Only `population` is used by the
+  // economy today (per 1,000 colonists, via `unitSize`); the military unit
+  // entries (infantry/tank/fighter/bomber/submarine/carrier) are scaffolding for
+  // a future combat system and are not yet read by the code.
   "unitCosts": {
     // EIA reports U.S. residential electricity use averaged ~4,437 kWh per person per year in 2020
     // ERS notes “the average American consumes roughly 1,885 lbs of food per year. That is nearly 1 ton of food annually per person”
@@ -181,12 +193,28 @@
     "carrier": { "food": 2, "material": 2, "energy": 2, "water": 0.1, "wealth": 2 }
   },
 
+  // Buildings keyed by the LOWERCASE name (spaces preserved); each entry carries
+  // a numeric `code` (the stable type id stored on building instances as
+  // b.type). Each defines buildCost (+turns), costPerYear upkeep, bonus
+  // (per-year production incl. growth/population), storage (summed into the
+  // colony's per-resource caps), prerequisiteBuildings (lowercase building name
+  // keys that must exist in the colony; the special token "network" additionally
+  // requires the colony to be transport-connected to another of the owner's
+  // colonies by road/monorail, river/canal, sea, or air),
+  // allowed terrain, optional `climate` restriction (list of band names:
+  // "tropical"/"temperate"/"subpolar"/"polar" — the building may only be placed
+  // in a cell whose climate band is listed), optional `other` placement rules,
+  // optional federationStorage, and `range` (Air Field link distance). The
+  // Spaceport (code 14) creates an UNLIMITED-range "space" transport network:
+  // any two of a player's colonies that both have a Spaceport are connected
+  // regardless of distance. A building only
+  // contributes production/upkeep/storage while its cell is worked.
   "buildingTypes": {
-    "1": {
+    "biodome": {
+      "code": 1,
       "name": "Biodome",
       "icon": "biodome.png",
       "startPopulation": 1000,
-      //      "growthRate": 0.01,
       "prerequisiteBuildings": [],
       "buildCost": { "material": 3, "wealth": 5, "turns": 2 },
       "costPerYear": { },
@@ -195,40 +223,44 @@
       "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
       "federationStorage": { "food": 20, "material": 20, "energy": 20, "water":  2, "wealth": 50, "happiness": 25 }
     },
-    "2": {
+    "farm": {
+      "code": 2,
       "name": "Farm",
       "icon": "farm.png",
-      "prerequisiteBuildings": [1,3],
+      "prerequisiteBuildings": ["biodome","solar panel"],
       "buildCost":   { "energy": 1, "material": 2, "water": 0, "wealth": 10, "turns": 1 },
       "costPerYear": { "energy": 0.2, "material": 5, "water": 10, "wealth": 5 },
       "bonus":       { "energy": 0, "food": 60, "material": 30, "water": 0, "wealth": 20 },
       "storage": { "food": 60 },
       "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
     },
-    "3": {
+    "solar panel": {
+      "code": 3,
       "name": "Solar Panel",
       "icon": "solar_panel.png",
-      "prerequisiteBuildings": [1],
+      "prerequisiteBuildings": ["biodome"],
       "buildCost": { "energy": 750, "material": 20, "wealth": 28, "turns": 1 },
       "costPerYear": { },
       "bonus": { "energy": 1000 },
       "storage": { },
       "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
     },
-    "4": {
+    "factory": {
+      "code": 4,
       "name": "Factory",
       "icon": "factory.png",
-      "prerequisiteBuildings": [3],
+      "prerequisiteBuildings": ["solar panel"],
       "buildCost": { "energy": 1000, "material": 75, "wealth": 150, "turns": 3 },
       "costPerYear": { "energy": 600, "material": 400, "water": 1, "wealth": 150 },
       "bonus": { "energy": 0, "material": 800, "wealth": 1, "happiness": -0.5, "population": -0.25 },
       "storage": { "material": 500, "energy": 10, "wealth": 0, "happiness": 0 },
       "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
     },
-    "5": {
+    "dock": {
+      "code": 5,
       "name": "Dock",
       "icon": "dock.png",
-      "prerequisiteBuildings": [3],
+      "prerequisiteBuildings": ["solar panel"],
       "buildCost": { "energy": 3, "material": 5, "water": 0.01, "wealth": 0.8, "turns": 1 },
       "costPerYear": { "energy": 5, "material": 0,  "water": 0.05,"wealth": 0.6 },
       "bonus": { "energy": 0, "food": 1.5, "material": 0.1, "water": 0, "wealth": 0.9 },
@@ -236,51 +268,56 @@
       "terrain": ["sea"],
       "other": [ "sea" ]
     },
-    "6": {
+    "air field": {
+      "code": 6,
       "name": "Air Field",
       "icon": "air_field.png",
-      "prerequisiteBuildings": [3, 4],
+      "prerequisiteBuildings": ["solar panel","factory"],
       "buildCost": { "energy": 5, "material": 100, "water": 1, "wealth": 50, "turns": 2 },
       "costPerYear": { "energy": 50, "material": 2, "water": 0.2, "wealth": 5 },
       "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 5, "happiness": 0.25 },
       "storage": { "energy": 5, "food": 50, "material": 100, "water": 0, "wealth": 0, "happiness": 0 },
       "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
-      "range": 16
+      "range": 32
     },
-    "7": {
+    "barracks": {
+      "code": 7,
       "name": "Barracks",
       "icon": "barracks.png",
-      "prerequisiteBuildings": [2, 3, 4],
+      "prerequisiteBuildings": ["farm","solar panel","factory"],
       "buildCost": { "energy": 5, "material": 50, "water": 0, "wealth": 30, "turns": 2 },
       "costPerYear": { "energy": 20, "material": 2, "water": 0, "wealth": 3 },
       "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0.5 },
       "storage": { "energy": 0, "food": 100, "material": 50, "water": 0, "wealth": 0, "happiness": 0 },
       "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
     },
-    "8": {
+    "grainery": {
+      "code": 8,
       "name": "Grainery",
       "icon": "grainery.png",
-      "prerequisiteBuildings": [2],
+      "prerequisiteBuildings": ["farm"],
       "buildCost": { "energy": 2, "material": 20, "water": 0, "wealth": 5, "turns": 2 },
       "costPerYear": { "energy": 2, "material": 0, "water": 0, "wealth": 0.5 },
       "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
       "storage": { "energy": 0, "food": 300, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
       "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
     },
-    "9": {
+    "warehouse": {
+      "code": 9,
       "name": "Warehouse",
       "icon": "warehouse.png",
-      "prerequisiteBuildings": [4],
+      "prerequisiteBuildings": ["factory"],
       "buildCost": { "energy": 2, "material": 30, "water": 0, "wealth": 8, "turns": 2 },
       "costPerYear": { "energy": 3, "material": 0, "water": 0, "wealth": 1 },
       "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
       "storage": { "energy": 0, "food": 0, "material": 300, "water": 0, "wealth": 0, "happiness": 0 },
       "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
     },
-    "10": {
+    "bank": {
+      "code": 10,
       "name": "Bank",
       "icon": "bank.png",
-      "prerequisiteBuildings": [3],
+      "prerequisiteBuildings": ["solar panel","network"],
       "buildCost": { "energy": 5, "material": 30, "water": 0, "wealth": 20, "turns": 2 },
       "costPerYear": { "energy": 15, "material": 0, "water": 0, "wealth": 3 },
       "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 5, "happiness": 0.25 },
@@ -288,10 +325,11 @@
       "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
     },
     // Compressed-Air Storage
-    "11": {
+    "caes": {
+      "code": 11,
       "name": "CAES",
       "icon": "caes.png",
-      "prerequisiteBuildings": [3, 10],
+      "prerequisiteBuildings": ["solar panel","bank"],
       "buildCost": { "energy": 10, "material": 40, "water": 1, "wealth": 30, "turns": 3 },
       "costPerYear": { "energy": 20, "material": 0, "water": 0, "wealth": 2 },
       "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
@@ -299,10 +337,11 @@
       "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
     },
     // Water Treatment Plant
-    "12": {
+    "wtp": {
+      "code": 12,
       "name": "WTP",
       "icon": "water_plant.png",
-      "prerequisiteBuildings": [3],
+      "prerequisiteBuildings": ["solar panel"],
       "buildCost":   { "energy": 30, "material": 40, "water": 1,  "wealth": 50, "turns": 3 },
       "costPerYear": { "energy": 40, "material": 4,  "water": 0,  "wealth": 2 },
       "bonus":       { "energy": 0,  "food": 0, "material": 0, "water": 140, "wealth": 0 },
@@ -311,19 +350,35 @@
       "other":       [ "river" ]
     },
     // Desalination Plant
-    "13": {
+    "desalination": {
+      "code": 13,
       "name": "Desalination",
       "icon": "desalination.png",
-      "prerequisiteBuildings": [3],
+      "prerequisiteBuildings": ["solar panel"],
       "buildCost":   { "energy": 5, "material": 200, "water": 1, "wealth": 100, "turns": 3 },
       "costPerYear": { "energy": 250, "material": 30, "water": 0, "wealth": 5 },
       "bonus":       { "energy": 0, "food": 0, "material": 0, "water": 70, "wealth": 0 },
       "storage":     { "water": 200 },
       "terrain":     ["sea"],
       "other":       [ "sea" ]
+    },
+    "spaceport": {
+      "code": 14,
+      "name": "Spaceport",
+      "icon": "spaceport.png",
+      "prerequisiteBuildings": ["air field"],
+      "buildCost": { "energy": 5, "material": 100, "water": 1, "wealth": 50, "turns": 2 },
+      "costPerYear": { "energy": 100, "material": 10, "water": 0.5, "wealth": 20 },
+      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 15, "happiness": 0.25 },
+      "storage": { "energy": 5, "food": 100, "material": 200, "water": 0, "wealth": 0, "happiness": 0 },
+      "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands"],
+      "climate": ["tropical","temperate"]
     }
   },
 
+  // Display metadata for the seven resources (name, units, single-letter
+  // abbrev, and description). Used for UI labels, tooltips, and the per-resource
+  // maintenance cost formatting.
   "resourceTypes": {
     "energy": { "name": "Energy", "units": "GWHr", "abbrev": "E", "desc": "Electrical power generated by solar panels and energy deposits, measured in gigawatt-hours. It runs factories, buildings, and transport. Shortfalls force buildings to idle."},
     "food": { "name": "Food", "units":  "kt", "abbrev": "F", "desc": "Edible biomass harvested from worked tiles and farms, measured in kilotonnes. Colonists consume it each year. Surplus or deficit drives happiness and population growth."},
@@ -334,6 +389,12 @@
     "wealth": { "name": "Wealth", "units":  "M¤", "abbrev": "¤", "desc": "The colony's accumulated economic value in millions of credits. It pays building upkeep, construction costs and is used by consumers and industry. It is produced by trade, banks, and luxury bonuses."}
   },
 
+  // Special resource deposits scattered across the map at generation time. Each
+  // entry defines a `bonus` (per-resource yield added when its cell is worked),
+  // the terrain(s)/terrain groups it may appear on, climate band(s), optional
+  // altitude band, optional `other` placement rules (river/sea/water/land/dry/
+  // pristine/elevation bands), and an `abundancy` weight. See `terrainGroups`
+  // for group selectors and the header legend for `terrain`/`other` tokens.
   "terrainBonus": {
     // Food
     "Myco-Tower Grove": {
@@ -663,55 +724,118 @@
       "desc": "Charged mist forms drifting curtains of colored light around immense waterfalls."
     }
   },
+  // ---- Overlay colors (HSL: h 0-360, s/l 0-1). Consumed by draw_map.cjs when
+  // rendering transport, water, and planning overlays; each has a hard-coded
+  // fallback in the renderer if omitted. ----
+  // Color of road bridges spanning a river/canal or single sea tile.
   "bridgeColor": { "h": 0, "s": 0.75, "l": 0.5 },
+  // Color of built road segments.
   "roadColor": { "h": 30, "s": 0.5, "l": 0.35 },
+  // Color of built monorail segments.
   "monorailColor": { "h": 40, "s": 1.0, "l": 0.5 },
+  // Color of natural rivers.
   "riverColor": { "h": 240, "s": 1, "l": 0.5 },
+  // Color of built canals (drawn like rivers but lighter).
   "canalColor": { "h": 240, "s": 1, "l": 0.75 },
+  // Color of the previewed route while planning a road/monorail/canal.
   "planningPathColor": { "h": 120, "s": 0.75, "l": 0.5 },
+  // Color overlaid on transport segments still under construction.
   "underConstructionColor": { "h": 0, "s": 0, "l": 0.5 },
+  // Maximum number of AI opponents selectable in the New Game dialog.
   "maxAIs": 40,
+  // Minimum hex distance required between two colonies (used when founding
+  // colonies and when picking the colony that pays to remove transport).
   "minColonyDistance": 7,
+  // Calendar year of turn 0; the displayed Year is startingYear + turn.
   "startingYear": 2500,
+  // Earliest/latest turn an AI may first place its colony; each AI's placement
+  // turn is randomized within this inclusive range.
   "aiPlacementMinTurns": 3,
   "aiPlacementMaxTurns": 200,
-  // per unit is food surplus/shortage
+  // Happiness-to-growth conversion: each point of a colony's happiness rate adds
+  // this fraction to its population growth rate (positive grows, negative
+  // shrinks), capped by maxHappinessGrowthBonus.
   "happinessGrowthPerUnit": 0.001,
+  // Hard cap on the happiness-derived growth-rate bonus (per turn).
   "maxHappinessGrowthBonus": 0.01,
+  // Reserved happiness tuning constant (currently read for happiness clamping).
   "happinessCap": 20,
+  // Population thresholds that expand a colony's zone-of-control radius: the
+  // index of the highest threshold a colony's population meets is its ring size.
   "zoneOfControlSize": [0, 10000, 100000, 1000000],
-  // Mississippi River (largest US river), per river/canal SEGMENT (5.77 km).
+  // Per-resource bonus a worked LAND cell gains when a road or monorail runs through it.
+  // Stacks with riverAdjacentBonus when adjacent to both.
+  "roadAdjacentBonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 3 },
+  // Per-resource bonus a worked LAND cell gains when a river/canal runs along one
+  // of its borders (edge-precise). Stacks with seaAdjacentBonus when adjacent to both.
   "riverAdjacentBonus": { "energy": 0, "food": 1, "material": 0, "water": 20, "wealth": 1 },
+  // Per-resource bonus a worked LAND cell gains when edge-adjacent to a sea tile.
+  // Stacks with riverAdjacentBonus when adjacent to both.
   "seaAdjacentBonus": { "energy": 0, "food": 3, "material": 1, "water": 0, "wealth": 3 },
+  // Cost + turns to tear down a building (Remove Improvement), paid by its colony.
   "removeImprovementCost": { "energy": 5, "food": 2, "turns": 2 },
+  // Cost + turns to remove one canal segment (border).
   "removeCanalCost": { "energy": 2, "food": 1, "turns": 2 },
+  // Cost + turns to remove a road/monorail tile, paid by the nearest colony.
   "removeTransportCost": { "energy": 2, "food": 1, "turns": 2 },
+  // Minimum colony population before roads may be built.
   "roadMinPopulation": 3000,
 
+  // Per-segment YEARLY upkeep for each transport kind, drawn per resource from
+  // the Federation OWNED pool each turn. Accessed dynamically as
+  // CONFIG[kind + "MaintenanceCost"]. If roads/monorails can't be funded their
+  // segments decay (see *DecayRate); canals and bridges never decay.
   "roadMaintenanceCost": { "energy": 0.5, "material": 1, "water": 0, "wealth": 0.75 },
   "monorailMaintenanceCost": { "energy": 0.5, "material": 0.5, "water": 0, "wealth": 0.5 },
   "canalMaintenanceCost": { "energy": 0.1, "material": 0.5, "water": 1, "wealth": 0.3 },
+  // One-time cost + turns to build a bridge (road crossing a river/canal or a
+  // single sea tile). Bridges are road-only; monorails never need one.
   "bridgeCost": { "energy": 0.3, "material": 60, "water": 0.01, "wealth": 15, "turns": 2 },
+  // Per-bridge yearly upkeep (same owned-pool model as the other *MaintenanceCost).
   "bridgeMaintenanceCost": { "energy": 0.5, "material": 0.5, "water": 0, "wealth": 1 },
 
+  // Fraction of UNFUNDED road segments destroyed per turn when upkeep is short.
   "roadDecayRate": 0.01,
+  // Minimum colony population before canals may be dug.
   "canalMinPopulation": 5000,
+  // Minimum colony population before monorails may be built.
   "monorailMinPopulation": 10000,
+  // Fraction of UNFUNDED monorail segments destroyed per turn when upkeep is short.
   "monorailDecayRate": 0.01,
+  // Default Federation tax rate (happiness cost per colony that funds the
+  // Federation treasury); the New Game/Federation UI can override per game.
   "federationTaxRate": 0,
+  // Minimum colony population required to launch (found) a new colony.
   "foundColonyMinPopulation": 3000,
+  // Colonists transferred from the host colony to a newly founded colony.
   "foundColonyPopulationTransfer": 1000,
+  // Overland movement points a founding biodome travels per year (sets arrival
+  // time based on terrain movement cost and river crossings).
   "biodomeMovementPerYear": 12,
+  // Extra movement points charged when a founding path crosses a river/canal.
   "riverCrossingMovementCost": 2,
+  // Terrain codes a canal may NOT be dug through (1 sea, 7/8 mountains, 9 frozen).
   "canalDisallowedTerrain": [1, 7, 8, 9],
+  // Max hex distance from a colony within which canals may be built.
   "canalBuildRadius": 5,
+  // Hit-test fraction (of cell size) treated as the border region when picking a
+  // cell border vs its interior on click.
   "cellClickBorderMargin": 0.28,
+  // Canal-vertex click hit radius in pixels (absolute).
   "canalVertexClickPixels": 7.5,
+  // Canal-vertex click hit radius as a fraction of cell size (whichever applies).
   "canalVertexClickFrac": 0.21,
+  // Highest elevation tier in meters ASL; the top tier (mountain tops) is
+  // impassable and cannot be settled or built on.
   "maxAltitudeMeters": 8000,
+  // Highlight color for worked cells in the colony work view.
   "workedCellColor": { "h": 0, "s": 1, "l": 0.7 },
+  // Color of the previewed overland path when launching a new colony.
   "launchPathColor": { "h": 120, "s": 0.7, "l": 0.45 },
 
+  // Pool of alien species names; AI opponents are named from this list.
   "names": ["Xel'Thara", "Vorn Kesh", "Zayllux", "Qortham", "Nyssarion", "Braal Vex", "Ithkane", "Ozúmara", "Threxil", "Vandros", "Kla276-Ur", "Sythara", "Draviim", "Uxberos", "Nel'Quoth", "Zaethys", "Morvax", "Illandor", "Kryssoth", "Obrahn", "Tyllvex", "Aznareth", "Woltrim", "Ekshara", "Pravoxi", "Ghorlune", "Yssibel", "Vraektor", "Nomilar", "Quenthaa", "Drommus", "Xibante", "Ulvarion", "Zephkar", "Trelisso", "Marnok", "Ashvenn", "Ryllakor", "Ozzenphar", "Velinth", "Kaebrax", "Junossi", "Thraliun", "Wexmoor", "Sillquith", "Ombrayel", "Draznok", "Yttheris", "Cavornu", "Ezraliim", "Bolthara", "Nivexus", "Qelmarr", "Zundareth", "Praxilon", "Voshkane", "Illurnex", "Krethsibar", "Aomvel", "Struxil", "Tazmuroth", "Welganth", "Nyrreth", "Osvakim", "Dranthel", "Ubelquor", "Zaethmor", "Fylvaris", "Krondaxi", "Ylssuran", "Menthara", "Vraddek", "Oxilune", "Perthaan", "Zunveil", "Chalorix", "Trennoss", "Auvraeth", "Skellivon", "Nymbrak", "Quorlath", "Delvimar", "Ossanther", "Kryllos", "Ythanor", "Vezmara", "Onbrakil", "Zathurex", "Prellun", "Maxothis", "Illveska", "Grondaal", "Ybernith", "Kavaslon", "Threnvox", "Wulmarra", "Ozziketh", "Drava'Nel", "Selquorra", "Nyxathil"],
+  // When true, after creating a new map show two debug dialogs: a terrain-type
+  // breakdown and a terrain-bonus placement count. Set false to disable.
   "debug": true
 }

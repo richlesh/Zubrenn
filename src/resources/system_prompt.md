@@ -119,7 +119,17 @@ idle building on an unworked cell does nothing at all and provides no storage.
 **Prerequisites:** a building type can only be built at a colony once its
 `prerequisiteBuildings` already exist there. Currently: Farm, Solar Panel and
 Dock require a Biodome; the Factory requires a Biodome **and** a Solar Panel;
-the **Air Field** requires a Factory.
+the **Air Field** requires a Factory. A prerequisite may also be the special
+token `"network"`, which requires the colony to be transport-connected to
+another of your colonies (road/monorail, river/canal, sea, or air) before the
+building can be built.
+
+**Climate restriction:** a building type may also declare a `climate` list
+(band names `tropical`/`temperate`/`subpolar`/`polar`); it can then only be
+built in a cell whose climate band is listed. For example the **Spaceport**
+(requires an Air Field) can only be built in a **tropical** cell. The Spaceport
+opens the **space transport network**, linking any two of your Spaceport
+colonies with no range limit at all.
 
 **Removing a building** (Remove Improvement) costs `removeImprovementCost`
 (Energy + Food from the colony) and takes `removeImprovementCost.turns` to
@@ -207,7 +217,11 @@ connected to it**. Two of your colonies are connected when any of these holds:
 - a **road/monorail path** links their biodomes, or
 - a **connected river/canal path** touches a corner of each colony, or
 - **both have a Dock** and a **shallow-sea route** links them (sea), or
-- **both have an Air Field** within **`buildingTypes[6].range`** of each other (air).
+- **both have an Air Field** within the Air Field's **`range`** (config
+  `buildingTypes["air field"].range`) of each other (air), or
+- **both have a Spaceport** — the space network has **no range limit at all**,
+  so any two of your Spaceport colonies are connected no matter how far apart
+  they are (space).
 
 It pulls from whichever connected colony currently **stores the most** of that
 resource. Only if no connected colony can cover it does the colony go over

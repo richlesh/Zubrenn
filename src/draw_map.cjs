@@ -733,6 +733,23 @@ class HexMap {
     }
     return this._ttByCode[id] || null;
   }
+  // Building-type config entry for a numeric code (building instances store this
+  // as b.type). CONFIG.buildingTypes is keyed by lowercase NAME with a numeric
+  // `code` member; this resolves by code, caching the index against the current
+  // buildingTypes object (mirrors _terrainTypeById).
+  _buildingTypeByCode(code) {
+    if (!this.buildingTypes) return null;
+    if (this._btByCodeSrc !== this.buildingTypes || !this._btByCode) {
+      this._btByCodeSrc = this.buildingTypes;
+      this._btByCode = {};
+      for (const key of Object.keys(this.buildingTypes)) {
+        const entry = this.buildingTypes[key];
+        const c = entry && typeof entry.code === 'number' ? entry.code : parseInt(key, 10);
+        if (Number.isFinite(c)) this._btByCode[c] = entry;
+      }
+    }
+    return this._btByCode[Number(code)] || null;
+  }
   // Terrain display name for a tile id — from config.terrainTypes if provided,
   // else the built-in TERRAIN_NAMES.
   _terrainName(id) {
@@ -795,14 +812,22 @@ class HexMap {
     // Load each configured building type's icon; keep the biodome (type 1) in
     // biodomeImg/biodomeReady for backward compatibility.
     const resRoot = this.resourcePath.replace(/\/terrain\/?$/, '');
+    // buildingTypes is keyed by lowercase NAME with a numeric `code` matching
+    // building instances' b.type; resolve entries by code.
     const iconFor = (type) => {
-      const bt = this.buildingTypes && this.buildingTypes[String(type)];
+      const bt = this._buildingTypeByCode(type);
       if (bt && bt.icon) return bt.icon;
       return type === 1 ? 'biodome.png' : null;
     };
-    const typesToLoad = this.buildingTypes ? Object.keys(this.buildingTypes) : ['1'];
-    for (const tk of typesToLoad) {
-      const type = parseInt(tk, 10);
+    // Codes to load: each entry's numeric code (fallback to the key when the
+    // config is still numeric-keyed).
+    const codesToLoad = this.buildingTypes
+      ? Object.keys(this.buildingTypes).map((k) => {
+          const e = this.buildingTypes[k];
+          return (e && typeof e.code === 'number') ? e.code : parseInt(k, 10);
+        }).filter((n) => !isNaN(n))
+      : [1];
+    for (const type of codesToLoad) {
       const file = iconFor(type);
       if (!file) continue;
       const img = new Image();
@@ -1440,7 +1465,7 @@ class HexMap {
         // Colonies carry their own name. Other buildings normally rely on their
         // icon; but when the icon is MISSING (e.g. a new type without art yet)
         // fall back to the configured type name so it isn't a blank square.
-        const bt = this.buildingTypes && this.buildingTypes[String(b.type)];
+        const bt = this._buildingTypeByCode(b.type);
         const label = b.name || (!icon && b.type !== 1 && bt && bt.name) || '';
         if (label) {
           const ly = cy - size / 2 - 2;

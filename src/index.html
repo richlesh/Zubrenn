@@ -464,7 +464,7 @@
     const FOG_COLONY_RADIUS = 15;  // revealed circle around each human colony
     let CONFIG = { maxAIs: 40, minColonyDistance: 20, startingYear: 2500,
                    aiPlacementMinTurns: 3, aiPlacementMaxTurns: 200,
-                   buildingTypes: { "1": { name: "Biodome", startPopulation: 1000, growthRate: 0.01, buildCost: { turns: 0 }, bonus: { food: 1, material: 1, energy: 2, growth: 0, wealth: 1 } } },
+                   buildingTypes: { "biodome": { code: 1, name: "Biodome", startPopulation: 1000, growthRate: 0.01, buildCost: { turns: 0 }, bonus: { food: 1, material: 1, energy: 2, growth: 0, wealth: 1 } } },
                    names: [] };
     // The unscaled config as loaded; CONFIG is derived from it per the current
     // game's difficulty (see applyGameDifficulty).
@@ -1035,6 +1035,19 @@
       const terr = terrainAt(x, y);
       if (terr < 2 || terr > 11) return 0;       // land only
       return adjacencyBonus(x, y, 'water');
+    }
+    // Per-resource bonus a worked LAND cell gains when a road OR monorail is
+    // built ON it (roadAdjacentBonus in config). Applied ONCE regardless of how
+    // many road/monorail segments pass through the cell, and granted purely by
+    // the live tr.roads/tr.monorails sets — so it is lost automatically when the
+    // last road/monorail on the cell is removed or decays. (A bridge only ever
+    // sits on a road cell, so bridges are covered by hasRoad.)
+    function roadTileBonus(x, y, resource) {
+      const terr = terrainAt(x, y);
+      if (terr < 2 || terr > 11) return 0;       // land only
+      if (!(hasRoad(x, y) || hasMonorail(x, y))) return 0;
+      const cfg = CONFIG.roadAdjacentBonus || {};
+      return cfg[resource] || 0;
     }
 
     // ---- transport network (roads / monorails / canals / bridges / airports)
@@ -2423,6 +2436,15 @@
       wealth.bonus += riverWealthBonus(gx, gy);
       water.bonus += waterTileBonus(gx, gy);
 
+      // Road/monorail tile bonus (roadAdjacentBonus): applied once to any land
+      // cell that has a road or monorail built on it, across all resources.
+      food.bonus    += roadTileBonus(gx, gy, 'food');
+      prod.bonus    += roadTileBonus(gx, gy, 'material');
+      energy.bonus  += roadTileBonus(gx, gy, 'energy');
+      wealth.bonus  += roadTileBonus(gx, gy, 'wealth');
+      water.bonus   += roadTileBonus(gx, gy, 'water');
+      happ.bonus    += roadTileBonus(gx, gy, 'happiness');
+
       // Terrain bonus feature on this cell adds its configured resources.
       const tb = bonusDefAt(gx, gy);
       if (tb && tb.bonus) {
@@ -2508,6 +2530,16 @@
         food: foodOk ? fp.sea : 0,
         wealth: landOk ? wp.sea : 0,
         water: landOk ? tp2.sea : 0,
+      });
+      // Road/monorail tile bonus: once per land cell that has a road or monorail
+      // built on it (roadTileBonus gates on land + presence, so no extra gate).
+      add("Road/monorail", {
+        food: roadTileBonus(gx, gy, 'food'),
+        material: roadTileBonus(gx, gy, 'material'),
+        energy: roadTileBonus(gx, gy, 'energy'),
+        water: roadTileBonus(gx, gy, 'water'),
+        wealth: roadTileBonus(gx, gy, 'wealth'),
+        happiness: roadTileBonus(gx, gy, 'happiness'),
       });
 
       // Terrain-bonus feature on this cell (e.g. a resource deposit): adds its
@@ -2927,11 +2959,15 @@
       if (!list) return;
       // One row per configured building type, in numeric type order (Colonies
       // first). Config-driven so new building types appear automatically.
-      const types = Object.keys(CONFIG.buildingTypes || { "1": {} })
-        .map((k) => parseInt(k, 10)).filter((n) => !isNaN(n)).sort((a, b) => a - b);
+      // buildingTypes is name-keyed; each entry carries a numeric `code` that
+      // matches instances' b.type. Order rows by that code.
+      const btMap = CONFIG.buildingTypes || {};
+      const types = Object.keys(btMap)
+        .map((k) => { const e = btMap[k]; return (e && typeof e.code === 'number') ? e.code : parseInt(k, 10); })
+        .filter((n) => !isNaN(n)).sort((a, b) => a - b);
       let html = "";
       for (const type of types) {
-        const bt = (CONFIG.buildingTypes && CONFIG.buildingTypes[String(type)]) || {};
+        const bt = buildingType(type) || {};
         const name = type === 1 ? "Colonies" : (bt.name || ("Type " + type));
         html += `<div class="bldg-stat">${name}: <span>${count(type).toLocaleString()}</span></div>`;
       }
@@ -3258,9 +3294,52 @@
 
     // ---- colony / building placement --------------------------------------
     // Building type properties come from config.json (CONFIG.buildingTypes).
-    // Type 1 = colony (Biodome); 2 = Farm; 3 = Solar Panel; 4 = Factory.
+    // CONFIG.buildingTypes is keyed by the LOWERCASE building name; each entry
+    // carries a numeric `code` that matches the `type` stored on building
+    // instances (b.type). Code 1 = colony (Biodome); 2 = Farm; 3 = Solar Panel;
+    // 4 = Factory; etc. Building instances keep NUMERIC types, so lookups by
+    // type resolve the name-keyed entry via its `code`.
+    //
+    // Index of code -> entry, cached against the current buildingTypes object so
+    // it rebuilds automatically whenever CONFIG is reassigned (config load or a
+    // difficulty rescale produces a new object).
+    let _btByCode = null, _btByCodeSrc = null;
+    function _buildingTypeIndex() {
+      const map = (CONFIG && CONFIG.buildingTypes) || null;
+      if (_btByCode && _btByCodeSrc === map) return _btByCode;
+      const byCode = new Map();
+      if (map) {
+        for (const key of Object.keys(map)) {
+          const e = map[key];
+          if (!e) continue;
+          const code = (typeof e.code === 'number') ? e.code : parseInt(key, 10);
+          if (Number.isFinite(code)) byCode.set(code, e);
+        }
+      }
+      _btByCode = byCode; _btByCodeSrc = map;
+      return byCode;
+    }
+    // Resolve a building-type config entry from either a numeric code/type or a
+    // lowercase name key. Returns null if unknown.
     function buildingType(type) {
-      return (CONFIG.buildingTypes && CONFIG.buildingTypes[String(type)]) || null;
+      const map = (CONFIG && CONFIG.buildingTypes) || null;
+      if (!map) return null;
+      if (typeof type === 'string') {
+        const key = type.toLowerCase();
+        if (map[key]) return map[key];
+      }
+      const code = Number(type);
+      if (Number.isFinite(code)) {
+        const e = _buildingTypeIndex().get(code);
+        if (e) return e;
+      }
+      return map[String(type)] || null;   // legacy fallback (numeric-keyed config)
+    }
+    // All configured building-type codes, ascending (numeric b.type values).
+    // Replaces the old `Object.keys(buildingTypes).map(parseInt)` pattern now
+    // that the config is name-keyed.
+    function buildingTypeCodes() {
+      return Array.from(_buildingTypeIndex().keys()).sort((a, b) => a - b);
     }
     // Default terrain set a building may occupy when its config entry omits a
     // `terrain` list: all habitable land (grassland, hills, forest, jungle,
@@ -3587,17 +3666,35 @@
         const wfb = waterFoodBonus(wx, wy);
         const rwb = riverWealthBonus(wx, wy);
         const wtb = waterTileBonus(wx, wy);
+        // Road/monorail tile bonus (once per cell that has a road/monorail).
+        const rtFood = roadTileBonus(wx, wy, 'food');
+        const rtMat = roadTileBonus(wx, wy, 'material');
+        const rtEnergy = roadTileBonus(wx, wy, 'energy');
+        const rtWealth = roadTileBonus(wx, wy, 'wealth');
+        const rtWater = roadTileBonus(wx, wy, 'water');
+        const rtHapp = roadTileBonus(wx, wy, 'happiness');
         production.food += tp.food + wfb;
         production.material += tp.material;
         production.wealth += rwb; // river/sea-adjacent wealth
         production.water += tp.water + wtb; // terrain base + river/canal/sea water
         terrainHappiness += tp.happiness;             // terrain base happiness (e.g. Wetlands)
+        production.food += rtFood;
+        production.material += rtMat;
+        production.energy += rtEnergy;
+        production.wealth += rtWealth;
+        production.water += rtWater;
+        terrainHappiness += rtHapp;
         addBreak('food', 'Terrain', tp.food);
         addBreak('material', 'Terrain', tp.material);
         addBreak('water', 'Terrain', tp.water);
         addBreak('food', 'Water adjacency', wfb);
         addBreak('wealth', 'Water adjacency', rwb);
         addBreak('water', 'Water adjacency', wtb);
+        addBreak('food', 'Road/monorail', rtFood);
+        addBreak('material', 'Road/monorail', rtMat);
+        addBreak('energy', 'Road/monorail', rtEnergy);
+        addBreak('wealth', 'Road/monorail', rtWealth);
+        addBreak('water', 'Road/monorail', rtWater);
         // Terrain-bonus feature on a WORKED cell adds its resources (pristine
         // bonuses included). Only worked cells yield; an idle bonus tile gives
         // nothing, and a pristine bonus destroyed by a building is already gone.
@@ -3823,9 +3920,21 @@
       for (let a = 0; a < dockCols.length; a++) {
         for (let b = a + 1; b < dockCols.length; b++) {
           const i = dockCols[a], j = dockCols[b];
-          if (find(i) === find(j)) continue; // already connected by some means
-          if (_pathExists(cols[i], cols[j], owner, (x, y) => isShallowSea(x, y))) union(i, j);
-        }
+        if (find(i) === find(j)) continue; // already connected by some means
+        if (_pathExists(cols[i], cols[j], owner, (x, y) => isShallowSea(x, y))) union(i, j);
+      }
+    }
+
+      // ---- space connectivity ----
+      // The Spaceport (building type 14) creates an UNLIMITED-range network:
+      // every colony that has a Spaceport is linked to every other Spaceport
+      // colony regardless of distance. Union them all into one group by linking
+      // each to the first Spaceport colony seen.
+      let firstSpace = -1;
+      for (let i = 0; i < cols.length; i++) {
+        if (!colonyHasSpaceport(cols[i])) continue;
+        if (firstSpace < 0) firstSpace = i;
+        else union(firstSpace, i);
       }
 
       // Final: colonyKey -> group root id.
@@ -4784,10 +4893,22 @@
       }
       return false;
     }
+    // Whether a colony owns an operational Spaceport (building type 14) within
+    // its control radius. Used for the UNLIMITED-range space-transport network:
+    // any two of a player's Spaceport colonies are linked regardless of distance.
+    function colonyHasSpaceport(colony) {
+      const radius = colonyControlRadius(colony);
+      for (const b of gameState.buildings) {
+        if (b.type !== 14 || b.owner !== colony.owner) continue;
+        if (!isOperational(b)) continue;
+        if (hexDistance(colony.x, colony.y, b.x, b.y) <= radius) return true;
+      }
+      return false;
+    }
     // Max hex distance between two Air Field colonies for an air link, from
     // buildingTypes[6].range (falls back to 16).
     function airFieldRange() {
-      const bt = (CONFIG.buildingTypes && CONFIG.buildingTypes["6"]) || {};
+      const bt = buildingType(6) || {};
       return (bt.range != null) ? bt.range : 16;
     }
     // Two same-owner colonies are air-linked when they EACH have an Air Field
@@ -5817,6 +5938,15 @@
             break; // handled above / runtime-only / unknown -> ignore
         }
       }
+      // Climate restriction: if the building declares a `climate` list (band
+      // names "tropical"/"temperate"/"subpolar"/"polar"), the cell's climate band
+      // must be one of them. Mirrors the terrainBonus climate rule.
+      if (Array.isArray(bt.climate) && bt.climate.length) {
+        const band = cellClimateBand(x, y);
+        if (!bt.climate.includes(band)) {
+          return { ok: false, reason: `must be in a ${bt.climate.join(" / ")} climate` };
+        }
+      }
       return { ok: true };
     }
     // The stored resources available to build at (x,y): the controlling colony's
@@ -5845,19 +5975,39 @@
     // Whether the prerequisite building types for `type` all exist (operational)
     // in the colony that controls (x,y).
     function hasPrerequisitesAt(type, x, y, owner) {
-      const prereq = (buildingType(type) || {}).prerequisiteBuildings || [];
-      if (!prereq.length) return true;
+      // prerequisiteBuildings are lowercase NAME keys, plus the special token
+      // "network" meaning the colony must be transport-connected to another of
+      // the owner's colonies (road/monorail, river/canal, sea, or air).
+      const raw = (buildingType(type) || {}).prerequisiteBuildings || [];
+      if (!raw.length) return true;
+      const needsNetwork = raw.includes("network");
+      // Map building NAME keys to numeric codes for the presence check.
+      const prereqCodes = raw
+        .filter((p) => p !== "network")
+        .map((p) => { const e = buildingType(p); return e ? e.code : p; });
       const col = colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
       if (!col) return false;
       const present = new Set(colonyBuildings(col).map((b) => b.type));
-      return prereq.every((t) => present.has(t));
+      if (!prereqCodes.every((t) => present.has(t))) return false;
+      if (needsNetwork && connectedColonies(col).length === 0) return false;
+      return true;
     }
     // Names of missing prerequisite building types (for the menu label).
     function missingPrerequisiteNames(type, x, y, owner) {
-      const prereq = (buildingType(type) || {}).prerequisiteBuildings || [];
+      // Building NAME-key prerequisites (mapped to codes) plus the special
+      // "network" token (transport connection to another colony).
+      const raw = (buildingType(type) || {}).prerequisiteBuildings || [];
+      const needsNetwork = raw.includes("network");
+      const prereqCodes = raw
+        .filter((p) => p !== "network")
+        .map((p) => { const e = buildingType(p); return e ? e.code : p; });
       const col = colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
       const present = new Set(col ? colonyBuildings(col).map((b) => b.type) : []);
-      return prereq.filter((t) => !present.has(t)).map((t) => improvementName(t));
+      const missing = prereqCodes.filter((t) => !present.has(t)).map((t) => improvementName(t));
+      if (needsNetwork && (!col || connectedColonies(col).length === 0)) {
+        missing.push("Transport network");
+      }
+      return missing;
     }
     // Whether the human can afford a building type (legacy: uses aggregate).
     function canAffordBuilding(type) {
@@ -6284,8 +6434,7 @@
     // colonies can assign a worker to an unworked controlled cell, or can build
     // an affordable building on an empty controlled land cell.
     function aiHasPossibleActions(pi) {
-      const types = Object.keys(CONFIG.buildingTypes || {})
-        .map((k) => parseInt(k, 10)).filter((type) => type !== 1);
+      const types = buildingTypeCodes().filter((type) => type !== 1);
       const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi);
       for (const col of myColonies) {
         ensureWorked(col);
@@ -6345,8 +6494,7 @@
     // empty land cell where an affordable building with satisfied prerequisites
     // could be placed. Used to keep the human's turn from auto-passing.
     function humanCanBuildAnything() {
-      const types = Object.keys(CONFIG.buildingTypes || {})
-        .map((k) => parseInt(k, 10)).filter((t) => t !== 1);
+      const types = buildingTypeCodes().filter((t) => t !== 1);
       const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === 'human');
       for (const col of myColonies) {
         const homeKey = cellKey(col.x, col.y);
@@ -6904,11 +7052,10 @@
       // building must be placed on an empty land cell (terrain 2-7) within the
       // human's area of control, and the human must afford its full cost.
       ctxBuildItems.innerHTML = "";
-      const types = (CONFIG.buildingTypes) ? Object.keys(CONFIG.buildingTypes) : [];
-      for (const tk of types) {
-        const type = parseInt(tk, 10);
+      const types = buildingTypeCodes();
+      for (const type of types) {
         if (type === 1) continue; // colony handled by Establish Colony
-        const bt = CONFIG.buildingTypes[tk];
+        const bt = buildingType(type);
         const canTurn = isHumanTurn() && hex;
         const place = canTurn ? canPlaceTypeAt(type, hex.x, hex.y, 'human') : { ok: false };
         const affordable = place.ok && canAffordBuildingAt(type, hex.x, hex.y, 'human');
