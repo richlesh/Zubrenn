@@ -83,8 +83,8 @@ found a new colony from it:
   `movement[0]` (unimproved) points; crossing a river segment adds
   `riverCrossingMovementCost` (2). (A tile's `movement` array is
   `[unimproved, road, sea (or river), monorail, air]`; only the unimproved cost
-  is used today.) **Deep sea is impassable**, and **frozen
-  cells above `impassableFrozenAltitude` (5,000 m) are impassable**. If you own
+  is used today.) **Deep sea is impassable**, and **the highest elevation
+  tier — the mountain tops — is impassable**. If you own
   a **Dock**, your paths may also cross **shallow-sea** tiles (sea adjacent to
   land), letting you reach islands and cross straits.
 - The target must be habitable land (2–7, Plains 10, Wetlands 11, or low frozen), empty, and at least

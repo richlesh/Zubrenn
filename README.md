@@ -624,8 +624,8 @@ without code changes:
 - Founding new colonies: `foundColonyMinPopulation` (population needed to launch),
   `foundColonyPopulationTransfer` (colonists moved to the new colony),
   `biodomeMovementPerYear` (overland movement points per year),
-  `riverCrossingMovementCost`, and `impassableFrozenAltitude` /
-  `maxAltitudeMeters` (frozen cells above the altitude limit are impassable).
+  `riverCrossingMovementCost`, and `maxAltitudeMeters` (the highest elevation
+  tier — the mountain tops — is impassable).
 - Game setup: `startingYear`, `maxAIs`, `minColonyDistance`,
   `aiPlacementMinTurns`/`aiPlacementMaxTurns`, and 100 alien `names`.
 - `debug` — when `true`, after creating a new map two debug dialogs are shown:

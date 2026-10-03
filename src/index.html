@@ -1001,7 +1001,20 @@
       const sea = CONFIG.seaAdjacentBonus || {};
       const riverB = nearRiver(x, y) ? (river[resource] || 0) : 0;   // river OR canal
       const seaB = nearSea(x, y) ? (sea[resource] || 0) : 0;
-      return Math.max(riverB, seaB);
+      // River/canal and sea adjacency STACK: a cell adjacent to both a
+      // river/canal and the sea collects BOTH bonuses.
+      return riverB + seaB;
+    }
+    // Per-source breakdown of the adjacency bonus for one resource, so tooltips
+    // can attribute each contribution to "Adjacent to River" vs "Adjacent to
+    // Sea". River adjacency also counts built canals (same as nearRiver). Both
+    // can be nonzero when a cell is adjacent to a river/canal AND the sea.
+    function adjacencyBonusParts(x, y, resource) {
+      const river = CONFIG.riverAdjacentBonus || {};
+      const sea = CONFIG.seaAdjacentBonus || {};
+      const riverB = nearRiver(x, y) ? (river[resource] || 0) : 0;
+      const seaB = nearSea(x, y) ? (sea[resource] || 0) : 0;
+      return { river: riverB, sea: seaB };
     }
     // Food bonus from river/canal/sea adjacency (habitable field terrains only).
     function waterFoodBonus(x, y) {
@@ -1756,6 +1769,10 @@
         // cell that just became a monorail (those road cells no longer exist).
         tr.monorailEdges.add(edgeKey(fx, fy, tx, ty));
         _dropRoadEdgesAtCell(fx, fy); _dropRoadEdgesAtCell(tx, ty);
+        // Monorails never need a bridge to cross a river/canal or a single sea
+        // tile. If this exact segment edge carried a road bridge, that bridge is
+        // removed from the game when the monorail replaces the road here.
+        tr.bridges.delete(edgeKey(fx, fy, tx, ty));
       } else { // road (+ bridge over river or sea)
         tr.roads.add(cellKey(fx, fy)); tr.roads.add(cellKey(tx, ty));
         tr.roadEdges.add(edgeKey(fx, fy, tx, ty)); // record the built road segment
@@ -2471,13 +2488,27 @@
         if (e.food || e.material || e.energy || e.water || e.wealth || e.happiness) bonuses.push(e);
       };
 
-      // River/canal/sea adjacency bonuses: food, wealth, and water.
-      const wf = waterFoodBonus(gx, gy);
-      if (wf) add("Adjacent to water", { food: wf });
-      const rw = riverWealthBonus(gx, gy);
-      if (rw) add("Adjacent to water", { wealth: rw });
-      const ww = waterTileBonus(gx, gy);
-      if (ww) add("Adjacent to water", { water: ww });
+      // River/canal/sea adjacency bonuses: food, wealth, and water. River/canal
+      // and sea adjacency STACK, so a cell adjacent to both lists BOTH an
+      // "Adjacent to River" row and an "Adjacent to Sea" row, each showing only
+      // the resources that source supplies. Terrain gates match the economy
+      // helpers: food applies on habitable field terrains, wealth/water on any
+      // land tile.
+      const foodOk = WATER_FOOD_TERRAINS.has(terr);
+      const landOk = (terr >= 2 && terr <= 11);
+      const fp = adjacencyBonusParts(gx, gy, 'food');
+      const wp = adjacencyBonusParts(gx, gy, 'wealth');
+      const tp2 = adjacencyBonusParts(gx, gy, 'water');
+      add("Adjacent to River", {
+        food: foodOk ? fp.river : 0,
+        wealth: landOk ? wp.river : 0,
+        water: landOk ? tp2.river : 0,
+      });
+      add("Adjacent to Sea", {
+        food: foodOk ? fp.sea : 0,
+        wealth: landOk ? wp.sea : 0,
+        water: landOk ? tp2.sea : 0,
+      });
 
       // Terrain-bonus feature on this cell (e.g. a resource deposit): adds its
       // configured food/material/energy/water/wealth/happiness.
@@ -2961,7 +2992,20 @@
               const parts = [];
               if (sum.destroyedRoads) parts.push(`${sum.destroyedRoads} road segment${sum.destroyedRoads === 1 ? '' : 's'}`);
               if (sum.destroyedMono) parts.push(`${sum.destroyedMono} monorail segment${sum.destroyedMono === 1 ? '' : 's'}`);
-              notify(`Federation treasury empty — ${parts.join(' and ')} fell into disrepair.`);
+              // List each resource the Federation was short on (with amounts).
+              const types = (CONFIG && CONFIG.resourceTypes) || {};
+              const shortBits = [];
+              const sf = sum.shortfalls || {};
+              for (const k of (typeof MAINT_RESOURCE_KEYS !== 'undefined' ? MAINT_RESOURCE_KEYS : Object.keys(sf))) {
+                const amt = sf[k];
+                if (!(amt > 0)) continue;
+                const nm = (types[k] && types[k].name) ? types[k].name : k;
+                shortBits.push(`${_fmtCredits(amt)} ${nm}`);
+              }
+              const shortMsg = shortBits.length
+                ? ` Short: ${shortBits.join(', ')}.`
+                : '';
+              notify(`Not enough Federation resources to fund the transportation network — ${parts.join(' and ')} fell into disrepair.${shortMsg}`);
             }
             if (typeof updatePlayerPanel === 'function') updatePlayerPanel();
           }
@@ -6009,16 +6053,40 @@
       const c = CONFIG[kind + 'MaintenanceCost'];
       return (c && typeof c.wealth === 'number') ? c.wealth : 0;
     }
-    // Yearly maintenance owed by a player's Federation (in credits/wealth).
+    // Resource keys that transport maintenance can consume from the Federation
+    // OWNED pool. (Population/food/happiness are not charged for upkeep.)
+    const MAINT_RESOURCE_KEYS = ['energy', 'material', 'water', 'wealth'];
+    // Per-segment maintenance cost VECTOR for a transport kind, as a plain
+    // object over MAINT_RESOURCE_KEYS (missing fields default to 0).
+    function _maintCost(kind) {
+      const c = CONFIG[kind + 'MaintenanceCost'] || {};
+      const out = {};
+      for (const k of MAINT_RESOURCE_KEYS) {
+        out[k] = (typeof c[k] === 'number' && Number.isFinite(c[k])) ? c[k] : 0;
+      }
+      return out;
+    }
+    // Multiply a per-segment cost vector by a segment count.
+    function _scaleCost(cost, count) {
+      const out = {};
+      for (const k of MAINT_RESOURCE_KEYS) out[k] = (cost[k] || 0) * count;
+      return out;
+    }
+    // Yearly maintenance owed by a player's Federation, per transport kind.
+    // Each entry is a resource vector; `.wealth` on each (road/monorail/…)
+    // preserves the legacy single-number reads, and `.total` is the summed
+    // vector across all kinds.
     function federationMaintenance(owner) {
       const n = federationTransportCounts(owner);
-      return {
-        road: n.roads * _maintPer('road'),
-        monorail: n.monorails * _maintPer('monorail'),
-        canal: n.canals * _maintPer('canal'),
-        bridge: n.bridges * _maintPer('bridge'),
-        get total() { return this.road + this.monorail + this.canal + this.bridge; }
-      };
+      const road = _scaleCost(_maintCost('road'), n.roads);
+      const monorail = _scaleCost(_maintCost('monorail'), n.monorails);
+      const canal = _scaleCost(_maintCost('canal'), n.canals);
+      const bridge = _scaleCost(_maintCost('bridge'), n.bridges);
+      const total = {};
+      for (const k of MAINT_RESOURCE_KEYS) {
+        total[k] = road[k] + monorail[k] + canal[k] + bridge[k];
+      }
+      return { road, monorail, canal, bridge, total };
     }
     // Remove `count` random road or monorail SEGMENTS (edges) from the network,
     // pruning any cell left with no incident edges. kind: 'road' | 'monorail'.
@@ -6079,47 +6147,87 @@
       const tax = federationTaxFor(owner, fed.taxRate);
       fed.treasury += tax;
 
-      // 2) Pay maintenance (roads + monorails + canals + bridges), each only as
-      //    far as the treasury allows. Pay canals and bridges first (neither
-      //    decays here), then split remaining funds between road and monorail so
-      //    each has a defined "unfunded" count.
+      // 2) Pay maintenance (roads + monorails + canals + bridges) from the
+      //    Federation OWNED pool, per resource (energy/material/water/wealth).
+      //    Pay canals and bridges first (neither decays), then roads, then
+      //    monorails. A road/monorail SEGMENT is "funded" only when EVERY one
+      //    of its resource components could be covered; the most constrained
+      //    resource therefore caps how many segments survive. Unfunded
+      //    road/monorail segments then decay at the configured rate.
       const counts = federationTransportCounts(owner);
-      const roadPer = _maintPer('road'), monoPer = _maintPer('monorail'), canalPer = _maintPer('canal'), bridgePer = _maintPer('bridge');
-      const roadDue = counts.roads * roadPer;
-      const monoDue = counts.monorails * monoPer;
-      const canalDue = counts.canals * canalPer;
-      const bridgeDue = counts.bridges * bridgePer;
-      const totalDue = roadDue + monoDue + canalDue + bridgeDue;
-
-      let destroyedRoads = 0, destroyedMono = 0;
-      if (fed.treasury >= totalDue) {
-        fed.treasury -= totalDue;
-      } else {
-        // Shortfall: pay what we can, then decay unfunded road/monorail segments.
-        let funds = Math.max(0, fed.treasury);
-        // Fund canals first, then bridges (neither decays here), then roads, then monorails.
-        const payCanal = Math.min(funds, canalDue); funds -= payCanal;
-        const payBridge = Math.min(funds, bridgeDue); funds -= payBridge;
-        const payRoad = Math.min(funds, roadDue); funds -= payRoad;
-        const payMono = Math.min(funds, monoDue); funds -= payMono;
-        fed.treasury = 0;
-        // Unfunded SEGMENT counts (how many segments could not be maintained).
-        const unfundedRoad = roadPer > 0 ? Math.ceil((roadDue - payRoad) / roadPer) : 0;
-        const unfundedMono = monoPer > 0 ? Math.ceil((monoDue - payMono) / monoPer) : 0;
-        const roadDecay = (typeof CONFIG.roadDecayRate === 'number') ? CONFIG.roadDecayRate : 0.01;
-        const monoDecay = (typeof CONFIG.monorailDecayRate === 'number') ? CONFIG.monorailDecayRate : 0.01;
-        const roadKill = Math.ceil(unfundedRoad * roadDecay);
-        const monoKill = Math.ceil(unfundedMono * monoDecay);
-        if (roadKill > 0) destroyedRoads = decayRandomSegments('road', roadKill);
-        if (monoKill > 0) destroyedMono = decayRandomSegments('monorail', monoKill);
-        if ((destroyedRoads || destroyedMono) && typeof invalidateColonyConnectivity === 'function') {
-          invalidateColonyConnectivity();
-        }
-        if ((destroyedRoads || destroyedMono) && hexMap && typeof hexMap.setTransport === 'function') {
-          hexMap.setTransport(ensureTransport());
-        }
+      const perRoad = _maintCost('road'), perMono = _maintCost('monorail');
+      const perCanal = _maintCost('canal'), perBridge = _maintCost('bridge');
+      const owned = fed.owned;
+      // Snapshot the owned pool and total network maintenance due per resource
+      // BEFORE spending, so we can report how short the Federation was to fully
+      // fund its transportation network this turn.
+      const startOwned = {};
+      const networkDue = {};
+      for (const k of MAINT_RESOURCE_KEYS) {
+        startOwned[k] = Math.max(0, owned[k] || 0);
+        networkDue[k] = (perRoad[k] || 0) * counts.roads
+          + (perMono[k] || 0) * counts.monorails
+          + (perCanal[k] || 0) * counts.canals
+          + (perBridge[k] || 0) * counts.bridges;
       }
-      return { tax, maintenance: totalDue, treasury: fed.treasury, destroyedRoads, destroyedMono };
+      // Spend up to `n` segments' worth of a per-segment cost vector from the
+      // owned pool, deducting each resource independently (clamped at 0). The
+      // number of FULLY funded segments is limited by the scarcest resource;
+      // partial funds are still spent (every credit of upkeep is consumed).
+      // Returns the count of segments that could be fully funded.
+      function spendMaint(perCost, n) {
+        if (n <= 0) return 0;
+        let funded = n;
+        for (const k of MAINT_RESOURCE_KEYS) {
+          const per = perCost[k] || 0;
+          if (per <= 0) continue;
+          const have = Math.max(0, owned[k] || 0);
+          const affordable = Math.floor(have / per + 1e-9);
+          if (affordable < funded) funded = affordable;
+        }
+        if (funded < 0) funded = 0;
+        // Deduct the full owed amount per resource, clamped so the pool never
+        // goes negative (a shortfall simply empties that resource).
+        for (const k of MAINT_RESOURCE_KEYS) {
+          const due = (perCost[k] || 0) * n;
+          if (due <= 0) continue;
+          owned[k] = Math.max(0, (owned[k] || 0) - due);
+        }
+        return funded;
+      }
+
+      // Canals and bridges: pay what we can; they never decay.
+      spendMaint(perCanal, counts.canals);
+      spendMaint(perBridge, counts.bridges);
+      // Roads then monorails: track how many segments went unfunded.
+      const fundedRoad = spendMaint(perRoad, counts.roads);
+      const fundedMono = spendMaint(perMono, counts.monorails);
+      // Per-resource shortfall to fully fund the whole network this turn.
+      const shortfalls = {};
+      for (const k of MAINT_RESOURCE_KEYS) {
+        const short = networkDue[k] - startOwned[k];
+        if (short > 1e-9) shortfalls[k] = short;
+      }
+      // Keep the legacy mirror in sync (treasury === owned.wealth).
+      fed.treasury = owned.wealth;
+
+      const unfundedRoad = Math.max(0, counts.roads - fundedRoad);
+      const unfundedMono = Math.max(0, counts.monorails - fundedMono);
+      const roadDecay = (typeof CONFIG.roadDecayRate === 'number') ? CONFIG.roadDecayRate : 0.01;
+      const monoDecay = (typeof CONFIG.monorailDecayRate === 'number') ? CONFIG.monorailDecayRate : 0.01;
+      const roadKill = Math.ceil(unfundedRoad * roadDecay);
+      const monoKill = Math.ceil(unfundedMono * monoDecay);
+      let destroyedRoads = 0, destroyedMono = 0;
+      if (roadKill > 0) destroyedRoads = decayRandomSegments('road', roadKill);
+      if (monoKill > 0) destroyedMono = decayRandomSegments('monorail', monoKill);
+      if ((destroyedRoads || destroyedMono) && typeof invalidateColonyConnectivity === 'function') {
+        invalidateColonyConnectivity();
+      }
+      if ((destroyedRoads || destroyedMono) && hexMap && typeof hexMap.setTransport === 'function') {
+        hexMap.setTransport(ensureTransport());
+      }
+      const maintObj = federationMaintenance(owner);
+      return { tax, maintenance: maintObj.total, treasury: fed.treasury, destroyedRoads, destroyedMono, shortfalls };
     }
 
     // ---- AI turn -----------------------------------------------------------
@@ -7927,6 +8035,22 @@
       const r = Math.round(n * 10) / 10;
       return (Number.isInteger(r) ? r.toLocaleString() : r.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
     }
+    // Format a maintenance cost VECTOR (energy/material/water/wealth) as a
+    // compact per-resource string using each resource's abbreviation, e.g.
+    // "12 E · 4 M · 0.5 ¤". Zero components are omitted; an all-zero cost
+    // renders as "0".
+    function _fmtMaintCost(vec) {
+      if (!vec || typeof vec !== 'object') return '0';
+      const types = (CONFIG && CONFIG.resourceTypes) || {};
+      const parts = [];
+      for (const k of MAINT_RESOURCE_KEYS) {
+        const v = vec[k] || 0;
+        if (Math.abs(v) < 1e-9) continue;
+        const ab = (types[k] && types[k].abbrev) ? types[k].abbrev : k;
+        parts.push(_fmtCredits(v) + ' ' + ab);
+      }
+      return parts.length ? parts.join(' \u00b7 ') : '0';
+    }
     function renderFederation() {
       const player = _humanPlayer();
       if (!player) return;
@@ -7946,26 +8070,38 @@
       const m = federationMaintenance('human');
       document.getElementById("fed-taxes").textContent = _fmtCredits(taxes);
       document.getElementById("fed-roadn").textContent = String(counts.roads);
-      document.getElementById("fed-roadcost").textContent = _fmtCredits(m.road);
+      document.getElementById("fed-roadcost").textContent = _fmtMaintCost(m.road);
       document.getElementById("fed-mononn").textContent = String(counts.monorails);
-      document.getElementById("fed-monocost").textContent = _fmtCredits(m.monorail);
+      document.getElementById("fed-monocost").textContent = _fmtMaintCost(m.monorail);
       document.getElementById("fed-canaln").textContent = String(counts.canals);
-      document.getElementById("fed-canalcost").textContent = _fmtCredits(m.canal);
+      document.getElementById("fed-canalcost").textContent = _fmtMaintCost(m.canal);
       document.getElementById("fed-bridgen").textContent = String(counts.bridges);
-      document.getElementById("fed-bridgecost").textContent = _fmtCredits(m.bridge);
-      document.getElementById("fed-maint").textContent = _fmtCredits(m.total);
-      const net = taxes - m.total;
+      document.getElementById("fed-bridgecost").textContent = _fmtMaintCost(m.bridge);
+      document.getElementById("fed-maint").textContent = _fmtMaintCost(m.total);
+      // Net/projected treasury track WEALTH only (taxes and treasury are wealth);
+      // other maintenance resources draw from their own owned pools.
+      const net = taxes - (m.total.wealth || 0);
       const netEl = document.getElementById("fed-net");
       netEl.textContent = (net >= 0 ? "+" : "") + _fmtCredits(net);
       netEl.style.color = net >= 0 ? "#1a9e1a" : "#d23b3b";
       const projected = fed.treasury + net;
       document.getElementById("fed-proj-treasury").textContent = _fmtCredits(projected);
 
-      // Warn if the projected treasury can't cover maintenance (segments decay).
+      // Warn if the owned pool can't cover road/monorail maintenance (those
+      // segments decay). Each resource is checked against its own pool; wealth
+      // also credits the taxes about to be collected this turn.
       const warn = document.getElementById("fed-warn");
-      if (fed.treasury + taxes < m.total) {
+      const owned = fed.owned || {};
+      const roadMonoDue = {};
+      for (const k of MAINT_RESOURCE_KEYS) roadMonoDue[k] = (m.road[k] || 0) + (m.monorail[k] || 0);
+      let willDecay = false;
+      for (const k of MAINT_RESOURCE_KEYS) {
+        const have = (owned[k] || 0) + (k === 'wealth' ? taxes : 0);
+        if (roadMonoDue[k] > have + 1e-9) { willDecay = true; break; }
+      }
+      if (willDecay) {
         warn.hidden = false;
-        warn.textContent = "Treasury won't cover maintenance — some road/monorail segments will decay at end of turn.";
+        warn.textContent = "Owned resources won't cover maintenance — some road/monorail segments will decay at end of turn.";
       } else {
         warn.hidden = true;
       }
