@@ -35,13 +35,11 @@ mountain-high (8) and frozen (9) are land but not buildable).
 Plains (10) are drier, upper-elevation grasslands. Wetlands (11) are low land
 that is both sea-adjacent and river-adjacent, and give a small happiness bonus.
 
-**Water food bonus:** grassland, hills, forest, jungle, desert, and plains cells gain
-**+`riverAdjacentFoodBonus` food** when a **sea tile is edge-adjacent** or a
-**river/canal runs along one of the cell's own borders**.
-
-**River wealth bonus:** any land cell whose own border carries a river/canal
-gains **+`riverAdjacentWealthBonus` wealth** (this one does not apply for plain
-sea adjacency).
+**Adjacency bonuses:** a land cell beside water gains extra yields from config.
+A **river or canal** on one of the cell's own borders grants the
+`riverAdjacentBonus` (food, water, and wealth); an **edge-adjacent sea tile**
+grants the `seaAdjacentBonus` (food and wealth). When adjacent to both, the
+higher per-resource value applies.
 
 ## Colonies (Biodomes)
 
@@ -223,33 +221,41 @@ budget** and cannot sustain its worked buildings. Reduce your yearly needs by
 upkeep — until the budget balances. (Idle buildings contribute nothing —
 no production, no upkeep, and no storage.)
 
+## Resources, storage, and the Federation
+
+There are **seven** resource types: Energy, Food, Material, Water, Wealth,
+Happiness, and Population. Each colony holds its own **owned** amount of all
+seven, clamped to its **max storage** — the sum of the `storage` keys over its
+worked buildings and worked cells. All your colonies form a **Federation** with
+its own pooled **owned** resources and **max storage** (the sum of worked
+buildings' `federationStorage`); the Federation **treasury** is its owned
+Wealth. The earliest-founded surviving colony is the **capital**, and only
+colonies network-connected to it can draw from or overflow into the Federation.
+
+Each turn, every colony computes a per-resource **delta** = the sum over its
+biodome and worked cells of terrain `base` + terrain-bonus `bonus` + building
+`bonus`, minus **population consumption** (`unitCosts.population` per 1,000
+colonists). The delta is added to owned. If a resource goes negative the colony
+**borrows** (Federation first, then the richest connected colony); if still
+short it **idles** worked cells; surplus above a colony's max **overflows** into
+the Federation (discarded if the pool is full or the colony isn't connected to
+the capital).
+
 ## Population growth each year
 
-Growth is driven by **stored happiness**, which each colony accumulates over
-time and which may go negative.
+Population is one of the seven resources. Each turn a colony's growth
+**percentage** = the sum of the `bonus.population` values on its worked cells,
+terrain bonuses, and worked buildings (e.g. Biodome +1%, Farm +0.25%, Factory
+−0.25%), **plus** a happiness term (`happinessRate × happinessGrowthPerUnit`,
+capped at `maxHappinessGrowthBonus`, in percentage points — added when happiness
+is positive, subtracted when negative). New population = `population × percentage
+÷ 100`. Happiness itself (owned, clamped to ±the colony's happiness storage)
+accumulates from the food balance (`netFood` = food produced − colonists'
+consumption), building/terrain happiness, and the Federation tax penalty.
 
-For each colony, per year:
-
-1. **Food balance.** Food consumption = `population/1000 × 1` food per year
-   (`foodPerColonistUnit`). `netFood = food produced − consumption`.
-2. **Happiness rate** = `netFood` (surplus is positive, shortfall negative) plus
-   any building happiness bonuses.
-3. **Stored happiness** += happiness rate, then **clamped** to
-   **±(sum of worked building happiness storage)** for that colony.
-4. **Growth direction** follows the **sign** of stored happiness:
-   - Stored happiness **≥ 0** → the colony **grows**.
-   - Stored happiness **< 0** → the population **declines**.
-5. **Growth rate magnitude** = base growth (**1% per year**, Biodome
-   `growthRate`) + a happiness component + building growth modifiers (Farm
-   +0.25%, Factory −0.25%). The happiness component is
-   `happinessRate × 0.001` (`happinessGrowthPerUnit`), **capped in magnitude at
-   1%** (`maxHappinessGrowthBonus`).
-   - When declining, the rate is the negative of (base + capped happiness
-     component), plus building modifiers.
-
-In short: keep each colony **well-fed** (food surplus) to build up positive
-stored happiness and grow; a lasting food **shortfall** drives stored happiness
-negative and the colony shrinks until its population fits its food supply.
+In short: keep each colony **well-fed** (food surplus) and happy to grow its
+population; a lasting **shortfall** turns happiness negative and shrinks the
+colony until it fits its supply.
 
 ## Strategy priorities
 

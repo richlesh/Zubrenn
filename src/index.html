@@ -291,6 +291,15 @@
     // Fallbacks are replaced by utilities.cjs implementations when available.
     let formatSISignificant = (x) => (typeof x === "number" ? String(Number(x.toPrecision(3))) : String(x));
     let setResourceTypes = () => {};
+    // Seven economy resource types + config-map readers (replaced by
+    // utilities.cjs when loaded). Fallbacks keep the renderer functional.
+    let RESOURCE_KEYS = ["energy", "food", "material", "water", "wealth", "happiness", "population"];
+    let resolveResValue = (v) => (typeof v === "number" ? v : (parseFloat(v) || 0));
+    let readResMap = (map) => {
+      const out = {}; const src = (map && typeof map === "object") ? map : {};
+      for (const k of RESOURCE_KEYS) out[k] = (src[k] != null) ? resolveResValue(src[k]) : 0;
+      return out;
+    };
     // Fallback used only if utilities.cjs fails to load; the real helper (which
     // honors useAbbrev via resourceTypes) replaces this below. Without a
     // resourceTypes map the label is just the key regardless of useAbbrev.
@@ -312,6 +321,9 @@
             formatSISignificant = mod.formatSISignificant;
             if (typeof mod.setResourceTypes === "function") setResourceTypes = mod.setResourceTypes;
             if (typeof mod.formatResource === "function") formatResource = mod.formatResource;
+            if (Array.isArray(mod.RESOURCE_KEYS)) RESOURCE_KEYS = mod.RESOURCE_KEYS;
+            if (typeof mod.resolveResValue === "function") resolveResValue = mod.resolveResValue;
+            if (typeof mod.readResMap === "function") readResMap = mod.readResMap;
             break;
           }
         } catch (e) {}
@@ -2468,10 +2480,6 @@
     // Per-year economy + population growth, run once when the year advances.
     // Human resources accumulate; AIs just grow population for now.
     function growColonies() {
-      const biodomeCfg = buildingType(1) || {};
-      const baseRate = (biodomeCfg.growthRate != null) ? biodomeCfg.growthRate : 0.01;
-      const happPerUnit = (CONFIG.happinessGrowthPerUnit != null) ? CONFIG.happinessGrowthPerUnit : 0.0025;
-      const starvationPerUnit = (CONFIG.starvationRatePerUnit != null) ? CONFIG.starvationRatePerUnit : 0.02;
       let badgeChanged = false;
       // Human aggregate population + population-weighted growth (for the panel).
       let humanPopBefore = 0, humanPopAfter = 0;
@@ -2534,131 +2542,101 @@
         }
         badgeChanged = true;
       }
-      // the sum of all human colonies' net budgets).
+      // the sum of all human colonies' per-turn deltas).
       let yFood = 0, yMaterial = 0, yEnergy = 0, yWater = 0, yHappiness = 0, yWealth = 0;
-      const _budgetDeficitColonies = []; // human colonies over budget this year
 
-      // Recompute colony connectivity fresh for this tick: in-transit colonies
-      // may have arrived and buildings may have changed since last year, and
-      // the shared-resource borrowing below relies on up-to-date groups.
-      invalidateColonyConnectivity();
-
-      // Index colonies + their buildings by owner.
-      const colonies = gameState.buildings.filter((b) => b.type === 1);
+      // All surviving colonies this tick. Capture per-colony BEFORE-state used by
+      // the worker-availability / badge checks (the pipeline mutates population).
+      const colonies = gameState.buildings.filter((b) => b.type === 1 && !b.inTransit);
+      const beforeState = new Map();
       for (const col of colonies) {
-        if (col.inTransit) continue; // still traveling; no economy/growth yet
-        const isHuman = col.owner === 'human';
-        ensureWorked(col);
-        pruneWorkedToControl(col); // drop cells outside the (possibly shrunk) area
-        const cap = workCap(col);
-        // Worked cells: biodome cell + up to `cap` others (trim if pop dropped).
-        const homeKey = cellKey(col.x, col.y);
-        const extras = col.worked.filter((k) => k !== homeKey).slice(0, cap);
-        col.worked = [homeKey, ...extras];
+        beforeState.set(col, {
+          popBefore: col.population || 0,
+          floorBefore: Math.floor((col.population || 0) / 1000),
+          capBefore: workCap(col),
+          radiusBefore: colonyControlRadius(col),
+        });
+      }
 
-        // Per-colony budget from WORKED cells: production, needs, net.
-        // Buildings only produce/consume when their cell is worked. Excess is
-        // stored (up to cap); shortfall is drawn from storage. If any resource
-        // would go below 0, the colony is over budget and must idle buildings.
-        const control = new Set(colonyControlCells(col).map((c) => cellKey(c.x, c.y)));
-        const result = applyColonyBudget(col);
-        const { net, growthBonus, consumption } = result.budget;
-        const food = result.budget.production.food;
-        const material = result.budget.production.material;
-        const energy = net.energy;
-        const netFood = net.food;
-        if (result.over.length && isHuman) { col._deficitResources = result.over; _budgetDeficitColonies.push(col); }
+      // Run the unified 6-step economy pipeline for ALL owners (human + AI):
+      // delta -> borrow -> idle -> clamp happiness/disband -> federation overflow
+      // -> federation happiness. Returns per-colony colonyStats for snapshots.
+      const statsByCol = applyEconomyTurn(gameState.turn || 0);
 
-        // Per-year happiness change for this colony: food surplus raises it,
-        // shortfall lowers it, plus any building happiness bonuses. Stored
-        // happiness accumulates and is clamped to +/- the colony's happiness
-        // storage.
-        // Federation taxation lowers morale: −1 happiness per tax-rate unit
-        // (e.g. a 5-credit/1000 tax rate subtracts 5 from each colony's happiness
-        // rate). Applies to every colony in that owner's Federation.
-        const taxHappinessPenalty = federationTaxRateOf(col.owner);
-        const happinessRate = netFood + happinessBonusInControl(col, control) - taxHappinessPenalty;
-        const happinessCap = colonyHappinessStorage(col);
-        col.storedHappiness = Math.max(-happinessCap, Math.min(happinessCap,
-          (col.storedHappiness || 0) + happinessRate));
-
-        // Growth is gated by the SIGN of stored happiness: while it is positive
-        // the colony grows; when it is negative the population declines. The
-        // happiness contribution to the rate is driven by the per-year
-        // happinessRate and CLAMPED to maxHappinessGrowthBonus (<= 1%) so growth
-        // stays slow and bounded regardless of how content the colony is.
-        const maxHappBonus = (CONFIG.maxHappinessGrowthBonus != null) ? CONFIG.maxHappinessGrowthBonus : 0.01;
-        const happBonus = Math.min(maxHappBonus, Math.abs(happinessRate) * happPerUnit);
-        let rate;
-        if (col.storedHappiness >= 0) {
-          rate = baseRate + happBonus + growthBonus;
-        } else {
-          rate = -(baseRate + happBonus) + growthBonus;
+      // Remove colonies the pipeline disbanded (population hit 0). Also deselect
+      // worked-cell references to them and drop their colonies[] entries.
+      const disbanded = gameState.buildings.filter((b) => b._disbanded);
+      if (disbanded.length) {
+        gameState.buildings = gameState.buildings.filter((b) => !b._disbanded);
+        for (const g of disbanded) {
+          gameState.colonies = (gameState.colonies || []).filter((c) => !(c.x === g.x && c.y === g.y && c.owner === g.owner));
+          if (g.owner === 'human') notify(`${g.name || 'A colony'} was lost — its population reached zero.`);
         }
-        if (rate < -0.5) rate = -0.5;
-        const happiness = happinessRate; // per-year rate (for the human panel)
+        badgeChanged = true;
+        invalidateColonyConnectivity();
+      }
 
-        const before = Math.floor((col.population || 0) / 1000);
-        const popBefore = col.population || 0;
-        const capBefore = workCap(col);
-        const radiusBefore = colonyControlRadius(col);
-        col.population = Math.max(0, (col.population || 0) * (1 + rate));
-        // Snapshot the latest per-year rates for the colony stats panel.
-        col.lastRates = {
-          food, material, energy,
-          consumption, netFood,
-          happinessRate,
-          storedHappiness: col.storedHappiness,
-          growthRate: rate,
-          popDelta: col.population - popBefore,
-        };
-        if (Math.floor(col.population / 1000) !== before) badgeChanged = true;
-        if (isHuman) { humanPopBefore += popBefore; humanPopAfter += col.population; }
+      // Post-pipeline per-colony bookkeeping: rate snapshot, worker-availability
+      // prompts, badge changes, and human aggregation.
+      for (const col of colonies) {
+        if (col._disbanded) continue;
+        const isHuman = col.owner === 'human';
+        const st = statsByCol.get(col);
+        const bs = beforeState.get(col) || { popBefore: 0, floorBefore: 0, capBefore: 0, radiusBefore: 0 };
+        const homeKey = cellKey(col.x, col.y);
+        if (st) {
+          col.lastRates = {
+            food: st.food, material: st.material, energy: st.energy,
+            consumption: st.consumption, netFood: st.netFood,
+            happinessRate: st.happinessRate,
+            storedHappiness: col.storedHappiness,
+            growthRate: st.growthRate,
+            popDelta: (col.population || 0) - bs.popBefore,
+          };
+        }
+        if (Math.floor((col.population || 0) / 1000) !== bs.floorBefore) badgeChanged = true;
+        if (isHuman) { humanPopBefore += bs.popBefore; humanPopAfter += (col.population || 0); }
 
-        // New worker available: the human colony's work capacity increased and
-        // there is at least one unworked cell in its zone of control. Queue the
-        // colony so we can prompt the player (unless everything is worked).
-        // Also queue when the control RADIUS grows (new tiles became workable),
-        // so the player can assign existing idle workers to them.
         if (isHuman) {
           const capAfter = workCap(col);
           const radiusAfter = colonyControlRadius(col);
           const controlCount = colonyControlCells(col).length; // includes home
           const workedCount = col.worked.length;
           const hasUnworked = workedCount < controlCount;
-          const hasIdleCap = (col.worked.filter(k => k !== homeKey).length) < capAfter;
-          const gainedWorker = capAfter > capBefore && hasUnworked && hasIdleCap;
-          const gainedRadius = radiusAfter > radiusBefore && hasUnworked && hasIdleCap;
+          const hasIdleCap = (col.worked.filter((k) => k !== homeKey).length) < capAfter;
+          const gainedWorker = capAfter > bs.capBefore && hasUnworked && hasIdleCap;
+          const gainedRadius = radiusAfter > bs.radiusBefore && hasUnworked && hasIdleCap;
           if ((gainedWorker || gainedRadius) && !_newWorkerColonies.includes(col)) {
-            col._radiusGrew = gainedRadius && !gainedWorker; // for a tailored message
+            col._radiusGrew = gainedRadius && !gainedWorker;
             _newWorkerColonies.push(col);
           }
-          if (radiusAfter > radiusBefore) badgeChanged = true; // redraw expanded zone
-        }
-
-        if (isHuman) {
-          yFood += net.food; yMaterial += net.material; yEnergy += net.energy;
-          yWater += (net.water || 0); yWealth += net.wealth; yHappiness += happiness;
-        } else {
-          // AI: auto-idle to fit budget, then its per-colony storage already
-          // reflects the applied budget. (Nothing else to do here.)
+          if (radiusAfter > bs.radiusBefore) badgeChanged = true;
+          // Human rate aggregation from the per-colony delta.
+          if (st) {
+            yFood += st.delta.food; yMaterial += st.delta.material; yEnergy += st.delta.energy;
+            yWater += st.delta.water; yWealth += st.delta.wealth; yHappiness += st.delta.happiness;
+          }
         }
       }
 
-      // Player panel resources = SUM of the human colonies' per-colony stored
-      // amounts (each colony stores its own budget). Rates = sum of net budgets.
+      // Player panel resources = SUM of the human colonies' owned amounts.
       const r = gameState.resources;
       r.food = 0; r.material = 0; r.energy = 0; r.water = 0; r.wealth = 0;
       for (const col of colonies) {
-        if (col.owner !== 'human') continue;
-        const s = ensureStored(col);
-        r.food += s.food; r.material += s.material; r.energy += s.energy; r.water += (s.water || 0); r.wealth += s.wealth;
+        if (col._disbanded || col.owner !== 'human') continue;
+        const o = ensureOwned(col);
+        r.food += o.food; r.material += o.material; r.energy += o.energy; r.water += o.water; r.wealth += o.wealth;
       }
       gameState.rates = { food: yFood, material: yMaterial, energy: yEnergy, water: yWater, wealth: yWealth, happiness: yHappiness };
 
       // Aggregate human population + effective growth rate for the player panel.
       gameState.humanPop = Math.round(humanPopAfter);
       gameState.humanPopRate = humanPopBefore > 0 ? (humanPopAfter / humanPopBefore - 1) : 0;
+
+      // Human colonies that still had a resource shortfall after borrowing/idling
+      // (flagged by the pipeline as `_deficitResources`). Prompt the player.
+      const _budgetDeficitColonies = colonies.filter(
+        (col) => !col._disbanded && col.owner === 'human' && col._deficitResources && col._deficitResources.length);
 
       // Advance transport construction (roads/monorails/canals) using each
       // source colony's now-current stored resources.
@@ -3164,15 +3142,13 @@
     // player's total capacity today. (When colonies are connected this will
     // become a shared per-player pool.) Caps stored Food/Material/Energy/Wealth.
     function playerResourceCaps(owner) {
-      const caps = { food: 0, material: 0, energy: 0, water: 0, wealth: 0, happiness: 0 };
-      // Sum each colony's caps, which already count only WORKED buildings (an
-      // idle building contributes no storage).
+      // Sum each colony's unified max storage (all 7 resources). colonyMaxStorage
+      // counts only WORKED buildings' + worked cells' `storage` keys.
+      const caps = {}; for (const k of RESOURCE_KEYS) caps[k] = 0;
       for (const b of gameState.buildings) {
         if (b.type !== 1 || b.owner !== owner || b.inTransit) continue;
-        const c = colonyStorageCaps(b);
-        caps.food += c.food; caps.material += c.material;
-        caps.energy += c.energy; caps.water += c.water; caps.wealth += c.wealth;
-        caps.happiness += colonyHappinessStorage(b);
+        const c = colonyMaxStorage(b);
+        for (const k of RESOURCE_KEYS) caps[k] += c[k];
       }
       return caps;
     }
@@ -3248,6 +3224,90 @@
         if (typeof col.stored[k] !== 'number') col.stored[k] = 0;
       }
       return col.stored;
+    }
+    // --- Unified 7-resource colony economy model -------------------------------
+    // Monotonic founding sequence assigned to each colony (biodome) when founded.
+    // Lower = older. Used to pick the federation capital (earliest surviving) and
+    // to order per-turn processing. Initialized/repaired by ensureColonySeqs().
+    let _colonySeqCounter = 0;
+    function _nextColonySeq() { return ++_colonySeqCounter; }
+    // Ensure every biodome has a stable `seq`. Called on load/new-map; derives
+    // order from existing array order for legacy saves lacking `seq`.
+    function ensureColonySeqs() {
+      let maxSeq = 0;
+      for (const b of gameState.buildings) {
+        if (b.type === 1 && typeof b.seq === 'number') maxSeq = Math.max(maxSeq, b.seq);
+      }
+      _colonySeqCounter = maxSeq;
+      for (const b of gameState.buildings) {
+        if (b.type === 1 && typeof b.seq !== 'number') b.seq = _nextColonySeq();
+      }
+    }
+    // Per-colony MAX STORAGE for all 7 resources = sum of `storage` keys over the
+    // colony's worked cells (incl. the always-worked biodome cell): building
+    // `storage`, plus terrain `storage` and terrain-bonus `storage` if present.
+    // (Terrain/terrainBonus storage are optional and default to 0.)
+    function colonyMaxStorage(col) {
+      const max = {}; for (const k of RESOURCE_KEYS) max[k] = 0;
+      const addMap = (m) => { const r = readResMap(m); for (const k of RESOURCE_KEYS) max[k] += r[k]; };
+      // Worked buildings' storage (biodome always worked).
+      for (const b of colonyBuildings(col)) {
+        if (!isBuildingWorked(col, b)) continue;
+        const def = buildingType(b.type) || {};
+        addMap(def.storage);
+      }
+      // Terrain + terrain-bonus storage on the colony cell + each worked cell.
+      const homeKey = cellKey(col.x, col.y);
+      const workedSet = new Set([homeKey, ...(col.worked || [])]);
+      for (const k of workedSet) {
+        const [wx, wy] = k.split(",").map(Number);
+        const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(wx, wy))]) || {};
+        addMap(tt.storage);
+        const tb = bonusDefAt(wx, wy);
+        if (tb && tb.storage) addMap(tb.storage);
+      }
+      return max;
+    }
+    // Ensure/return a colony's unified `owned` object (all 7 resources). On first
+    // access, migrate from legacy fields: stored.{food,material,energy,water,
+    // wealth}, storedHappiness, and population.
+    function ensureOwned(col) {
+      if (!col.owned) {
+        const legacyStored = col.stored || {};
+        col.owned = {
+          energy: legacyStored.energy || 0,
+          food: legacyStored.food || 0,
+          material: legacyStored.material || 0,
+          water: legacyStored.water || 0,
+          wealth: legacyStored.wealth || 0,
+          happiness: (typeof col.storedHappiness === 'number') ? col.storedHappiness : 0,
+          population: col.population || 0,
+        };
+      }
+      for (const k of RESOURCE_KEYS) {
+        if (typeof col.owned[k] !== 'number' || !Number.isFinite(col.owned[k])) col.owned[k] = 0;
+      }
+      return col.owned;
+    }
+    // Mirror the unified `owned` back onto the legacy fields that existing
+    // readers/UI still use (col.stored, col.storedHappiness, col.population).
+    // Removed in Task 7 once all readers use `owned` directly.
+    function syncOwnedToLegacy(col) {
+      const o = ensureOwned(col);
+      col.stored = { food: o.food, material: o.material, energy: o.energy, water: o.water, wealth: o.wealth };
+      col.storedHappiness = o.happiness;
+      col.population = o.population;
+    }
+    // Reverse mirror: fold legacy-field changes (made by construction-cost
+    // payment, which debits col.stored) back into the unified `owned`. Called
+    // after payment/construction so `owned` stays authoritative. Happiness and
+    // population are NOT touched here (only payment resources change stored).
+    function syncLegacyToOwned(col) {
+      const o = ensureOwned(col);
+      const s = col.stored || {};
+      for (const k of ["food", "material", "energy", "water", "wealth"]) {
+        if (typeof s[k] === "number") o[k] = s[k];
+      }
     }
     // Recompute the player-panel resource aggregate from human colonies' stored
     // amounts (used after a build so the panel reflects the spend immediately).
@@ -3389,39 +3449,8 @@
       };
       return { production, needs, net, growthBonus, terrainHappiness, breakdown, consumption: needs.food, popUnits };
     }
-    // Apply a colony's net budget to its stored resources, clamped to
-    // [0, cap]. Returns { over: [resources that went negative], stored, caps }.
-    // "over" lists resources whose shortfall exceeded storage (budget deficit).
-    function applyColonyBudget(col) {
-      const b = colonyBudget(col);
-      const caps = colonyStorageCaps(col);
-      const stored = ensureStored(col);
-      const over = [];
-      for (const k of ['food', 'material', 'energy', 'wealth']) {
-        let v = stored[k] + b.net[k];
-        if (v < 0) {
-          // Try to cover the shortfall from connected same-owner colonies
-          // (roads/monorails OR a river/canal path), drawing from the one that
-          // stores the most of this resource. Only if still short after that
-          // does the colony go over budget (and must idle buildings).
-          const borrowed = borrowFromConnected(col, k, -v);
-          v += borrowed;
-          if (v < 0) { over.push(k); v = 0; }
-        }
-        if (v > caps[k]) v = caps[k];
-        stored[k] = v;
-      }
-      // Water is tracked as a stored resource with a per-year usage rate, but
-      // (unlike the budget resources above) a water shortfall does NOT force
-      // buildings to idle: just draw storage down, clamped to [0, cap].
-      {
-        let w = (stored.water || 0) + (b.net.water || 0);
-        if (w < 0) w = 0;
-        if (w > caps.water) w = caps.water;
-        stored.water = w;
-      }
-      return { over, stored, caps, budget: b };
-    }
+    // (Legacy applyColonyBudget removed — replaced by applyEconomyTurn, the
+    // unified 6-step per-turn pipeline.)
 
     // ---- inter-colony resource sharing --------------------------------------
     // Connected colonies (same owner) can share stored resources. Two colonies
@@ -3601,25 +3630,253 @@
     // until the need is met or no connected colony has any left. Drains the
     // peers' storage and RETURNS the amount obtained; the caller adds it to
     // `col`'s balance (so this must not also credit col.stored).
-    function borrowFromConnected(col, resource, amount) {
+    // Is `col` network-connected (any transport modality) to its federation's
+    // capital (earliest-founded surviving colony)? The capital is connected to
+    // itself. Used to gate federation borrowing/overflow.
+    function colonyConnectedToCapital(col) {
+      const capital = capitalOf(col.owner);
+      if (!capital) return false;
+      if (capital === col) return true;
+      const groups = colonyConnectivity(col.owner);
+      const gCol = groups.get(_colonyKey(col));
+      const gCap = groups.get(_colonyKey(capital));
+      return gCol != null && gCol === gCap;
+    }
+    // Small deterministic RNG (mulberry32) so "random" idle/tiebreak choices are
+    // stable across saves/replays. Seeded from the turn + a per-colony value.
+    function _seededRng(seed) {
+      let a = (seed >>> 0) || 1;
+      return function () {
+        a |= 0; a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+    // BORROW: cover a colony's shortfall of `resource` (amount > 0). Returns the
+    // amount obtained. Rules:
+    //  1. The colony must be network-connected to the capital to borrow from the
+    //     federation pool; borrow from federationOwned[resource] first.
+    //  2. If still short (or not connected to the capital), borrow from the
+    //     connected colony with the HIGHEST owned of that resource (random
+    //     tiebreak among equal-highest, seeded-deterministic). Peers are the
+    //     same-group colonies; a colony connected to peers but not the capital
+    //     still borrows directly from a peer.
+    function economyBorrow(col, resource, amount, rng) {
       if (!(amount > 0)) return 0;
-      const peers = connectedColonies(col);
-      if (!peers.length) return 0;
       let got = 0;
+      // Step 1-2: federation pool, only if connected to the capital.
+      if (colonyConnectedToCapital(col)) {
+        const fed = federationOwnedOf(col.owner);
+        const take = Math.min(Math.max(0, fed[resource] || 0), amount - got);
+        if (take > 0) { fed[resource] -= take; got += take; }
+      }
+      // Step 3-4: connected colonies, richest-first (random tiebreak).
+      const peers = connectedColonies(col);
       let guard = 0;
       while (amount - got > 1e-9 && guard++ < peers.length + 1) {
-        // Find the richest peer for this resource.
-        let best = null, bestAmt = 0;
+        let bestAmt = 0; const ties = [];
         for (const p of peers) {
-          const s = ensureStored(p);
-          if ((s[resource] || 0) > bestAmt) { bestAmt = s[resource]; best = p; }
+          const amt = ensureOwned(p)[resource] || 0;
+          if (amt > bestAmt + 1e-9) { bestAmt = amt; ties.length = 0; ties.push(p); }
+          else if (Math.abs(amt - bestAmt) <= 1e-9 && amt > 1e-9) ties.push(p);
         }
-        if (!best || bestAmt <= 1e-9) break;
+        if (!ties.length || bestAmt <= 1e-9) break;
+        const pick = ties.length === 1 ? ties[0]
+          : ties[Math.min(ties.length - 1, Math.floor((rng ? rng() : Math.random()) * ties.length))];
         const take = Math.min(bestAmt, amount - got);
-        ensureStored(best)[resource] = bestAmt - take;
+        ensureOwned(pick)[resource] -= take;
         got += take;
       }
       return got;
+    }
+    // IDLE: for a colony whose `owned[resource]` is still negative after
+    // borrowing, idle worked cells that CONSUME that resource (net contribution
+    // < 0) until the balance is >= 0 or no more cells can be idled (then set the
+    // resource to 0). Deterministic order via a seeded shuffle. Returns true if
+    // any cell was idled. Never idles the biodome cell.
+    function economyIdle(col, resource, rng) {
+      const homeKey = cellKey(col.x, col.y);
+      let changed = false;
+      let guard = 0;
+      while ((ensureOwned(col)[resource] || 0) < -1e-9 && guard++ < 200) {
+        // Candidate worked cells (excluding the biodome) whose net per-turn
+        // contribution to `resource` is negative.
+        const extras = (col.worked || []).filter((k) => k !== homeKey);
+        const consumers = [];
+        for (const k of extras) {
+          const [wx, wy] = k.split(",").map(Number);
+          const contrib = cellResourceNet(col, wx, wy, resource);
+          if (contrib < -1e-9) consumers.push({ k, contrib });
+        }
+        if (!consumers.length) { col.owned[resource] = 0; break; }
+        // Seeded "random": shuffle by rng, idle the first.
+        consumers.sort((a, b) => a.k.localeCompare(b.k)); // stable base order
+        const idx = Math.min(consumers.length - 1, Math.floor((rng ? rng() : Math.random()) * consumers.length));
+        const victim = consumers[idx];
+        col.worked = col.worked.filter((k) => k !== victim.k);
+        // Re-credit the consumption that cell would have cost this turn so the
+        // balance reflects idling it (its negative contribution is removed).
+        col.owned[resource] -= victim.contrib; // contrib<0 -> adds back
+        changed = true;
+      }
+      return changed;
+    }
+    // Net per-turn contribution of a single worked cell to one resource
+    // (terrain base + terrain-bonus + building bonus/upkeep on that cell). Used
+    // by economyIdle to find consumers. Does NOT include population consumption
+    // (that is colony-wide, not per-cell).
+    function cellResourceNet(col, x, y, resource) {
+      let v = 0;
+      const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(x, y))]) || {};
+      v += readResMap(tt.base)[resource];
+      const tb = bonusDefAt(x, y);
+      if (tb && tb.bonus) v += readResMap(tb.bonus)[resource];
+      for (const b of gameState.buildings) {
+        if (b.owner !== col.owner || b.type === 1) continue;
+        if (b.x !== x || b.y !== y) continue;
+        if (!isOperational(b)) continue;
+        const def = buildingType(b.type) || {};
+        v += readResMap(def.bonus)[resource];
+        // upkeep (costPerYear) reduces the net for material/energy/water/wealth
+        const up = readResMap(def.costPerYear);
+        v -= up[resource];
+      }
+      return v;
+    }
+
+    // ---- Unified per-turn economy pipeline (Tasks 5+6) ----------------------
+    // Runs the 6-step economy for ALL owners (human + AI), equally. Returns a
+    // Map(col -> colonyStats result) so the caller can snapshot per-colony rates
+    // and aggregate the human panel. Also marks disbanded colonies with
+    // `_disbanded = true` (caller filters them out of gameState.buildings).
+    //
+    // Steps (per owner's federation; colonies processed in REVERSE founding
+    // order; ALL colonies finish step 1 before any borrowing):
+    //   1. delta -> add to colony.owned (may temporarily exceed max).
+    //   2. borrow for negative owned (except happiness).
+    //   3. idle worked cells for still-negative resources.
+    //   4. clamp happiness to [-max,max]; population<=0 disbands the colony.
+    //   5. overflow owned above colony max into federation (capped at fed max,
+    //      discard beyond). population capped at colony; happiness excluded.
+    //   6. federation happiness = population-weighted average of colonies.
+    function applyEconomyTurn(turnNo) {
+      const statsByCol = new Map();
+      invalidateColonyConnectivity();
+      // Group surviving biodomes by owner.
+      const byOwner = new Map();
+      for (const b of gameState.buildings) {
+        if (b.type !== 1 || b.inTransit) continue;
+        if (!byOwner.has(b.owner)) byOwner.set(b.owner, []);
+        byOwner.get(b.owner).push(b);
+      }
+      const NON_HAPPINESS = ["energy", "food", "material", "water", "wealth"]; // borrow/idle set
+      for (const [owner, colsAll] of byOwner) {
+        // Reverse founding order: newest (highest seq) first.
+        const cols = colsAll.slice().sort((a, z) =>
+          ((z.seq || 0) - (a.seq || 0)));
+        const maxByCol = new Map();
+
+        // --- Step 1: compute delta, add to owned (all colonies first). --------
+        for (const col of cols) {
+          ensureWorked(col);
+          pruneWorkedToControl(col);
+          const cap = workCap(col);
+          const homeKey = cellKey(col.x, col.y);
+          const extras = col.worked.filter((k) => k !== homeKey).slice(0, cap);
+          col.worked = [homeKey, ...extras];
+          const st = colonyStats(col);
+          statsByCol.set(col, st);
+          const owned = ensureOwned(col);
+          // Fold any mid-turn construction/payment debits (made to col.stored by
+          // payColonyCost between turns) back into owned before applying delta.
+          syncLegacyToOwned(col);
+          for (const k of RESOURCE_KEYS) owned[k] += (st.delta[k] || 0);
+          maxByCol.set(col, colonyMaxStorage(col));
+        }
+
+        // --- Step 2: borrow for negative non-happiness resources. -------------
+        for (const col of cols) {
+          const owned = ensureOwned(col);
+          const rng = _seededRng((turnNo | 0) * 2654435761 ^ ((col.seq || 0) * 40503));
+          for (const k of NON_HAPPINESS) {
+            if (owned[k] < -1e-9) {
+              const got = economyBorrow(col, k, -owned[k], rng);
+              owned[k] += got;
+            }
+          }
+        }
+
+        // --- Step 3: idle cells for still-negative resources. -----------------
+        for (const col of cols) {
+          const owned = ensureOwned(col);
+          const rng = _seededRng((turnNo | 0) * 97 ^ ((col.seq || 0) * 193));
+          const over = [];
+          for (const k of NON_HAPPINESS) {
+            if (owned[k] < -1e-9) { economyIdle(col, k, rng); if (owned[k] < -1e-9) over.push(k); if (owned[k] < 0) owned[k] = 0; }
+          }
+          col._deficitResources = over.length ? over : null;
+        }
+
+        // --- Step 4: clamp happiness; disband zero-population colonies. --------
+        const survivors = [];
+        for (const col of cols) {
+          const owned = ensureOwned(col);
+          const max = maxByCol.get(col) || colonyMaxStorage(col);
+          const hCap = max.happiness || 0;
+          owned.happiness = Math.max(-hCap, Math.min(hCap, owned.happiness));
+          if (owned.population <= 0) {
+            col._disbanded = true;
+          } else {
+            survivors.push(col);
+          }
+        }
+
+        // --- Step 5: overflow colony -> federation (capped), discard beyond. ---
+        const fed = federationOwnedOf(owner);
+        const fedMax = federationMaxStorage(owner);
+        for (const col of survivors) {
+          const owned = ensureOwned(col);
+          const max = maxByCol.get(col) || colonyMaxStorage(col);
+          for (const k of RESOURCE_KEYS) {
+            if (k === "happiness") continue; // handled by step 6
+            const cap = max[k] || 0;
+            if (k === "population") { if (owned[k] > cap) owned[k] = cap; continue; }
+            if (owned[k] <= cap) { if (owned[k] < 0) owned[k] = 0; continue; }
+            let excess = owned[k] - cap;
+            owned[k] = cap;
+            // Overflow routes to the federation only if connected to the capital.
+            if (colonyConnectedToCapital(col)) {
+              const room = Math.max(0, (fedMax[k] || 0) - (fed[k] || 0));
+              const moved = Math.min(excess, room);
+              fed[k] = (fed[k] || 0) + moved;
+              // any excess beyond federation max is discarded
+            }
+          }
+        }
+        // Clamp federation pool to its max (safety) + mirror treasury.
+        for (const k of RESOURCE_KEYS) {
+          if (k === "happiness" || k === "population") continue;
+          const cap = fedMax[k] || 0;
+          if (fed[k] > cap) fed[k] = cap;
+          if (fed[k] < 0) fed[k] = 0;
+        }
+        const fedObj = federationOf(owner);
+        if (fedObj) fedObj.treasury = fed.wealth;
+
+        // --- Step 6: federation happiness = population-weighted average. -------
+        let popSum = 0, hpSum = 0;
+        for (const col of survivors) {
+          const o = ensureOwned(col);
+          popSum += o.population; hpSum += o.population * o.happiness;
+        }
+        fed.happiness = popSum > 0 ? (hpSum / popSum) : 0;
+
+        // Mirror owned -> legacy fields so existing UI/readers keep working
+        // (removed in Task 7).
+        for (const col of survivors) syncOwnedToLegacy(col);
+      }
+      return statsByCol;
     }
 
     // Total of `resource` available across colonies connected to `col`
@@ -3627,8 +3884,31 @@
     // borrowing before committing to drain peers.
     function connectedAvailable(col, resource) {
       let sum = 0;
-      for (const p of connectedColonies(col)) sum += (ensureStored(p)[resource] || 0);
+      for (const p of connectedColonies(col)) sum += (ensureOwned(p)[resource] || 0);
       return sum;
+    }
+    // Borrow up to `amount` of `resource` from the colony's CONNECTED same-owner
+    // peers (richest first), debiting their `owned` pool (and re-mirroring to
+    // legacy fields). Used by construction-cost payment (payColonyCost), which
+    // is independent of the per-turn economy pipeline. Returns the amount got.
+    function borrowFromConnected(col, resource, amount) {
+      if (!(amount > 0)) return 0;
+      const peers = connectedColonies(col);
+      if (!peers.length) return 0;
+      let got = 0, guard = 0;
+      while (amount - got > 1e-9 && guard++ < peers.length + 1) {
+        let best = null, bestAmt = 0;
+        for (const p of peers) {
+          const amt = ensureOwned(p)[resource] || 0;
+          if (amt > bestAmt) { bestAmt = amt; best = p; }
+        }
+        if (!best || bestAmt <= 1e-9) break;
+        const take = Math.min(bestAmt, amount - got);
+        ensureOwned(best)[resource] = bestAmt - take;
+        syncOwnedToLegacy(best);
+        got += take;
+      }
+      return got;
     }
 
     // Pay a resource cost `cost` from colony `col`'s storage (`pool` === its
@@ -3887,6 +4167,35 @@
       return { pos, neg };
     }
 
+    // Sum of per-cell `bonus.population` (a percent, ×100 scale) over the
+    // colony's biodome cell + worked cells: terrain `base.population` +
+    // terrain-bonus `bonus.population` + worked-building `bonus.population`.
+    // Excludes the happiness growth bonus (added by colonyStats). Returns a
+    // percentage: new population = owned.population * (this + happiness×100)/100.
+    function colonyPopPercent(col) {
+      let pct = 0;
+      const homeKey = cellKey(col.x, col.y);
+      const cap = workCap(col);
+      const extras = (col.worked || []).filter((k) => k !== homeKey).slice(0, cap);
+      const worked = [homeKey, ...extras];
+      const workedSet = new Set(worked);
+      // Terrain base + terrain-bonus population on each worked cell.
+      for (const k of worked) {
+        const [wx, wy] = k.split(",").map(Number);
+        const tt = (CONFIG.terrainTypes && CONFIG.terrainTypes[String(terrainAt(wx, wy))]) || {};
+        pct += readResMap(tt.base).population;
+        const tb = bonusDefAt(wx, wy);
+        if (tb && tb.bonus) pct += readResMap(tb.bonus).population;
+      }
+      // Worked buildings' bonus.population (biodome always worked).
+      for (const b of colonyBuildings(col)) {
+        if (!workedSet.has(cellKey(b.x, b.y))) continue;
+        const def = buildingType(b.type) || {};
+        pct += readResMap(def.bonus).population;
+      }
+      return pct;
+    }
+
     // Compute a colony's CURRENT per-year budget/happiness/growth for the stats
     // panel. Mirrors the math in growColonies but does not mutate state.
     function colonyStats(col) {
@@ -3898,7 +4207,7 @@
 
       const b = colonyBudget(col);
       const stored = ensureStored(col);
-      const caps = colonyStorageCaps(col);
+      const caps = colonyMaxStorage(col);
       const growthBonus = b.growthBonus;
       const consumption = b.consumption;
       const netFood = b.net.food;
@@ -3923,13 +4232,17 @@
       const storedHappiness = Math.max(-happinessCap, Math.min(happinessCap, col.storedHappiness || 0));
       const maxHappBonus = (cfg.maxHappinessGrowthBonus != null) ? cfg.maxHappinessGrowthBonus : 0.01;
       const happBonus = Math.min(maxHappBonus, Math.abs(happinessRate) * happPerUnit);
-      let rate;
-      if (storedHappiness >= 0) {
-        rate = baseRate + happBonus + growthBonus;
-      } else {
-        rate = -(baseRate + happBonus) + growthBonus;
-      }
-      if (rate < -0.5) rate = -0.5;
+      // Population growth (new model): the per-turn delta is a PERCENT (×100
+      // scale) = sum of config `bonus.population` over worked cells + buildings
+      // (colonyPopPercent) PLUS the happiness growth bonus in percentage points
+      // (±happBonus×100, sign by stored-happiness polarity: happy grows,
+      // unhappy shrinks). growthRate is kept as a FRACTION (percent/100) so the
+      // existing `pct(growthRate)` displays still show a percentage.
+      const popPercentBonus = colonyPopPercent(col);                 // percent points from config
+      const happinessPercent = (storedHappiness >= 0 ? happBonus : -happBonus) * 100; // percent points
+      let popDeltaPercent = popPercentBonus + happinessPercent;      // total percent/yr
+      let rate = popDeltaPercent / 100;                              // fraction/yr
+      if (rate < -0.5) { rate = -0.5; popDeltaPercent = -50; }
       // Whether the colony is over budget: any resource shortfall exceeds its
       // current storage.
       const over = [];
@@ -3940,6 +4253,18 @@
         population: col.population || 0,
         growthRate: rate,
         popDelta: (col.population || 0) * rate,
+        popDeltaPercent,
+        popPercentBonus,
+        happinessPercent,
+        // Unified 7-resource per-turn delta (owned change this turn): the 6
+        // material resources come from colonyBudget's net; happiness is the net
+        // happiness rate; population is owned.population × popDeltaPercent/100.
+        delta: {
+          energy: b.net.energy, food: b.net.food, material: b.net.material,
+          water: b.net.water, wealth: b.net.wealth,
+          happiness: happinessRate,
+          population: (col.population || 0) * rate,
+        },
         // Net per-year rates (production − needs), per resource.
         food: b.net.food, material: b.net.material, energy: b.net.energy, water: b.net.water, wealthRate: b.net.wealth,
         consumption, netFood,
@@ -3948,14 +4273,16 @@
         stored, caps, over,
         rateBreakdown: b.breakdown,
         happinessCap,
-        // Breakdown of the growth rate (sums to growthRate, before the -0.5 floor):
-        //  - base: the Biodome base rate, positive while the colony is happy and
-        //    negative while it is unhappy.
-        //  - happiness: the happiness-driven bonus (capped), same sign as base.
-        //  - buildings: net building/terrain growth modifiers (bonus.growth).
-        growthBase: (storedHappiness >= 0 ? baseRate : -baseRate),
-        growthHappiness: (storedHappiness >= 0 ? happBonus : -happBonus),
-        growthBuildings: growthBonus,
+        // Breakdown of the growth rate (fractions that sum to growthRate before
+        // the -0.5 floor):
+        //  - buildings: config population bonus from worked cells+buildings
+        //    (bonus.population, incl. biodome/terrain), as a fraction.
+        //  - happiness: happiness-driven bonus in fraction terms (happy +, unhappy -).
+        //  - base: retained for display compatibility (0 in the new model; the
+        //    biodome's contribution is part of `buildings`).
+        growthBase: 0,
+        growthHappiness: happinessPercent / 100,
+        growthBuildings: popPercentBonus / 100,
       };
     }
     // odd-q offset neighbors within N rings of (x,y) as a de-duped list.
@@ -4288,6 +4615,7 @@
       const bt = buildingType(1);
       const rec = { x, y, type: 1, owner, name, ownerName: species, improvement: improvementName(1),
                     population: (bt && bt.startPopulation) || 1000,
+                    seq: _nextColonySeq(),
                     worked: [cellKey(x, y)] };
       gameState.buildings.push(rec);
       gameState.colonies.push({ x, y, owner, name });
@@ -5319,7 +5647,69 @@
       if (typeof player.federation.treasury !== 'number' || !isFinite(player.federation.treasury)) player.federation.treasury = 0;
       if (typeof player.federation.taxRate !== 'number' || !isFinite(player.federation.taxRate)) player.federation.taxRate = federationDefaultTaxRate();
       player.federation.taxRate = Math.max(0, Math.min(20, player.federation.taxRate));
+      // Federation OWNED pool (7 resources). Treasury is federationOwned.wealth.
+      // Migrate a legacy numeric `treasury` into owned.wealth on first access.
+      if (!player.federation.owned || typeof player.federation.owned !== 'object') {
+        player.federation.owned = {
+          energy: 0, food: 0, material: 0, water: 0,
+          wealth: player.federation.treasury || 0, happiness: 0, population: 0,
+        };
+      }
+      for (const k of RESOURCE_KEYS) {
+        if (typeof player.federation.owned[k] !== 'number' || !Number.isFinite(player.federation.owned[k])) {
+          player.federation.owned[k] = 0;
+        }
+      }
+      // Keep legacy `treasury` mirrored to owned.wealth (transition shim).
+      player.federation.treasury = player.federation.owned.wealth;
       return player.federation;
+    }
+    // Find the player object for a colony owner ('human' or an AI id).
+    function playerOf(owner) {
+      return (gameState.players || []).find(
+        (p) => p && (p.id === owner || (owner === 'human' && p.kind === 'human'))) || null;
+    }
+    // The federation (per-owner) object, or null when the owner has no player.
+    function federationOf(owner) {
+      const p = playerOf(owner);
+      return p ? ensureFederation(p) : null;
+    }
+    // The federation OWNED pool (7 resources) for an owner. Falls back to a
+    // fresh zeroed pool when the owner has no player object.
+    function federationOwnedOf(owner) {
+      const fed = federationOf(owner);
+      if (fed) return fed.owned;
+      return { energy: 0, food: 0, material: 0, water: 0, wealth: 0, happiness: 0, population: 0 };
+    }
+    // A federation's colonies (surviving biodomes for an owner), i.e. all the
+    // colonies that pool resources together.
+    function federationColonies(owner) {
+      return (gameState.buildings || []).filter(
+        (b) => b.type === 1 && b.owner === owner && !b.inTransit);
+    }
+    // FEDERATION MAX STORAGE (7 resources) = sum of each colony's worked
+    // buildings' `federationStorage` across all colonies in the federation.
+    function federationMaxStorage(owner) {
+      const max = {}; for (const k of RESOURCE_KEYS) max[k] = 0;
+      for (const col of federationColonies(owner)) {
+        for (const b of colonyBuildings(col)) {
+          if (!isBuildingWorked(col, b)) continue;
+          const def = buildingType(b.type) || {};
+          const fs = readResMap(def.federationStorage);
+          for (const k of RESOURCE_KEYS) max[k] += fs[k];
+        }
+      }
+      return max;
+    }
+    // The federation CAPITAL for an owner = earliest-founded surviving colony
+    // (lowest `seq`). Null when the owner has no surviving colony.
+    function capitalOf(owner) {
+      let best = null;
+      for (const col of federationColonies(owner)) {
+        const seq = (typeof col.seq === 'number') ? col.seq : Infinity;
+        if (!best || seq < ((typeof best.seq === 'number') ? best.seq : Infinity)) best = col;
+      }
+      return best;
     }
     // Operational (not in-transit) colonies owned by a player id/'human'.
     function playerColonies(owner) {
@@ -6557,7 +6947,7 @@
       const pct = (r) => `${sign(r * 100)}${nf(r * 100, 2)}%/yr`;
       const growLabel = s.storedHappiness < 0 ? "declining" : "growing";
       // Per-colony stored resources (each colony holds its own budget).
-      const res = s.stored;
+      const res = ensureOwned(col); // unified 7-resource owned pool
       const overNote = s.over && s.over.length
         ? `<div class="stat-note stat-neg">Over budget: ${s.over.join(", ")} storage is empty. Deselect worked buildings to idle them and fit the yearly budget.</div>`
         : "";
@@ -7435,6 +7825,8 @@
       if (gameState.players && gameState.players[0] && gameState.players[0].kind === 'human') {
         gameState.players[0].name = gameState.playerName;
       }
+      // Assign/repair stable colony founding sequences (for capital + ordering).
+      ensureColonySeqs();
 
       // Fog of war. Restore a saved visible set if present; otherwise seed a
       // fresh circle around a random land tile for a NEW game (no buildings yet).

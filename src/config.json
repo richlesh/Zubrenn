@@ -25,6 +25,7 @@
     "submarine": { "food": 1, "material": 1, "energy": 1, "water": 0.1, "wealth": 1 },
     "carrier": { "food": 2, "material": 2, "energy": 2, "water": 0.1, "wealth": 2 }
   },
+  // terrain cells are 10km diameter
   "terrainTypes": {
     "1": {
       "name": "Sea",
@@ -523,12 +524,13 @@
       "name": "Biodome",
       "icon": "biodome.png",
       "startPopulation": 1000,
-      "growthRate": 0.01,
+//      "growthRate": 0.01,
       "prerequisiteBuildings": [],
       "buildCost": { "material": 3, "wealth": 5, "turns": 2 },
       "costPerYear": { "material": 0, "energy": 1, "water": 0.1, "wealth": 0 },
-      "bonus": { "food": 1, "material": 1, "energy": 1, "growth": 0, "water": 0.5, "wealth": 1 },
-      "storage": { "food": 20, "material": 20, "energy": 20, "water":  0.5, "wealth": 50, "happiness": 25 }
+      "bonus": { "food": 1, "material": 1, "energy": 1, "population": 1, "water": 0.5, "wealth": 1 },
+      "storage": { "food": 20, "material": 20, "energy": 20, "water":  0.5, "wealth": 50, "happiness": 25, "population": 5000 },
+      "federationStorage": { "food": 20, "material": 20, "energy": 20, "water":  2, "wealth": 50, "happiness": 25 }
     },
     "2": {
       "name": "Farm",
@@ -536,7 +538,7 @@
       "prerequisiteBuildings": [1,3],
       "buildCost": { "material": 3, "energy": 2, "wealth": 2, "turns": 1 },
       "costPerYear": { "material": 1, "energy": 1, "water": 0.5, "wealth": 0.5 },
-      "bonus": { "food": 3, "material": 0, "energy": 0, "growth": 0.0025, "wealth": 1 },
+      "bonus": { "food": 3, "material": 0, "energy": 0, "population": 0.25, "wealth": 1 },
       "storage": { "food": 30, "material": 0, "energy": 0, "wealth": 0, "happiness": 0 }
     },
     "3": {
@@ -545,7 +547,7 @@
       "prerequisiteBuildings": [1],
       "buildCost": { "material": 2, "energy": 2, "wealth": 2, "turns": 1 },
       "costPerYear": { "material": 0, "energy": 0, "wealth": 0.5 },
-      "bonus": { "food": 0, "material": 0, "energy": 6, "growth": 0, "wealth": 0 },
+      "bonus": { "food": 0, "material": 0, "energy": 6, "population": 0, "wealth": 0 },
       "storage": { "food": 0, "material": 0, "energy": 0, "wealth": 0, "happiness": 0 }
     },
     "4": {
@@ -554,7 +556,7 @@
       "prerequisiteBuildings": [3],
       "buildCost": { "material": 5, "energy": 5, "wealth": 5, "turns": 3 },
       "costPerYear": { "material": 2, "energy": 3, "water": 1, "wealth": 1 },
-      "bonus": { "food": 0, "material": 5, "energy": 0, "growth": -0.0025, "wealth": 1, "happiness": -0.5 },
+      "bonus": { "food": 0, "material": 5, "energy": 0, "population": -0.25, "wealth": 1, "happiness": -0.5 },
       "storage": { "food": 0, "material": 50, "energy": 10, "wealth": 0, "happiness": 0 }
     },
     "5": {
@@ -563,7 +565,7 @@
       "prerequisiteBuildings": [3],
       "buildCost": { "material": 2, "energy": 1, "wealth": 1, "turns": 2 },
       "costPerYear": { "material": 0, "energy": 1, "wealth": 1 },
-      "bonus": { "food": 1, "material": 0, "energy": 0, "growth": 0, "wealth": 1 },
+      "bonus": { "food": 1, "material": 0, "energy": 0, "population": 0, "wealth": 1 },
       "storage": { "food": 10, "material": 10, "energy": 0, "wealth": 0, "happiness": 0 }
     },
     "6": {
@@ -572,7 +574,7 @@
       "prerequisiteBuildings": [3, 4],
       "buildCost": { "material": 3, "energy": 2, "wealth": 2, "turns": 2 },
       "costPerYear": { "material": 0, "energy": 1, "wealth": 1 },
-      "bonus": { "food": 0, "material": 0, "energy": 0, "growth": 0, "wealth": 2 },
+      "bonus": { "food": 0, "material": 0, "energy": 0, "population": 0, "wealth": 2 },
       "storage": { "food": 20, "material": 20, "energy": 0, "wealth": 0, "happiness": 0 },
       "range": 16
     },
@@ -582,7 +584,7 @@
       "prerequisiteBuildings": [2, 3, 4],
       "buildCost": { "material": 1, "energy": 1, "wealth": 2, "turns": 2 },
       "costPerYear": { "food": 1, "material": 0, "energy": 1, "wealth": 1 },
-      "bonus": { "food": 0, "material": 0, "energy": 0, "wealth": 0, "happiness": 0, "growth": 0 },
+      "bonus": { "food": 0, "material": 0, "energy": 0, "wealth": 0, "happiness": 0, "population": 0 },
       "storage": { "food": 0, "material": 0, "energy": 0, "wealth": 0, "happiness": 0 }
     },
     "8": {
@@ -591,7 +593,7 @@
       "prerequisiteBuildings": [2],
       "buildCost": { "material": 2, "energy": 2, "wealth": 2, "turns": 2 },
       "costPerYear": { "food": 0, "material": 0, "energy": 0, "wealth": 0 },
-      "bonus": { "food": 0, "material": 0, "energy": 0, "wealth": 0, "happiness": 0, "growth": 0 },
+      "bonus": { "food": 0, "material": 0, "energy": 0, "wealth": 0, "happiness": 0, "population": 0 },
       "storage": { "food": 50, "material": 0, "energy": 0, "wealth": 0, "happiness": 0 }
     },
     "9": {
@@ -600,7 +602,7 @@
       "prerequisiteBuildings": [4],
       "buildCost": { "material": 2, "energy": 2, "wealth": 2, "turns": 2 },
       "costPerYear": { "food": 0, "material": 0, "energy": 0.5, "wealth": 0.5 },
-      "bonus": { "food": 0, "material": 0, "energy": 0, "wealth": 0, "happiness": 0, "growth": 0 },
+      "bonus": { "food": 0, "material": 0, "energy": 0, "wealth": 0, "happiness": 0, "population": 0 },
       "storage": { "food": 0, "material": 50, "energy": 0, "wealth": 0, "happiness": 0 }
     },
     "10": {
@@ -609,7 +611,7 @@
       "prerequisiteBuildings": [3],
       "buildCost": { "material": 2, "energy": 2, "wealth": 2, "turns": 2 },
       "costPerYear": { "food": 0, "material": 0, "energy": 0.5, "wealth": 0.5 },
-      "bonus": { "food": 0, "material": 0, "energy": 0, "wealth": 3, "happiness": 0.25, "growth": 0 },
+      "bonus": { "food": 0, "material": 0, "energy": 0, "wealth": 3, "happiness": 0.25, "population": 0 },
       "storage": { "food": 0, "material": 0, "energy": 0, "wealth": 50, "happiness": 0 }
     },
     // Compressed-Air Storage
@@ -619,7 +621,7 @@
       "prerequisiteBuildings": [3, 10],
       "buildCost": { "material": 4, "energy": 2, "wealth": 2, "turns": 2 },
       "costPerYear": { "food": 0, "material": 0, "energy": 0.5, "wealth": 0.5 },
-      "bonus": { "food": 0, "material": 0, "energy": 0, "wealth": 0, "happiness": 0, "growth": 0 },
+      "bonus": { "food": 0, "material": 0, "energy": 0, "wealth": 0, "happiness": 0, "population": 0 },
       "storage": { "food": 0, "material": 0, "energy": 50, "wealth": 0, "happiness": 0 }
     },
     // Water Treatment Plant
@@ -629,7 +631,7 @@
       "prerequisiteBuildings": [3],
       "buildCost": { "material": 4, "energy": 2, "wealth": 2, "turns": 2 },
       "costPerYear": { "food": 0, "material": 0.5, "energy": 0.5, "wealth": 0.5 },
-      "bonus": { "food": 0, "material": 0, "energy": 0, "water": 1, "wealth": 0, "happiness": 0, "growth": 0 },
+      "bonus": { "food": 0, "material": 0, "energy": 0, "water": 1, "wealth": 0, "happiness": 0, "population": 0 },
       "storage": { "food": 0, "material": 0, "energy": 0, "water": 2, "wealth": 0, "happiness": 0 }
     }
   },

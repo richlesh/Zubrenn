@@ -30,16 +30,29 @@ with alien AI opponents for resources.
   land extra food. Every mountain region gets at least two rivers.
 - **Colonies & buildings** — found colonies (Biodomes) and build Farms, Solar
   Panels, Factories, and **Docks** within your zone of control.
-- **Economy** — each colony works surrounding tiles to produce Food, Material,
-  Energy, and Wealth, and keeps its **own stored resources**. A building only
-  contributes — its production, upkeep, **and storage** — when its cell is
-  **worked**; an idle building does nothing and provides no storage. Every year
-  the colony's excess production is stored (up to its worked buildings' storage
-  caps) and any shortfall is drawn from storage; if a resource runs out,
-  buildings must be **idled** (their cells deselected) to fit the budget.
-- **Happiness & growth** — each colony accumulates **stored happiness** from its
-  food balance; positive happiness grows the population and negative happiness
-  shrinks it.
+- **Economy** — a single, config-driven model governs seven resource types
+  (**Energy, Food, Material, Water, Wealth, Happiness, Population**) identically
+  for you and the AI. Each colony holds its own **owned** amounts for all seven,
+  clamped to its **max storage** (the sum of the `storage` keys of its worked
+  buildings and worked cells). Each turn a colony's **delta** per resource is the
+  sum, over its biodome and worked cells, of terrain `base` + terrain-bonus
+  `bonus` + building `bonus`, minus population consumption
+  (`unitCosts.population`). A building only contributes — production, upkeep,
+  **and storage** — when its cell is **worked**. Shortfalls are covered by
+  **borrowing** from the Federation and connected colonies; if still short, the
+  colony **idles** worked cells; surplus beyond a colony's max **overflows** into
+  the Federation pool.
+- **Federation** — all of a player's colonies form a Federation with its own
+  pooled **owned** resources and **max storage** (the sum of worked buildings'
+  `federationStorage`). The Federation **treasury** is its owned Wealth. The
+  earliest-founded surviving colony is the **capital**; only colonies network-
+  connected to the capital can draw from (or overflow into) the Federation pool.
+- **Happiness & growth** — each colony accumulates **happiness** (owned) from its
+  food balance, buildings, and terrain, clamped to ±its happiness storage.
+  Population grows each turn by a percentage = the sum of `bonus.population`
+  values on its worked cells/buildings plus a happiness bonus (positive happiness
+  grows the population, negative shrinks it). Federation happiness is the
+  population-weighted average of its colonies.
 - **Prerequisites** — some buildings require others first (e.g. a Factory needs
   a Solar Panel in the colony).
 - **Transport network** — build **Roads** and **Monorails** overland, dig
@@ -585,10 +598,14 @@ without code changes:
   `bridgeColor`, `planningPathColor`, `underConstructionColor`, `launchPathColor`,
   `workedCellColor` — transport/overlay costs and colors.
 - `zoneOfControlSize` — population thresholds that expand a colony's control radius.
-- Economy constants: `foodPerColonistUnit` (food eaten per 1,000 colonists),
-  `happinessGrowthPerUnit` and `maxHappinessGrowthBonus` (how food-driven
-  happiness converts to growth, capped), `riverAdjacentFoodBonus`, and
-  `riverAdjacentWealthBonus`.
+- Economy constants: `unitCosts.population` (per-1,000-colonist consumption of
+  each resource, with `unitSize`), `happinessGrowthPerUnit` and
+  `maxHappinessGrowthBonus` (how food/terrain/building happiness converts to a
+  population-growth bonus, capped), `riverAdjacentBonus` and `seaAdjacentBonus`
+  (per-resource yields for cells beside a river/canal or the sea), and
+  `federationTaxRate` (per-colony happiness penalty funding the Federation).
+  Each building may define `federationStorage` (its contribution to the
+  Federation's pooled max storage).
 - `removeImprovementCost` (remove a building), `removeCanalCost` (remove a
   canal), and `removeTransportCost` (remove a road/monorail) — each an
   Energy/Food cost plus a `turns` completion time.
@@ -604,12 +621,15 @@ without code changes:
   terrain-bonus count (how many of each `terrainBonus` type were placed,
   including zeros). Set to `false` to disable.
 
-**Population growth:** each colony builds up **stored happiness** from its food
-balance (`netFood` = food produced − colonists' consumption), clamped to
-**±(sum of its worked buildings' happiness storage)** per colony. While stored happiness is positive the
-colony grows; when negative it shrinks. The per-year growth rate is the Biodome
-`growthRate` plus a happiness term (`happinessRate × happinessGrowthPerUnit`,
-capped at `maxHappinessGrowthBonus`) plus building `bonus.growth` modifiers.
+**Population growth:** population is one of the seven resources. Each turn a
+colony's growth **percentage** is the sum of the `bonus.population` values on its
+worked cells, terrain bonuses, and worked buildings, **plus** a happiness term
+(`happinessRate × happinessGrowthPerUnit`, capped at `maxHappinessGrowthBonus`,
+expressed in percentage points and added when happiness is positive, subtracted
+when negative). The new population is `population × percentage ÷ 100`. Happiness
+itself (owned, clamped to ±the colony's happiness storage) accumulates from the
+food balance (`netFood` = food produced − colonists' consumption), building and
+terrain happiness, and the Federation tax penalty.
 
 A plain-language summary of these rules is generated in
 [`src/resources/system_prompt.md`](src/resources/system_prompt.md), which is
