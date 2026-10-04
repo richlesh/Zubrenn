@@ -62,8 +62,8 @@ try {
 // Game config (max AIs, min starting distance, starting year, AI placement
 // turn range, and the pool of alien names). Falls back to sane defaults.
 let CONFIG = {
-  maxAIs: 40, minColonyDistance: 20, startingYear: 2500,
-  aiPlacementMinTurns: 3, aiPlacementMaxTurns: 200, names: []
+  ai: { maxAgents: 40, minLandingTurns: 3, maxLandingTurns: 200 },
+  minColonyDistance: 20, startingYear: 2500, names: []
 };
 // Set when config.json fails to load/parse, so the app can warn the user (with
 // a line/column clue) once a window is available. Null when config loaded OK.

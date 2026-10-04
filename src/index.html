@@ -467,8 +467,8 @@
     let _visibleSet = null;
     const FOG_INITIAL_RADIUS = 20; // revealed circle around the random start tile
     const FOG_COLONY_RADIUS = 15;  // revealed circle around each human colony
-    let CONFIG = { maxAIs: 40, minColonyDistance: 20, startingYear: 2500,
-                   aiPlacementMinTurns: 3, aiPlacementMaxTurns: 200,
+    let CONFIG = { ai: { maxAgents: 40, minLandingTurns: 3, maxLandingTurns: 200 },
+                   minColonyDistance: 20, startingYear: 2500,
                    buildingTypes: { "biodome": { code: 1, name: "Biodome", startPopulation: 1000, growthRate: 0.01, buildCost: { turns: 0 }, bonus: { food: 1, material: 1, energy: 2, growth: 0, wealth: 1 } } },
                    names: [] };
     // The unscaled config as loaded; CONFIG is derived from it per the current
@@ -500,8 +500,8 @@
         divAll(b.buildCost);
       }
       // Global economy constants.
-      divAll(cfg.removeTransportCost);
-      divAll(cfg.removeCanalCost);
+      divAll(cfg.road && cfg.road.removeCost);
+      divAll(cfg.canal && cfg.canal.removeCost);
       divAll(cfg.removeImprovementCost);
       divAll(cfg.bridge && cfg.bridge.buildCost);
       // Per-1,000-colonist population costs (food/material/energy/water/wealth)
@@ -514,7 +514,8 @@
         }
       }
       // Adjacency bonuses are economy outputs: scale their food/water/wealth by d.
-      mul(cfg.riverAdjacentBonus, ['food', 'water', 'wealth']);
+      mul(cfg.river && cfg.river.adjacentBonus, ['food', 'water', 'wealth']);
+      mul(cfg.canal && cfg.canal.adjacentBonus, ['food', 'water', 'wealth']);
       mul(cfg.seaAdjacentBonus, ['food', 'water', 'wealth']);
       if (typeof cfg.happinessGrowthPerUnit === 'number') cfg.happinessGrowthPerUnit *= d;
       return cfg;
@@ -948,6 +949,26 @@
       }
       return false;
     }
+    // Edge-precise: true if one of THIS cell's own borders is a NATURAL river
+    // segment (excludes built canals). Mirrors nearRiver but river-only.
+    function nearNaturalRiver(x, y) {
+      const H = gameState.map.terrain.length;
+      const rs = riverEdgeSet();
+      for (const n of hexNeighborsRenderer(x, y)) {
+        if (n.y < 0 || n.y >= H) continue;
+        if (rs.has(edgeKey(x, y, n.x, n.y))) return true;
+      }
+      return false;
+    }
+    // Edge-precise: true if one of THIS cell's own borders is a built CANAL.
+    function nearCanal(x, y) {
+      const H = gameState.map.terrain.length;
+      for (const n of hexNeighborsRenderer(x, y)) {
+        if (n.y < 0 || n.y >= H) continue;
+        if (hasCanalEdge(x, y, n.x, n.y)) return true;
+      }
+      return false;
+    }
     // True if any edge-adjacent cell is sea (tile 1).
     function nearSea(x, y) {
       for (const n of hexNeighborsRenderer(x, y)) {
@@ -1006,29 +1027,25 @@
     // adjacent to a river segment OR a sea tile. (Wetlands are intentionally
     // excluded — they already carry their own happiness bonus.)
     const WATER_FOOD_TERRAINS = new Set([2, 3, 4, 5, 6, 10]); // + plains (10)
-    // Per-resource adjacency bonus from config. River/canal adjacency uses
-    // `riverAdjacentBonus` (nearRiver already counts built canals as rivers);
-    // sea adjacency uses `seaAdjacentBonus`. When adjacent to BOTH, the higher
-    // per-resource value wins. Each bonus object may carry food/water/wealth.
+    // Per-resource adjacency bonus from config. Natural-river adjacency uses
+    // CONFIG.river.adjacentBonus, built-canal adjacency uses
+    // CONFIG.canal.adjacentBonus, and sea adjacency uses seaAdjacentBonus. A cell
+    // bordering more than one source collects ALL applicable bonuses (they stack).
     function adjacencyBonus(x, y, resource) {
-      const river = CONFIG.riverAdjacentBonus || {};
-      const sea = CONFIG.seaAdjacentBonus || {};
-      const riverB = nearRiver(x, y) ? (river[resource] || 0) : 0;   // river OR canal
-      const seaB = nearSea(x, y) ? (sea[resource] || 0) : 0;
-      // River/canal and sea adjacency STACK: a cell adjacent to both a
-      // river/canal and the sea collects BOTH bonuses.
-      return riverB + seaB;
+      const p = adjacencyBonusParts(x, y, resource);
+      return p.river + p.canal + p.sea;
     }
     // Per-source breakdown of the adjacency bonus for one resource, so tooltips
-    // can attribute each contribution to "Adjacent to River" vs "Adjacent to
-    // Sea". River adjacency also counts built canals (same as nearRiver). Both
-    // can be nonzero when a cell is adjacent to a river/canal AND the sea.
+    // can attribute each contribution to River / Canal / Sea. Any combination can
+    // be nonzero when a cell borders more than one of them.
     function adjacencyBonusParts(x, y, resource) {
-      const river = CONFIG.riverAdjacentBonus || {};
+      const river = (CONFIG.river && CONFIG.river.adjacentBonus) || {};
+      const canal = (CONFIG.canal && CONFIG.canal.adjacentBonus) || {};
       const sea = CONFIG.seaAdjacentBonus || {};
-      const riverB = nearRiver(x, y) ? (river[resource] || 0) : 0;
+      const riverB = nearNaturalRiver(x, y) ? (river[resource] || 0) : 0;
+      const canalB = nearCanal(x, y) ? (canal[resource] || 0) : 0;
       const seaB = nearSea(x, y) ? (sea[resource] || 0) : 0;
-      return { river: riverB, sea: seaB };
+      return { river: riverB, canal: canalB, sea: seaB };
     }
     // Food bonus from river/canal/sea adjacency (habitable field terrains only).
     function waterFoodBonus(x, y) {
@@ -1051,17 +1068,20 @@
       return adjacencyBonus(x, y, 'water');
     }
     // Per-resource bonus a worked LAND cell gains when a road OR monorail is
-    // built ON it (roadAdjacentBonus in config). Applied ONCE regardless of how
-    // many road/monorail segments pass through the cell, and granted purely by
-    // the live tr.roads/tr.monorails sets — so it is lost automatically when the
-    // last road/monorail on the cell is removed or decays. (A bridge only ever
-    // sits on a road cell, so bridges are covered by hasRoad.)
+    // built ON it. The bonus is per-kind: a monorail cell uses
+    // CONFIG.monorail.adjacentBonus, a road cell uses CONFIG.road.adjacentBonus
+    // (a cell is one or the other — a monorail replaces any road there). Applied
+    // ONCE and granted purely by the live tr.roads/tr.monorails sets, so it is
+    // lost automatically when the road/monorail on the cell is removed or decays.
+    // (A bridge only ever sits on a road cell, covered by hasRoad.)
     function roadTileBonus(x, y, resource) {
       const terr = terrainAt(x, y);
       if (terr < 2 || terr > 11) return 0;       // land only
-      if (!(hasRoad(x, y) || hasMonorail(x, y))) return 0;
-      const cfg = CONFIG.roadAdjacentBonus || {};
-      return cfg[resource] || 0;
+      let cfg = null;
+      if (hasMonorail(x, y)) cfg = CONFIG.monorail && CONFIG.monorail.adjacentBonus;
+      else if (hasRoad(x, y)) cfg = CONFIG.road && CONFIG.road.adjacentBonus;
+      else return 0;
+      return (cfg && cfg[resource]) || 0;
     }
 
     // ---- transport network (roads / monorails / canals / bridges / airports)
@@ -1176,7 +1196,7 @@
     // Cost to remove one canal SEGMENT (a built border), from config. `turns`
     // is the build time, not a resource (see _resourceKeysOf).
     function canalRemovalCost() {
-      return CONFIG.removeCanalCost || { energy: 2, food: 1, turns: 2 };
+      return (CONFIG.canal && CONFIG.canal.removeCost) || { energy: 2, food: 1, turns: 2 };
     }
     function canalRemovalCostLabel() { return costLabelOf(canalRemovalCost()); }
     // Removal is paid from the colony controlling either of the border's cells.
@@ -1337,11 +1357,15 @@
     }
 
     // ---- road / monorail removal -------------------------------------------
-    // Cost (and turns) to remove the road/monorail on a cell, from config.
-    function transportRemovalCost() {
-      return CONFIG.removeTransportCost || { energy: 2, food: 1, turns: 2 };
+    // Cost (and turns) to remove the road/monorail on a cell, from config —
+    // monorail tiles use CONFIG.monorail.removeCost, roads CONFIG.road.removeCost.
+    function transportRemovalCost(x, y) {
+      const mono = (x != null && y != null && hasMonorail(x, y));
+      const src = mono ? (CONFIG.monorail && CONFIG.monorail.removeCost)
+                       : (CONFIG.road && CONFIG.road.removeCost);
+      return src || { energy: 2, food: 1, turns: 2 };
     }
-    function transportRemovalCostLabel() { return costLabelOf(transportRemovalCost()); }
+    function transportRemovalCostLabel(x, y) { return costLabelOf(transportRemovalCost(x, y)); }
     // True if the cell carries a road or a monorail.
     function cellHasTransport(x, y) { return hasRoad(x, y) || hasMonorail(x, y); }
     // The nearest same-owner colony (biodome) to a cell, by hex distance, or
@@ -1370,12 +1394,12 @@
       const col = transportRemovalColony(x, y, owner);
       if (!col) return false;
       const pool = ensureStored(col);
-      const c = transportRemovalCost();
+      const c = transportRemovalCost(x, y);
       return _resourceKeysOf(c).every((r) =>
         (pool[r] || 0) + connectedAvailable(col, r) >= c[r] - 1e-9);
     }
     function transportRemovalShortfallLabel(x, y, owner) {
-      const c = transportRemovalCost();
+      const c = transportRemovalCost(x, y);
       const col = transportRemovalColony(x, y, owner);
       const pool = col ? ensureStored(col) : {};
       const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
@@ -1420,7 +1444,7 @@
       if (isTransportRemoving(x, y)) return false;             // already removing
       const col = transportRemovalColony(x, y, owner);
       if (!col) return false;                                   // no colony within range
-      const c = transportRemovalCost();
+      const c = transportRemovalCost(x, y);
       const pay = payColonyCost(col, ensureStored(col), c);     // borrows if needed
       if (!pay.paid) return false;
       // Drop this cell from pending road/monorail build plans.
@@ -1537,10 +1561,10 @@
     function vertexCells(vkey) { const v = vertexGraph().get(vkey); return v ? v.cells : []; }
     // A canal SEGMENT (shared border of adjacent cells a,b) is allowed if both
     // cells are LAND (2-9), the border is NOT a river, and not already a canal.
-    // Whether a cell is within the canal build reach (config.canalBuildRadius,
+    // Whether a cell is within the canal build reach (config.canal.buildRadius,
     // default 5) of any of `owner`'s colonies.
     function cellInCanalRange(x, y, owner) {
-      const R = (CONFIG.canalBuildRadius != null) ? CONFIG.canalBuildRadius : 5;
+      const R = (CONFIG.canal && CONFIG.canal.buildRadius != null) ? CONFIG.canal.buildRadius : 5;
       for (const b of gameState.buildings) {
         if (b.type !== 1 || b.owner !== owner || b.inTransit) continue;
         if (hexDistance(b.x, b.y, x, y) <= R) return true;
@@ -1558,7 +1582,7 @@
       // Both cells a canal segment runs between must be an ALLOWED canal terrain.
       // `canalAllowedTerrain` is a list of terrain NAME keys (group names expand
       // via terrainGroups), same vocabulary as building/terrainBonus terrain.
-      const allowed = expandTerrainTokens(CONFIG.canalAllowedTerrain || []);
+      const allowed = expandTerrainTokens((CONFIG.canal && CONFIG.canal.terrain) || []);
       const na = terrainNameOf(ta), nb = terrainNameOf(tb);
       if (na == null || nb == null || !allowed.has(na) || !allowed.has(nb)) return false;
       // Not through/adjacent to impassable frozen: neither cell the canal runs
@@ -2198,15 +2222,26 @@
     // (lower = cheaper/faster to enter). Only index 0 (unimproved) is used
     // today; the road/sea/monorail/air entries are reserved for future
     // transport infrastructure.
-    function enterCost(x, y) {
+    // Movement cost to enter cell (x,y), optionally crossing from (fromX,fromY).
+    // Base cost is the terrain's unimproved movement. Crossing a river/canal
+    // BORDER adds river.crossingCost (turns) — but only when there is NO bridge
+    // spanning that border (a bridge lets you cross for free). When no from-cell
+    // is given, fall back to the legacy cell-based river-segment check.
+    function enterCost(x, y, fromX, fromY) {
       const tt = (terrainTypeById(terrainAt(x, y))) || {};
       const mv = Array.isArray(tt.movement) ? tt.movement[0] : 1; // [0] = unimproved
       let cost = (mv != null ? mv : 1);
-      const W = gameState.map.terrain[0].length;
-      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
-      const xx = wrap ? ((x % W) + W) % W : x;
-      if (riverSegmentSet().has(y * W + xx)) {
-        cost += (CONFIG.riverCrossingMovementCost != null ? CONFIG.riverCrossingMovementCost : 2);
+      const crossCost = (CONFIG.river && CONFIG.river.crossingCost != null) ? CONFIG.river.crossingCost : 2;
+      if (fromX != null && fromY != null) {
+        // Border-precise: only when the crossed border is a river/canal AND has no bridge.
+        if (borderIsRiverSegment(fromX, fromY, x, y) && !hasBridgeEdge(fromX, fromY, x, y)) {
+          cost += crossCost;
+        }
+      } else {
+        const W = gameState.map.terrain[0].length;
+        const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+        const xx = wrap ? ((x % W) + W) % W : x;
+        if (riverSegmentSet().has(y * W + xx)) cost += crossCost;
       }
       return cost;
     }
@@ -2241,7 +2276,7 @@
           if (foreign.has(key(nx, ny))) continue; // skip foreign-controlled cells
           const nk = key(nx, ny);
           if (done.has(nk)) continue;
-          const nd = cur.d + enterCost(nx, ny);
+          const nd = cur.d + enterCost(nx, ny, cur.x, cur.y);
           if (maxCost != null && nd > maxCost) continue;
           if (!dist.has(nk) || nd < dist.get(nk)) {
             dist.set(nk, nd); prev.set(nk, cur.k);
@@ -2287,7 +2322,7 @@
           if (foreign.has(key(nx, ny))) continue; // skip foreign-controlled cells
           const nk = key(nx, ny);
           if (done.has(nk)) continue;
-          const nd = cur.d + enterCost(nx, ny);
+          const nd = cur.d + enterCost(nx, ny, cur.x, cur.y);
           if (!dist.has(nk) || nd < dist.get(nk)) {
             dist.set(nk, nd); prev.set(nk, cur.k);
             pq.push({ k: nk, x: nx, y: ny, d: nd });
@@ -2548,6 +2583,11 @@
         food: foodOk ? fp.river : 0,
         wealth: landOk ? wp.river : 0,
         water: landOk ? tp2.river : 0,
+      });
+      add("Adjacent to Canal", {
+        food: foodOk ? fp.canal : 0,
+        wealth: landOk ? wp.canal : 0,
+        water: landOk ? tp2.canal : 0,
       });
       add("Adjacent to Sea", {
         food: foodOk ? fp.sea : 0,
@@ -5553,9 +5593,9 @@
     // (size 10+). The check is INCLUSIVE (>=), matching the "size N or greater"
     // wording — a colony at exactly the threshold qualifies.
     function transportMinPopulation(kind) {
-      if (kind === 'road') return (CONFIG.roadMinPopulation != null) ? CONFIG.roadMinPopulation : 3000;
-      if (kind === 'canal') return (CONFIG.canalMinPopulation != null) ? CONFIG.canalMinPopulation : 5000;
-      if (kind === 'monorail') return (CONFIG.monorailMinPopulation != null) ? CONFIG.monorailMinPopulation : 10000;
+      if (kind === 'road') return (CONFIG.road && CONFIG.road.minPopulation != null) ? CONFIG.road.minPopulation : 3000;
+      if (kind === 'canal') return (CONFIG.canal && CONFIG.canal.minPopulation != null) ? CONFIG.canal.minPopulation : 5000;
+      if (kind === 'monorail') return (CONFIG.monorail && CONFIG.monorail.minPopulation != null) ? CONFIG.monorail.minPopulation : 10000;
       return 0;
     }
     // Whether a colony is large enough to build the given transport type.
@@ -5730,8 +5770,8 @@
         { x: c.x + r,  y: c.y      }, { x: c.x + r2, y: c.y + yr },
         { x: c.x - r2, y: c.y + yr }, { x: c.x - r,  y: c.y      },
       ];
-      const vpxFloor = (CONFIG.canalVertexClickPixels != null) ? CONFIG.canalVertexClickPixels : 5;
-      const vFrac = (CONFIG.canalVertexClickFrac != null) ? CONFIG.canalVertexClickFrac : 0.28;
+      const vpxFloor = (CONFIG.canal && CONFIG.canal.vertexClickPixels != null) ? CONFIG.canal.vertexClickPixels : 5;
+      const vFrac = (CONFIG.canal && CONFIG.canal.vertexClickFraction != null) ? CONFIG.canal.vertexClickFraction : 0.28;
       const marginFrac = (CONFIG.cellClickBorderMargin != null) ? CONFIG.cellClickBorderMargin : 0.28;
       const vpx = Math.max(vpxFloor, vFrac * r);   // vertex hit radius
       const margin = marginFrac * r;               // edge/vertex suppression band
@@ -6389,11 +6429,14 @@
       }
       return units;
     }
-    // Per-segment YEARLY upkeep config for a transport kind. Bridges keep their
-    // upkeep under CONFIG.bridge.costPerYear; road/monorail/canal use
-    // CONFIG[kind + "MaintenanceCost"].
+    // Per-segment YEARLY upkeep config for a transport kind. Road and bridge keep
+    // their upkeep under CONFIG.road.costPerYear / CONFIG.bridge.costPerYear;
+    // monorail/canal use CONFIG[kind + "MaintenanceCost"].
     function _maintCostCfg(kind) {
+      if (kind === 'road') return (CONFIG.road && CONFIG.road.costPerYear) || null;
+      if (kind === 'monorail') return (CONFIG.monorail && CONFIG.monorail.costPerYear) || null;
       if (kind === 'bridge') return (CONFIG.bridge && CONFIG.bridge.costPerYear) || null;
+      if (kind === 'canal') return (CONFIG.canal && CONFIG.canal.costPerYear) || null;
       return CONFIG[kind + 'MaintenanceCost'];
     }
     function _maintPer(kind) {
@@ -6522,13 +6565,14 @@
       const tr = ensureTransport();
       const builtYear = tr.edgeBuiltYear || {};
       const yr = currentYear();
-      // Config-driven: minimum age (years) before a segment can fail, and the
-      // per-segment per-turn failure probability (fraction 0..1).
-      const MIN_FAIL_AGE = (CONFIG.catastrophicFailureMinAge != null) ? CONFIG.catastrophicFailureMinAge : 50;
-      const FAIL_CHANCE = (CONFIG.catastrophicFailureChance != null) ? CONFIG.catastrophicFailureChance : 0.0025;
       let anyFailed = false;
       for (const kind of ['road', 'monorail']) {
         const edgeSet = kind === 'monorail' ? tr.monorailEdges : tr.roadEdges;
+        // Per-kind config: minimum age (years) before a segment can fail, and the
+        // per-segment per-turn failure probability (fraction 0..1).
+        const cf = (CONFIG[kind] && CONFIG[kind].catastrophicFailure) || {};
+        const MIN_FAIL_AGE = (cf.minAge != null) ? cf.minAge : 50;
+        const FAIL_CHANCE = (cf.rate != null) ? cf.rate : 0.0025;
         for (const ek of Array.from(edgeSet)) {
           const by = builtYear[ek];
           const age = (typeof by === 'number') ? (yr - by) : Infinity; // legacy = old
@@ -6633,8 +6677,8 @@
 
       const unfundedRoad = Math.max(0, counts.roads - fundedRoad);
       const unfundedMono = Math.max(0, counts.monorails - fundedMono);
-      const roadDecay = (typeof CONFIG.roadDecayRate === 'number') ? CONFIG.roadDecayRate : 0.01;
-      const monoDecay = (typeof CONFIG.monorailDecayRate === 'number') ? CONFIG.monorailDecayRate : 0.01;
+      const roadDecay = (CONFIG.road && typeof CONFIG.road.decayRate === 'number') ? CONFIG.road.decayRate : 0.01;
+      const monoDecay = (CONFIG.monorail && typeof CONFIG.monorail.decayRate === 'number') ? CONFIG.monorail.decayRate : 0.01;
       const roadKill = Math.ceil(unfundedRoad * roadDecay);
       const monoKill = Math.ceil(unfundedMono * monoDecay);
       let destroyedRoads = 0, destroyedMono = 0;
@@ -7398,8 +7442,8 @@
           && !isTransportRemoving(hex.x, hex.y)
           && canAffordTransportRemoval(hex.x, hex.y, 'human')) {
         showRemoveTransport = true;
-        const turns = _turnsOf(transportRemovalCost(), 2);
-        ctxRemoveTransport.textContent = `Remove Transportation (${transportRemovalCostLabel()}, ${turns} turn${turns === 1 ? '' : 's'})`;
+        const turns = _turnsOf(transportRemovalCost(hex.x, hex.y), 2);
+        ctxRemoveTransport.textContent = `Remove Transportation (${transportRemovalCostLabel(hex.x, hex.y)}, ${turns} turn${turns === 1 ? '' : 's'})`;
         ctxRemoveTransport.classList.remove("disabled");
       }
       ctxRemoveTransport.hidden = !showRemoveTransport;
@@ -8615,10 +8659,11 @@
         const j = Math.floor(Math.random() * (i + 1));
         [names[i], names[j]] = [names[j], names[i]];
       }
-      const minT = CONFIG.aiPlacementMinTurns || 3;
-      const maxT = CONFIG.aiPlacementMaxTurns || 200;
+      const aiCfg = CONFIG.ai || {};
+      const minT = aiCfg.minLandingTurns || 3;
+      const maxT = aiCfg.maxLandingTurns || 200;
       const players = [{ id: 0, kind: 'human', name: gameState.playerName || 'Human', placed: false, modules: 1 }];
-      const n = Math.max(0, Math.min(aiCount, CONFIG.maxAIs || 40, names.length));
+      const n = Math.max(0, Math.min(aiCount, aiCfg.maxAgents || 40, names.length));
       for (let i = 0; i < n; i++) {
         players.push({
           id: i + 1, kind: 'ai', name: names[i] || ('AI ' + (i + 1)),
@@ -8738,10 +8783,10 @@
         terrainBonus: CONFIG.terrainBonus || null,
         bonuses: (map.bonuses || {}),
         bridgeColor: CONFIG.bridge && CONFIG.bridge.color,
-        roadColor: CONFIG.roadColor,
-        monorailColor: CONFIG.monorailColor,
-        riverColor: CONFIG.riverColor,
-        canalColor: CONFIG.canalColor,
+        roadColor: CONFIG.road && CONFIG.road.color,
+        monorailColor: CONFIG.monorail && CONFIG.monorail.color,
+        riverColor: CONFIG.river && CONFIG.river.color,
+        canalColor: CONFIG.canal && CONFIG.canal.color,
         planningPathColor: CONFIG.planningPathColor,
         underConstructionColor: CONFIG.underConstructionColor,
         zoneOfControlSize: CONFIG.zoneOfControlSize || null,
@@ -8776,12 +8821,12 @@
           const prox = hexMap.borderProximityAtEvent ? hexMap.borderProximityAtEvent(e) : null;
           // A canal may be started only by clicking essentially ON a vertex.
           // The hit radius is the larger of a fixed pixel floor
-          // (config.canalVertexClickPixels, default 5) and a zoom-scaled
-          // fraction of the hex radius (config.canalVertexClickFrac, default
+          // (config.canal.vertexClickPixels, default 5) and a zoom-scaled
+          // fraction of the hex radius (config.canal.vertexClickFraction, default
           // 0.28) so vertices remain clickable at any zoom while interior and
           // mid-edge clicks never offer "Build Canal".
-          const vpxFloor = (CONFIG.canalVertexClickPixels != null) ? CONFIG.canalVertexClickPixels : 5;
-          const vFrac = (CONFIG.canalVertexClickFrac != null) ? CONFIG.canalVertexClickFrac : 0.28;
+          const vpxFloor = (CONFIG.canal && CONFIG.canal.vertexClickPixels != null) ? CONFIG.canal.vertexClickPixels : 5;
+          const vFrac = (CONFIG.canal && CONFIG.canal.vertexClickFraction != null) ? CONFIG.canal.vertexClickFraction : 0.28;
           const vpx = prox ? Math.max(vpxFloor, vFrac * prox.radius) : vpxFloor;
           const onVertex = prox && prox.vertexDist <= vpx;
           _ctxVertex = (corner && onVertex)

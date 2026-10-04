@@ -769,12 +769,16 @@
   // Color overlaid on transport segments still under construction.
 
   "underConstructionColor": { "h": 0, "s": 0, "l": 0.5 },
-  // Maximum number of AI opponents selectable in the New Game dialog.
-  "maxAIs": 40,
-  // Earliest/latest turn an AI may first place its colony; each AI's placement
-  // turn is randomized within this inclusive range.
-  "aiPlacementMinTurns": 3,
-  "aiPlacementMaxTurns": 200,
+  // AI opponent settings:
+  //   maxAgents       - maximum number of AI opponents selectable in the New Game dialog
+  //   minLandingTurns - earliest turn an AI may first place (land) its colony
+  //   maxLandingTurns - latest such turn; each AI's landing turn is randomized
+  //                     within the inclusive [minLandingTurns, maxLandingTurns] range
+  "ai": {
+    "maxAgents": 40,
+    "minLandingTurns": 3,
+    "maxLandingTurns": 200
+  },
 
   // Minimum hex distance required between two colonies (used when founding
   // colonies and when picking the colony that pays to remove transport).
@@ -798,7 +802,6 @@
   // index of the highest threshold a colony's population meets is its ring size.
   "zoneOfControlSize": [0, 10000, 100000, 1000000],
 
-
   // Road bridges spanning a river/canal or a single sea tile (bridges are
   // road-only; monorails never need one):
   //   color      - bridge line color (HSL)
@@ -811,73 +814,86 @@
     "costPerYear": { "energy": 0.5, "material": 0.5, "water": 0, "wealth": 1 }
   },
 
-  // Color of built road segments.
-  "roadColor": { "h": 30, "s": 0.5, "l": 0.35 },
-  // Per-resource bonus a worked LAND cell gains when a road or monorail runs through it.
-  // Stacks with riverAdjacentBonus when adjacent to both.
-  "roadAdjacentBonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 2 },
-  // Cost + turns to remove a road/monorail tile, paid by the nearest colony.
-  "removeTransportCost": { "energy": 2, "food": 1, "turns": 2 },
-  // Per-segment YEARLY upkeep for each transport kind, drawn per resource from
-  // the Federation OWNED pool each turn. Accessed dynamically as
-  // CONFIG[kind + "MaintenanceCost"]. If roads/monorails can't be funded their
-  // segments decay (see *DecayRate); canals and bridges never decay.
-  "roadMaintenanceCost": { "energy": 0.5, "material": 1, "water": 0, "wealth": 0.75 },
-  // Fraction of UNFUNDED road segments destroyed per turn when upkeep is short.
-  "roadDecayRate": 0.01,
-  // Minimum colony population before roads may be built.
-  "roadMinPopulation": 3000,
-  // Per-turn probability (fraction, 0..1) that any single road/monorail segment
-  // OLDER than catastrophicFailureMinAge years fails catastrophically and is
-  // removed. 0.0025 = 0.25% chance per eligible segment per turn.
-  "catastrophicFailureChance": 0.0025,
-  // Minimum age in years before a road/monorail segment can fail catastrophically.
-  "catastrophicFailureMinAge": 50,
+  // Road network settings:
+  //   color         - built road segment line color (HSL)
+  //   adjacentBonus - per-resource bonus a worked LAND cell gains when a road OR
+  //                   monorail runs through it (stacks with riverAdjacentBonus)
+  //   removeCost    - cost + turns to remove a road/monorail tile (nearest colony pays)
+  //   costPerYear   - per-segment yearly upkeep, drawn per resource from the
+  //                   Federation owned pool (same model as monorail/canal/bridge)
+  //   decayRate     - fraction of UNFUNDED road segments destroyed per turn when short
+  //   minPopulation - minimum colony population before roads may be built
+  //   catastrophicFailure.rate   - per-turn probability (0..1) an aged road/monorail
+  //                                segment fails catastrophically (0.0025 = 0.25%)
+  //   catastrophicFailure.minAge - minimum segment age (years) to be failure-eligible
+  "road": {
+    "color": { "h": 30, "s": 0.5, "l": 0.35 },
+    "adjacentBonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 2 },
+    "removeCost": { "energy": 2, "food": 1, "turns": 2 },
+    "costPerYear": { "energy": 0.5, "material": 1, "water": 0, "wealth": 0.75 },
+    "decayRate": 0.01,
+    "minPopulation": 3000,
+    "catastrophicFailure": { "rate": 0.0025, "minAge": 50 }
+  },
 
-  // Color of built monorail segments.
-  "monorailColor": { "h": 40, "s": 1.0, "l": 0.5 },
-  // Cost + turns to remove a road/monorail tile, paid by the nearest colony.
-  "removeTransportCost": { "energy": 2, "food": 1, "turns": 2 },
-  "monorailMaintenanceCost": { "energy": 0.5, "material": 0.5, "water": 0, "wealth": 0.5 },
-  // Fraction of UNFUNDED monorail segments destroyed per turn when upkeep is short.
-  "monorailDecayRate": 0.01,
-  // Minimum colony population before monorails may be built.
-  "monorailMinPopulation": 10000,
-  // Per-turn probability (fraction, 0..1) that any single road/monorail segment
-  // OLDER than catastrophicFailureMinAge years fails catastrophically and is
-  // removed. 0.0025 = 0.25% chance per eligible segment per turn.
-  "catastrophicFailureChance": 0.0025,
-  // Minimum age in years before a road/monorail segment can fail catastrophically.
-  "catastrophicFailureMinAge": 50,
-  // Default Federation tax rate (happiness cost per colony that funds the
-  // Federation treasury); the New Game/Federation UI can override per game.
+  // Monorail network settings (parallel to `road`):
+  //   color         - built monorail segment line color (HSL)
+  //   adjacentBonus - per-resource bonus a worked LAND cell gains when a monorail
+  //                   runs through it (stacks with riverAdjacentBonus)
+  //   removeCost    - cost + turns to remove a monorail tile (nearest colony pays)
+  //   costPerYear   - per-segment yearly upkeep, drawn per resource from the
+  //                   Federation owned pool
+  //   decayRate     - fraction of UNFUNDED monorail segments destroyed per turn when short
+  //   minPopulation - minimum colony population before monorails may be built
+  //   catastrophicFailure.rate/minAge - aged-segment catastrophic failure (see road)
+  "monorail": {
+    "color": { "h": 40, "s": 1.0, "l": 0.5 },
+    "adjacentBonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 2 },
+    "removeCost": { "energy": 2, "food": 1, "turns": 2 },
+    "costPerYear": { "energy": 0.5, "material": 0.5, "water": 0, "wealth": 0.5 },
+    "decayRate": 0.01,
+    "minPopulation": 10000,
+    "catastrophicFailure": { "rate": 0.0025, "minAge": 50 }
+  },
 
-  // Color of natural rivers.
-  "riverColor": { "h": 240, "s": 1, "l": 0.5 },
-  // Color of built canals (drawn like rivers but lighter).
-  // Per-resource bonus a worked LAND cell gains when a river/canal runs along one
-  // of its borders (edge-precise). Stacks with seaAdjacentBonus when adjacent to both.
-  "riverAdjacentBonus": { "energy": 0, "food": 1, "material": 0, "water": 10, "wealth": 1 },
+  // Natural river network settings:
+  //   color         - river line color (HSL)
+  //   adjacentBonus - per-resource bonus a worked LAND cell gains when a natural
+  //                   river runs along one of its borders (edge-precise; stacks
+  //                   with canal.adjacentBonus and seaAdjacentBonus)
+  //   crossingCost  - extra movement cost (turns) to CROSS a river/canal border
+  //                   that has no bridge (applied to colony-launch paths, and to
+  //                   unit movement once combat is implemented)
+  "river": {
+    "color": { "h": 240, "s": 1, "l": 0.5 },
+    "adjacentBonus": { "energy": 0, "food": 2, "material": 0, "water": 10, "wealth": 4 },
+    "crossingCost": 2
+  },
 
-  "canalColor": { "h": 240, "s": 1, "l": 0.75 },
-  // Color of the previewed route while planning a road/monorail/canal.
-  // Cost + turns to remove one canal segment (border).
-  "removeCanalCost": { "energy": 2, "food": 1, "turns": 2 },
-  "canalMaintenanceCost": { "energy": 0.1, "material": 0.5, "water": 1, "wealth": 0.3 },
-  // Minimum colony population before canals may be dug.
-  "canalMinPopulation": 5000,
-  // Terrain a canal MAY be dug through, as terrain NAME keys (same vocabulary as
-  // other terrain settings; terrain-group names like "flatland"/"trees" also
-  // work). Both cells a canal segment runs between must be in this set. (Sea and
-  // the mountains/frozen are intentionally excluded.)
-  "canalAllowedTerrain": ["grassland", "hills", "forest", "jungle", "desert", "plains", "wetlands"],
-  // Max hex distance from a colony within which canals may be built.
-  "canalBuildRadius": 7,
-  // Canal-vertex click hit radius in pixels (absolute).
-  "canalVertexClickPixels": 7.5,
-  // Canal-vertex click hit radius as a fraction of cell size (whichever applies).
-  "canalVertexClickFrac": 0.21,
-
+  // Canal network settings (player-dug waterways; drawn like rivers but lighter):
+  //   color            - canal line color (HSL)
+  //   adjacentBonus    - per-resource bonus a worked LAND cell gains when a canal
+  //                      runs along one of its borders (stacks with river/sea)
+  //   removeCost       - cost + turns to remove one canal segment (border)
+  //   costPerYear      - per-segment yearly upkeep (Federation owned pool)
+  //   minPopulation    - minimum colony population before canals may be dug
+  //   terrain          - terrain NAME keys a canal may be dug through (group
+  //                      names like "flatland"/"trees" also work); both cells of
+  //                      a segment must qualify
+  //   buildRadius      - max hex distance from a colony within which canals build
+  //   vertexClickPixels   - canal-vertex click hit radius in pixels (absolute)
+  //   vertexClickFraction - canal-vertex click hit radius as a fraction of cell size
+  "canal": {
+    "color": { "h": 240, "s": 1, "l": 0.75 },
+    "adjacentBonus": { "energy": 0, "food": 2, "material": 0, "water": 10, "wealth": 4 },
+    "removeCost": { "energy": 2, "food": 1, "turns": 2 },
+    "costPerYear": { "energy": 0.1, "material": 0.5, "water": 1, "wealth": 0.3 },
+    "minPopulation": 5000,
+    "terrain": ["grassland", "hills", "forest", "jungle", "desert", "plains", "wetlands"],
+    "buildRadius": 7,
+    "vertexClickPixels": 7.5,
+    "vertexClickFraction": 0.21
+  },
 
   // Per-resource bonus a worked LAND cell gains when edge-adjacent to a sea tile.
   // Stacks with riverAdjacentBonus when adjacent to both.
@@ -895,8 +911,6 @@
   // Overland movement points a founding biodome travels per year (sets arrival
   // time based on terrain movement cost and river crossings).
   "biodomeMovementPerYear": 12,
-  // Extra movement points charged when a founding path crosses a river/canal.
-  "riverCrossingMovementCost": 2,
   // Hit-test fraction (of cell size) treated as the border region when picking a
   // cell border vs its interior on click.
   "cellClickBorderMargin": 0.28,
