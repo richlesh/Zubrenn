@@ -228,6 +228,11 @@
           <tr><td>Colonies</td><td id="fed-colonies">0</td></tr>
           <tr><td>Total population</td><td id="fed-population">0</td></tr>
           <tr><td>Treasury</td><td id="fed-treasury">0</td></tr>
+          <tr><td>Energy (stored / max)</td><td id="fed-stored-energy">0 / 0</td></tr>
+          <tr><td>Food (stored / max)</td><td id="fed-stored-food">0 / 0</td></tr>
+          <tr><td>Material (stored / max)</td><td id="fed-stored-material">0 / 0</td></tr>
+          <tr><td>Water (stored / max)</td><td id="fed-stored-water">0 / 0</td></tr>
+          <tr><td>Wealth (stored / max)</td><td id="fed-stored-wealth">0 / 0</td></tr>
         </tbody>
       </table>
       <div class="fed-field">
@@ -498,7 +503,7 @@
       divAll(cfg.removeTransportCost);
       divAll(cfg.removeCanalCost);
       divAll(cfg.removeImprovementCost);
-      divAll(cfg.bridgeCost);
+      divAll(cfg.bridge && cfg.bridge.buildCost);
       // Per-1,000-colonist population costs (food/material/energy/water/wealth)
       // are efforts/costs: DIVIDE them by d (harder difficulty -> higher costs).
       // Leave `unitSize` (the 1,000 divisor) untouched.
@@ -1088,6 +1093,10 @@
       // 0, when advanceTransportRemovals() finalizes it (drops the cell from
       // tr.roads/tr.monorails and any incident edge from the edge sets).
       tr.transportRemovals = Array.isArray(tr.transportRemovals) ? tr.transportRemovals : [];
+      // Built-YEAR per road/monorail segment edge (edgeKey -> game year), used to
+      // protect young segments from upkeep decay. A plain object (not a Map) so it
+      // serializes with save files. Keyed the same as tr.roadEdges/monorailEdges.
+      tr.edgeBuiltYear = (tr.edgeBuiltYear && typeof tr.edgeBuiltYear === 'object') ? tr.edgeBuiltYear : {};
       return tr;
     }
     function edgeKey(x1, y1, x2, y2) {
@@ -1144,7 +1153,7 @@
       const tt = (terrainTypeById(terrainAt(x, y))) || {};
       return tt.canalCostPerEdge || tt.canalCostPerTile || _emptyCost();
     }
-    function bridgeCostVal() { return CONFIG.bridgeCost || _emptyCost(); }
+    function bridgeCostVal() { return (CONFIG.bridge && CONFIG.bridge.buildCost) || _emptyCost(); }
 
     // Cost to build a ROAD segment between adjacent cells (from)->(to):
     //   average of the road build cost of FROM and TO. If the shared edge is a
@@ -1393,8 +1402,8 @@
       tr.roads.delete(ck);
       tr.monorails.delete(ck);
       const incident = (ek) => { const [a, b] = ek.split("|"); return a === ck || b === ck; };
-      for (const ek of Array.from(tr.roadEdges)) if (incident(ek)) tr.roadEdges.delete(ek);
-      for (const ek of Array.from(tr.monorailEdges)) if (incident(ek)) tr.monorailEdges.delete(ek);
+      for (const ek of Array.from(tr.roadEdges)) if (incident(ek)) { tr.roadEdges.delete(ek); delete tr.edgeBuiltYear[ek]; }
+      for (const ek of Array.from(tr.monorailEdges)) if (incident(ek)) { tr.monorailEdges.delete(ek); delete tr.edgeBuiltYear[ek]; }
       for (const ek of Array.from(tr.bridges)) if (incident(ek)) tr.bridges.delete(ek);
       // Removing transport can change colony connectivity.
       if (typeof invalidateColonyConnectivity === 'function') invalidateColonyConnectivity();
@@ -1546,9 +1555,12 @@
     function canalSegmentAllowed(ax, ay, bx, by) {
       const ta = terrainAt(ax, ay), tb = terrainAt(bx, by);
       if (ta < 2 || ta > 11 || tb < 2 || tb > 11) return false;   // both must be land (2-11)
-      // Disallow if either adjacent cell is of a config-listed terrain code.
-      const disallowed = CONFIG.canalDisallowedTerrain || [];
-      if (disallowed.includes(ta) || disallowed.includes(tb)) return false;
+      // Both cells a canal segment runs between must be an ALLOWED canal terrain.
+      // `canalAllowedTerrain` is a list of terrain NAME keys (group names expand
+      // via terrainGroups), same vocabulary as building/terrainBonus terrain.
+      const allowed = expandTerrainTokens(CONFIG.canalAllowedTerrain || []);
+      const na = terrainNameOf(ta), nb = terrainNameOf(tb);
+      if (na == null || nb == null || !allowed.has(na) || !allowed.has(nb)) return false;
       // Not through/adjacent to impassable frozen: neither cell the canal runs
       // between may be Frozen (terrain 9).
       if (isImpassableFrozen(ax, ay) || isImpassableFrozen(bx, by)) return false;
@@ -1790,6 +1802,7 @@
         // Record the built monorail segment edge; drop any road edges touching a
         // cell that just became a monorail (those road cells no longer exist).
         tr.monorailEdges.add(edgeKey(fx, fy, tx, ty));
+        tr.edgeBuiltYear[edgeKey(fx, fy, tx, ty)] = currentYear();
         _dropRoadEdgesAtCell(fx, fy); _dropRoadEdgesAtCell(tx, ty);
         // Monorails never need a bridge to cross a river/canal or a single sea
         // tile. If this exact segment edge carried a road bridge, that bridge is
@@ -1798,6 +1811,7 @@
       } else { // road (+ bridge over river or sea)
         tr.roads.add(cellKey(fx, fy)); tr.roads.add(cellKey(tx, ty));
         tr.roadEdges.add(edgeKey(fx, fy, tx, ty)); // record the built road segment
+        tr.edgeBuiltYear[edgeKey(fx, fy, tx, ty)] = currentYear();
         // Bridge this segment only if THIS border is a river/canal (edge-
         // precise, so a road merely running beside a river isn't bridged), or
         // if the segment spans a sea tile (sea crossing).
@@ -1813,7 +1827,7 @@
       const ck = cellKey(x, y);
       for (const ek of Array.from(tr.roadEdges)) {
         const [ka, kb] = ek.split("|");
-        if (ka === ck || kb === ck) tr.roadEdges.delete(ek);
+        if (ka === ck || kb === ck) { tr.roadEdges.delete(ek); delete tr.edgeBuiltYear[ek]; }
       }
     }
     // The resources (and how much more of each) a source colony's `pool` lacks
@@ -2841,6 +2855,8 @@
       advanceCanalRemovals();
       // Advance any scheduled road/monorail removals likewise.
       advanceTransportRemovals();
+      // Aged (>50 yr) road/monorail segments can fail catastrophically (1%/turn).
+      advanceCatastrophicFailures();
 
       updatePlayerPanel();
       if (badgeChanged && hexMap) hexMap.setBuildings(gameState.buildings);
@@ -5533,9 +5549,9 @@
         p && !p.edges && p.path && p.source && p.source.x === col.x && p.source.y === col.y);
     }
     // Minimum population a colony needs to build a given transport type (from
-    // config). road > 3000 (size 3+), canal > 5000 (size 5+), monorail > 10000
-    // (size 10+). The check uses strict ">", matching the "size N or greater"
-    // wording in the ruleset.
+    // config): road 3000 (size 3+), canal 5000 (size 5+), monorail 10000
+    // (size 10+). The check is INCLUSIVE (>=), matching the "size N or greater"
+    // wording — a colony at exactly the threshold qualifies.
     function transportMinPopulation(kind) {
       if (kind === 'road') return (CONFIG.roadMinPopulation != null) ? CONFIG.roadMinPopulation : 3000;
       if (kind === 'canal') return (CONFIG.canalMinPopulation != null) ? CONFIG.canalMinPopulation : 5000;
@@ -5544,7 +5560,7 @@
     }
     // Whether a colony is large enough to build the given transport type.
     function colonyCanBuildTransport(col, kind) {
-      return !!col && (col.population || 0) > transportMinPopulation(kind);
+      return !!col && (col.population || 0) >= transportMinPopulation(kind);
     }
     function beginTransport(kind, x, y) {
       // Source colony = the human colony controlling (or nearest to) the cell,
@@ -5556,7 +5572,7 @@
       // Population gate: road needs size 3+ (>3000), monorail size 10+ (>10000).
       if (!colonyCanBuildTransport(col, kind)) {
         const need = transportMinPopulation(kind);
-        notify(`${col.name || 'This colony'} needs over ${need.toLocaleString()} population to build a ${kind}.`);
+        notify(`${col.name || 'This colony'} needs at least ${need.toLocaleString()} population to build a ${kind}.`);
         return;
       }
       // One road/monorail construction at a time per colony: block a new plan
@@ -5770,6 +5786,10 @@
     // Show/hide the debug overlay. Rebinds the map overlay callback, chaining
     // onto whatever overlay is already active so plan previews still draw.
     function setDebugHitCell(cell) {
+      // The hit-zone overlay is a development aid; only show it when the config
+      // `debug` flag is on. When debug is off, force it off (and clear any that
+      // was already showing).
+      if (!(CONFIG && CONFIG.debug)) cell = null;
       const same = (!cell && !_debugHitCell) ||
         (cell && _debugHitCell && cell.x === _debugHitCell.x && cell.y === _debugHitCell.y);
       if (same) return;
@@ -5918,7 +5938,7 @@
       // Population gate: canals need size 5+ (>5000).
       if (!colonyCanBuildTransport(col, 'canal')) {
         const need = transportMinPopulation('canal');
-        notify(`${col.name || 'This colony'} needs over ${need.toLocaleString()} population to build a canal.`);
+        notify(`${col.name || 'This colony'} needs at least ${need.toLocaleString()} population to build a canal.`);
         return;
       }
       if (!vertexConnectable(startVK)) { notify("Canal must start at a sea/river/canal vertex."); return; }
@@ -6369,8 +6389,15 @@
       }
       return units;
     }
+    // Per-segment YEARLY upkeep config for a transport kind. Bridges keep their
+    // upkeep under CONFIG.bridge.costPerYear; road/monorail/canal use
+    // CONFIG[kind + "MaintenanceCost"].
+    function _maintCostCfg(kind) {
+      if (kind === 'bridge') return (CONFIG.bridge && CONFIG.bridge.costPerYear) || null;
+      return CONFIG[kind + 'MaintenanceCost'];
+    }
     function _maintPer(kind) {
-      const c = CONFIG[kind + 'MaintenanceCost'];
+      const c = _maintCostCfg(kind);
       return (c && typeof c.wealth === 'number') ? c.wealth : 0;
     }
     // Resource keys that transport maintenance can consume from the Federation
@@ -6379,7 +6406,7 @@
     // Per-segment maintenance cost VECTOR for a transport kind, as a plain
     // object over MAINT_RESOURCE_KEYS (missing fields default to 0).
     function _maintCost(kind) {
-      const c = CONFIG[kind + 'MaintenanceCost'] || {};
+      const c = _maintCostCfg(kind) || {};
       const out = {};
       for (const k of MAINT_RESOURCE_KEYS) {
         out[k] = (typeof c[k] === 'number' && Number.isFinite(c[k])) ? c[k] : 0;
@@ -6415,9 +6442,19 @@
       const tr = ensureTransport();
       const edgeSet = kind === 'monorail' ? tr.monorailEdges : tr.roadEdges;
       const cellSet = kind === 'monorail' ? tr.monorails : tr.roads;
-      const n = Math.min(count, edgeSet.size);
+      // Only segments at least MIN_DECAY_AGE years old are eligible for upkeep
+      // decay; younger segments are protected. A segment with no recorded built
+      // year (e.g. a legacy save) is treated as old/eligible.
+      const MIN_DECAY_AGE = 21;
+      const builtYear = tr.edgeBuiltYear || {};
+      const yr = currentYear();
+      const eligible = Array.from(edgeSet).filter((ek) => {
+        const by = builtYear[ek];
+        return (typeof by !== 'number') || (yr - by >= MIN_DECAY_AGE);
+      });
+      const n = Math.min(count, eligible.length);
       if (n <= 0) return 0;
-      const edges = Array.from(edgeSet);
+      const edges = eligible;
       // Fisher–Yates partial shuffle to pick n random distinct edges.
       for (let i = 0; i < n; i++) {
         const j = i + Math.floor(Math.random() * (edges.length - i));
@@ -6427,6 +6464,7 @@
       for (let i = 0; i < n; i++) {
         const ek = edges[i];
         edgeSet.delete(ek);
+        delete tr.edgeBuiltYear[ek];
         const [a, b] = ek.split("|");
         touched.add(a); touched.add(b);
         // Bridges belong to a crossing segment; drop any incident bridge.
@@ -6448,6 +6486,68 @@
     }
     function _edgeStillUsed(tr, bridgeKey) {
       return tr.roadEdges.has(bridgeKey) || tr.monorailEdges.has(bridgeKey);
+    }
+    // Remove ONE specific road/monorail segment edge: drop it from its edge set
+    // and the built-year map, remove any incident bridge no longer backed by a
+    // segment, and prune either endpoint cell left with no incident edge of this
+    // kind. kind: 'road' | 'monorail'.
+    function _removeSegmentEdge(kind, ek) {
+      const tr = ensureTransport();
+      const edgeSet = kind === 'monorail' ? tr.monorailEdges : tr.roadEdges;
+      const cellSet = kind === 'monorail' ? tr.monorails : tr.roads;
+      if (!edgeSet.has(ek)) return false;
+      edgeSet.delete(ek);
+      if (tr.edgeBuiltYear) delete tr.edgeBuiltYear[ek];
+      const [a, b] = ek.split("|");
+      for (const bk of Array.from(tr.bridges)) {
+        const [ba, bb] = bk.split("|");
+        if (ba === a || bb === a || ba === b || bb === b) {
+          if (!_edgeStillUsed(tr, bk)) tr.bridges.delete(bk);
+        }
+      }
+      for (const ck of [a, b]) {
+        const stillUsed = Array.from(edgeSet).some((e) => {
+          const [ea, eb] = e.split("|"); return ea === ck || eb === ck;
+        });
+        if (!stillUsed) cellSet.delete(ck);
+      }
+      return true;
+    }
+    // Each turn, every road/monorail segment OLDER than 50 years has a 1% chance
+    // (roll 1..100, fail on 1) of catastrophic failure — the segment is removed
+    // immediately. The human is notified per failure with the segment kind and a
+    // clickable lat/long (notify auto-links lat/long strings) so they can jump to
+    // the site. Returns true if anything failed.
+    function advanceCatastrophicFailures() {
+      const tr = ensureTransport();
+      const builtYear = tr.edgeBuiltYear || {};
+      const yr = currentYear();
+      // Config-driven: minimum age (years) before a segment can fail, and the
+      // per-segment per-turn failure probability (fraction 0..1).
+      const MIN_FAIL_AGE = (CONFIG.catastrophicFailureMinAge != null) ? CONFIG.catastrophicFailureMinAge : 50;
+      const FAIL_CHANCE = (CONFIG.catastrophicFailureChance != null) ? CONFIG.catastrophicFailureChance : 0.0025;
+      let anyFailed = false;
+      for (const kind of ['road', 'monorail']) {
+        const edgeSet = kind === 'monorail' ? tr.monorailEdges : tr.roadEdges;
+        for (const ek of Array.from(edgeSet)) {
+          const by = builtYear[ek];
+          const age = (typeof by === 'number') ? (yr - by) : Infinity; // legacy = old
+          if (!(age > MIN_FAIL_AGE)) continue;
+          if (Math.random() >= FAIL_CHANCE) continue; // per-turn failure probability
+          const [a] = ek.split("|");
+          const [ax, ay] = a.split(",").map(Number);
+          if (_removeSegmentEdge(kind, ek)) {
+            anyFailed = true;
+            notify(`A ${kind} segment failed catastrophically at ${cellLatLonLabel(ax, ay)}.`);
+          }
+        }
+      }
+      if (anyFailed) {
+        if (typeof invalidateColonyConnectivity === 'function') invalidateColonyConnectivity();
+        if (hexMap && typeof hexMap.setTransport === 'function') hexMap.setTransport(ensureTransport());
+        recomputeHumanResourcePanel(); updatePlayerPanel();
+      }
+      return anyFailed;
     }
     // Run the Federation economy for the player whose turn is ENDING: collect
     // taxes into the treasury, then pay yearly maintenance. If the treasury can't
@@ -8377,6 +8477,15 @@
       document.getElementById("fed-colonies").textContent = cols.length.toLocaleString();
       document.getElementById("fed-population").textContent = Math.round(pop).toLocaleString();
       document.getElementById("fed-treasury").textContent = _fmtCredits(fed.treasury);
+      // Per-resource stored / max (Federation owned pool vs its pooled storage).
+      {
+        const owned = federationOwnedOf('human');
+        const fmax = federationMaxStorage('human');
+        for (const k of ['energy', 'food', 'material', 'water', 'wealth']) {
+          const el = document.getElementById('fed-stored-' + k);
+          if (el) el.textContent = _fmtCredits(owned[k] || 0) + ' / ' + _fmtCredits(fmax[k] || 0);
+        }
+      }
 
       const rate = parseFloat(fedTaxRate.value) || 0;
       document.getElementById("fed-taxrate-val").textContent = String(rate);
@@ -8628,7 +8737,7 @@
         terrainTypes: CONFIG.terrainTypes || null,
         terrainBonus: CONFIG.terrainBonus || null,
         bonuses: (map.bonuses || {}),
-        bridgeColor: CONFIG.bridgeColor,
+        bridgeColor: CONFIG.bridge && CONFIG.bridge.color,
         roadColor: CONFIG.roadColor,
         monorailColor: CONFIG.monorailColor,
         riverColor: CONFIG.riverColor,
