@@ -275,6 +275,39 @@ function showBackstory() {
   });
 }
 
+// Help ▸ Nexus Data Core: a two-panel Markdown reference browser (table of
+// contents on the left, page content on the right). Non-modal and resizable so
+// it can stay open beside the game. Theme and font size follow Settings and
+// update live via the "settings-updated" broadcast.
+let nexusWin;
+function showNexus() {
+  if (nexusWin && !nexusWin.isDestroyed()) return nexusWin.focus();
+  nexusWin = new BrowserWindow({
+    width: 900,
+    height: 680,
+    minWidth: 520,
+    minHeight: 400,
+    parent: mainWin,
+    modal: false,
+    icon: appIcon,
+    show: false,
+    webPreferences: { nodeIntegration: true, contextIsolation: false }
+  });
+  nexusWin.setMenuBarVisibility(false);
+  nexusWin.loadFile(path.join(__dirname, "nexus.html"));
+  nexusWin.once("ready-to-show", () => {
+    if (mainWin && !mainWin.isDestroyed()) {
+      const [px, py] = mainWin.getPosition();
+      const [pw, ph] = mainWin.getSize();
+      const [w, h] = nexusWin.getSize();
+      nexusWin.setPosition(Math.round(px + (pw - w) / 2), Math.round(py + (ph - h) / 2));
+    }
+    nexusWin.show();
+  });
+  nexusWin.on("closed", () => { nexusWin = null; });
+}
+ipcMain.handle("close-nexus", () => nexusWin?.close());
+
 function buildViewMenu() {
   const isMac = process.platform === "darwin";
   const ours = gameColonies.filter((c) => c.kind === "human");
@@ -399,7 +432,8 @@ function buildMenu() {
       role: "help",
       label: "Help",
       submenu: [
-        { label: "Backstory", click: showBackstory }
+        { label: "Backstory", click: showBackstory },
+        { label: "Nexus Data Core", click: showNexus }
       ]
     }
   ];
@@ -554,6 +588,8 @@ ipcMain.handle("settings-save", (_e, newSettings) => {
   save({ ...existing, ...newSettings });
   settingsWin?.close();
   mainWin?.webContents.send("settings-updated");
+  // Live-update any open auxiliary windows that mirror theme/font size.
+  if (nexusWin && !nexusWin.isDestroyed()) nexusWin.webContents.send("settings-updated");
 });
 
 ipcMain.handle("settings-cancel", () => settingsWin?.close());

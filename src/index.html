@@ -248,6 +248,7 @@
           <tr><td>Monorail maintenance (<span id="fed-mononn">0</span> seg)</td><td id="fed-monocost">0</td></tr>
           <tr><td>Canal maintenance (<span id="fed-canaln">0</span> sides)</td><td id="fed-canalcost">0</td></tr>
           <tr><td>Bridge maintenance (<span id="fed-bridgen">0</span> seg)</td><td id="fed-bridgecost">0</td></tr>
+          <tr><td>Drone Base support (<span id="fed-dronen">0</span> bases)</td><td id="fed-dronecost">0</td></tr>
           <tr><td>Total maintenance</td><td id="fed-maint">0</td></tr>
           <tr class="fed-net"><td>Net to treasury</td><td id="fed-net">0</td></tr>
           <tr><td>Projected treasury</td><td id="fed-proj-treasury">0</td></tr>
@@ -2228,8 +2229,26 @@
     // is given, fall back to the legacy cell-based river-segment check.
     function enterCost(x, y, fromX, fromY) {
       const tt = (terrainTypeById(terrainAt(x, y))) || {};
-      const mv = Array.isArray(tt.movement) ? tt.movement[0] : 1; // [0] = unimproved
-      let cost = (mv != null ? mv : 1);
+      const mvArr = Array.isArray(tt.movement) ? tt.movement : null;
+      const mvAt = (i, dflt) => (mvArr && mvArr[i] != null) ? mvArr[i] : dflt;
+      // movement = [unimproved, road, sea/river, monorail, air]; lower = faster.
+      // When the move crosses a monorail or road edge (or a road bridge), use
+      // that transport mode's cheaper enter cost — so overland networks speed up
+      // route planning (colony launches AND federation-building deliveries).
+      let cost = mvAt(0, 1); // unimproved baseline
+      if (fromX != null && fromY != null) {
+        const tr = ensureTransport();
+        const ek = edgeKey(fromX, fromY, x, y);
+        if (tr.monorailEdges && tr.monorailEdges.has(ek)) {
+          cost = mvAt(3, cost);
+        } else if ((tr.roadEdges && tr.roadEdges.has(ek)) || hasBridgeEdge(fromX, fromY, x, y)) {
+          cost = mvAt(1, cost);
+        }
+      } else if (hasMonorail(x, y)) {
+        cost = mvAt(3, cost);
+      } else if (hasRoad(x, y)) {
+        cost = mvAt(1, cost);
+      }
       const crossCost = (CONFIG.river && CONFIG.river.crossingCost != null) ? CONFIG.river.crossingCost : 2;
       if (fromX != null && fromY != null) {
         // Border-precise: only when the crossed border is a river/canal AND has no bridge.
@@ -2739,6 +2758,11 @@
             // Fog of war: reveal this building's configured visibility radius
             // (e.g. Drone Base) now that it is operational.
             revealBuildingVisibility(b);
+            // Announce completion of a Federation building (e.g. a Drone Base)
+            // now that it has arrived on site and finished assembling.
+            if (b.owner === 'human' && buildingIsFederation(b.type)) {
+              notify(`${improvementName(b.type)} is now operational at ${cellLatLonLabel(b.x, b.y)}.`);
+            }
           }
         }
       }
@@ -3796,6 +3820,9 @@
       // Buildings contribute production + upkeep ONLY when their cell is worked.
       for (const b of colonyBuildings(col)) {
         if (!workedSet.has(cellKey(b.x, b.y))) continue; // idle: no produce, no upkeep
+        // Federation buildings are funded by the Federation pool, not the
+        // colony — their upkeep/production never touch a colony's budget.
+        if (buildingIsFederation(b.type)) continue;
         const bo = bldgBonus(b.type), up = bldgUpkeep(b.type);
         production.food += bo.food;
         production.material += bo.material;
@@ -4391,6 +4418,49 @@
           if (fed[k] > cap) fed[k] = cap;
           if (fed[k] < 0) fed[k] = 0;
         }
+
+        // --- Step 5b: Federation building maintenance + random idling. --------
+        // Federation buildings (e.g. Drone Bases) are funded entirely by the
+        // Federation pool, not any colony. Each turn the Federation pays their
+        // combined yearly upkeep. If it cannot afford the full fleet in ANY
+        // resource, buildings are idled at random (one at a time) until the
+        // remaining fleet's upkeep fits what the pool holds. Idled federation
+        // buildings do not function (an idled intelligence building stops
+        // gathering), flagged on the building as `_fedIdle` for this turn.
+        {
+          const fedBuildings = gameState.buildings.filter(
+            (b) => b.owner === owner && b.type !== 1 && isOperational(b) && buildingIsFederation(b.type));
+          // Clear last turn's idle flags; recompute fresh each turn.
+          for (const b of fedBuildings) b._fedIdle = false;
+          const MAINT = ["energy", "food", "material", "water", "wealth"];
+          const upkeepOf = (b) => {
+            const u = bldgUpkeep(b.type) || {};
+            return { energy: u.energy || 0, food: u.food || 0, material: u.material || 0, water: u.water || 0, wealth: u.wealth || 0 };
+          };
+          const totalNeed = () => {
+            const t = { energy: 0, food: 0, material: 0, water: 0, wealth: 0 };
+            for (const b of fedBuildings) { if (b._fedIdle) continue; const u = upkeepOf(b); for (const k of MAINT) t[k] += u[k]; }
+            return t;
+          };
+          const affordable = (t) => MAINT.every((k) => (fed[k] || 0) >= t[k] - 1e-9);
+          // Idle random buildings until the remaining fleet is affordable.
+          const ownerSeed = (owner === 'human') ? 0x9E3779B1 : ((Number(owner) || 0) * 2654435761);
+          const rng = _seededRng(((turnNo | 0) * 2246822519) ^ ownerSeed);
+          let active = fedBuildings.filter((b) => !b._fedIdle);
+          let guard = active.length + 1;
+          while (active.length && !affordable(totalNeed()) && guard-- > 0) {
+            const victim = active[Math.floor(rng() * active.length)];
+            victim._fedIdle = true;
+            if (victim.owner === 'human') {
+              notify(`${improvementName(victim.type)} at ${cellLatLonLabel(victim.x, victim.y)} was idled — the Federation can't afford its upkeep.`);
+            }
+            active = fedBuildings.filter((b) => !b._fedIdle);
+          }
+          // Pay the affordable fleet's upkeep from the Federation pool.
+          const need = totalNeed();
+          for (const k of MAINT) fed[k] = Math.max(0, (fed[k] || 0) - need[k]);
+        }
+
         const fedObj = federationOf(owner);
         if (fedObj) fedObj.treasury = fed.wealth;
 
@@ -5218,8 +5288,19 @@
         ? 'You'
         : ((players[owner] && players[owner].name) || 'Alien');
       const bt = buildingType(type) || {};
+      // Federation buildings (e.g. Drone Bases) are delivered from a colony by
+      // route planning: their completion time is build time PLUS travel time
+      // from the cheapest-reachable colony (terrain cost + river crossings −
+      // road/monorail speedups; blocked by impassable/foreign cells; shallow sea
+      // via a Dock). Non-federation buildings build in place (no travel).
+      let turns = buildTurnsOf(bt);
+      let route = null;
+      if (buildingIsFederation(type)) {
+        route = federationBuildRoute(x, y, owner);
+        if (route) turns += route.travelTurns;
+      }
       const rec = { x, y, type, owner, ownerName: species, improvement: improvementName(type),
-                    turnsRemaining: buildTurnsOf(bt) };
+                    turnsRemaining: turns };
       gameState.buildings.push(rec);
       // Building on a pristine-bonus tile destroys that bonus permanently.
       const _lostBuildBonus = destroyPristineBonusAt(x, y);
@@ -5229,7 +5310,15 @@
       // Pay the build cost from the CONTROLLING colony's stored resources,
       // borrowing any shortfall from transport-connected colonies.
       const col = buildColonyAt(x, y, owner, type);
-      if (col) {
+      if (buildingIsFederation(type)) {
+        // Federation buildings are paid for by the Federation pool, not a colony.
+        const fed = federationOwnedOf(owner);
+        const cost = buildingCost(type);
+        for (const res of _resourceKeysOf(cost)) fed[res] = Math.max(0, (fed[res] || 0) - (cost[res] || 0));
+        const fedObj = federationOf(owner);
+        if (fedObj) fedObj.treasury = fed.wealth;
+        if (owner === 'human') { recomputeHumanResourcePanel(); updatePlayerPanel(); }
+      } else if (col) {
         payColonyCost(col, ensureStored(col), buildingCost(type));
         if (owner === 'human') { recomputeHumanResourcePanel(); updatePlayerPanel(); }
       }
@@ -5239,6 +5328,15 @@
       // so reveal its configured visibility radius now. (Buildings with build
       // time reveal when their construction countdown reaches 0.)
       if (rec.turnsRemaining == null || rec.turnsRemaining <= 0) revealBuildingVisibility(rec);
+      // Inform the human when a Federation building is under way: it must be
+      // carried to its site (travel time) and then assembled (build time), so
+      // report the total turns until ready, noting the travel portion.
+      if (owner === 'human' && buildingIsFederation(type) && turns > 0) {
+        const travel = route ? route.travelTurns : 0;
+        const where = cellLatLonLabel(x, y);
+        const detail = travel > 0 ? ` (${travel} travelling + ${turns - travel} building)` : '';
+        notify(`${improvementName(type)} is under way to ${where} — ready in ${turns} turn${turns === 1 ? '' : 's'}${detail}.`);
+      }
     }
     // A building is operational once its construction turns have elapsed and it
     // is not in the process of being removed.
@@ -5284,6 +5382,11 @@
       const c = removalCost();
       for (const r of _resourceKeysOf(c)) {
         if (pool[r] != null) pool[r] = Math.max(0, pool[r] - c[r]);
+      }
+      // If the Federation pool funded this removal, keep its treasury mirror.
+      if (buildingIsFederation(b.type)) {
+        const fedObj = federationOf(owner);
+        if (fedObj) fedObj.treasury = federationOwnedOf(owner).wealth;
       }
       b.removeTurns = _turnsOf(c, 2);
       // Idle its cell in every colony that was working it (it no longer produces).
@@ -6144,6 +6247,15 @@
         if (!controlled) return { ok: false, reason: "outside your zone of control" };
       }
 
+      // Federation buildings are delivered from a colony via route planning (like
+      // a colony launch). Require a reachable overland/shallow-sea route from one
+      // of the owner's colonies; without one the cell can't be serviced.
+      if (tags.includes('federation')) {
+        if (!federationBuildRoute(x, y, owner)) {
+          return { ok: false, reason: "no delivery route from a colony" };
+        }
+      }
+
       // At most two buildings may be under construction per colony at once.
       const col = colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
       if (col && colonyBuildingsUnderConstruction(col) >= 2) {
@@ -6202,16 +6314,74 @@
     // The stored resources available to build at (x,y): the controlling colony's
     // per-colony storage. Falls back to an empty pool if no colony controls it.
     function buildPoolAt(x, y, owner) {
+      // If a building already stands here, resolve its funding pool by kind so
+      // removal is paid from the same place that built/maintains it: a
+      // Federation building draws from the Federation pool; an `anywhere`
+      // building outside every zone falls back to the owner's nearest colony.
+      const here = gameState.buildings.find((bb) => bb.x === x && bb.y === y && bb.owner === owner && bb.type !== 1);
+      if (here && buildingIsFederation(here.type)) return federationOwnedOf(owner);
       const col = colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
-      return col ? ensureStored(col) : null;
+      if (col) return ensureStored(col);
+      if (here && buildingIsAnywhere(here.type)) {
+        const nc = nearestColony(x, y, owner);
+        if (nc) return ensureStored(nc.colony);
+      }
+      return null;
     }
     // The colony that would pay to build at (x,y): the controlling colony.
-    // Whether a building type carries the `anywhere` placement tag (may be built
-    // outside the owner's zone of control, on any explored cell not inside
-    // another player's zone).
-    function buildingIsAnywhere(type) {
+    // Whether a building type's `other` placement list contains a given tag.
+    function buildingHasOther(type, tag) {
       const other = btPrereq(type).other;
-      return Array.isArray(other) && other.includes('anywhere');
+      return Array.isArray(other) && other.includes(tag);
+    }
+    // `anywhere`: may be built outside the owner's zone of control, on any
+    // explored cell not inside another player's zone.
+    function buildingIsAnywhere(type) { return buildingHasOther(type, 'anywhere'); }
+    // `federation`: built and maintained by the Federation (its build cost and
+    // yearly upkeep are paid from the Federation pool, not a colony), and it is
+    // randomly idled when the Federation can't cover its upkeep.
+    function buildingIsFederation(type) { return buildingHasOther(type, 'federation'); }
+    // `intelligence`: gathers intel on rival colonies within its `visibility`
+    // (Euclidean) range while active.
+    function buildingIsIntelligence(type) { return buildingHasOther(type, 'intelligence'); }
+    // Number of an owner's active (non-in-transit) colonies.
+    function ownerColonyCount(owner) {
+      let n = 0;
+      for (const b of gameState.buildings) {
+        if (b.type === 1 && b.owner === owner && !b.inTransit) n++;
+      }
+      return n;
+    }
+    // A player's Federation is "established" once they have founded a SECOND
+    // colony (a single colony has nothing to federate). Federation buildings
+    // require an established Federation to build.
+    function federationEstablished(owner) {
+      return ownerColonyCount(owner) >= 2;
+    }
+    // A Federation building is ACTIVE when it is operational and was not idled
+    // by the Federation this turn (set on the building as `_fedIdle`). Non-
+    // federation buildings are active whenever operational.
+    function buildingIsActive(b) {
+      if (!b || !isOperational(b)) return false;
+      if (buildingIsFederation(b.type) && b._fedIdle) return false;
+      return true;
+    }
+    // Whether cell (x,y) is covered by an ACTIVE `intelligence` building owned
+    // by `owner`, i.e. within that building's `visibility` Euclidean radius
+    // (measured in cells). Used by the Rankings dialog to decide which rival
+    // colonies the owner can "see" well enough to rank.
+    function intelCovers(x, y, owner) {
+      for (const b of gameState.buildings) {
+        if (b.owner !== owner) continue;
+        if (b.type === 1) continue;
+        if (!buildingIsIntelligence(b.type)) continue;
+        if (!buildingIsActive(b)) continue;
+        const radius = buildingVisibility(b.type);
+        if (radius <= 0) continue;
+        const dx = x - b.x, dy = y - b.y;
+        if (dx * dx + dy * dy <= radius * radius) return true;
+      }
+      return false;
     }
     // The colony that owns/pays for a building at (x,y). Normally the colony
     // whose zone contains the cell; for an `anywhere` building that may sit
@@ -6226,14 +6396,43 @@
       }
       return null;
     }
+    // Route planning for a Federation building delivery (e.g. a Drone Base).
+    // The materials/drones travel overland from one of the owner's colonies to
+    // the target cell, taking time based on terrain movement cost, river
+    // crossings, and road/monorail speedups — exactly like a colony launch, via
+    // the shared findMovementPath pathfinder. Impassable cells and foreign zones
+    // block the route; shallow sea is traversable only when the owner has a Dock
+    // (deep sea is never passable, so until a Deep Water Port exists, deep-sea
+    // routes are unavailable). Returns the CHEAPEST-reachable source colony with
+    // its path cost and travel turns, or null when no colony can reach the cell.
+    function federationBuildRoute(targetX, targetY, owner) {
+      let best = null;
+      for (const b of gameState.buildings) {
+        if (b.type !== 1 || b.owner !== owner || b.inTransit) continue;
+        const pf = findMovementPath(b.x, b.y, targetX, targetY, owner);
+        if (!pf) continue;
+        if (!best || pf.cost < best.cost) {
+          best = { colony: b, cost: pf.cost, path: pf.path, travelTurns: biodomeTravelTurns(pf.cost) };
+        }
+      }
+      return best;
+    }
     // Whether the owner can afford a building type at (x,y), paying from the
     // controlling colony's stored resources PLUS whatever it can borrow from
     // transport-connected colonies (road/monorail, river/canal, sea, air).
     function canAffordBuildingAt(type, x, y, owner) {
+      const cost = buildingCost(type);
+      // Federation buildings are paid from the Federation pool, not a colony.
+      if (buildingIsFederation(type)) {
+        const fed = federationOwnedOf(owner);
+        for (const res of _resourceKeysOf(cost)) {
+          if ((fed[res] || 0) < cost[res] - 1e-9) return false;
+        }
+        return true;
+      }
       const col = buildColonyAt(x, y, owner, type);
       if (!col) return false;
       const pool = ensureStored(col);
-      const cost = buildingCost(type);
       for (const res of _resourceKeysOf(cost)) {
         if ((pool[res] || 0) + connectedAvailable(col, res) < cost[res] - 1e-9) return false;
       }
@@ -6268,6 +6467,9 @@
     function hasPrerequisitesAt(type, x, y, owner) {
       const pre = btPrereq(type);
       const buildings = Array.isArray(pre.building) ? pre.building : [];
+      // Federation buildings require an established Federation: the owner must
+      // have founded a second colony before any can be built.
+      if (buildingIsFederation(type) && !federationEstablished(owner)) return false;
       // For `anywhere` buildings outside every zone, prerequisites (required
       // buildings, network, city size) are evaluated against the nearest colony
       // — the same colony that pays for and owns the build.
@@ -6297,6 +6499,9 @@
       }
       if (!citySizeMet(col, pre.citySize)) {
         missing.push(`population ${(pre.citySize * 1000).toLocaleString()}`);
+      }
+      if (buildingIsFederation(type) && !federationEstablished(owner)) {
+        missing.push("an established Federation (a second colony)");
       }
       return missing;
     }
@@ -6533,11 +6738,23 @@
       const monorail = _scaleCost(_maintCost('monorail'), n.monorails);
       const canal = _scaleCost(_maintCost('canal'), n.canals);
       const bridge = _scaleCost(_maintCost('bridge'), n.bridges);
+      // Federation BUILDINGS (e.g. Drone Bases): their yearly upkeep is paid by
+      // the Federation too. Sum per-resource upkeep over the owner's operational
+      // federation buildings and count them for the dialog.
+      const fedBuildings = { energy: 0, material: 0, water: 0, wealth: 0 };
+      let fedBuildingCount = 0;
+      for (const b of gameState.buildings) {
+        if (b.owner !== owner || b.type === 1) continue;
+        if (!isOperational(b) || !buildingIsFederation(b.type)) continue;
+        fedBuildingCount++;
+        const up = bldgUpkeep(b.type) || {};
+        for (const k of MAINT_RESOURCE_KEYS) fedBuildings[k] += (up[k] || 0);
+      }
       const total = {};
       for (const k of MAINT_RESOURCE_KEYS) {
-        total[k] = road[k] + monorail[k] + canal[k] + bridge[k];
+        total[k] = road[k] + monorail[k] + canal[k] + bridge[k] + fedBuildings[k];
       }
-      return { road, monorail, canal, bridge, total };
+      return { road, monorail, canal, bridge, fedBuildings, fedBuildingCount, total };
     }
     // Remove `count` random road or monorail SEGMENTS (edges) from the network,
     // pruning any cell left with no incident edges. kind: 'road' | 'monorail'.
@@ -8305,6 +8522,11 @@
       for (const b of (gameState.buildings || [])) {
         const r = byOwner.get(b.owner);
         if (!r) continue;
+        // Intel gating: a rival (non-human) owner's colonies/buildings are only
+        // ranked when the human has an ACTIVE `intelligence` building (e.g. a
+        // Drone Base) covering that cell within its `visibility` range. The
+        // human player always ranks across all of their own holdings.
+        if (!r.me && !intelCovers(b.x, b.y, 'human')) continue;
         if (b.type === 1) {
           r.colonies += 1;
           r._pop += (b.population || 0);
@@ -8608,6 +8830,8 @@
       document.getElementById("fed-canalcost").textContent = _fmtMaintCost(m.canal);
       document.getElementById("fed-bridgen").textContent = String(counts.bridges);
       document.getElementById("fed-bridgecost").textContent = _fmtMaintCost(m.bridge);
+      document.getElementById("fed-dronen").textContent = String(m.fedBuildingCount || 0);
+      document.getElementById("fed-dronecost").textContent = _fmtMaintCost(m.fedBuildings);
       document.getElementById("fed-maint").textContent = _fmtMaintCost(m.total);
       // Net/projected treasury track WEALTH only (taxes and treasury are wealth);
       // other maintenance resources draw from their own owned pools.

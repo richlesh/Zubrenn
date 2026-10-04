@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Nexus Data Core</title>
+  <style>
+    /* ----- Theme variables (light default; .dark overrides) ------------- */
+    :root {
+      --bg: #f5f5f5;
+      --panel-bg: #ffffff;
+      --toc-bg: #ececec;
+      --fg: #1e1e1e;
+      --muted: #666;
+      --border: #d0d0d0;
+      --link: #0a66d6;
+      --accent: #0a84ff;
+      --code-bg: #f0f0f0;
+      --table-head: #e8e8e8;
+      --table-stripe: #f6f6f6;
+      --quote-bar: #c6c6c6;
+    }
+    body.dark {
+      --bg: #1a1a1a;
+      --panel-bg: #202020;
+      --toc-bg: #161616;
+      --fg: #e0e0e0;
+      --muted: #a0a0a0;
+      --border: #3a3a3a;
+      --link: #4da3ff;
+      --accent: #4da3ff;
+      --code-bg: #2a2a2a;
+      --table-head: #2b2b2b;
+      --table-stripe: #242424;
+      --quote-bar: #444;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      display: flex;
+      flex-direction: column;
+    }
+
+    #layout { display: flex; flex: 1; min-height: 0; }
+
+    /* Narrow left Table of Contents panel. */
+    #toc {
+      width: 260px;
+      min-width: 180px;
+      max-width: 420px;
+      flex: 0 0 auto;
+      background: var(--toc-bg);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 18px 16px;
+    }
+    /* Right content panel. */
+    #content {
+      flex: 1;
+      min-width: 0;
+      background: var(--panel-bg);
+      overflow-y: auto;
+      padding: 24px 32px;
+    }
+
+    /* ----- Rendered markdown styling (shared by both panels) ------------ */
+    .md { line-height: 1.6; font-size: 15px; }
+    .md h1 { font-size: 1.7em; margin: 0.2em 0 0.5em; font-weight: 650; }
+    .md h2 { font-size: 1.4em; margin: 1.1em 0 0.5em; font-weight: 640; border-bottom: 1px solid var(--border); padding-bottom: 0.2em; }
+    .md h3 { font-size: 1.18em; margin: 1em 0 0.4em; font-weight: 620; }
+    .md h4 { font-size: 1.05em; margin: 0.9em 0 0.35em; font-weight: 620; }
+    .md p { margin: 0.6em 0; }
+    .md ul, .md ol { margin: 0.5em 0 0.5em 1.4em; }
+    .md li { margin: 0.25em 0; }
+    .md a { color: var(--link); text-decoration: none; }
+    .md a:hover { text-decoration: underline; }
+    .md code {
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 0.9em;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 4px;
+    }
+    .md pre { background: var(--code-bg); padding: 12px 14px; border-radius: 8px; overflow-x: auto; margin: 0.7em 0; }
+    .md pre code { background: none; padding: 0; }
+    .md blockquote {
+      margin: 0.7em 0;
+      padding: 0.2em 0 0.2em 1em;
+      border-left: 3px solid var(--quote-bar);
+      color: var(--muted);
+    }
+    .md hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
+    .md img { max-width: 128px; height: auto; vertical-align: middle; border-radius: 6px; }
+    /* Right/left-floated thumbnails (content pages wrap building/terrain icons
+       in <span class="float-right">…</span>). The paragraph that holds the span
+       is floated so the following text wraps around the image. */
+    .md .float-right { float: right; margin: 0 0 0.6em 1em; }
+    .md .float-left { float: left; margin: 0 1em 0.6em 0; }
+    /* Headings and horizontal rules start a new row below any floated image. */
+    .md h1, .md h2, .md h3, .md h4, .md hr { clear: both; }
+    .md table { border-collapse: collapse; margin: 0.8em 0; width: 100%; }
+    .md th, .md td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
+    .md th { background: var(--table-head); font-weight: 620; }
+    .md tbody tr:nth-child(even) { background: var(--table-stripe); }
+
+    /* TOC panel: slightly tighter, left-aligned list of page links. */
+    #toc .md { font-size: 14px; }
+    #toc .md h1 { font-size: 1.3em; }
+    #toc .md h2 { font-size: 1.05em; border: none; }
+
+    /* The currently loaded page is highlighted in the TOC. */
+    #toc a.active { font-weight: 700; color: var(--accent); }
+
+    #error { color: #d04545; padding: 20px; }
+    body.dark #error { color: #ff8a8a; }
+  </style>
+</head>
+<body>
+  <div id="layout">
+    <nav id="toc"><div class="md"></div></nav>
+    <section id="content"><div class="md"></div></section>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require("electron");
+    const fs = require("fs");
+    const path = require("path");
+
+    // Directory holding the Nexus markdown pages and the project root used to
+    // resolve README-relative image paths like "src/resources/...".
+    const NEXUS_DIR = path.join(__dirname, "resources", "nexus");
+    const PROJECT_ROOT = path.join(__dirname, "..");
+
+    const tocEl = document.querySelector("#toc .md");
+    const contentEl = document.querySelector("#content .md");
+
+    // -------------------- theme / font size --------------------
+    const FONT_SCALES = { small: 1, medium: 1.25, large: 1.5 };
+    function applySettings(settings) {
+      settings = settings || {};
+      document.body.classList.toggle("dark", (settings.theme || "dark") === "dark");
+      document.body.style.zoom = String(FONT_SCALES[settings.fontSize || "small"] || 1);
+    }
+    function refreshSettings() {
+      ipcRenderer.invoke("settings-get").then(applySettings).catch(() => {});
+    }
+    // Live-update when Settings are saved elsewhere.
+    ipcRenderer.on("settings-updated", refreshSettings);
+
+    // -------------------- tiny markdown renderer --------------------
+    // A compact, dependency-free Markdown-to-HTML converter covering the
+    // subset used by the Nexus pages: ATX headings, bold/italic, inline code,
+    // fenced code blocks, links, images, unordered/ordered lists, GitHub-style
+    // tables, blockquotes, horizontal rules, and paragraphs.
+
+    function escapeHtml(s) {
+      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    // Resolve an image/link href that may be README-relative (e.g.
+    // "src/resources/aliens/128/X.png") to an absolute file URL so it loads
+    // inside this dialog regardless of the page's own location.
+    function resolveAssetUrl(src) {
+      if (/^(https?:|data:|file:)/i.test(src)) return src;
+      let abs;
+      if (path.isAbsolute(src)) abs = src;
+      else if (/^src[\\/]/.test(src)) abs = path.join(PROJECT_ROOT, src);
+      else abs = path.join(NEXUS_DIR, src); // relative to the page
+      return "file://" + abs.split(path.sep).join("/");
+    }
+
+    // Inline formatting: images, links, code, bold, italic. Operates on a
+    // single line of already-structural text. Order matters (code first so its
+    // contents aren't further processed).
+    function renderInline(text) {
+      const codeStash = [];
+      // Inline code -> placeholder (protect from other rules).
+      text = text.replace(/`([^`]+)`/g, (_m, c) => {
+        codeStash.push("<code>" + escapeHtml(c) + "</code>");
+        return "\u0000" + (codeStash.length - 1) + "\u0000";
+      });
+      // Allow a small, safe set of raw inline HTML tags to pass through
+      // (the content pages use <span class="float-right">…</span> to float
+      // building/terrain thumbnails). Each matched tag is stashed like inline
+      // code so escapeHtml() below doesn't turn it into visible text, then
+      // restored verbatim afterwards. Attributes are limited to a quoted
+      // class, so no arbitrary HTML/script can slip through.
+      const htmlStash = [];
+      const stashHtml = (frag) => {
+        htmlStash.push(frag);
+        return "\u0001" + (htmlStash.length - 1) + "\u0001";
+      };
+      text = text
+        .replace(/<span(?:\s+class="[\w\- ]*")?\s*>/gi, (m) => stashHtml(m))
+        .replace(/<\/span>/gi, (m) => stashHtml(m))
+        .replace(/<br\s*\/?>/gi, () => stashHtml("<br>"));
+      text = escapeHtml(text);
+      // Images: ![alt](src){opt}
+      text = text.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)(?:\{[^}]*\})?/g,
+        (_m, alt, src) => `<img src="${resolveAssetUrl(src)}" alt="${alt}">`);
+      // Links: [text](href)
+      text = text.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_m, label, href) => {
+        const internal = /\.md($|[#?])/i.test(href) || !/^[a-z]+:/i.test(href);
+        const cls = internal ? ' data-md="' + href + '"' : "";
+        const h = internal ? "#" : href;
+        return `<a href="${h}"${cls}>${label}</a>`;
+      });
+      // Bold then italic.
+      text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      text = text.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+      // Restore inline code.
+      text = text.replace(/\u0000(\d+)\u0000/g, (_m, i) => codeStash[+i]);
+      // Restore passed-through inline HTML tags.
+      text = text.replace(/\u0001(\d+)\u0001/g, (_m, i) => htmlStash[+i]);
+      return text;
+    }
+
+    function splitTableRow(line) {
+      let s = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+      return s.split("|").map((c) => c.trim());
+    }
+    function isTableDivider(line) {
+      return /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(line);
+    }
+
+    function renderMarkdown(src) {
+      const lines = src.replace(/\r\n/g, "\n").split("\n");
+      let html = "";
+      let i = 0;
+      let para = [];
+      const flushPara = () => {
+        if (para.length) { html += "<p>" + renderInline(para.join(" ")) + "</p>"; para = []; }
+      };
+      while (i < lines.length) {
+        const line = lines[i];
+
+        // Fenced code block.
+        const fence = line.match(/^```(.*)$/);
+        if (fence) {
+          flushPara();
+          const buf = [];
+          i++;
+          while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i++; }
+          i++; // closing fence
+          html += "<pre><code>" + escapeHtml(buf.join("\n")) + "</code></pre>";
+          continue;
+        }
+
+        // Horizontal rule.
+        if (/^\s*(---|\*\*\*|___)\s*$/.test(line)) { flushPara(); html += "<hr>"; i++; continue; }
+
+        // ATX heading.
+        const h = line.match(/^(#{1,6})\s+(.*)$/);
+        if (h) { flushPara(); const lvl = h[1].length; html += `<h${lvl}>${renderInline(h[2].trim())}</h${lvl}>`; i++; continue; }
+
+        // Table (header row followed by a divider row).
+        if (/\|/.test(line) && i + 1 < lines.length && isTableDivider(lines[i + 1])) {
+          flushPara();
+          const headers = splitTableRow(line);
+          i += 2; // skip header + divider
+          let t = "<table><thead><tr>";
+          for (const hcell of headers) t += "<th>" + renderInline(hcell) + "</th>";
+          t += "</tr></thead><tbody>";
+          while (i < lines.length && /\|/.test(lines[i]) && lines[i].trim() !== "") {
+            const cells = splitTableRow(lines[i]);
+            t += "<tr>";
+            for (let c = 0; c < headers.length; c++) t += "<td>" + renderInline(cells[c] || "") + "</td>";
+            t += "</tr>";
+            i++;
+          }
+          t += "</tbody></table>";
+          html += t;
+          continue;
+        }
+
+        // Blockquote (one or more consecutive > lines).
+        if (/^\s*>\s?/.test(line)) {
+          flushPara();
+          const buf = [];
+          while (i < lines.length && /^\s*>\s?/.test(lines[i])) { buf.push(lines[i].replace(/^\s*>\s?/, "")); i++; }
+          html += "<blockquote>" + renderInline(buf.join(" ")) + "</blockquote>";
+          continue;
+        }
+
+        // Ordered list.
+        if (/^\s*\d+\.\s+/.test(line)) {
+          flushPara();
+          let t = "<ol>";
+          while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+            t += "<li>" + renderInline(lines[i].replace(/^\s*\d+\.\s+/, "")) + "</li>";
+            i++;
+          }
+          t += "</ol>";
+          html += t;
+          continue;
+        }
+
+        // Unordered list.
+        if (/^\s*[-*+]\s+/.test(line)) {
+          flushPara();
+          let t = "<ul>";
+          while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
+            t += "<li>" + renderInline(lines[i].replace(/^\s*[-*+]\s+/, "")) + "</li>";
+            i++;
+          }
+          t += "</ul>";
+          html += t;
+          continue;
+        }
+
+        // Blank line ends a paragraph.
+        if (line.trim() === "") { flushPara(); i++; continue; }
+
+        // Otherwise accumulate paragraph text.
+        para.push(line.trim());
+        i++;
+      }
+      flushPara();
+      return html;
+    }
+
+    // -------------------- page loading --------------------
+    function readPage(name) {
+      const file = path.join(NEXUS_DIR, name);
+      return fs.readFileSync(file, "utf8");
+    }
+
+    let currentPage = null;
+    function loadContent(name) {
+      try {
+        const md = readPage(name);
+        contentEl.innerHTML = renderMarkdown(md);
+        contentEl.parentElement.scrollTop = 0;
+        currentPage = name;
+        highlightActive();
+      } catch (err) {
+        contentEl.innerHTML = '<div id="error">Could not load <code>' +
+          escapeHtml(name) + '</code>:<br>' + escapeHtml(String(err && err.message || err)) + '</div>';
+      }
+    }
+
+    function highlightActive() {
+      tocEl.querySelectorAll('a[data-md]').forEach((a) => {
+        a.classList.toggle("active", a.getAttribute("data-md") === currentPage);
+      });
+    }
+
+    // Clicks inside either panel: internal .md links swap the content panel;
+    // external links open in the system browser.
+    function wireLinks(container) {
+      container.addEventListener("click", (e) => {
+        const a = e.target.closest("a");
+        if (!a) return;
+        e.preventDefault();
+        const md = a.getAttribute("data-md");
+        if (md) {
+          // Strip any trailing #anchor/?query for the filename.
+          const name = md.replace(/[#?].*$/, "");
+          loadContent(name);
+        } else {
+          const href = a.getAttribute("href");
+          if (href && /^https?:/i.test(href)) ipcRenderer.invoke("open-external", href);
+        }
+      });
+    }
+    wireLinks(tocEl);
+    wireLinks(contentEl);
+
+    // -------------------- init --------------------
+    refreshSettings();
+    tocEl.innerHTML = (() => {
+      try { return renderMarkdown(readPage("index.md")); }
+      catch (err) { return '<div id="error">Missing index.md</div>'; }
+    })();
+    highlightActive();
+    // Open the How to Play page by default (fall back to index if absent).
+    try { readPage("how_to_play.md"); loadContent("how_to_play.md"); }
+    catch { loadContent("index.md"); }
+
+    // Close on Escape or Cmd/Ctrl+W.
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "w")) {
+        ipcRenderer.invoke("close-nexus");
+      }
+    });
+  </script>
+</body>
+</html>

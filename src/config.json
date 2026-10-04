@@ -220,6 +220,14 @@
   //              requirement: the building may be placed on ANY explored cell
   //              that is NOT inside another player's zone of control (its cost
   //              is paid by, and it is owned by, the owner's nearest colony).
+  //              "federation": the building is built and maintained by the
+  //              Federation — its buildCost and yearly costPerYear are paid from
+  //              the Federation pool (not a colony), and it is randomly idled
+  //              when the Federation can't afford the full fleet's upkeep in any
+  //              resource. An idled federation building stops functioning.
+  //              "intelligence": while active, the building gathers intel on
+  //              rival colonies within its `visibility` (Euclidean) range; the
+  //              Rankings dialog only ranks rival colonies so covered.
   //   climate  : climate band names ("tropical"/"temperate"/"subpolar"/"polar")
   //              the cell must be in. Missing/empty = any climate.
   //   citySize : the colony population must be >= citySize * 1000.
@@ -240,8 +248,9 @@
       "prerequisite": {
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
       },
+      "other": [ "intelligence" ],
       "visibility": 16,
-      "federationStorage": { "food": 20, "material": 20, "energy": 20, "water":  2, "wealth": 50, "happiness": 25 }
+      "federationStorage": { "energy": 200, "food": 20, "material": 200, "water":  5, "wealth": 200 }
     },
     "farm": {
       "code": 2,
@@ -431,7 +440,7 @@
       "prerequisite": {
   //      "building": ["air field"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands","mountain-low"],
-        "other": [ "anywhere" ]
+        "other": [ "anywhere", "federation", "intelligence" ]
       },
       "visibility": 16
     }
