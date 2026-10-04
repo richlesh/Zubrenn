@@ -704,12 +704,24 @@ without code changes:
     `growth` (growth-rate modifier). Only applied when the building's cell is worked.
   - `storage` — how much Food/Material/Energy/Wealth/Happiness this building can
     hold; a colony's cap for each is the **sum** of its buildings' storage.
-  - `prerequisiteBuildings` — building types (by **lowercase name key**, e.g.
-    `["solar panel"]`) that must already exist in the colony before this type can
-    be built (e.g. the Factory requires a Solar Panel). The special token
-    `"network"` additionally requires the colony to be **transport-connected** to
-    another of your colonies (road/monorail, river/canal, sea, or air) before the
-    building can be placed.
+  - `prerequisite` — all build-eligibility requirements for the building, as an
+    object with optional keys:
+    - `building` — **lowercase building-name keys** (e.g. `["solar panel"]`) that
+      must **all** already exist in the colony (e.g. the Factory requires a Solar
+      Panel).
+    - `network` — a list of transport-connection types the colony must have to
+      **another** of your colonies (satisfied by **any one** listed): `"land"`
+      (road or monorail), `"river"` (river/canal), `"sea"`, `"air"`, `"space"`,
+      or `"any"` (any connection at all). Omitted/empty means no network needed.
+    - `terrain` — terrain **name keys** the building may be placed on (defaults to
+      habitable land).
+    - `other` — extra per-cell placement tags (same vocabulary as a
+      terrain-bonus's `other`): e.g. `"sea"` (on a shallow-sea tile), `"river"`
+      (river/canal-adjacent land), `"water"`/`"dry"`, or elevation bands. All
+      listed tags must hold.
+    - `climate` — climate band names (`"tropical"`/`"temperate"`/`"subpolar"`/
+      `"polar"`) the cell must be in. Omitted means any climate.
+    - `citySize` — the colony population must be **≥ `citySize` × 1,000**.
   - `range` — for the **Air Field**, the maximum hex distance for an air link:
     two colonies that each have an Air Field within this distance are connected
     (and can share resources).

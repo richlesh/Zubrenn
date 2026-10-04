@@ -12,16 +12,16 @@
   //    "flatland", "mountain", "trees"
 
   // "other" restrictions can be a list of
-  //    "river": River adjacent tile
-  //    "sea":   Sea adjacent tile (for shallow sea)
-  //    "water": River or sea/wetland adjacent tile
-  //    "land":      Land adjacent (for shoreline)
-  //    "pristine":  Destroyed by building
-  //    "dry"        Not water adjacent
+  //    "river":    River adjacent tile
+  //    "sea":      Sea adjacent tile (for shallow sea)
+  //    "water":    River or sea/wetland adjacent tile
+  //    "land":     Land adjacent (for shoreline)
+  //    "pristine": Destroyed by building
+  //    "dry"       Not water adjacent
   //    (elevation bands, signed meters ASL = (elevation - seaLevel) * 10000)
-  //    "deep":      Deep water      (depth below -1000 m ASL)
-  //    "shallow":   Shallow water   (-1000 m <= depth <= 0 m ASL)
-  //    "lowland":   Low land        (0 m <= altitude <= 2000 m ASL)
+  //    "deep":     Deep water      (depth below -1000 m ASL)
+  //    "shallow":  Shallow water   (-1000 m <= depth <= 0 m ASL)
+  //    "lowland":  Low land        (0 m <= altitude <= 2000 m ASL)
 
   // Climate-band dividing lines, as fractions of the polar line
   // (P = 25 + polar*45 deg). Each fraction ranges 0..0.35 (0%..35%):
@@ -37,15 +37,15 @@
   // terrainBonus). A group expands to its member terrains.
   "terrainGroups": {
     "flatland": ["grassland", "plains", "desert", "wetlands"],
-    "trees": ["jungle", "forest", "mountain-low"],
+    "trees":    ["jungle", "forest", "mountain-low"],
     "mountain": ["mountain-low", "mountain-high"]
   },
 
   // Per terrain type (keyed by name, each with a numeric `code` = grid id):
   // display name, tile icon, HSV/HSL color, a `bonus` base Food/Material/Water
   // yield per 1,000 workers, a `movement` cost array
-  // [unimproved, road, sea/river, monorail, air], and per-tile transport build
-  // costs (roadCostPerTile, monorailCostPerTile, canalCostPerEdge). Codes:
+  // [unimproved, road, sea/river, monorail, air] (space is 0), and per-tile transport
+  // build costs (roadCostPerTile, monorailCostPerTile, canalCostPerEdge). Codes:
   // 1 Sea, 2 Grassland, 3 Hills, 4 Forest, 5 Jungle, 6 Desert, 7 Mountain-Low,
   // 8 Mountain-High, 9 Frozen, 10 Plains, 11 Wetlands.
   "terrainTypes": {
@@ -54,7 +54,7 @@
       "name": "Sea",
       "icon": "Port of Taganrog.png",
       "color": { "h": 240, "s": 1, "l": 0.25 },
-      "movement": [1000, 1, 0.75, 0.2, 0.1],
+      "movement": [1000, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 0.25, "material": 0, "water": 0, "energy": -0.01, "wealth": -0.025 },
       "roadCostPerTile": { "energy": 3, "material": 800, "water": 0.2, "wealth": 130, "turns": 4 },
       "monorailCostPerTile": { "energy": 4, "material": 950, "water": 0.2, "wealth": 180, "turns": 4 }
@@ -64,7 +64,7 @@
       "name": "Grassland",
       "icon": "Open Square Path Grass.png",
       "color": { "h": 120, "s": 1, "l": 0.6 },
-      "movement": [2, 1, 0.75, 0.2, 0.1],
+      "movement": [2, 0.5, 0.75, 0.2, 0.1],
       "bonus": {  "food": 10, "material": 3, "water": 0, "energy": -1, "wealth": -0.25 },
       "roadCostPerTile": { "energy": 0.3, "material": 180, "water": 0.05, "wealth": 3, "turns": 1 },
       "monorailCostPerTile": { "energy": 2, "material": 600, "water": 0.2, "wealth": 60, "turns": 2 },
@@ -75,7 +75,7 @@
       "name": "Hills",
       "icon": "Just Add Bison.png",
       "color": { "h": 90, "s": 0.583, "l": 0.52 },
-      "movement": [3, 1, 0.75, 0.2, 0.1],
+      "movement": [2, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 1, "material": 2 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.75 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.75 },
@@ -86,7 +86,7 @@
       "name": "Forest",
       "icon": "Shrub Cover.png",
       "color": { "h": 120, "s": 1, "l": 0.3 },
-      "movement": [4, 1, 0.75, 0.2, 0.1],
+      "movement": [4, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 1, "material": 2 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 1 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 1 },
@@ -97,7 +97,7 @@
       "name": "Jungle",
       "icon": "Deep Forest.png",
       "color": { "h": 120, "s": 1, "l": 0.15 },
-      "movement": [5, 1, 0.75, 0.2, 0.1],
+      "movement": [5, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 1, "material": 2, "water": 0.5},
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 1 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 1 },
@@ -108,7 +108,7 @@
       "name": "Desert",
       "icon": "Slush.png",
       "color": { "h": 60, "s": 0.6, "l": 0.469 },
-      "movement": [2, 1, 0.75, 0.2, 0.1],
+      "movement": [2, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 0, "material": 0 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
@@ -119,7 +119,7 @@
       "name": "Mountain-Low",
       "icon": "Dense Pine Forest.png",
       "color": { "h": 120, "s": 0.818, "l": 0.275 },
-      "movement": [4, 1, 1000, 0.2, 0.1],
+      "movement": [4, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 0, "material": 3 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 1.5 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 1.5 },
@@ -130,7 +130,7 @@
       "name": "Mountain-High",
       "icon": "Age of the Canyon.png",
       "color": { "h": 30, "s": 0.333, "l": 0.225 },
-      "movement": [5, 1, 1000, 0.2, 0.1],
+      "movement": [5, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 0, "material": 4 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 2 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 2 },
@@ -141,7 +141,7 @@
       "name": "Frozen",
       "icon": "Polar Zone.png",
       "color": { "h": 0, "s": 0, "l": 1 },
-      "movement": [2, 1, 1000, 0.2, 0.1],
+      "movement": [2, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 0, "material": 0 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 },
@@ -152,7 +152,7 @@
       "name": "Plains",
       "icon": "Sage Stone.png",
       "color": { "h": 120, "s": 1, "l": 0.8 },
-      "movement": [2, 1, 0.75, 0.2, 0.1],
+      "movement": [2, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 1, "material": 1 },
       "roadCostPerTile": { "energy": 0.3, "material": 180, "water": 0.05, "wealth": 3, "turns": 1 },
       "monorailCostPerTile": { "energy": 2, "material": 600, "water": 0.2, "wealth": 60, "turns": 2 },
@@ -163,7 +163,7 @@
       "name": "Wetlands",
       "icon": "Dodders Marsh.png",
       "color": { "h": 120, "s": 1, "l": 0.4 },
-      "movement": [3, 1, 0.75, 0.2, 0.1],
+      "movement": [3, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 0, "material": 1, "water": 0.5, "happiness": 1 },
       "roadCostPerTile": { "energy": 3, "material": 800, "water": 0.2, "wealth": 130, "turns": 4 },
       "monorailCostPerTile": { "energy": 4, "material": 950, "water": 0.2, "wealth": 180, "turns": 4 },
@@ -183,7 +183,7 @@
     // average American uses 100 kL of water/year. The ~1,000 gal/d per capita figure is the total national withdrawal intensity for all sectors.
     // US income is roughly $ 80 million per 1,000.  $10 is one credit so ¤8M credit /1000
 
-    // population costs are per 1000 population
+    // population costs are per "unitSize" population
     "population": { "unitSize": 1000, "food": 1, "material": 10, "energy": 5, "water": 0.2, "wealth": 8 },
     "infantry": { "unitSize": 1000, "food": 1, "material": 10, "energy": 6, "water": 0.2, "wealth": 10 },
     "tank": { "food": 2, "material": 2, "energy": 2, "water": 0.1, "wealth": 2 },
@@ -197,182 +197,218 @@
   // a numeric `code` (the stable type id stored on building instances as
   // b.type). Each defines buildCost (+turns), costPerYear upkeep, bonus
   // (per-year production incl. growth/population), storage (summed into the
-  // colony's per-resource caps), prerequisiteBuildings (lowercase building name
-  // keys that must exist in the colony; the special token "network" additionally
-  // requires the colony to be transport-connected to another of the owner's
-  // colonies by road/monorail, river/canal, sea, or air),
-  // allowed terrain, optional `climate` restriction (list of band names:
-  // "tropical"/"temperate"/"subpolar"/"polar" — the building may only be placed
-  // in a cell whose climate band is listed), optional `other` placement rules,
-  // optional federationStorage, and `range` (Air Field link distance). The
-  // Spaceport (code 14) creates an UNLIMITED-range "space" transport network:
+  // colony's per-resource caps), optional federationStorage, and `range`
+  // (Air Field link distance). All build-eligibility requirements live under a
+  // single `prerequisite` object:
+  //   building : list of lowercase building-name keys that must already exist in
+  //              the colony (ALL required).
+  //   network  : list of connection types the colony must have to ANOTHER of the
+  //              owner's colonies (ANY one satisfies): "land" (road or monorail),
+  //              "river" (river/canal), "sea", "air", "space", or "any" (any
+  //              connection at all). Missing/empty = no network requirement.
+  //   terrain  : terrain NAME keys the building may be placed on.
+  //   other    : extra per-cell placement tags (same vocabulary as
+  //              terrainBonus.other): "sea" (on a shallow-sea tile), "river"
+  //              (river/canal-adjacent land), "water"/"dry", elevation bands,
+  //              etc. ALL listed tags must hold.
+  //   climate  : climate band names ("tropical"/"temperate"/"subpolar"/"polar")
+  //              the cell must be in. Missing/empty = any climate.
+  //   citySize : the colony population must be >= citySize * 1000.
+  // The Spaceport (code 14) creates an UNLIMITED-range "space" transport network:
   // any two of a player's colonies that both have a Spaceport are connected
-  // regardless of distance. A building only
-  // contributes production/upkeep/storage while its cell is worked.
+  // regardless of distance. A building only contributes production/upkeep/storage
+  // while its cell is worked.
   "buildingTypes": {
     "biodome": {
       "code": 1,
       "name": "Biodome",
       "icon": "biodome.png",
       "startPopulation": 1000,
-      "prerequisiteBuildings": [],
       "buildCost": { "material": 3, "wealth": 5, "turns": 2 },
       "costPerYear": { },
       "bonus": { "energy": 100, "food": 60, "material": 30, "water": 0.3, "wealth": 20, "population": 1 },
       "storage": { "energy": 1000, "food": 1000, "material": 1000, "water":  10, "wealth": 1000, "happiness": 25, "population": 5000 },
-      "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+      "prerequisite": {
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      },
       "federationStorage": { "food": 20, "material": 20, "energy": 20, "water":  2, "wealth": 50, "happiness": 25 }
     },
     "farm": {
       "code": 2,
       "name": "Farm",
       "icon": "farm.png",
-      "prerequisiteBuildings": ["biodome","solar panel"],
       "buildCost":   { "energy": 1, "material": 2, "water": 0, "wealth": 10, "turns": 1 },
       "costPerYear": { "energy": 0.2, "material": 5, "water": 10, "wealth": 5 },
       "bonus":       { "energy": 0, "food": 60, "material": 30, "water": 0, "wealth": 20 },
       "storage": { "food": 60 },
-      "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      "prerequisite": {
+        "building": ["biodome","solar panel"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      }
     },
     "solar panel": {
       "code": 3,
       "name": "Solar Panel",
       "icon": "solar_panel.png",
-      "prerequisiteBuildings": ["biodome"],
       "buildCost": { "energy": 750, "material": 20, "wealth": 28, "turns": 1 },
       "costPerYear": { },
       "bonus": { "energy": 1000 },
       "storage": { },
-      "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      "prerequisite": {
+        "building": ["biodome"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      }
     },
     "factory": {
       "code": 4,
       "name": "Factory",
       "icon": "factory.png",
-      "prerequisiteBuildings": ["solar panel"],
       "buildCost": { "energy": 1000, "material": 75, "wealth": 150, "turns": 3 },
       "costPerYear": { "energy": 600, "material": 400, "water": 1, "wealth": 150 },
       "bonus": { "energy": 0, "material": 800, "wealth": 1, "happiness": -0.5, "population": -0.25 },
       "storage": { "material": 500, "energy": 10, "wealth": 0, "happiness": 0 },
-      "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      "prerequisite": {
+        "building": ["solar panel"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      }
     },
     "dock": {
       "code": 5,
       "name": "Dock",
       "icon": "dock.png",
-      "prerequisiteBuildings": ["solar panel"],
       "buildCost": { "energy": 3, "material": 5, "water": 0.01, "wealth": 0.8, "turns": 1 },
       "costPerYear": { "energy": 5, "material": 0,  "water": 0.05,"wealth": 0.6 },
       "bonus": { "energy": 0, "food": 1.5, "material": 0.1, "water": 0, "wealth": 0.9 },
       "storage": { "energy": 0, "food": 5, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
-      "terrain": ["sea"],
-      "other": [ "sea" ]
+      "prerequisite": {
+        "building": ["solar panel"],
+        "terrain":  ["sea"],
+        "other":    ["land"]
+      }
     },
     "air field": {
       "code": 6,
       "name": "Air Field",
       "icon": "air_field.png",
-      "prerequisiteBuildings": ["solar panel","factory"],
       "buildCost": { "energy": 5, "material": 100, "water": 1, "wealth": 50, "turns": 2 },
       "costPerYear": { "energy": 50, "material": 2, "water": 0.2, "wealth": 5 },
       "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 5, "happiness": 0.25 },
       "storage": { "energy": 5, "food": 50, "material": 100, "water": 0, "wealth": 0, "happiness": 0 },
-      "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+      "prerequisite": {
+        "building": ["solar panel","factory"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      },
       "range": 32
     },
     "barracks": {
       "code": 7,
       "name": "Barracks",
       "icon": "barracks.png",
-      "prerequisiteBuildings": ["farm","solar panel","factory"],
       "buildCost": { "energy": 5, "material": 50, "water": 0, "wealth": 30, "turns": 2 },
       "costPerYear": { "energy": 20, "material": 2, "water": 0, "wealth": 3 },
       "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0.5 },
       "storage": { "energy": 0, "food": 100, "material": 50, "water": 0, "wealth": 0, "happiness": 0 },
-      "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      "prerequisite": {
+        "building": ["farm","solar panel","factory"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      }
     },
     "grainery": {
       "code": 8,
       "name": "Grainery",
       "icon": "grainery.png",
-      "prerequisiteBuildings": ["farm"],
       "buildCost": { "energy": 2, "material": 20, "water": 0, "wealth": 5, "turns": 2 },
       "costPerYear": { "energy": 2, "material": 0, "water": 0, "wealth": 0.5 },
       "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
       "storage": { "energy": 0, "food": 300, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
-      "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      "prerequisite": {
+        "building": ["farm"], "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      }
     },
     "warehouse": {
       "code": 9,
       "name": "Warehouse",
       "icon": "warehouse.png",
-      "prerequisiteBuildings": ["factory"],
       "buildCost": { "energy": 2, "material": 30, "water": 0, "wealth": 8, "turns": 2 },
       "costPerYear": { "energy": 3, "material": 0, "water": 0, "wealth": 1 },
       "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
       "storage": { "energy": 0, "food": 0, "material": 300, "water": 0, "wealth": 0, "happiness": 0 },
-      "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      "prerequisite": {
+        "building": ["factory"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      }
     },
     "bank": {
       "code": 10,
       "name": "Bank",
       "icon": "bank.png",
-      "prerequisiteBuildings": ["solar panel","network"],
       "buildCost": { "energy": 5, "material": 30, "water": 0, "wealth": 20, "turns": 2 },
       "costPerYear": { "energy": 15, "material": 0, "water": 0, "wealth": 3 },
       "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 5, "happiness": 0.25 },
       "storage": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 500, "happiness": 0 },
-      "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      "prerequisite": {
+        "building": ["solar panel"],
+        "network": ["any"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      }
     },
     // Compressed-Air Storage
     "caes": {
       "code": 11,
       "name": "CAES",
       "icon": "caes.png",
-      "prerequisiteBuildings": ["solar panel","bank"],
       "buildCost": { "energy": 10, "material": 40, "water": 1, "wealth": 30, "turns": 3 },
       "costPerYear": { "energy": 20, "material": 0, "water": 0, "wealth": 2 },
       "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
       "storage": { "energy": 1000, "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
-      "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      "prerequisite": {
+        "building": ["solar panel","bank"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      }
     },
     // Water Treatment Plant
     "wtp": {
       "code": 12,
       "name": "WTP",
       "icon": "water_plant.png",
-      "prerequisiteBuildings": ["solar panel"],
       "buildCost":   { "energy": 30, "material": 40, "water": 1,  "wealth": 50, "turns": 3 },
       "costPerYear": { "energy": 40, "material": 4,  "water": 0,  "wealth": 2 },
       "bonus":       { "energy": 0,  "food": 0, "material": 0, "water": 140, "wealth": 0 },
       "storage":     { "water": 200 },
-      "terrain":     ["grassland","hills","forest","jungle","desert","plains"],
-      "other":       [ "river" ]
+      "prerequisite": {
+        "building": ["solar panel"],
+        "terrain": ["grassland","hills","forest","jungle","desert","plains"],
+        "other": ["river"]
+      }
     },
     // Desalination Plant
     "desalination": {
       "code": 13,
       "name": "Desalination",
       "icon": "desalination.png",
-      "prerequisiteBuildings": ["solar panel"],
       "buildCost":   { "energy": 5, "material": 200, "water": 1, "wealth": 100, "turns": 3 },
       "costPerYear": { "energy": 250, "material": 30, "water": 0, "wealth": 5 },
       "bonus":       { "energy": 0, "food": 0, "material": 0, "water": 70, "wealth": 0 },
       "storage":     { "water": 200 },
-      "terrain":     ["sea"],
-      "other":       [ "sea" ]
+      "prerequisite": {
+        "building": ["solar panel"],
+        "terrain":  ["sea"],
+        "other":    ["land"]
+      }
     },
     "spaceport": {
       "code": 14,
       "name": "Spaceport",
       "icon": "spaceport.png",
-      "prerequisiteBuildings": ["air field"],
       "buildCost": { "energy": 5, "material": 100, "water": 1, "wealth": 50, "turns": 2 },
       "costPerYear": { "energy": 100, "material": 10, "water": 0.5, "wealth": 20 },
       "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 15, "happiness": 0.25 },
       "storage": { "energy": 5, "food": 100, "material": 200, "water": 0, "wealth": 0, "happiness": 0 },
-      "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands"],
-      "climate": ["tropical","temperate"]
+      "prerequisite": {
+        "building": ["air field"],
+        "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands"],
+        "climate": ["tropical","temperate"]
+      }
     }
   },
 

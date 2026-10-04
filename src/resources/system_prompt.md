@@ -116,20 +116,24 @@ become operational (it produces nothing until finished). **A building only
 contributes (its bonus, upkeep, AND storage) when its cell is worked** — an
 idle building on an unworked cell does nothing at all and provides no storage.
 
-**Prerequisites:** a building type can only be built at a colony once its
-`prerequisiteBuildings` already exist there. Currently: Farm, Solar Panel and
-Dock require a Biodome; the Factory requires a Biodome **and** a Solar Panel;
-the **Air Field** requires a Factory. A prerequisite may also be the special
-token `"network"`, which requires the colony to be transport-connected to
-another of your colonies (road/monorail, river/canal, sea, or air) before the
-building can be built.
+**Prerequisites:** each building type has a `prerequisite` object controlling
+when it can be built at a colony. All of its parts must be satisfied:
 
-**Climate restriction:** a building type may also declare a `climate` list
-(band names `tropical`/`temperate`/`subpolar`/`polar`); it can then only be
-built in a cell whose climate band is listed. For example the **Spaceport**
-(requires an Air Field) can only be built in a **tropical** cell. The Spaceport
-opens the **space transport network**, linking any two of your Spaceport
-colonies with no range limit at all.
+- `building` — other building types that must already exist in the colony (e.g.
+  Farm/Solar Panel/Dock need a Biodome; the Factory needs a Solar Panel; the
+  **Air Field** needs a Factory; the **Spaceport** needs an Air Field).
+- `network` — the colony must be transport-connected to **another** of your
+  colonies by at least **one** of the listed types: `land` (road/monorail),
+  `river` (river/canal), `sea`, `air`, `space`, or `any` (any connection at all).
+  Omitted/empty means no network is required.
+- `terrain` — terrain the building may sit on.
+- `climate` — climate band(s) (`tropical`/`temperate`/`subpolar`/`polar`) the
+  cell must be in. For example the **Spaceport** can only be built in a
+  `tropical` or `temperate` cell. Omitted means any climate.
+- `citySize` — the colony population must be at least `citySize` × 1,000.
+
+The Spaceport opens the **space transport network**, linking any two of your
+Spaceport colonies with no range limit at all.
 
 **Removing a building** (Remove Improvement) costs `removeImprovementCost`
 (Energy + Food from the colony) and takes `removeImprovementCost.turns` to

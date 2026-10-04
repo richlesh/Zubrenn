@@ -3347,13 +3347,18 @@
     // rule. Sea and the uninhabitable high mountains / frozen are excluded by
     // default. Values are terrain NAME keys (config now keys terrain by name).
     const DEFAULT_BUILDING_TERRAIN = ["grassland", "hills", "forest", "jungle", "desert", "mountain-low", "plains", "wetlands"];
+    // The `prerequisite` object for a building type (building/network/terrain/
+    // climate/citySize), or an empty object when absent.
+    function btPrereq(type) {
+      const bt = buildingType(type);
+      return (bt && bt.prerequisite && typeof bt.prerequisite === 'object') ? bt.prerequisite : {};
+    }
     // The terrain NAME keys a building type may be placed on, taken from
-    // config.json buildingTypes[type].terrain (same convention as
+    // config.json buildingTypes[type].prerequisite.terrain (same convention as
     // terrainBonus.terrain). Falls back to the habitable-land default.
     function buildingTerrains(type) {
-      const bt = buildingType(type);
-      const list = bt && Array.isArray(bt.terrain) ? bt.terrain : null;
-      return (list && list.length) ? list : DEFAULT_BUILDING_TERRAIN;
+      const list = btPrereq(type).terrain;
+      return (Array.isArray(list) && list.length) ? list : DEFAULT_BUILDING_TERRAIN;
     }
     // Terrain GROUP selectors expand to a set of terrain names. Groups come from
     // config.json `terrainGroups`; the canonical built-in groups are the
@@ -3956,6 +3961,124 @@
         if (groups.get(_colonyKey(b)) === myGroup) out.push(b);
       }
       return out;
+    }
+    // The SET of transport-network modes by which `col` is connected to at least
+    // one OTHER same-owner colony. Modes: 'land' (road/monorail), 'river'
+    // (river/canal), 'sea' (both Docks + shallow route), 'air' (both Air Fields
+    // in range), 'space' (both Spaceports). Used by the per-building
+    // `prerequisite.network` requirement. Reuses the same linking primitives as
+    // colonyConnectivity; computed on demand (only during build-eligibility
+    // checks, so no caching needed).
+    function colonyNetworkModes(col) {
+      const modes = new Set();
+      if (!col) return modes;
+      const owner = col.owner;
+      const others = (gameState.buildings || []).filter(
+        (b) => b.type === 1 && b.owner === owner && !b.inTransit && b !== col);
+      if (!others.length) return modes;
+      const tr = ensureTransport();
+
+      // land: col and another colony attach to the same road/monorail component.
+      const netCells = new Set([...tr.roads, ...tr.monorails]);
+      if (netCells.size) {
+        const cellComp = new Map();
+        let comp = 0;
+        for (const start of netCells) {
+          if (cellComp.has(start)) continue;
+          const id = comp++; const stack = [start]; cellComp.set(start, id);
+          while (stack.length) {
+            const ck = stack.pop();
+            const [cx, cy] = ck.split(",").map(Number);
+            for (const n of hexNeighborsRenderer(cx, cy)) {
+              const nk = cellKey(n.x, n.y);
+              if (netCells.has(nk) && !cellComp.has(nk)) { cellComp.set(nk, id); stack.push(nk); }
+            }
+          }
+        }
+        const compsOf = (c) => {
+          const set = new Set();
+          const own = cellKey(c.x, c.y);
+          if (cellComp.has(own)) set.add(cellComp.get(own));
+          for (const n of hexNeighborsRenderer(c.x, c.y)) {
+            const nk = cellKey(n.x, n.y);
+            if (cellComp.has(nk)) set.add(cellComp.get(nk));
+          }
+          return set;
+        };
+        const mine = compsOf(col);
+        if (mine.size) {
+          for (const o of others) {
+            const oc = compsOf(o);
+            for (const id of oc) if (mine.has(id)) { modes.add('land'); break; }
+            if (modes.has('land')) break;
+          }
+        }
+      }
+
+      // river: col and another colony share a river/canal vertex component.
+      {
+        const vAdj = new Map();
+        const link = (u, v) => {
+          if (!vAdj.has(u)) vAdj.set(u, new Set());
+          if (!vAdj.has(v)) vAdj.set(v, new Set());
+          vAdj.get(u).add(v); vAdj.get(v).add(u);
+        };
+        for (const e of allRiverBorderEdges()) {
+          const vs = edgeVertices(e.a.x, e.a.y, e.b.x, e.b.y);
+          if (vs.length === 2) link(vs[0], vs[1]);
+        }
+        for (const ek of tr.canals) {
+          const [ka, kb] = ek.split("|");
+          const [ax, ay] = ka.split(",").map(Number);
+          const [bx, by] = kb.split(",").map(Number);
+          const vs = edgeVertices(ax, ay, bx, by);
+          if (vs.length === 2) link(vs[0], vs[1]);
+        }
+        if (vAdj.size) {
+          const vComp = new Map(); let vc = 0;
+          for (const v of vAdj.keys()) {
+            if (vComp.has(v)) continue;
+            const id = vc++; const stack = [v]; vComp.set(v, id);
+            while (stack.length) {
+              const u = stack.pop();
+              for (const w of (vAdj.get(u) || [])) if (!vComp.has(w)) { vComp.set(w, id); stack.push(w); }
+            }
+          }
+          const waterCompsOf = (c) => {
+            const set = new Set();
+            for (const vk of cellCornerKeys(c.x, c.y)) if (vComp.has(vk)) set.add(vComp.get(vk));
+            return set;
+          };
+          const mine = waterCompsOf(col);
+          if (mine.size) {
+            for (const o of others) {
+              const oc = waterCompsOf(o);
+              for (const id of oc) if (mine.has(id)) { modes.add('river'); break; }
+              if (modes.has('river')) break;
+            }
+          }
+        }
+      }
+
+      // sea: both have a Dock and a shallow-sea route links them.
+      if (colonyHasDock(col)) {
+        for (const o of others) {
+          if (colonyHasDock(o) && _pathExists(col, o, owner, (x, y) => isShallowSea(x, y))) { modes.add('sea'); break; }
+        }
+      }
+      // air: both have an Air Field within range.
+      if (colonyHasAirfield(col)) {
+        for (const o of others) {
+          if (colonyHasAirfield(o) && coloniesAirLinked(col, o)) { modes.add('air'); break; }
+        }
+      }
+      // space: both have a Spaceport (unlimited range).
+      if (colonyHasSpaceport(col)) {
+        for (const o of others) {
+          if (colonyHasSpaceport(o)) { modes.add('space'); break; }
+        }
+      }
+      return modes;
     }
 
     // Borrow up to `amount` of `resource` for `col` from the connected colony
@@ -5875,7 +5998,8 @@
       // buildingTypes[type].terrain in config.json (same convention as
       // terrainBonus.terrain); it defaults to habitable land when omitted.
       const bt = buildingType(type) || {};
-      const tags = Array.isArray(bt.other) ? bt.other : [];
+      const otherTags = btPrereq(type).other;
+      const tags = Array.isArray(otherTags) ? otherTags : [];
       const terr = terrainAt(x, y);
 
       // Terrain gate: the cell's tile must be in the building's allowed set.
@@ -5938,13 +6062,14 @@
             break; // handled above / runtime-only / unknown -> ignore
         }
       }
-      // Climate restriction: if the building declares a `climate` list (band
+      // Climate restriction: if the building declares prerequisite.climate (band
       // names "tropical"/"temperate"/"subpolar"/"polar"), the cell's climate band
       // must be one of them. Mirrors the terrainBonus climate rule.
-      if (Array.isArray(bt.climate) && bt.climate.length) {
+      const climateReq = btPrereq(type).climate;
+      if (Array.isArray(climateReq) && climateReq.length) {
         const band = cellClimateBand(x, y);
-        if (!bt.climate.includes(band)) {
-          return { ok: false, reason: `must be in a ${bt.climate.join(" / ")} climate` };
+        if (!climateReq.includes(band)) {
+          return { ok: false, reason: `must be in a ${climateReq.join(" / ")} climate` };
         }
       }
       return { ok: true };
@@ -5974,38 +6099,59 @@
     }
     // Whether the prerequisite building types for `type` all exist (operational)
     // in the colony that controls (x,y).
+    // Whether a colony satisfies a prerequisite.network list (OR semantics):
+    // the colony must be connected to another of the owner's colonies by AT
+    // LEAST ONE listed mode. Modes: "land", "river", "sea", "air", "space", or
+    // "any" (any connection at all). Empty/missing list = no requirement.
+    function networkRequirementMet(col, networkList) {
+      if (!Array.isArray(networkList) || !networkList.length) return true;
+      if (!col) return false;
+      const modes = colonyNetworkModes(col);
+      for (const req of networkList) {
+        if (req === 'any') { if (modes.size > 0) return true; }
+        else if (modes.has(req)) return true;
+      }
+      return false;
+    }
+    // Whether the colony population meets a prerequisite.citySize (population
+    // must be >= citySize * 1000). Missing/zero = no requirement.
+    function citySizeMet(col, citySize) {
+      if (!(citySize > 0)) return true;
+      return !!col && (col.population || 0) >= citySize * 1000;
+    }
+    // Whether ALL build prerequisites for `type` are met at (x,y): required
+    // buildings present in the colony, a satisfying network connection (if any
+    // listed), and the colony population >= citySize*1000 (if set). Terrain and
+    // climate are enforced separately by canPlaceTypeAt.
     function hasPrerequisitesAt(type, x, y, owner) {
-      // prerequisiteBuildings are lowercase NAME keys, plus the special token
-      // "network" meaning the colony must be transport-connected to another of
-      // the owner's colonies (road/monorail, river/canal, sea, or air).
-      const raw = (buildingType(type) || {}).prerequisiteBuildings || [];
-      if (!raw.length) return true;
-      const needsNetwork = raw.includes("network");
-      // Map building NAME keys to numeric codes for the presence check.
-      const prereqCodes = raw
-        .filter((p) => p !== "network")
-        .map((p) => { const e = buildingType(p); return e ? e.code : p; });
+      const pre = btPrereq(type);
+      const buildings = Array.isArray(pre.building) ? pre.building : [];
       const col = colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
       if (!col) return false;
+      // Required buildings (NAME keys -> numeric codes) present in the colony.
       const present = new Set(colonyBuildings(col).map((b) => b.type));
-      if (!prereqCodes.every((t) => present.has(t))) return false;
-      if (needsNetwork && connectedColonies(col).length === 0) return false;
+      const codes = buildings.map((p) => { const e = buildingType(p); return e ? e.code : p; });
+      if (!codes.every((t) => present.has(t))) return false;
+      if (!networkRequirementMet(col, pre.network)) return false;
+      if (!citySizeMet(col, pre.citySize)) return false;
       return true;
     }
-    // Names of missing prerequisite building types (for the menu label).
+    // Human-readable list of unmet prerequisites (for the build-menu label):
+    // missing building names, an unmet network requirement, and an unmet
+    // population requirement.
     function missingPrerequisiteNames(type, x, y, owner) {
-      // Building NAME-key prerequisites (mapped to codes) plus the special
-      // "network" token (transport connection to another colony).
-      const raw = (buildingType(type) || {}).prerequisiteBuildings || [];
-      const needsNetwork = raw.includes("network");
-      const prereqCodes = raw
-        .filter((p) => p !== "network")
-        .map((p) => { const e = buildingType(p); return e ? e.code : p; });
+      const pre = btPrereq(type);
+      const buildings = Array.isArray(pre.building) ? pre.building : [];
       const col = colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
       const present = new Set(col ? colonyBuildings(col).map((b) => b.type) : []);
-      const missing = prereqCodes.filter((t) => !present.has(t)).map((t) => improvementName(t));
-      if (needsNetwork && (!col || connectedColonies(col).length === 0)) {
-        missing.push("Transport network");
+      const codes = buildings.map((p) => { const e = buildingType(p); return e ? e.code : p; });
+      const missing = codes.filter((t) => !present.has(t)).map((t) => improvementName(t));
+      if (!networkRequirementMet(col, pre.network)) {
+        const nets = pre.network.map((n) => n === 'any' ? 'network' : (n + ' network'));
+        missing.push(nets.join(" or "));
+      }
+      if (!citySizeMet(col, pre.citySize)) {
+        missing.push(`population ${(pre.citySize * 1000).toLocaleString()}`);
       }
       return missing;
     }
