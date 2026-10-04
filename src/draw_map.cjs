@@ -227,12 +227,13 @@ const TERRAIN_COLORS = [
   hsl(120, 0.818, 0.275), // 7 mountain-low
   hsl(30, 0.333, 0.225),  // 8 mountain-high
   hsl(0, 0, 1),        // 9 frozen
-  hsl(240, 1, 0.5)     // 10 river
+  hsl(120, 1, 0.8),    // 10 plains
+  hsl(120, 1, 0.4)     // 11 wetlands
 ];
 
 const TERRAIN_NAMES = [
   'undefined', 'sea', 'grassland', 'hills', 'forest', 'jungle',
-  'desert', 'mountain-low', 'mountain-high', 'frozen', 'river'
+  'desert', 'mountain-low', 'mountain-high', 'frozen', 'plains', 'wetlands'
 ];
 
 const TERRAIN_IMAGES = [
@@ -246,7 +247,8 @@ const TERRAIN_IMAGES = [
   'Dense Pine Forest.png',      // 7 mountain-low
   'Age of the Canyon.png',      // 8 mountain-high
   'Polar Zone.png',             // 9 frozen
-  'Azure Waters.png'            // 10 river
+  'Sage Stone.png',             // 10 plains
+  'Dodders Marsh.png'           // 11 wetlands
 ];
 
 // Hex geometry: 4 sub-cells wide/tall. y stretched by sqrt(3)/2 so sides match.
@@ -1133,6 +1135,19 @@ class HexMap {
   // as Sets of "x,y" cell keys / "x,y|x,y" edge keys) and redraw.
   setTransport(tr) {
     this.transport = tr || null;
+    this._draw();
+  }
+
+  // Public: replace the terrain-type and building-type config maps (e.g. after
+  // the real config.json loads over the in-code default). Invalidates the cached
+  // code->entry indexes, reloads tile/building textures, and redraws so config
+  // colors/icons become authoritative without recreating the HexMap.
+  setTypeConfig(terrainTypes, buildingTypes) {
+    if (terrainTypes) this.terrainTypes = terrainTypes;
+    if (buildingTypes) this.buildingTypes = buildingTypes;
+    this._ttByCode = null; this._ttByCodeSrc = null;
+    this._btByCode = null; this._btByCodeSrc = null;
+    try { this._loadTiles(); } catch (e) { /* ignore */ }
     this._draw();
   }
 

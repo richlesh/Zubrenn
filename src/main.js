@@ -16,12 +16,39 @@ const APP_ICON_PATH = path.join(__dirname, "resources", "app_icon.png");
 // describing the terrainBonus schema, etc). JSON.parse rejects those, so strip
 // lines whose first non-whitespace characters are `//` before parsing. Only
 // whole-line comments are removed, so `//` inside string values is preserved.
+// Comment lines are blanked (not deleted), so line numbers in a parse error map
+// 1:1 back to the original file. On a JSON syntax error this throws an Error
+// annotated with `.line`, `.column`, and `.snippet` (the offending source line)
+// to help the user locate the problem.
 function parseJsonc(text) {
-  const cleaned = String(text)
-    .split(/\r?\n/)
+  const lines = String(text).split(/\r?\n/);
+  const cleaned = lines
     .map((line) => (/^\s*\/\//.test(line) ? "" : line))
     .join("\n");
-  return JSON.parse(cleaned);
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    // V8's error message includes "... at position N" and often
+    // "... (line L column C)". Derive line/column from position when needed so
+    // we can point the user at the right spot (and show that line's text).
+    let line = null, column = null;
+    const lc = /line (\d+) column (\d+)/i.exec(e.message);
+    if (lc) { line = parseInt(lc[1], 10); column = parseInt(lc[2], 10); }
+    if (line == null) {
+      const pm = /position (\d+)/i.exec(e.message);
+      if (pm) {
+        const pos = parseInt(pm[1], 10);
+        const before = cleaned.slice(0, pos);
+        line = (before.match(/\n/g) || []).length + 1;
+        column = pos - before.lastIndexOf("\n");
+      }
+    }
+    const err = new Error(e.message);
+    err.line = line;
+    err.column = column;
+    err.snippet = (line && line >= 1 && line <= lines.length) ? lines[line - 1] : null;
+    throw err;
+  }
 }
 
 // AI vendor catalog (labels, static model lists, API-key URLs).
@@ -38,11 +65,21 @@ let CONFIG = {
   maxAIs: 40, minColonyDistance: 20, startingYear: 2500,
   aiPlacementMinTurns: 3, aiPlacementMaxTurns: 200, names: []
 };
+// Set when config.json fails to load/parse, so the app can warn the user (with
+// a line/column clue) once a window is available. Null when config loaded OK.
+let CONFIG_LOAD_ERROR = null;
 try {
   CONFIG = Object.assign(CONFIG,
     parseJsonc(fs.readFileSync(path.join(__dirname, "config.json"), "utf8")));
 } catch (e) {
-  console.error("Failed to load config.json:", e && e.message);
+  const where = (e && e.line) ? ` (line ${e.line}${e.column ? `, column ${e.column}` : ""})` : "";
+  console.error(`Failed to load config.json${where}:`, e && e.message);
+  CONFIG_LOAD_ERROR = {
+    message: (e && e.message) || String(e),
+    line: (e && e.line) || null,
+    column: (e && e.column) || null,
+    snippet: (e && e.snippet) || null,
+  };
 }
 
 function openExternal(url) {
@@ -889,6 +926,38 @@ function showSplash(nagOnly) {
   splash.on("closed", () => ipcMain.removeListener("splash-close", handler));
 }
 
+// If config.json failed to load/parse at startup, warn the user with a clue to
+// what's wrong (parse message plus the offending line/column and its text), so
+// they can fix the file. The game continues on built-in defaults meanwhile.
+function maybeWarnConfigLoadError() {
+  if (!CONFIG_LOAD_ERROR) return;
+  const e = CONFIG_LOAD_ERROR;
+  const loc = e.line ? `Line ${e.line}${e.column ? `, column ${e.column}` : ""}` : "Location unknown";
+  let detail = `${e.message}\n\n${loc}`;
+  if (e.snippet != null) {
+    const trimmed = e.snippet.length > 200 ? e.snippet.slice(0, 200) + "…" : e.snippet;
+    detail += `:\n    ${trimmed.trim()}`;
+  }
+  detail += "\n\nThe game is running on built-in default settings until "
+    + "src/config.json is valid. A common cause is a trailing comma before a "
+    + "closing } or ], or a missing/extra comma or quote.";
+  const opts = {
+    type: "error",
+    title: "Configuration error",
+    message: "config.json could not be loaded.",
+    detail,
+    buttons: ["OK"],
+    noLink: true,
+  };
+  try {
+    const parent = (mainWin && !mainWin.isDestroyed()) ? mainWin : null;
+    if (parent) dialog.showMessageBox(parent, opts);
+    else dialog.showMessageBox(opts);
+  } catch (err) {
+    console.error("Failed to show config error dialog:", err && err.message);
+  }
+}
+
 app.whenReady().then(() => {
   const { licenseKey, userName } = load();
   if (isValidLicense(licenseKey, userName)) {
@@ -896,6 +965,7 @@ app.whenReady().then(() => {
   } else {
     showSplash();
   }
+  maybeWarnConfigLoadError();
 });
 
 app.on("window-all-closed", () => {

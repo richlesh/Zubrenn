@@ -521,7 +521,16 @@
         ? gameState.map.meta.difficulty : 1.0;
       CONFIG = applyDifficulty(BASE_CONFIG, d);
     }
-    ipcRenderer.invoke("config-get").then((c) => { if (c) { BASE_CONFIG = c; CONFIG = c; setResourceTypes(c.resourceTypes || null); applyGameDifficulty(); } }).catch(() => {});
+    ipcRenderer.invoke("config-get").then((c) => {
+      if (!c) return;
+      BASE_CONFIG = c; CONFIG = c; setResourceTypes(c.resourceTypes || null); applyGameDifficulty();
+      // If a map was already rendered against the in-code default CONFIG (which
+      // has no terrainTypes), push the real terrain/building type config into the
+      // renderer so its colors/icons become authoritative (e.g. Wetlands, Plains).
+      if (hexMap && typeof hexMap.setTypeConfig === 'function') {
+        hexMap.setTypeConfig(CONFIG.terrainTypes || null, CONFIG.buildingTypes || null);
+      }
+    }).catch(() => {});
     let SYSTEM_PROMPT = "";
     ipcRenderer.invoke("system-prompt-get").then((s) => { if (s) SYSTEM_PROMPT = s; }).catch(() => {});
 
@@ -2685,6 +2694,11 @@
             b.inTransit = false;
             b.population = (b.population || 0) + (b.pendingColonists || 0);
             b.pendingColonists = 0;
+            // Population is tracked authoritatively in the colony's `owned` pool;
+            // the economy mirrors owned.population -> b.population each turn, so a
+            // just-arrived colony must seed owned.population too, or its transferred
+            // colonists would be clobbered back to the stale owned value (0).
+            ensureOwned(b).population = b.population;
             b.turnsRemaining = 0;
             badgeChanged = true;
             // The biodome now occupies the tile: a pristine bonus here is lost.
@@ -4676,7 +4690,12 @@
       const taxPenalty = federationTaxRateOf(col.owner); // >= 0
       let happinessPos = bFactors.pos;
       let happinessNeg = bFactors.neg; // negative or 0
-      if (netFood >= 0) happinessPos += netFood; else happinessNeg += netFood;
+      // Food surplus/shortage contributes to happiness, but its effect is capped
+      // to +/- foodHappinessCap (happiness is a percent; default +/-5%) so a huge
+      // surplus or deficit can't dominate the colony's morale.
+      const foodHappCap = (cfg.foodHappinessCap != null) ? cfg.foodHappinessCap : 5;
+      const foodHappiness = Math.max(-foodHappCap, Math.min(foodHappCap, netFood));
+      if (foodHappiness >= 0) happinessPos += foodHappiness; else happinessNeg += foodHappiness;
       // Happiness from worked cells' terrain + terrain-bonus (e.g. Wetlands, or
       // happiness-granting resource deposits), split by sign.
       const terrainHappiness = b.terrainHappiness || 0;
@@ -4691,7 +4710,7 @@
       // negative Federation tax penalty. Attach to the shared breakdown object
       // that colonyStats returns as rateBreakdown.
       b.breakdown.happiness = {};
-      if (netFood) b.breakdown.happiness['Food balance'] = netFood;
+      if (foodHappiness) b.breakdown.happiness['Food balance'] = foodHappiness;
       const bldgHappiness = bFactors.pos + bFactors.neg;
       if (bldgHappiness) b.breakdown.happiness['Buildings'] = bldgHappiness;
       if (terrainHappiness) b.breakdown.happiness['Terrain'] = terrainHappiness;
@@ -5256,8 +5275,13 @@
       // shortfall from transport-connected colonies.
       const cost = buildingCost(1);
       payColonyCost(host, ensureStored(host), cost);
-      // Transfer colonists out of the host now.
-      host.population = Math.max(0, (host.population || 0) - transfer);
+      // Transfer colonists out of the host now. Population is tracked
+      // authoritatively in the colony's `owned` pool (the economy mirrors
+      // owned.population -> host.population each turn), so decrement BOTH or the
+      // reduction is undone on the next economy pass.
+      const hostOwned = ensureOwned(host);
+      hostOwned.population = Math.max(0, (hostOwned.population || 0) - transfer);
+      host.population = hostOwned.population;
       const buildTurns = buildTurnsOf(buildingType(1));
       const players = gameState.players || [];
       const species = (owner === 'human') ? 'You' : ((players[owner] && players[owner].name) || 'Alien');
