@@ -466,11 +466,10 @@
     // Null when fog is inactive. Persisted via gameState.map.meta.visible.
     let _visibleSet = null;
     const FOG_INITIAL_RADIUS = 20; // revealed circle around the random start tile
-    const FOG_COLONY_RADIUS = 15;  // revealed circle around each human colony
-    let CONFIG = { ai: { maxAgents: 40, minLandingTurns: 3, maxLandingTurns: 200 },
+    let CONFIG = { ai: { maxAgents: 40, minLandingTurns: 3, maxLandingTurns: 200, names: [] },
                    minColonyDistance: 20, startingYear: 2500,
                    buildingTypes: { "biodome": { code: 1, name: "Biodome", startPopulation: 1000, growthRate: 0.01, buildCost: { turns: 0 }, bonus: { food: 1, material: 1, energy: 2, growth: 0, wealth: 1 } } },
-                   names: [] };
+                 };
     // The unscaled config as loaded; CONFIG is derived from it per the current
     // game's difficulty (see applyGameDifficulty).
     let BASE_CONFIG = CONFIG;
@@ -2735,7 +2734,12 @@
       for (const b of gameState.buildings) {
         if (b.type !== 1 && b.turnsRemaining != null && b.turnsRemaining > 0) {
           b.turnsRemaining -= 1;
-          if (b.turnsRemaining <= 0) badgeChanged = true; // visual state changes
+          if (b.turnsRemaining <= 0) {
+            badgeChanged = true; // visual state changes
+            // Fog of war: reveal this building's configured visibility radius
+            // (e.g. Drone Base) now that it is operational.
+            revealBuildingVisibility(b);
+          }
         }
       }
       // Advance in-transit colonies (launched from another colony). When they
@@ -2760,8 +2764,8 @@
             if (_lostArrivalBonus && b.owner === 'human') notify(`${_lostArrivalBonus} was destroyed by founding a colony on its tile.`);
             if (b.owner === 'human') {
               notify(`${b.name || 'A new colony'} has been established at ${cellLatLonLabel(b.x, b.y)}.`);
-              // Fog of war: reveal a circle around the newly arrived colony.
-              revealAroundColony(b.x, b.y);
+              // Fog of war: reveal the biodome's configured visibility radius.
+              revealBuildingVisibility(b);
               // Prompt the player to assign this colony's first worker.
               b._justEstablished = true;
               if (!_newWorkerColonies.includes(b)) _newWorkerColonies.push(b);
@@ -4863,6 +4867,13 @@
         ? gameState.map.terrain[0].length : 0;
     }
     function fogKey(x, y) { return y * fogWidth() + x; }
+    // Whether a cell has been revealed (explored) for the human player. When fog
+    // is inactive (no _visibleSet — e.g. a legacy save or debug "reveal all"),
+    // every cell counts as visible.
+    function cellIsVisible(x, y) {
+      if (!_visibleSet) return true;
+      return _visibleSet.has(fogKey(x, y));
+    }
 
     // Hex geometry (unit cell spacing), mirroring getHexCenter in draw_map.cjs:
     // flat-topped, odd-q layout where odd columns sit half a row lower.
@@ -4971,11 +4982,22 @@
       syncVisibleToMeta();
     }
 
-    // Reveal a circle of radius FOG_COLONY_RADIUS around a (human) colony and
-    // refresh the map if anything new became visible.
-    function revealAroundColony(x, y) {
+    // The sight radius (in cells) a completed building reveals, from its config
+    // `visibility` (0 or missing = reveals nothing).
+    function buildingVisibility(type) {
+      const bt = buildingType(type);
+      const v = bt && bt.visibility;
+      return (typeof v === 'number' && v > 0) ? v : 0;
+    }
+    // Reveal fog of war around a completed HUMAN building per its config
+    // `visibility` radius. No-op for AI buildings (fog is human-only), when fog
+    // is inactive, or when the building has no visibility.
+    function revealBuildingVisibility(b) {
+      if (!b || b.owner !== 'human') return;
       if (!_visibleSet) return;            // fog inactive (e.g. legacy save)
-      const added = addVisibleAround(x, y, FOG_COLONY_RADIUS);
+      const radius = buildingVisibility(b.type);
+      if (radius <= 0) return;
+      const added = addVisibleAround(b.x, b.y, radius);
       if (added > 0) {
         syncVisibleToMeta();
         if (hexMap) hexMap.setVisible(_visibleSet);
@@ -5181,8 +5203,8 @@
       // Building on a pristine-bonus tile destroys that bonus permanently.
       const _lostColonyBonus = destroyPristineBonusAt(x, y);
       if (_lostColonyBonus && owner === 'human') notify(`${_lostColonyBonus} was destroyed by founding a colony on its tile.`);
-      // Fog of war: a human colony reveals a circle around it.
-      if (owner === 'human') revealAroundColony(x, y);
+      // Fog of war: reveal the biodome's configured visibility radius.
+      revealBuildingVisibility(rec);
       if (hexMap) hexMap.setBuildings(gameState.buildings);
       updateColonyAttention();
       if (owner === 'human') updatePlayerPanel();
@@ -5206,13 +5228,17 @@
       // gameState.resources; each AI uses its own player.resources).
       // Pay the build cost from the CONTROLLING colony's stored resources,
       // borrowing any shortfall from transport-connected colonies.
-      const col = buildColonyAt(x, y, owner);
+      const col = buildColonyAt(x, y, owner, type);
       if (col) {
         payColonyCost(col, ensureStored(col), buildingCost(type));
         if (owner === 'human') { recomputeHumanResourcePanel(); updatePlayerPanel(); }
       }
       if (hexMap) hexMap.setBuildings(gameState.buildings);
       updateColonyAttention();
+      // Fog of war: a building with no build time is operational immediately,
+      // so reveal its configured visibility radius now. (Buildings with build
+      // time reveal when their construction countdown reaches 0.)
+      if (rec.turnsRemaining == null || rec.turnsRemaining <= 0) revealBuildingVisibility(rec);
     }
     // A building is operational once its construction turns have elapsed and it
     // is not in the process of being removed.
@@ -6097,12 +6123,26 @@
         return { ok: false, reason: "needs sea adjacent to land" };
       }
 
-      // Zone-of-control check. Sea tiles are not "controlled" the same way, so
-      // (as Docks did) fall back to the radius-based controlling colony.
-      const controlled = onSea
-        ? !!colonyControllingByRadius(x, y, owner)
-        : (owner === 'human' ? humanControls(x, y) : !!colonyControlling(x, y, owner));
-      if (!controlled) return { ok: false, reason: "outside your zone of control" };
+      // Zone-of-control check. The `anywhere` tag waives the owner's
+      // zone-of-control requirement: the building may be placed on any explored
+      // cell that is NOT inside ANOTHER player's zone of control. Otherwise the
+      // cell must be in the owner's own zone (sea tiles aren't "controlled" the
+      // same way, so — as Docks did — fall back to the radius-based colony).
+      const anywhere = tags.includes('anywhere');
+      if (anywhere) {
+        // Fog is tracked for the human only; AI placement isn't fog-gated.
+        if (owner === 'human' && !cellIsVisible(x, y)) {
+          return { ok: false, reason: "cell not yet explored" };
+        }
+        if (inForeignControl(x, y, owner)) {
+          return { ok: false, reason: "inside another player's zone of control" };
+        }
+      } else {
+        const controlled = onSea
+          ? !!colonyControllingByRadius(x, y, owner)
+          : (owner === 'human' ? humanControls(x, y) : !!colonyControlling(x, y, owner));
+        if (!controlled) return { ok: false, reason: "outside your zone of control" };
+      }
 
       // At most two buildings may be under construction per colony at once.
       const col = colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
@@ -6142,8 +6182,9 @@
             break;
           case 'sea':
           case 'pristine':
+          case 'anywhere':
           default:
-            break; // handled above / runtime-only / unknown -> ignore
+            break; // handled above (zone/visibility) / runtime-only / unknown -> ignore
         }
       }
       // Climate restriction: if the building declares prerequisite.climate (band
@@ -6165,14 +6206,31 @@
       return col ? ensureStored(col) : null;
     }
     // The colony that would pay to build at (x,y): the controlling colony.
-    function buildColonyAt(x, y, owner) {
-      return colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
+    // Whether a building type carries the `anywhere` placement tag (may be built
+    // outside the owner's zone of control, on any explored cell not inside
+    // another player's zone).
+    function buildingIsAnywhere(type) {
+      const other = btPrereq(type).other;
+      return Array.isArray(other) && other.includes('anywhere');
+    }
+    // The colony that owns/pays for a building at (x,y). Normally the colony
+    // whose zone contains the cell; for an `anywhere` building that may sit
+    // outside every zone, fall back to the owner's nearest colony (which pays
+    // the cost and provides the resource pool, as transport removal does).
+    function buildColonyAt(x, y, owner, type) {
+      const col = colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
+      if (col) return col;
+      if (type != null && buildingIsAnywhere(type)) {
+        const nc = nearestColony(x, y, owner);
+        if (nc) return nc.colony;
+      }
+      return null;
     }
     // Whether the owner can afford a building type at (x,y), paying from the
     // controlling colony's stored resources PLUS whatever it can borrow from
     // transport-connected colonies (road/monorail, river/canal, sea, air).
     function canAffordBuildingAt(type, x, y, owner) {
-      const col = buildColonyAt(x, y, owner);
+      const col = buildColonyAt(x, y, owner, type);
       if (!col) return false;
       const pool = ensureStored(col);
       const cost = buildingCost(type);
@@ -6210,7 +6268,10 @@
     function hasPrerequisitesAt(type, x, y, owner) {
       const pre = btPrereq(type);
       const buildings = Array.isArray(pre.building) ? pre.building : [];
-      const col = colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
+      // For `anywhere` buildings outside every zone, prerequisites (required
+      // buildings, network, city size) are evaluated against the nearest colony
+      // — the same colony that pays for and owns the build.
+      const col = buildColonyAt(x, y, owner, type);
       if (!col) return false;
       // Required buildings (NAME keys -> numeric codes) present in the colony.
       const present = new Set(colonyBuildings(col).map((b) => b.type));
@@ -6226,7 +6287,7 @@
     function missingPrerequisiteNames(type, x, y, owner) {
       const pre = btPrereq(type);
       const buildings = Array.isArray(pre.building) ? pre.building : [];
-      const col = colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
+      const col = buildColonyAt(x, y, owner, type);
       const present = new Set(col ? colonyBuildings(col).map((b) => b.type) : []);
       const codes = buildings.map((p) => { const e = buildingType(p); return e ? e.code : p; });
       const missing = codes.filter((t) => !present.has(t)).map((t) => improvementName(t));
@@ -6264,7 +6325,7 @@
     // Per-colony shortfall: what the controlling colony still lacks in storage.
     function buildingShortfallAtLabel(type, x, y, owner) {
       const cost = buildingCost(type);
-      const col = buildColonyAt(x, y, owner);
+      const col = buildColonyAt(x, y, owner, type);
       const pool = col ? ensureStored(col) : {};
       const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
       const parts = [];
@@ -8654,7 +8715,7 @@
 
     // ---- player setup ------------------------------------------------------
     function setupPlayers(aiCount) {
-      const names = (CONFIG.names || []).slice();
+      const names = ((CONFIG.ai && CONFIG.ai.names) || []).slice();
       for (let i = names.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [names[i], names[j]] = [names[j], names[i]];
