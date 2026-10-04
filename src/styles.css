@@ -397,6 +397,7 @@ body.dark #turnstart-sub { color: #aaa; }
 #work-tooltip .wt-row { display: flex; justify-content: space-between; gap: 12px; }
 #work-tooltip .wt-src { color: #cfe8ff; }
 #work-tooltip .wt-val { color: #d6ffd6; white-space: nowrap; }
+#work-tooltip .wt-note { color: #ffd27f; font-style: italic; margin-bottom: 3px; }
 #work-tooltip .wt-sep { border-top: 1px solid rgba(255,255,255,0.25); margin: 4px 0; }
 
 /* Rankings dialog (View ▸ View Rankings): a sortable per-species totals table. */

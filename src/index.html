@@ -30,6 +30,7 @@
         <div class="player-stat"><span>Energy: <span id="player-energy">0</span> / <span id="player-energy-max">0</span></span> <span id="player-energy-rate" class="player-rate">+0/yr</span></div>
         <div class="player-stat"><span>Food: <span id="player-food">0</span> / <span id="player-food-max">0</span></span> <span id="player-food-rate" class="player-rate">+0/yr</span></div>
         <div class="player-stat"><span>Material: <span id="player-material">0</span> / <span id="player-material-max">0</span></span> <span id="player-material-rate" class="player-rate">+0/yr</span></div>
+        <div class="player-stat"><span>Goods: <span id="player-goods">0</span> / <span id="player-goods-max">0</span></span> <span id="player-goods-rate" class="player-rate">+0/yr</span></div>
         <div class="player-stat"><span>Water: <span id="player-water">0</span> / <span id="player-water-max">0</span></span> <span id="player-water-rate" class="player-rate">+0/yr</span></div>
         <div class="player-stat"><span>Wealth: <span id="player-wealth">0</span> / <span id="player-wealth-max">0</span></span> <span id="player-wealth-rate" class="player-rate">+0/yr</span></div>
         <div class="player-stat"><span>Happiness: <span id="player-happiness">0</span> / <span id="player-happiness-max">0</span></span> <span id="player-happiness-rate" class="player-rate">+0/yr</span></div>
@@ -300,7 +301,7 @@
     let setResourceTypes = () => {};
     // Seven economy resource types + config-map readers (replaced by
     // utilities.cjs when loaded). Fallbacks keep the renderer functional.
-    let RESOURCE_KEYS = ["energy", "food", "material", "water", "wealth", "happiness", "population"];
+    let RESOURCE_KEYS = ["energy", "food", "material", "goods", "water", "wealth", "happiness", "population"];
     let resolveResValue = (v) => (typeof v === "number" ? v : (parseFloat(v) || 0));
     let readResMap = (map) => {
       const out = {}; const src = (map && typeof map === "object") ? map : {};
@@ -485,7 +486,7 @@
       if (!(d > 0) || d === 1) return cfg;        // easy / invalid -> no scaling
       const mul = (o, keys) => { if (o) for (const k of keys) if (typeof o[k] === 'number') o[k] *= d; };
       const divAll = (o) => { if (o) for (const k of Object.keys(o)) if (typeof o[k] === 'number') o[k] /= d; };
-      const RES = ['food', 'material', 'energy', 'wealth', 'happiness', 'growth'];
+      const RES = ['food', 'material', 'goods', 'energy', 'wealth', 'happiness', 'growth'];
       // Terrain: ×base yields; ÷movement; ÷transport per-tile/edge costs.
       for (const k of Object.keys(cfg.terrainTypes || {})) {
         const t = cfg.terrainTypes[k];
@@ -509,7 +510,7 @@
       // Leave `unitSize` (the 1,000 divisor) untouched.
       if (cfg.unitCosts && cfg.unitCosts.population) {
         const pc = cfg.unitCosts.population;
-        for (const k of ['food', 'material', 'energy', 'water', 'wealth']) {
+        for (const k of ['food', 'material', 'goods', 'energy', 'water', 'wealth']) {
           if (typeof pc[k] === 'number') pc[k] /= d;
         }
       }
@@ -551,8 +552,8 @@
       currentPlayer: 0, // index into players[]
       playerName: "Human", // editable human player name (saved)
       // Player (human) accumulated resources and last per-year production rates.
-      resources: { material: 0, food: 0, energy: 0, wealth: 0 },
-      rates: { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 }
+      resources: { material: 0, goods: 0, food: 0, energy: 0, wealth: 0 },
+      rates: { food: 0, material: 0, goods: 0, energy: 0, wealth: 0, happiness: 0 }
     };
 
     // Exposed for the main process (Save Game) to read the current state.
@@ -1132,8 +1133,8 @@
     // ---- transport build costs ---------------------------------------------
     // A cost object is { food, material, energy, wealth, turns }. These
     // helpers read the per-terrain cost blocks from config.
-    const _COST_KEYS = ["food", "material", "energy", "wealth", "turns"];
-    function _emptyCost() { return { food: 0, material: 0, energy: 0, wealth: 0, turns: 0 }; }
+    const _COST_KEYS = ["food", "material", "goods", "energy", "wealth", "turns"];
+    function _emptyCost() { return { food: 0, material: 0, goods: 0, energy: 0, wealth: 0, turns: 0 }; }
     function _addCost(a, b, scale) {
       const s = (scale == null) ? 1 : scale;
       for (const k of _COST_KEYS) a[k] = (a[k] || 0) + (b && b[k] || 0) * s;
@@ -1860,7 +1861,7 @@
     function _segmentShortfall(seg, pool) {
       const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
       const parts = [];
-      for (const k of ["food", "material", "energy", "wealth"]) {
+      for (const k of ["food", "material", "goods", "energy", "wealth"]) {
         const need = (seg[k] || 0) - (pool[k] || 0);
         if (need > 1e-9) parts.push(`${Math.ceil(need)} more ${cap(k)}`);
       }
@@ -2502,6 +2503,7 @@
       const tpp = ((terrainTypeById(terr)) || {}).bonus || {};
       const food = { base: tp.food, bonus: 0 };
       const prod = { base: tp.material, bonus: 0 };
+      const goods = { base: 0, bonus: 0 }; // manufactured; no terrain base
       const happ = { base: tpp.happiness || 0, bonus: 0 };
       const energy = { base: 0, bonus: 0 };
       const wealth = { base: 0, bonus: 0 };
@@ -2516,6 +2518,7 @@
       // cell that has a road or monorail built on it, across all resources.
       food.bonus    += roadTileBonus(gx, gy, 'food');
       prod.bonus    += roadTileBonus(gx, gy, 'material');
+      goods.bonus   += roadTileBonus(gx, gy, 'goods');
       energy.bonus  += roadTileBonus(gx, gy, 'energy');
       wealth.bonus  += roadTileBonus(gx, gy, 'wealth');
       water.bonus   += roadTileBonus(gx, gy, 'water');
@@ -2526,6 +2529,7 @@
       if (tb && tb.bonus) {
         food.bonus += tb.bonus.food || 0;
         prod.bonus += tb.bonus.material || 0;
+        goods.bonus += tb.bonus.goods || 0;
         energy.bonus += tb.bonus.energy || 0;
         wealth.bonus += tb.bonus.wealth || 0;
         happ.bonus += tb.bonus.happiness || 0;
@@ -2537,6 +2541,7 @@
         const n = bldgNet(1);
         food.bonus += n.food;
         prod.bonus += n.material;
+        goods.bonus += n.goods;
         energy.bonus += n.energy;
         happ.bonus += n.happiness;
         wealth.bonus += n.wealth;
@@ -2552,12 +2557,13 @@
         const n = bldgNet(b.type);
         food.bonus += n.food;
         prod.bonus += n.material;
+        goods.bonus += n.goods;
         energy.bonus += n.energy;
         happ.bonus += n.happiness;
         wealth.bonus += n.wealth;
         water.bonus += n.water;
       }
-      return { food, prod, happ, energy, wealth, water };
+      return { food, prod, goods, happ, energy, wealth, water };
     }
 
     // Itemized version of cellBreakdown for the colony work-dialog tooltip.
@@ -2575,6 +2581,7 @@
       const base = {
         food: tp.food || 0,
         material: tp.material || 0,
+        goods: 0,
         energy: 0,
         water: tp.water || 0,
         wealth: 0,
@@ -2582,8 +2589,8 @@
       };
       const bonuses = [];
       const add = (label, r) => {
-        const e = { label, food: 0, material: 0, energy: 0, water: 0, wealth: 0, happiness: 0, ...r };
-        if (e.food || e.material || e.energy || e.water || e.wealth || e.happiness) bonuses.push(e);
+        const e = { label, food: 0, material: 0, goods: 0, energy: 0, water: 0, wealth: 0, happiness: 0, ...r };
+        if (e.food || e.material || e.goods || e.energy || e.water || e.wealth || e.happiness) bonuses.push(e);
       };
 
       // River/canal/sea adjacency bonuses: food, wealth, and water. River/canal
@@ -2617,6 +2624,7 @@
       add("Road/monorail", {
         food: roadTileBonus(gx, gy, 'food'),
         material: roadTileBonus(gx, gy, 'material'),
+        goods: roadTileBonus(gx, gy, 'goods'),
         energy: roadTileBonus(gx, gy, 'energy'),
         water: roadTileBonus(gx, gy, 'water'),
         wealth: roadTileBonus(gx, gy, 'wealth'),
@@ -2630,6 +2638,7 @@
         add(tb.name || "Resource", {
           food: tb.bonus.food || 0,
           material: tb.bonus.material || 0,
+          goods: tb.bonus.goods || 0,
           energy: tb.bonus.energy || 0,
           water: tb.bonus.water || 0,
           wealth: tb.bonus.wealth || 0,
@@ -2640,7 +2649,7 @@
       // Biodome base production on its home cell.
       if (isHome) {
         const n = bldgNet(1);
-        add(improvementName(1), { food: n.food, material: n.material, energy: n.energy, water: n.water, wealth: n.wealth, happiness: n.happiness });
+        add(improvementName(1), { food: n.food, material: n.material, goods: n.goods, energy: n.energy, water: n.water, wealth: n.wealth, happiness: n.happiness });
       }
       // Owned, operational building standing on this cell (net of upkeep).
       for (const b of gameState.buildings) {
@@ -2649,7 +2658,7 @@
         if (b.x !== gx || b.y !== gy) continue;
         if (!isOperational(b)) continue;
         const n = bldgNet(b.type);
-        add(improvementName(b.type), { food: n.food, material: n.material, energy: n.energy, water: n.water, wealth: n.wealth, happiness: n.happiness });
+        add(improvementName(b.type), { food: n.food, material: n.material, goods: n.goods, energy: n.energy, water: n.water, wealth: n.wealth, happiness: n.happiness });
       }
 
       return { terrainName: tt.name || `Terrain ${terr}`, base, bonuses };
@@ -2715,6 +2724,7 @@
       };
       push("energy", bd.energy);
       push("food", bd.food);
+      push("goods", bd.goods);
       push("material", bd.prod);
       push("water", bd.water);
       push("wealth", bd.wealth);
@@ -2821,7 +2831,7 @@
         badgeChanged = true;
       }
       // the sum of all human colonies' per-turn deltas).
-      let yFood = 0, yMaterial = 0, yEnergy = 0, yWater = 0, yHappiness = 0, yWealth = 0;
+      let yFood = 0, yMaterial = 0, yGoods = 0, yEnergy = 0, yWater = 0, yHappiness = 0, yWealth = 0;
 
       // All surviving colonies this tick. Capture per-colony BEFORE-state used by
       // the worker-availability / badge checks (the pipeline mutates population).
@@ -2891,7 +2901,7 @@
           if (radiusAfter > bs.radiusBefore) badgeChanged = true;
           // Human rate aggregation from the per-colony delta.
           if (st) {
-            yFood += st.delta.food; yMaterial += st.delta.material; yEnergy += st.delta.energy;
+            yFood += st.delta.food; yMaterial += st.delta.material; yGoods += st.delta.goods; yEnergy += st.delta.energy;
             yWater += st.delta.water; yWealth += st.delta.wealth; yHappiness += st.delta.happiness;
           }
         }
@@ -2905,7 +2915,7 @@
         const o = ensureOwned(col);
         r.food += o.food; r.material += o.material; r.energy += o.energy; r.water += o.water; r.wealth += o.wealth;
       }
-      gameState.rates = { food: yFood, material: yMaterial, energy: yEnergy, water: yWater, wealth: yWealth, happiness: yHappiness };
+      gameState.rates = { food: yFood, material: yMaterial, goods: yGoods, energy: yEnergy, water: yWater, wealth: yWealth, happiness: yHappiness };
 
       // Aggregate human population + effective growth rate for the player panel.
       gameState.humanPop = Math.round(humanPopAfter);
@@ -3033,6 +3043,10 @@
       set("player-material", formatSISignificant(r.material || 0, 3));
       set("player-material-max", formatSISignificant(caps.material || 0, 3));
       setRate("player-material-rate", rt.material);
+
+      set("player-goods", formatSISignificant(r.goods || 0, 3));
+      set("player-goods-max", formatSISignificant(caps.goods || 0, 3));
+      setRate("player-goods-rate", rt.goods);
 
       set("player-water", formatSISignificant(r.water || 0, 3));
       set("player-water-max", formatSISignificant(caps.water || 0, 3));
@@ -3507,15 +3521,15 @@
     function bldgBonus(type) {
       const b = (buildingType(type) || {}).bonus || {};
       return {
-        food: b.food || 0, material: b.material || 0, energy: b.energy || 0,
+        food: b.food || 0, material: b.material || 0, goods: b.goods || 0, energy: b.energy || 0,
         water: b.water || 0, growth: b.growth || 0, wealth: b.wealth || 0,
         happiness: b.happiness || 0,
       };
     }
-    // Per-year upkeep (costPerYear): { material, energy, wealth }.
+    // Per-year upkeep (costPerYear): { material, goods, energy, water, wealth }.
     function bldgUpkeep(type) {
       const u = (buildingType(type) || {}).costPerYear || {};
-      return { material: u.material || 0, energy: u.energy || 0, water: u.water || 0, wealth: u.wealth || 0 };
+      return { material: u.material || 0, goods: u.goods || 0, energy: u.energy || 0, water: u.water || 0, wealth: u.wealth || 0 };
     }
     // NET per-year output of a building (bonus production minus upkeep).
     // Food and growth have no upkeep; material/energy/wealth net out.
@@ -3524,6 +3538,7 @@
       return {
         food: b.food,
         material: b.material - u.material,
+        goods: b.goods - u.goods,
         energy: b.energy - u.energy,
         water: b.water - u.water,
         wealth: b.wealth - u.wealth,
@@ -3622,8 +3637,8 @@
       return caps;
     }
     function ensureStored(col) {
-      if (!col.stored) col.stored = { food: 0, material: 0, energy: 0, water: 0, wealth: 0 };
-      for (const k of ['food', 'material', 'energy', 'water', 'wealth']) {
+      if (!col.stored) col.stored = { food: 0, material: 0, goods: 0, energy: 0, water: 0, wealth: 0 };
+      for (const k of ['food', 'material', 'goods', 'energy', 'water', 'wealth']) {
         if (typeof col.stored[k] !== 'number') col.stored[k] = 0;
       }
       return col.stored;
@@ -3716,11 +3731,11 @@
     // amounts (used after a build so the panel reflects the spend immediately).
     function recomputeHumanResourcePanel() {
       const r = gameState.resources;
-      r.food = 0; r.material = 0; r.energy = 0; r.wealth = 0;
+      r.food = 0; r.material = 0; r.goods = 0; r.energy = 0; r.wealth = 0;
       for (const b of gameState.buildings) {
         if (b.type !== 1 || b.owner !== 'human') continue;
         const s = ensureStored(b);
-        r.food += s.food; r.material += s.material; r.energy += s.energy; r.wealth += s.wealth;
+        r.food += s.food; r.material += s.material; r.goods += s.goods; r.energy += s.energy; r.wealth += s.wealth;
       }
     }
 
@@ -3744,14 +3759,14 @@
       const worked = [homeKey, ...extras];
       const workedSet = new Set(worked);
 
-      const production = { food: 0, material: 0, energy: 0, water: 0, wealth: 0 };
-      const needs = { food: 0, material: 0, energy: 0, water: 0, wealth: 0 };
+      const production = { food: 0, material: 0, goods: 0, energy: 0, water: 0, wealth: 0 };
+      const needs = { food: 0, material: 0, goods: 0, energy: 0, water: 0, wealth: 0 };
       let growthBonus = 0;
       // Per-resource breakdown of the net rate's contributing values, for the
       // Resources-panel hover tooltip. Each resource maps to a bucket of signed
       // category totals; the categories sum to that resource's net rate.
       const breakdown = {
-        food: {}, material: {}, energy: {}, water: {}, wealth: {},
+        food: {}, material: {}, goods: {}, energy: {}, water: {}, wealth: {},
       };
       const addBreak = (res, label, v) => {
         if (!v) return;
@@ -3772,6 +3787,7 @@
         // Road/monorail tile bonus (once per cell that has a road/monorail).
         const rtFood = roadTileBonus(wx, wy, 'food');
         const rtMat = roadTileBonus(wx, wy, 'material');
+        const rtGoods = roadTileBonus(wx, wy, 'goods');
         const rtEnergy = roadTileBonus(wx, wy, 'energy');
         const rtWealth = roadTileBonus(wx, wy, 'wealth');
         const rtWater = roadTileBonus(wx, wy, 'water');
@@ -3783,6 +3799,7 @@
         terrainHappiness += tp.happiness;             // terrain base happiness (e.g. Wetlands)
         production.food += rtFood;
         production.material += rtMat;
+        production.goods += rtGoods;
         production.energy += rtEnergy;
         production.wealth += rtWealth;
         production.water += rtWater;
@@ -3795,6 +3812,7 @@
         addBreak('water', 'Water adjacency', wtb);
         addBreak('food', 'Road/monorail', rtFood);
         addBreak('material', 'Road/monorail', rtMat);
+        addBreak('goods', 'Road/monorail', rtGoods);
         addBreak('energy', 'Road/monorail', rtEnergy);
         addBreak('wealth', 'Road/monorail', rtWealth);
         addBreak('water', 'Road/monorail', rtWater);
@@ -3805,6 +3823,7 @@
         if (tb && tb.bonus) {
           production.food += tb.bonus.food || 0;
           production.material += tb.bonus.material || 0;
+          production.goods += tb.bonus.goods || 0;
           production.energy += tb.bonus.energy || 0;
           production.wealth += tb.bonus.wealth || 0;
           production.water += tb.bonus.water || 0;
@@ -3812,6 +3831,7 @@
           growthBonus += tb.bonus.growth || 0;
           addBreak('food', 'Resource deposits', tb.bonus.food || 0);
           addBreak('material', 'Resource deposits', tb.bonus.material || 0);
+          addBreak('goods', 'Resource deposits', tb.bonus.goods || 0);
           addBreak('energy', 'Resource deposits', tb.bonus.energy || 0);
           addBreak('wealth', 'Resource deposits', tb.bonus.wealth || 0);
           addBreak('water', 'Resource deposits', tb.bonus.water || 0);
@@ -3826,10 +3846,12 @@
         const bo = bldgBonus(b.type), up = bldgUpkeep(b.type);
         production.food += bo.food;
         production.material += bo.material;
+        production.goods += bo.goods;
         production.energy += bo.energy;
         production.water += bo.water;
         production.wealth += bo.wealth;
         needs.material += up.material;
+        needs.goods += up.goods;
         needs.energy += up.energy;
         needs.water += up.water;
         needs.wealth += up.wealth;
@@ -3837,6 +3859,7 @@
         // Net building contribution per resource (production bonus − upkeep).
         addBreak('food', 'Buildings', bo.food);
         addBreak('material', 'Buildings', bo.material - up.material);
+        addBreak('goods', 'Buildings', bo.goods - up.goods);
         addBreak('energy', 'Buildings', bo.energy - up.energy);
         addBreak('water', 'Buildings', bo.water - up.water);
         addBreak('wealth', 'Buildings', bo.wealth - up.wealth);
@@ -3852,24 +3875,28 @@
       const popUnits = (col.population || 0) / popUnitSize;
       needs.food += popUnits * popCostOf('food', 1);
       needs.material += popUnits * popCostOf('material', 0);
+      needs.goods += popUnits * popCostOf('goods', 0);
       needs.energy += popUnits * popCostOf('energy', 0);
       needs.water += popUnits * popCostOf('water', 0.1);
       needs.wealth += popUnits * popCostOf('wealth', 0);
       // Population consumption shows as a negative contribution to each rate.
       addBreak('food', 'Population', -(popUnits * popCostOf('food', 1)));
       addBreak('material', 'Population', -(popUnits * popCostOf('material', 0)));
+      addBreak('goods', 'Population', -(popUnits * popCostOf('goods', 0)));
       addBreak('energy', 'Population', -(popUnits * popCostOf('energy', 0)));
       addBreak('water', 'Population', -(popUnits * popCostOf('water', 0.1)));
       addBreak('wealth', 'Population', -(popUnits * popCostOf('wealth', 0)));
       // Wealth income also includes derived income (10% of surplus food+material).
       const derivedWealth = Math.max(0, production.food - needs.food) * 0.1
-        + Math.max(0, production.material) * 0.1;
+        + Math.max(0, production.material) * 0.1
+        + Math.max(0, production.goods) * 0.1;
       production.wealth += derivedWealth;
       addBreak('wealth', 'Trade income', derivedWealth);
 
       const net = {
         food: production.food - needs.food,
         material: production.material - needs.material,
+        goods: production.goods - needs.goods,
         energy: production.energy - needs.energy,
         water: (production.water || 0) - needs.water,
         wealth: production.wealth - needs.wealth,
@@ -4327,7 +4354,7 @@
         if (!byOwner.has(b.owner)) byOwner.set(b.owner, []);
         byOwner.get(b.owner).push(b);
       }
-      const NON_HAPPINESS = ["energy", "food", "material", "water", "wealth"]; // borrow/idle set
+      const NON_HAPPINESS = ["energy", "food", "material", "goods", "water", "wealth"]; // borrow/idle set
       for (const [owner, colsAll] of byOwner) {
         // Reverse founding order: newest (highest seq) first.
         const cols = colsAll.slice().sort((a, z) =>
@@ -4432,7 +4459,7 @@
             (b) => b.owner === owner && b.type !== 1 && isOperational(b) && buildingIsFederation(b.type));
           // Clear last turn's idle flags; recompute fresh each turn.
           for (const b of fedBuildings) b._fedIdle = false;
-          const MAINT = ["energy", "food", "material", "water", "wealth"];
+          const MAINT = ["energy", "food", "material", "goods", "water", "wealth"];
           const upkeepOf = (b) => {
             const u = bldgUpkeep(b.type) || {};
             return { energy: u.energy || 0, food: u.food || 0, material: u.material || 0, water: u.water || 0, wealth: u.wealth || 0 };
@@ -4522,7 +4549,7 @@
     // The `turns` field of a cost object is ignored (build time, not a resource).
     function payColonyCost(col, pool, cost) {
       const seg = cost;
-      const keys = ["food", "material", "energy", "wealth"];
+      const keys = ["food", "material", "goods", "energy", "wealth"];
       // Can the network cover every resource (own storage + connected supply)?
       for (const k of keys) {
         const need = (seg[k] || 0) - (pool[k] || 0);
@@ -4864,7 +4891,7 @@
       // Whether the colony is over budget: any resource shortfall exceeds its
       // current storage.
       const over = [];
-      for (const k of ['food', 'material', 'energy', 'wealth']) {
+      for (const k of ['food', 'material', 'goods', 'energy', 'wealth']) {
         if (stored[k] + b.net[k] < 0) over.push(k);
       }
       return {
@@ -4878,13 +4905,13 @@
         // material resources come from colonyBudget's net; happiness is the net
         // happiness rate; population is owned.population × popDeltaPercent/100.
         delta: {
-          energy: b.net.energy, food: b.net.food, material: b.net.material,
+          energy: b.net.energy, food: b.net.food, material: b.net.material, goods: b.net.goods,
           water: b.net.water, wealth: b.net.wealth,
           happiness: happinessRate,
           population: (col.population || 0) * rate,
         },
         // Net per-year rates (production − needs), per resource.
-        food: b.net.food, material: b.net.material, energy: b.net.energy, water: b.net.water, wealthRate: b.net.wealth,
+        food: b.net.food, material: b.net.material, goods: b.net.goods, energy: b.net.energy, water: b.net.water, wealthRate: b.net.wealth,
         consumption, netFood,
         happinessRate, storedHappiness,
         happinessPos, happinessNeg,
@@ -6711,7 +6738,7 @@
     }
     // Resource keys that transport maintenance can consume from the Federation
     // OWNED pool. (Population/food/happiness are not charged for upkeep.)
-    const MAINT_RESOURCE_KEYS = ['energy', 'material', 'water', 'wealth'];
+    const MAINT_RESOURCE_KEYS = ['energy', 'material', 'goods', 'water', 'wealth'];
     // Per-segment maintenance cost VECTOR for a transport kind, as a plain
     // object over MAINT_RESOURCE_KEYS (missing fields default to 0).
     function _maintCost(kind) {
@@ -7987,16 +8014,28 @@
         const header = [];
         if (bldgHere) { header.push(improvementName(bldgHere.type)); header.push(terrName); }
         else header.push(terrName);
-        // Two-column resource rows: [left, right] per row.
+        // Each cell shows its NET per-resource contribution (terrain base + all
+        // bonuses + any building net; cellBreakdown already subtracts building
+        // upkeep). This is the SAME computation for worked and unworked cells:
+        // an unworked cell shows what it WOULD net if worked, drawn in gray.
+        // Layout (two columns + a centered happiness row):
+        //   E  F
+        //   G  M
+        //   ¤  W
+        //      H%
         const statRows = [
-          [fr("energy", bd.energy),    fr("food", bd.food)],
-          [fr("happiness", bd.happ),   fr("material", bd.prod)],
-          [fr("wealth", bd.wealth),    fr("water", bd.water)],
+          [fr("energy", bd.energy),  fr("food", bd.food)],
+          [fr("goods", bd.goods),    fr("material", bd.prod)],
+          [fr("wealth", bd.wealth),  fr("water", bd.water)],
         ];
+        const happRow = fr("happiness", bd.happ);
         const smallPx = Math.max(5, Math.round(fontPx * 0.62)); // smaller text
         const lh = smallPx * 0.7;                               // tighter leading
-        const totalLines = header.length + statRows.length;
-        ctx.fillStyle = "#1e1e1e";
+        const totalLines = header.length + statRows.length + 1; // +1 for the H row
+        // Worked/home cells render dark; unworked cells render the as-if-worked
+        // NET in gray.
+        const textColor = (isWorked || isHome) ? "#1e1e1e" : "#888";
+        ctx.fillStyle = textColor;
         let ty = cy - (totalLines - 1) * lh / 2;
         // Header lines: centered on the cell.
         ctx.textAlign = "center";
@@ -8015,6 +8054,10 @@
           ctx.fillText(right, cx + colGap * 0.25, ty + smallPx * 0.35);
           ty += lh;
         }
+        // Happiness on its own centered row beneath the two-column grid.
+        ctx.textAlign = "center";
+        ctx.fillText(happRow, cx, ty + smallPx * 0.35);
+        ty += lh;
         ctx.textAlign = "center"; // restore for subsequent cells
       }
       renderWorkStats(col);
@@ -8080,10 +8123,11 @@
         // dedicated bonus resource, so it is shown under the "population"
         // resource (abbrev "P") as a signed percentage, e.g. P:+0.25%.
         const ab = (key, fallback) => (RT[key] && RT[key].abbrev != null ? RT[key].abbrev : fallback);
-        // Order: Energy, Food, Material, Water, Wealth, (growth as population "P"),
+        // Order: Energy, Food, Goods, Material, Water, Wealth, (growth as "P"),
         // Happiness — matching the Resources panel. Zero values are skipped.
         if (bo.energy) parts.push(`${ab("energy", "E")}:${sign(bo.energy)}${nf(bo.energy, 0)}`);
         if (bo.food) parts.push(`${ab("food", "F")}:${sign(bo.food)}${nf(bo.food, 0)}`);
+        if (bo.goods) parts.push(`${ab("goods", "G")}:${sign(bo.goods)}${nf(bo.goods, 0)}`);
         if (bo.material) parts.push(`${ab("material", "M")}:${sign(bo.material)}${nf(bo.material, 0)}`);
         if (bo.water) parts.push(`${ab("water", "W")}:${sign(bo.water)}${nf(bo.water, 0)}`);
         if (bo.wealth) parts.push(`${ab("wealth", "¤")}:${sign(bo.wealth)}${nf(bo.wealth, 0)}`);
@@ -8121,6 +8165,7 @@
         `<div class="stat-row"><span>${resName("energy")}</span><span>${resVal("energy", res.energy)} / ${resVal("energy", s.caps.energy)} <span class="${cls(s.energy)}" title="${esc(rateTip("energy", s.energy))}">${sign(s.energy)}${nf(s.energy, 1)}/yr</span></span></div>`,
         `<div class="stat-row"><span>${resName("food")}</span><span>${resVal("food", res.food)} / ${resVal("food", s.caps.food)} <span class="${cls(s.netFood)}" title="${esc(rateTip("food", s.netFood))}">${sign(s.netFood)}${nf(s.netFood, 1)}/yr</span></span></div>`,
         `<div class="stat-row"><span>${resName("material")}</span><span>${resVal("material", res.material)} / ${resVal("material", s.caps.material)} <span class="${cls(s.material)}" title="${esc(rateTip("material", s.material))}">${sign(s.material)}${nf(s.material, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>${resName("goods")}</span><span>${resVal("goods", res.goods)} / ${resVal("goods", s.caps.goods)} <span class="${cls(s.goods)}" title="${esc(rateTip("goods", s.goods))}">${sign(s.goods)}${nf(s.goods, 1)}/yr</span></span></div>`,
         `<div class="stat-row"><span>${resName("water")}</span><span>${resVal("water", res.water)} / ${resVal("water", s.caps.water)} <span class="${cls(s.water)}" title="${esc(rateTip("water", s.water))}">${sign(s.water)}${nf(s.water, 1)}/yr</span></span></div>`,
         `<div class="stat-row"><span>${resName("wealth")}</span><span>${resVal("wealth", res.wealth)} / ${resVal("wealth", s.caps.wealth)} <span class="${cls(s.wealthRate)}" title="${esc(rateTip("wealth", s.wealthRate))}">${sign(s.wealthRate)}${nf(s.wealthRate, 1)}/yr</span></span></div>`,
         `<div class="stat-row"><span>Happiness</span><span>${fmtHappiness(s.storedHappiness)} / ±${fmtHappiness(s.happinessCap)} <span class="${cls(s.happinessRate)}" title="${esc(rateTip("happiness", s.happinessRate))}">${sign(s.happinessRate)}${nf(s.happinessRate, 1)}/yr</span></span></div>`,
@@ -8375,6 +8420,7 @@
       const parts = [];
       if (o.energy)    parts.push(formatResource("energy", o.energy, true));
       if (o.food)      parts.push(formatResource("food", o.food, true));
+      if (o.goods)     parts.push(formatResource("goods", o.goods, true));
       if (o.material)  parts.push(formatResource("material", o.material, true));
       if (o.water)     parts.push(formatResource("water", o.water, true));
       if (o.wealth)    parts.push(formatResource("wealth", o.wealth, true));
@@ -8385,10 +8431,15 @@
       const col = workColony; if (!col) return "";
       const isHome = (hex.x === col.x && hex.y === col.y);
       const c = cellContributions(hex.x, hex.y, isHome, col.owner);
+      // Whether this cell is currently worked (the biodome home cell always is).
+      const isWorked = isHome || (col.worked || []).includes(cellKey(hex.x, hex.y));
       const esc = (s) => String(s).replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[ch]));
       const row = (src, val) =>
         `<div class="wt-row"><span class="wt-src">${esc(src)}</span><span class="wt-val">${esc(val)}</span></div>`;
       let html = `<div class="wt-title">${esc(c.terrainName)} (${hex.x},${hex.y})</div>`;
+      // Unworked cells don't contribute yet; the breakdown is what they WOULD
+      // net if worked.
+      if (!isWorked) html += `<div class="wt-note">Net if worked:</div>`;
       html += row("Base tile", _fmtResources(c.base) || "—");
       if (c.bonuses.length) {
         html += `<div class="wt-sep"></div>`;
@@ -8954,7 +9005,7 @@
           id: i + 1, kind: 'ai', name: names[i] || ('AI ' + (i + 1)),
           placeTurn: minT + Math.floor(Math.random() * (maxT - minT + 1)),
           placed: false, modules: 1,
-          resources: { material: 0, food: 0, energy: 0, wealth: 0 }
+          resources: { material: 0, goods: 0, food: 0, energy: 0, wealth: 0 }
         });
       }
       return players;

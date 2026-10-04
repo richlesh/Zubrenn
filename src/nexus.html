@@ -150,11 +150,13 @@
     // Live-update when Settings are saved elsewhere.
     ipcRenderer.on("settings-updated", refreshSettings);
 
-    // -------------------- tiny markdown renderer --------------------
-    // A compact, dependency-free Markdown-to-HTML converter covering the
-    // subset used by the Nexus pages: ATX headings, bold/italic, inline code,
-    // fenced code blocks, links, images, unordered/ordered lists, GitHub-style
-    // tables, blockquotes, horizontal rules, and paragraphs.
+    // -------------------- markdown renderer --------------------
+    // Rendering is handled by markdown-it (CommonMark + GFM tables) plus
+    // markdown-it-attrs for Pandoc-style attribute blocks (e.g. image sizing
+    // `{width=128}`). Two custom renderer rules adapt output for this offline
+    // Electron dialog: image `src` values are rewritten to absolute file:// URLs,
+    // and links are classified as internal (another .md page, loaded into the
+    // content panel) or external (opened in the system browser).
 
     function escapeHtml(s) {
       return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -172,154 +174,50 @@
       return "file://" + abs.split(path.sep).join("/");
     }
 
-    // Inline formatting: images, links, code, bold, italic. Operates on a
-    // single line of already-structural text. Order matters (code first so its
-    // contents aren't further processed).
-    function renderInline(text) {
-      const codeStash = [];
-      // Inline code -> placeholder (protect from other rules).
-      text = text.replace(/`([^`]+)`/g, (_m, c) => {
-        codeStash.push("<code>" + escapeHtml(c) + "</code>");
-        return "\u0000" + (codeStash.length - 1) + "\u0000";
-      });
-      // Allow a small, safe set of raw inline HTML tags to pass through
-      // (the content pages use <span class="float-right">…</span> to float
-      // building/terrain thumbnails). Each matched tag is stashed like inline
-      // code so escapeHtml() below doesn't turn it into visible text, then
-      // restored verbatim afterwards. Attributes are limited to a quoted
-      // class, so no arbitrary HTML/script can slip through.
-      const htmlStash = [];
-      const stashHtml = (frag) => {
-        htmlStash.push(frag);
-        return "\u0001" + (htmlStash.length - 1) + "\u0001";
-      };
-      text = text
-        .replace(/<span(?:\s+class="[\w\- ]*")?\s*>/gi, (m) => stashHtml(m))
-        .replace(/<\/span>/gi, (m) => stashHtml(m))
-        .replace(/<br\s*\/?>/gi, () => stashHtml("<br>"));
-      text = escapeHtml(text);
-      // Images: ![alt](src){opt}
-      text = text.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)(?:\{[^}]*\})?/g,
-        (_m, alt, src) => `<img src="${resolveAssetUrl(src)}" alt="${alt}">`);
-      // Links: [text](href)
-      text = text.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_m, label, href) => {
-        const internal = /\.md($|[#?])/i.test(href) || !/^[a-z]+:/i.test(href);
-        const cls = internal ? ' data-md="' + href + '"' : "";
-        const h = internal ? "#" : href;
-        return `<a href="${h}"${cls}>${label}</a>`;
-      });
-      // Bold then italic.
-      text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-      text = text.replace(/\*([^*]+)\*/g, "<em>$1</em>");
-      // Restore inline code.
-      text = text.replace(/\u0000(\d+)\u0000/g, (_m, i) => codeStash[+i]);
-      // Restore passed-through inline HTML tags.
-      text = text.replace(/\u0001(\d+)\u0001/g, (_m, i) => htmlStash[+i]);
-      return text;
-    }
+    const MarkdownIt = require("markdown-it");
+    const mdAttrs = require("markdown-it-attrs");
+    // html:true lets the content pages' raw <span class="float-right"> wrappers
+    // pass through; linkify turns bare URLs into links; typographer off keeps
+    // text verbatim. markdown-it-attrs enables {width=128} etc. on images.
+    const md = new MarkdownIt({ html: true, linkify: true, typographer: false }).use(mdAttrs);
 
-    function splitTableRow(line) {
-      let s = line.trim().replace(/^\|/, "").replace(/\|$/, "");
-      return s.split("|").map((c) => c.trim());
-    }
-    function isTableDivider(line) {
-      return /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(line);
-    }
+    // Image rule: rewrite the resolved src to a file:// URL (README-relative
+    // src/resources/... paths), preserving any attributes markdown-it-attrs set
+    // (e.g. width/height). Falls back to markdown-it's default token rendering
+    // for everything else.
+    md.renderer.rules.image = function (tokens, idx, options, env, self) {
+      const token = tokens[idx];
+      const srcIdx = token.attrIndex("src");
+      if (srcIdx >= 0) token.attrs[srcIdx][1] = resolveAssetUrl(token.attrs[srcIdx][1]);
+      // Keep the alt text markdown-it parsed into the token's children
+      // (self.renderToken alone would emit an empty alt="").
+      const altIdx = token.attrIndex("alt");
+      const altText = self.renderInlineAsText(token.children || [], options, env);
+      if (altIdx >= 0) token.attrs[altIdx][1] = altText;
+      else token.attrSet("alt", altText);
+      return self.renderToken(tokens, idx, options);
+    };
+
+    // Link rule: classify links. An internal link (another .md page, or any
+    // non-absolute-URL href) is marked with data-md and neutralized href="#" so
+    // the panel-swap click handler loads it; external http(s) links are left for
+    // the system browser. Applied by overriding link_open.
+    const _defaultLinkOpen = md.renderer.rules.link_open ||
+      function (tokens, idx, options, env, self) { return self.renderToken(tokens, idx, options); };
+    md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
+      const token = tokens[idx];
+      const hrefIdx = token.attrIndex("href");
+      const href = hrefIdx >= 0 ? token.attrs[hrefIdx][1] : "";
+      const internal = /\.md($|[#?])/i.test(href) || !/^[a-z]+:/i.test(href);
+      if (internal) {
+        token.attrSet("data-md", href);
+        if (hrefIdx >= 0) token.attrs[hrefIdx][1] = "#";
+      }
+      return _defaultLinkOpen(tokens, idx, options, env, self);
+    };
 
     function renderMarkdown(src) {
-      const lines = src.replace(/\r\n/g, "\n").split("\n");
-      let html = "";
-      let i = 0;
-      let para = [];
-      const flushPara = () => {
-        if (para.length) { html += "<p>" + renderInline(para.join(" ")) + "</p>"; para = []; }
-      };
-      while (i < lines.length) {
-        const line = lines[i];
-
-        // Fenced code block.
-        const fence = line.match(/^```(.*)$/);
-        if (fence) {
-          flushPara();
-          const buf = [];
-          i++;
-          while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i++; }
-          i++; // closing fence
-          html += "<pre><code>" + escapeHtml(buf.join("\n")) + "</code></pre>";
-          continue;
-        }
-
-        // Horizontal rule.
-        if (/^\s*(---|\*\*\*|___)\s*$/.test(line)) { flushPara(); html += "<hr>"; i++; continue; }
-
-        // ATX heading.
-        const h = line.match(/^(#{1,6})\s+(.*)$/);
-        if (h) { flushPara(); const lvl = h[1].length; html += `<h${lvl}>${renderInline(h[2].trim())}</h${lvl}>`; i++; continue; }
-
-        // Table (header row followed by a divider row).
-        if (/\|/.test(line) && i + 1 < lines.length && isTableDivider(lines[i + 1])) {
-          flushPara();
-          const headers = splitTableRow(line);
-          i += 2; // skip header + divider
-          let t = "<table><thead><tr>";
-          for (const hcell of headers) t += "<th>" + renderInline(hcell) + "</th>";
-          t += "</tr></thead><tbody>";
-          while (i < lines.length && /\|/.test(lines[i]) && lines[i].trim() !== "") {
-            const cells = splitTableRow(lines[i]);
-            t += "<tr>";
-            for (let c = 0; c < headers.length; c++) t += "<td>" + renderInline(cells[c] || "") + "</td>";
-            t += "</tr>";
-            i++;
-          }
-          t += "</tbody></table>";
-          html += t;
-          continue;
-        }
-
-        // Blockquote (one or more consecutive > lines).
-        if (/^\s*>\s?/.test(line)) {
-          flushPara();
-          const buf = [];
-          while (i < lines.length && /^\s*>\s?/.test(lines[i])) { buf.push(lines[i].replace(/^\s*>\s?/, "")); i++; }
-          html += "<blockquote>" + renderInline(buf.join(" ")) + "</blockquote>";
-          continue;
-        }
-
-        // Ordered list.
-        if (/^\s*\d+\.\s+/.test(line)) {
-          flushPara();
-          let t = "<ol>";
-          while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
-            t += "<li>" + renderInline(lines[i].replace(/^\s*\d+\.\s+/, "")) + "</li>";
-            i++;
-          }
-          t += "</ol>";
-          html += t;
-          continue;
-        }
-
-        // Unordered list.
-        if (/^\s*[-*+]\s+/.test(line)) {
-          flushPara();
-          let t = "<ul>";
-          while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
-            t += "<li>" + renderInline(lines[i].replace(/^\s*[-*+]\s+/, "")) + "</li>";
-            i++;
-          }
-          t += "</ul>";
-          html += t;
-          continue;
-        }
-
-        // Blank line ends a paragraph.
-        if (line.trim() === "") { flushPara(); i++; continue; }
-
-        // Otherwise accumulate paragraph text.
-        para.push(line.trim());
-        i++;
-      }
-      flushPara();
-      return html;
+      return md.render(String(src == null ? "" : src));
     }
 
     // -------------------- page loading --------------------

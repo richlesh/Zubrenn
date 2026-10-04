@@ -5,7 +5,7 @@
 // The seven economy resource types, in canonical order. All config resource
 // maps (base/bonus/cost/storage/federationStorage) are keyed by a subset of
 // these; a missing key means 0.
-const RESOURCE_KEYS = ["energy", "food", "material", "water", "wealth", "happiness", "population"];
+const RESOURCE_KEYS = ["energy", "food", "material", "goods", "water", "wealth", "happiness", "population"];
 
 /**
  * Resolve a single config resource value. Accepts a number, or a positive

@@ -69,7 +69,10 @@
     "electron": "^41.3.0",
     "electron-builder": "^26.8.1"
   },
-  "dependencies": {},
+  "dependencies": {
+    "markdown-it": "14.3.2",
+    "markdown-it-attrs": "4.3.0"
+  },
   "allowScripts": {
     "electron@41.10.7": true
   }
