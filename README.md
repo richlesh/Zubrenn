@@ -667,7 +667,7 @@ directly into the heart of your civilization.
 | Zayllux | Small, iridescent fliers with four wings and large black eyes. They navigate by starlight and treat constellations as sacred maps. | ![Zayllux](src/resources/aliens/128/Zayllux.png) |
 | Qortham | Amphibious, tusked folk with ridged backs. Their cities are built around tidal pools, and they can sense distant vibrations through water. | ![Qortham](src/resources/aliens/128/Qortham.png) |
 | Nyssarion | Slender, nocturnal humanoids with silver markings. They value quiet contemplation and believe silence is the purest form of prayer. | ![Nyssarion](src/resources/aliens/128/Nyssarion.png) |
-| Braal Vex | Insectoid engineers with plated bodies and nimble hands. Their intricate machines are family heirlooms, and each generation adds to them. | ![Braal Vex](src/resources/aliens/128/Braal Vex.png) |
+| Braal Vex | Insectoid engineers with plated bodies and nimble hands. Their intricate machines are family heirlooms, and each generation adds to them. | ![Braal Vex](src/resources/aliens/128/Braal_Vex.png) |
 | Ithkane | Long-necked desert dwellers with mirrored eyes. They travel in singing caravans and can detect water beneath dry ground. | ![Ithkane](src/resources/aliens/128/Ithkane.png) |
 | Ozúmara | Colorful, fin-crested swimmers who live in deep ocean cities. They celebrate life through elaborate dances and communicate over long distances with clicks. | ![Ozúmara](src/resources/aliens/128/Ozúmara.png) |
 | Threxil | Compact, many-legged hunters with tough chitin. They follow strict codes of fair pursuit and can cling to almost any surface. | ![Threxil](src/resources/aliens/128/Threxil.png) |
