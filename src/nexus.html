@@ -62,6 +62,13 @@
       flex: 1;
       min-width: 0;
       background: var(--panel-bg);
+    }
+    /* The content column holds a scrolling markdown area plus a pinned find
+       bar at the bottom. */
+    #content { display: flex; flex-direction: column; }
+    #content .md {
+      flex: 1;
+      min-height: 0;
       overflow-y: auto;
       padding: 24px 32px;
     }
@@ -116,13 +123,108 @@
 
     #error { color: #d04545; padding: 20px; }
     body.dark #error { color: #ff8a8a; }
+
+    /* Click-to-enlarge lightbox for Nexus images. Content images show a
+       zoom-in cursor; clicking one opens a full-screen overlay with the image
+       enlarged, dimming the rest of the dialog. Click anywhere or press Esc to
+       close. */
+    #content .md img { cursor: zoom-in; }
+    #nexus-lightbox {
+      position: fixed;
+      inset: 0;
+      z-index: 10050;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.82);
+      cursor: zoom-out;
+      opacity: 0;
+      transition: opacity 0.12s ease;
+    }
+    #nexus-lightbox.open { display: flex; opacity: 1; }
+    #nexus-lightbox img {
+      max-width: 90vw;
+      max-height: 90vh;
+      width: auto;
+      height: auto;
+      border-radius: 8px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+      /* Override the 128px cap that .md img imposes so thumbnails enlarge. */
+      object-fit: contain;
+      image-rendering: auto;
+    }
+
+    /* ----- In-page find bar (bottom of the content panel) ----------------- */
+    #find-bar {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-top: 1px solid var(--border);
+      background: var(--toc-bg);
+      font-size: 13px;
+    }
+    #find-bar .find-icon { color: var(--muted); flex: 0 0 auto; display: flex; }
+    #find-input {
+      flex: 1;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel-bg);
+      color: var(--fg);
+      font-size: 13px;
+      outline: none;
+    }
+    #find-input:focus { border-color: var(--accent); }
+    #find-count {
+      flex: 0 0 auto;
+      color: var(--muted);
+      min-width: 54px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    #find-bar button {
+      flex: 0 0 auto;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel-bg);
+      color: var(--fg);
+      cursor: pointer;
+      line-height: 1;
+    }
+    #find-bar button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    #find-bar button:disabled { opacity: 0.4; cursor: default; }
+    /* Search-match highlights injected into the content. */
+    #content mark.find-hit { background: #ffe066; color: #1e1e1e; border-radius: 2px; }
+    #content mark.find-hit.current { background: #ff9d2e; color: #1e1e1e; }
+    body.dark #content mark.find-hit { background: #6b5a1a; color: #fff; }
+    body.dark #content mark.find-hit.current { background: #c77b1a; color: #fff; }
   </style>
 </head>
 <body>
   <div id="layout">
     <nav id="toc"><div class="md"></div></nav>
-    <section id="content"><div class="md"></div></section>
+    <section id="content">
+      <div class="md"></div>
+      <div id="find-bar">
+        <span class="find-icon" title="Search this page">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        </span>
+        <input id="find-input" type="text" placeholder="Search this page…" aria-label="Search this page" spellcheck="false" autocomplete="off">
+        <span id="find-count">0/0</span>
+        <button id="find-prev" type="button" title="Previous match (Shift+Enter)" aria-label="Previous match" disabled>&#9650;</button>
+        <button id="find-next" type="button" title="Next match (Enter)" aria-label="Next match" disabled>&#9660;</button>
+      </div>
+    </section>
   </div>
+
+  <!-- Click-to-enlarge overlay for Nexus images (populated/toggled from JS). -->
+  <div id="nexus-lightbox"><img alt=""></div>
 
   <script>
     const { ipcRenderer } = require("electron");
@@ -234,6 +336,11 @@
         contentEl.parentElement.scrollTop = 0;
         currentPage = name;
         highlightActive();
+        // New page: drop any prior search highlights and re-apply the current
+        // query (if the find field still holds text) against the new content.
+        if (typeof clearFindHighlights === "function") { clearFindHighlights(); }
+        if (typeof runFind === "function" && findInput && findInput.value.trim()) { runFind(false); }
+        else if (typeof updateFindUI === "function") { updateFindUI(); }
       } catch (err) {
         contentEl.innerHTML = '<div id="error">Could not load <code>' +
           escapeHtml(name) + '</code>:<br>' + escapeHtml(String(err && err.message || err)) + '</div>';
@@ -267,6 +374,157 @@
     wireLinks(tocEl);
     wireLinks(contentEl);
 
+    // -------------------- image lightbox --------------------
+    // Clicking any rendered image enlarges it in a full-screen overlay. The
+    // content images are 128px thumbnails from a `/128/` folder; when a
+    // full-size sibling (the same file without the `/128` segment) exists on
+    // disk, show that for a crisper enlargement, else fall back to the thumb.
+    const lightbox = document.getElementById("nexus-lightbox");
+    const lightboxImg = lightbox ? lightbox.querySelector("img") : null;
+    function fullResUrl(fileUrl) {
+      try {
+        if (!/^file:\/\//i.test(fileUrl)) return fileUrl;
+        const p = decodeURIComponent(fileUrl.replace(/^file:\/\//i, ""));
+        const alt = p.replace(/\/128\//, "/");
+        if (alt !== p && fs.existsSync(alt)) {
+          return "file://" + alt.split(path.sep).join("/");
+        }
+      } catch (e) { /* fall through to the original */ }
+      return fileUrl;
+    }
+    function openLightbox(src) {
+      if (!lightbox || !lightboxImg) return;
+      lightboxImg.src = fullResUrl(src);
+      lightbox.classList.add("open");
+    }
+    function closeLightbox() {
+      if (!lightbox) return;
+      lightbox.classList.remove("open");
+      if (lightboxImg) lightboxImg.removeAttribute("src");
+    }
+    function wireImages(container) {
+      container.addEventListener("click", (e) => {
+        const img = e.target.closest("img");
+        if (!img || !container.contains(img)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openLightbox(img.getAttribute("src"));
+      });
+    }
+    wireImages(tocEl);
+    wireImages(contentEl);
+    if (lightbox) lightbox.addEventListener("click", closeLightbox);
+
+    // -------------------- in-page find --------------------
+    // A find bar at the bottom of the content panel searches the currently
+    // loaded page: it highlights every case-insensitive match, shows a
+    // current/total count, and the up/down arrows (or Shift+Enter / Enter) jump
+    // between matches. Highlights are cleared whenever a new page loads.
+    const findInput = document.getElementById("find-input");
+    const findCount = document.getElementById("find-count");
+    const findPrev = document.getElementById("find-prev");
+    const findNext = document.getElementById("find-next");
+    let findHits = [];     // the <mark.find-hit> elements, in document order
+    let findIndex = -1;    // index of the current (focused) match
+
+    // Remove all highlight wrappers, restoring the original text runs.
+    function clearFindHighlights() {
+      const marks = contentEl.querySelectorAll("mark.find-hit");
+      for (const m of marks) {
+        const parent = m.parentNode;
+        if (!parent) continue;
+        parent.replaceChild(document.createTextNode(m.textContent), m);
+        parent.normalize();
+      }
+      findHits = [];
+      findIndex = -1;
+    }
+
+    function updateFindUI() {
+      const total = findHits.length;
+      findCount.textContent = total ? `${findIndex + 1}/${total}` : "0/0";
+      findPrev.disabled = total === 0;
+      findNext.disabled = total === 0;
+    }
+
+    function setCurrentMatch(i, scroll) {
+      if (!findHits.length) return;
+      if (findIndex >= 0 && findHits[findIndex]) findHits[findIndex].classList.remove("current");
+      findIndex = ((i % findHits.length) + findHits.length) % findHits.length;
+      const el = findHits[findIndex];
+      el.classList.add("current");
+      if (scroll) el.scrollIntoView({ block: "center", behavior: "smooth" });
+      updateFindUI();
+    }
+
+    // Wrap every case-insensitive occurrence of `query` in the content's text
+    // nodes with <mark class="find-hit">. Skips text already inside a mark and
+    // inside script/style. Collects the created marks into findHits.
+    function highlightMatches(query) {
+      const q = query.toLowerCase();
+      const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+          const p = node.parentNode;
+          if (!p) return NodeFilter.FILTER_REJECT;
+          const tag = p.nodeName;
+          if (tag === "SCRIPT" || tag === "STYLE" || tag === "MARK") return NodeFilter.FILTER_REJECT;
+          return node.nodeValue.toLowerCase().includes(q) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+        }
+      });
+      const targets = [];
+      let n;
+      while ((n = walker.nextNode())) targets.push(n);
+      for (const node of targets) {
+        const text = node.nodeValue;
+        const lower = text.toLowerCase();
+        const frag = document.createDocumentFragment();
+        let pos = 0, hit;
+        while ((hit = lower.indexOf(q, pos)) !== -1) {
+          if (hit > pos) frag.appendChild(document.createTextNode(text.slice(pos, hit)));
+          const mark = document.createElement("mark");
+          mark.className = "find-hit";
+          mark.textContent = text.slice(hit, hit + q.length);
+          frag.appendChild(mark);
+          findHits.push(mark);
+          pos = hit + q.length;
+        }
+        if (pos < text.length) frag.appendChild(document.createTextNode(text.slice(pos)));
+        node.parentNode.replaceChild(frag, node);
+      }
+    }
+
+    // Re-run the search for the current input value (clearing prior highlights).
+    function runFind(keepIndex) {
+      const prev = findIndex;
+      clearFindHighlights();
+      const query = (findInput.value || "").trim();
+      if (query.length) {
+        highlightMatches(query);
+      }
+      if (findHits.length) {
+        const start = (keepIndex && prev >= 0) ? Math.min(prev, findHits.length - 1) : 0;
+        setCurrentMatch(start, true);
+      } else {
+        updateFindUI();
+      }
+    }
+
+    findInput.addEventListener("input", () => runFind(false));
+    findInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (findHits.length) setCurrentMatch(findIndex + (e.shiftKey ? -1 : 1), true);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        if (findInput.value) { findInput.value = ""; runFind(false); }
+        else { findInput.blur(); }
+        e.stopPropagation();
+      }
+    });
+    findPrev.addEventListener("click", () => setCurrentMatch(findIndex - 1, true));
+    findNext.addEventListener("click", () => setCurrentMatch(findIndex + 1, true));
+
     // -------------------- init --------------------
     refreshSettings();
     tocEl.innerHTML = (() => {
@@ -280,6 +538,23 @@
 
     // Close on Escape or Cmd/Ctrl+W.
     window.addEventListener("keydown", (e) => {
+      // Cmd/Ctrl+F focuses the page-find field.
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        findInput.focus();
+        findInput.select();
+        return;
+      }
+      // Esc closes an open lightbox first; otherwise it closes the dialog.
+      if (e.key === "Escape" && lightbox && lightbox.classList.contains("open")) {
+        closeLightbox();
+        return;
+      }
+      // While typing in the find field, let its own handler manage Esc
+      // (clear/blur) instead of closing the whole dialog.
+      if (e.key === "Escape" && document.activeElement === findInput) {
+        return;
+      }
       if (e.key === "Escape" || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "w")) {
         ipcRenderer.invoke("close-nexus");
       }

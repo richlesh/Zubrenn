@@ -73,7 +73,7 @@ th, td {white-space: normal; word-break: keep-all;}
 | Illurnex | Bioluminescent beings with delicate, glassy bodies. They navigate through coordinated flashes and consider a person’s light-pattern a private identity. | ![Illurnex](src/resources/aliens/128/Illurnex.png) |
 | Kreth­sibar | Krethsibar are rugged, plated inhabitants of harsh worlds. They prize resilience, and their thick outer layers repair slowly after injury. | ![Kreth­sibar](src/resources/aliens/128/Kreth­sibar.png) |
 | Aomvel | Soft-bodied, floating beings who live in the upper atmosphere. They communicate through changing shapes and steer themselves with tiny jets of gas. | ![Aomvel](src/resources/aliens/128/Aomvel.png) |
-| Struxil | Fast-moving, six-legged runners with sharp crests. Their communities hold endurance races as religious festivals and value stamina over speed. | ![Struxil](src/resources/aliens/128/Struxil.png) |
+| Struxil | Fast-moving, runners with sharp crests. Their communities hold endurance races as religious festivals and value stamina over speed. | ![Struxil](src/resources/aliens/128/Struxil.png) |
 | Tazmuroth | Large, tusked beings with heat-sensing pits. Their lawkeepers settle disputes through formal debate rather than combat. | ![Tazmuroth](src/resources/aliens/128/Tazmuroth.png) |
 | Welganth | Gentle, shell-backed nomads who carry household gardens with them. They believe a home is wherever the community gathers. | ![Welganth](src/resources/aliens/128/Welganth.png) |
 | Nyrreth | Pale, subterranean beings with sensitive whiskers. Their festivals celebrate sound, and they map tunnels by tapping walls and listening for echoes. | ![Nyrreth](src/resources/aliens/128/Nyrreth.png) |
@@ -87,7 +87,7 @@ th, td {white-space: normal; word-break: keep-all;}
 | Menthara | Calm, luminous-skinned beings with branching head crests. Their spiritual leaders guide group meditation, often using shared rhythmic breathing. | ![Menthara](src/resources/aliens/128/Menthara.png) |
 | Vraddek | Burly, tusked inhabitants of rugged highlands. They mark important promises with permanent tattoos and are skilled at climbing sheer rock. | ![Vraddek](src/resources/aliens/128/Vraddek.png) |
 | Oxilune | Pale, long-eared beings adapted to dim, icy worlds. They celebrate the return of sunlight and can detect distant movement in darkness. | ![Oxilune](src/resources/aliens/128/Oxilune.png) |
-| Perthaan | Six-fingered, broad-shouldered artisans. Their guilds teach each craft as both a practical skill and a form of devotion. | ![Perthaan](src/resources/aliens/128/Perthaan.png) |
+| Perthaan | Stocky, broad-shouldered artisans. Their guilds teach each craft as both a practical skill and a form of devotion. | ![Perthaan](src/resources/aliens/128/Perthaan.png) |
 | Zunveil | Veil-winged fliers with shifting patterns. Their customs emphasize privacy, and their wings can disrupt their outline in flight. | ![Zunveil](src/resources/aliens/128/Zunveil.png) |
 | Chalorix | Horned, desert-dwelling beings with tough, reflective skin. They hold water-sharing ceremonies and can conserve moisture exceptionally well. | ![Chalorix](src/resources/aliens/128/Chalorix.png) |
 | Trennoss | Small, burrowing gatherers with powerful hind legs. Their villages share underground food stores, and they communicate with rhythmic thumps. | ![Trennoss](src/resources/aliens/128/Trennoss.png) |
