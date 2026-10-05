@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONVERTER="$SCRIPT_DIR/cvt_2_github_md.py"
 SRC_DIR="$SCRIPT_DIR/src/resources/nexus"
 
-pages=(how_to_play resources terrain terrain_bonus buildings transportation federation aliens)
+pages=(how_to_play resource_types terrain terrain_bonus buildings transportation federation aliens)
 
 for x in "${pages[@]}"; do
 	in="$SRC_DIR/$x.md"

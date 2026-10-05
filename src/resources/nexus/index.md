@@ -7,7 +7,7 @@ to the right.
 ## Contents
 
 - [How to Play](how_to_play.md) — turn flow, founding colonies, and controls
-- [Resources](resources.md) — the seven resources and the colony economy
+- [Resources](resource_types.md) — the eight resources and the colony economy
 - [Terrain](terrain.md) — the eleven terrain types and what they yield
 - [Terrain Bonus](terrain_bonus.md) — special resource deposits across the land
 - [Buildings](buildings.md) — every structure, its costs, upkeep, and output
