@@ -21,7 +21,7 @@ th, td {white-space: normal; word-break: keep-all;}
 | Nyssarion | Slender, nocturnal humanoids with silver markings. They value quiet contemplation and believe silence is the purest form of prayer. | ![Nyssarion](src/resources/aliens/128/Nyssarion.png) |
 | Braal Vex | Insectoid engineers with plated bodies and nimble hands. Their intricate machines are family heirlooms, and each generation adds to them. | ![Braal Vex](src/resources/aliens/128/Braal_Vex.png) |
 | Ithkane | Long-necked desert dwellers with mirrored eyes. They travel in singing caravans and can detect water beneath dry ground. | ![Ithkane](src/resources/aliens/128/Ithkane.png) |
-| Ozúmara | Colorful, fin-crested swimmers who live in deep ocean cities. They celebrate life through elaborate dances and communicate over long distances with clicks. | ![Ozúmara](src/resources/aliens/128/Ozúmara.png) |
+| Ozumara | Colorful, fin-crested swimmers who live in deep ocean cities. They celebrate life through elaborate dances and communicate over long distances with clicks. | ![Ozumara](src/resources/aliens/128/Ozumara.png) |
 | Threxil | Compact, many-legged hunters with tough chitin. They follow strict codes of fair pursuit and can cling to almost any surface. | ![Threxil](src/resources/aliens/128/Threxil.png) |
 | Vandros | Tall, furred beings adapted to icy worlds. Their hearth-keepers preserve oral histories, while their bodies thrive in extreme cold. | ![Vandros](src/resources/aliens/128/Vandros.png) |
 | Kla276-Ur | A synthetic species of modular metal bodies and shared software minds. They debate whether personal identity is a sacred inheritance or a choice. | ![Kla276-Ur](src/resources/aliens/128/Kla276-Ur.png) |
@@ -71,7 +71,7 @@ th, td {white-space: normal; word-break: keep-all;}
 | Praxilon | Precise, insectlike thinkers with segmented limbs. They organize society around collaborative problem-solving and can process complex patterns rapidly. | ![Praxilon](src/resources/aliens/128/Praxilon.png) |
 | Voshkane | Furred, long-armed forest dwellers. Their clans exchange carved tokens at seasonal gatherings, and they move quietly through dense woods. | ![Voshkane](src/resources/aliens/128/Voshkane.png) |
 | Illurnex | Bioluminescent beings with delicate, glassy bodies. They navigate through coordinated flashes and consider a person’s light-pattern a private identity. | ![Illurnex](src/resources/aliens/128/Illurnex.png) |
-| Kreth­sibar | Krethsibar are rugged, plated inhabitants of harsh worlds. They prize resilience, and their thick outer layers repair slowly after injury. | ![Kreth­sibar](src/resources/aliens/128/Kreth­sibar.png) |
+| Krethsibar | Krethsibar are rugged, plated inhabitants of harsh worlds. They prize resilience, and their thick outer layers repair slowly after injury. | ![Krethsibar](src/resources/aliens/128/Krethsibar.png) |
 | Aomvel | Soft-bodied, floating beings who live in the upper atmosphere. They communicate through changing shapes and steer themselves with tiny jets of gas. | ![Aomvel](src/resources/aliens/128/Aomvel.png) |
 | Struxil | Fast-moving, runners with sharp crests. Their communities hold endurance races as religious festivals and value stamina over speed. | ![Struxil](src/resources/aliens/128/Struxil.png) |
 | Tazmuroth | Large, tusked beings with heat-sensing pits. Their lawkeepers settle disputes through formal debate rather than combat. | ![Tazmuroth](src/resources/aliens/128/Tazmuroth.png) |

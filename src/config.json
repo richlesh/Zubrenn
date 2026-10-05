@@ -827,7 +827,7 @@
     "maxLandingTurns": 200,
     // Pool of alien species names; AI opponents are named from this list.
     "names": ["Xel'Thara", "Vorn Kesh", "Zayllux", "Qortham", "Nyssarion", "Braal Vex",
-      "Ithkane", "Ozúmara", "Threxil", "Vandros", "Kla276-Ur", "Sythara", "Draviim",
+      "Ithkane", "Ozumara", "Threxil", "Vandros", "Kla276-Ur", "Sythara", "Draviim",
       "Uxberos", "Nel'Quoth", "Zaethys", "Morvax", "Illandor", "Kryssoth", "Obrahn",
       "Tyllvex", "Aznareth", "Woltrim", "Ekshara", "Pravoxi", "Ghorlune", "Yssibel",
       "Vraektor", "Nomilar", "Quenthaa", "Drommus", "Xibante", "Ulvarion", "Zephkar",
