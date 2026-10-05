@@ -1,4 +1,26 @@
+<style>
+.float-left {
+  float: left;
+  margin: 0 1em 0 0;
+}
+.float-right {
+  float: right;
+  margin: 0 0 0 1em;
+}
+.center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+}
+th, td {white-space: normal; word-break: keep-all;}
+</style>
+
+<span class="center">![federation_flag](../federation_flag_256.png)</span>
+
+
 ## The Federation
+
 
 Every colony you found belongs to a single **Federation** — the political and
 economic union of all your settlements. The Federation is what turns a scattering
@@ -7,6 +29,8 @@ infrastructure, and lets your colonies prop one another up through lean years.
 Each alien species runs its own independent Federation on exactly the same rules.
 
 ### The capital
+
+<span class="float-right">![federation](../128/federation.png)</span>
 
 The **capital** is your **earliest-founded surviving colony**. It anchors the
 Federation: only colonies that are **network-connected to the capital** — by road

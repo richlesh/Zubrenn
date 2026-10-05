@@ -1,3 +1,15 @@
+<style>
+.float-left {
+  float: left;
+  margin: 0 1em 0 0;
+}
+.float-right {
+  float: right;
+  margin: 0 0 0 1em;
+}
+
+th, td {white-space: normal; word-break: keep-all;}
+</style>
 ## How to play
 
 1. **New Game** (File ▸ New Game…): choose map size, water, rivers, wrapping,
