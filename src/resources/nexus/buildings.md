@@ -2,13 +2,13 @@
 
 #### Biodome
 
-<span class="float-right">![biodome](src/resources/buildings/128/biodome.png)</span>
+<span class="float-right">![biodome](../buildings/128/biodome.png)</span>
 
 The Biodome is the heart of a colony, establishing its central hub and initial zone of control. Its tile is always worked, providing all the living quarters for a growing population. The building boosts the colony’s baseline growth rate and grants starting storage for Food, Material, Energy, Wealth, and Happiness. Functioning as a self‑contained city, the Biodome includes limited solar power generation, hydroponic food production, fresh‑water extraction (via wells or nearby rivers), and basic manufacturing. It also holds modest reserves of energy (batteries), food, water, and warehouse space. Drones attached to the Biodome can explore beyond its borders and can monitor neighboring colonies.
 
 #### Solar Panels
 
-<span class="float-right">![solar_panel](src/resources/buildings/128/solar_panel.png)</span>
+<span class="float-right">![solar_panel](../buildings/128/solar_panel.png)</span>
 
 Solar Panels are advanced energy collectors. They cost 2 Material, 2 Energy and 2 Wealth to construct (takes 1 turn) and have a yearly upkeep of 0.5 Wealth. Each panel produces 6 Energy per year and adds 500 Energy storage to the colony, while providing no food, material, wealth or growth bonuses.
  
