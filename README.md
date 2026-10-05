@@ -91,14 +91,14 @@ Welcome, Administrator. The Nexus Data Core is your field reference for the colo
 
 ## Contents
 
-- [How to Play](src/resources/nexus/how_to_play.md) — turn flow, founding colonies, and controls
-- [Resources](src/resources/nexus/resources.md) — the seven resources and the colony economy
-- [Terrain](src/resources/nexus/terrain.md) — the eleven terrain types and what they yield
-- [Terrain Bonus](src/resources/nexus/terrain_bonus.md) — special resource deposits across the land
-- [Buildings](src/resources/nexus/buildings.md) — every structure, its costs, upkeep, and output
-- [Transportation](src/resources/nexus/transportation.md) — roads, rivers, sea, monorail, air, space
-- [Federation](src/resources/nexus/federation.md) — the capital, treasury, taxes, and shared upkeep
-- [Alien Species](src/resources/nexus/aliens.md) — the peoples who contest the continent
+- [How to Play](how_to_play.md) — turn flow, founding colonies, and controls
+- [Resources](resources.md) — the seven resources and the colony economy
+- [Terrain](terrain.md) — the eleven terrain types and what they yield
+- [Terrain Bonus](terrain_bonus.md) — special resource deposits across the land
+- [Buildings](buildings.md) — every structure, its costs, upkeep, and output
+- [Transportation](transportation.md) — roads, rivers, sea, monorail, air, space
+- [Federation](federation.md) — the capital, treasury, taxes, and shared upkeep
+- [Alien Species](aliens.md) — the peoples who contest the continent
 
 ## Getting started
 
