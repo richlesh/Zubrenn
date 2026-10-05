@@ -170,7 +170,13 @@
     },
     "ollama": {
       "label": "Ollama",
-      "models": [],
+      "models": [
+        "llama3.2:3b",
+        "qwen2.5:7b",
+        "qwen2.5:14b",
+        "qwen2.5:72b",
+        "llama3.3:70b"
+      ],
       "apiKeyUrl": "https://ollama.com/settings/keys",
       "baseURL": "http://localhost:11434/v1"
     }

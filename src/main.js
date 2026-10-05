@@ -308,6 +308,54 @@ function showNexus() {
 }
 ipcMain.handle("close-nexus", () => nexusWin?.close());
 
+// Debug: a standalone, movable AI Tool Log window (independent OS window, not an
+// in-page panel). Opened lazily when the renderer sends the first log entry in
+// debug mode; non-modal and resizable so it can sit anywhere beside the game.
+let aiLogWin = null;
+function showAiLog() {
+  if (aiLogWin && !aiLogWin.isDestroyed()) return aiLogWin;
+  aiLogWin = new BrowserWindow({
+    width: 380,
+    height: 460,
+    minWidth: 260,
+    minHeight: 200,
+    parent: mainWin,
+    modal: false,
+    icon: appIcon,
+    show: false,
+    title: "AI Tool Log",
+    webPreferences: { nodeIntegration: true, contextIsolation: false },
+  });
+  aiLogWin.setMenuBarVisibility(false);
+  aiLogWin.loadFile(path.join(__dirname, "ailog.html"));
+  aiLogWin.once("ready-to-show", () => {
+    // Position at the main window's top-right by default.
+    if (mainWin && !mainWin.isDestroyed()) {
+      const [px, py] = mainWin.getPosition();
+      const [pw] = mainWin.getSize();
+      const [w] = aiLogWin.getSize();
+      aiLogWin.setPosition(Math.round(px + pw - w - 20), Math.round(py + 40));
+    }
+    aiLogWin.showInactive(); // show without stealing focus from the game
+  });
+  aiLogWin.on("closed", () => { aiLogWin = null; });
+  return aiLogWin;
+}
+// Receive a log entry from the game renderer and forward it to the log window,
+// creating the window on first use. Entries are small plain objects
+// ({ kind:'year'|'player'|'tool'|'note'|'clear', ... }).
+ipcMain.handle("ai-log", (_e, entry) => {
+  const win = showAiLog();
+  const send = () => { if (win && !win.isDestroyed()) win.webContents.send("ai-log-entry", entry); };
+  if (win.webContents.isLoading()) win.webContents.once("did-finish-load", send);
+  else send();
+});
+// The log window's Clear button asks the game renderer to reset its dedupe
+// state (so a later year header re-prints).
+ipcMain.handle("ai-log-clear-request", () => {
+  if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send("ai-log-reset");
+});
+
 function buildViewMenu() {
   const isMac = process.platform === "darwin";
   const ours = gameColonies.filter((c) => c.kind === "human");
@@ -519,6 +567,21 @@ ipcMain.handle("ai-chat", async (_e, { system, user, maxTokens, timeoutMs }) => 
     const text = await aiProvider.chat(VENDORS, s, system || "", user || "",
       { maxTokens: maxTokens || 1024, timeoutMs: timeoutMs || 30000 });
     return { ok: true, text };
+  } catch (err) {
+    return { ok: false, error: String(err && err.message || err) };
+  }
+});
+
+// Tool-calling variant used by the AI agent loop. Takes a full message array
+// and OpenAI-style tool schemas; returns { ok, message } where message has
+// { role, content, tool_calls }. { ok:false, error } on failure.
+ipcMain.handle("ai-chat-tools", async (_e, { messages, tools, maxTokens, timeoutMs }) => {
+  const s = load();
+  if (s.useBuiltinAI) return { ok: false, error: "built-in AI selected" };
+  try {
+    const message = await aiProvider.chatTools(VENDORS, s, messages || [], tools || [],
+      { maxTokens: maxTokens || 1024, timeoutMs: timeoutMs || 30000 });
+    return { ok: true, message };
   } catch (err) {
     return { ok: false, error: String(err && err.message || err) };
   }

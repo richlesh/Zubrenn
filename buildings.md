@@ -50,13 +50,19 @@ The Barracks train military battalions for defense and offense. It requires a **
  
 <img align="right" width="128" src="src/resources/buildings/128/grainery.png">
 
-The Grainery provides large‑scale food storage, increasing a colony’s food capacity by **1 000**. It can be built after a **Farm** is built.  It costs **2 Material**, **2 Energy** and **2 Wealth**, taking **2 turns** to construct. It has no upkeep or production bonuses.
+The Grainery provides large‑scale food storage, increasing a colony’s food capacity by **1 000**. It can be built after a **Farm** is built.  It costs **2 Material**, **2 Energy** and **2 Wealth**, taking **2 turns** to construct. It has no upkeep or production bonuses.
+
+#### Materials Depot
+
+<img align="right" width="128" src="src/resources/buildings/128/depot.png">
+
+The Materials Depot is bulk storage for raw **Material** — the ore, stone, and timber mined and harvested from the land before it is refined into Goods. It increases a colony’s Material storage capacity by **1 000**, giving mining‑heavy colonies somewhere to stockpile the raw stock that feeds their Factories (which convert Material into manufactured Goods). It can be built after a **Factory** is present, costs **10 Material**, **2 Energy** and **4 Wealth** over **1 turn**, and carries a small yearly upkeep of **1 Energy** and **1 Wealth**. It produces nothing on its own — it is the raw‑materials counterpart to the Warehouse, which stores finished Goods.
 
 #### Warehouse
 
 <img align="right" width="128" src="src/resources/buildings/128/warehouse.png">
 
-The Warehouse boosts material storage capacity by **1 000 Material**. It can be built after a **Factory** is built, costs **2 Material**, **2 Energy** and **2 Wealth**, and takes **2 turns** to construct. It has no upkeep or production bonuses, serving solely as a large material depot.
+The Warehouse boosts manufactured goods storage capacity by **1 000 Goods**. It can be built after a **Factory** is built, costs **2 Material**, **2 Energy** and **2 Wealth**, and takes **2 turns** to construct. It has no upkeep or production bonuses, serving solely as a large goods warehouse.
 
 #### Bank
 

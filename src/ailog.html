@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Tool Log</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      display: flex;
+      flex-direction: column;
+      background: #141418;
+      color: #e6e6e6;
+      font: 12px/1.45 "SF Mono", Menlo, Consolas, monospace;
+    }
+    body.light { background: #f5f5f5; color: #1e1e1e; }
+
+    #head {
+      flex: 0 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 10px;
+      border-bottom: 1px solid #3a3a3a;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    body.light #head { border-bottom-color: #d0d0d0; background: #ececec; }
+    #head button {
+      background: none;
+      border: 1px solid #4a4a4a;
+      color: inherit;
+      border-radius: 4px;
+      font: inherit;
+      padding: 2px 8px;
+      cursor: pointer;
+    }
+    #head button:hover { border-color: #6a9bd8; color: #6a9bd8; }
+
+    #body { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 10px; }
+
+    .ai-log-year {
+      color: #ffd27f;
+      font-weight: 700;
+      margin: 8px 0 2px;
+      border-top: 1px solid #3a3a3a;
+      padding-top: 5px;
+    }
+    .ai-log-year:first-child { border-top: none; margin-top: 0; }
+    body.light .ai-log-year { color: #a66400; border-top-color: #d0d0d0; }
+    .ai-log-player { color: #7fc9ff; font-weight: 700; margin: 5px 0 1px; }
+    body.light .ai-log-player { color: #0a66d6; }
+    .ai-log-tool { margin-left: 10px; white-space: pre-wrap; word-break: break-word; }
+    .ai-log-tool .t-name { color: #b6f28c; }
+    body.light .ai-log-tool .t-name { color: #1a7a1a; }
+    .ai-log-tool.err .t-name { color: #ff8a8a; }
+    body.light .ai-log-tool.err .t-name { color: #c0392b; }
+    .ai-log-tool .t-args { color: #9a9a9a; }
+    body.light .ai-log-tool .t-args { color: #777; }
+    #empty { color: #777; padding: 10px; font-style: italic; }
+  </style>
+</head>
+<body>
+  <div id="head">
+    <span>AI Tool Log</span>
+    <button id="clear" type="button" title="Clear the log">Clear</button>
+  </div>
+  <div id="body"><div id="empty">Waiting for AI turns…</div></div>
+
+  <script>
+    const { ipcRenderer } = require("electron");
+    const bodyEl = document.getElementById("body");
+    const emptyEl = document.getElementById("empty");
+    let lastYear = null;
+
+    function esc(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+    function dropEmpty() { if (emptyEl && emptyEl.parentNode) emptyEl.remove(); }
+    function append(el) {
+      dropEmpty();
+      bodyEl.appendChild(el);
+      bodyEl.scrollTop = bodyEl.scrollHeight;
+    }
+    function clearLog() {
+      bodyEl.innerHTML = "";
+      lastYear = null;
+      const e = document.createElement("div");
+      e.id = "empty"; e.textContent = "Waiting for AI turns…";
+      bodyEl.appendChild(e);
+    }
+
+    // Render one log entry sent from the game renderer.
+    // entry: { kind:'year'|'player'|'tool'|'note'|'clear', ... }
+    function render(entry) {
+      if (!entry) return;
+      if (entry.kind === "clear") { clearLog(); return; }
+      if (entry.kind === "year") {
+        if (entry.year === lastYear) return;
+        lastYear = entry.year;
+        const d = document.createElement("div");
+        d.className = "ai-log-year";
+        d.textContent = "Year " + entry.year;
+        append(d);
+      } else if (entry.kind === "player") {
+        const d = document.createElement("div");
+        d.className = "ai-log-player";
+        d.textContent = String(entry.name || "AI");
+        append(d);
+      } else if (entry.kind === "tool") {
+        const ok = entry.ok !== false;
+        const d = document.createElement("div");
+        d.className = "ai-log-tool" + (ok ? "" : " err");
+        const argStr = entry.args ? " " + entry.args : "";
+        const detail = (!ok && entry.error) ? " — " + entry.error : "";
+        d.innerHTML = '<span class="t-name">' + esc(entry.name) + "</span>" +
+          '<span class="t-args">' + esc(argStr) + "</span>" + esc(detail);
+        append(d);
+      } else if (entry.kind === "note") {
+        const d = document.createElement("div");
+        d.className = "ai-log-tool" + (entry.error ? " err" : "");
+        d.innerHTML = '<span class="t-args">' + esc(entry.text) + "</span>";
+        append(d);
+      }
+    }
+
+    ipcRenderer.on("ai-log-entry", (_e, entry) => render(entry));
+    ipcRenderer.on("ai-log-clear", () => clearLog());
+    // Theme: light/dark from settings.
+    ipcRenderer.invoke("settings-get").then((s) => {
+      document.body.classList.toggle("light", (s && s.theme) === "light");
+    }).catch(() => {});
+    ipcRenderer.on("settings-updated", () => {
+      ipcRenderer.invoke("settings-get").then((s) => {
+        document.body.classList.toggle("light", (s && s.theme) === "light");
+      }).catch(() => {});
+    });
+
+    document.getElementById("clear").addEventListener("click", () => {
+      clearLog();
+      ipcRenderer.invoke("ai-log-clear-request"); // reset the renderer's lastYear
+    });
+  </script>
+</body>
+</html>

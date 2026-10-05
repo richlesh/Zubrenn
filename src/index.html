@@ -2666,6 +2666,39 @@
     // ---- status / turn -----------------------------------------------------
     function currentYear() { return (CONFIG.startingYear || 2500) + (gameState.turn || 0); }
 
+    // ---- debug: AI tool-call log -------------------------------------------
+    // Records the AI players' queries and actions into a SEPARATE, movable
+    // window (src/ailog.html), created on demand in the main process. Each call
+    // sends a small entry over IPC ("ai-log"); the first entry opens the window.
+    // Everything is gated on config.json "debug" so it never appears in normal
+    // play. A new year prints a header, each AI turn prints the player's name,
+    // and each tool call / status note prints a line.
+    const aiLog = (function () {
+      let _lastYear = null;
+      const enabled = () => !!(CONFIG && CONFIG.debug);
+      const emit = (entry) => { if (enabled()) ipcRenderer.invoke("ai-log", entry).catch(() => {}); };
+      return {
+        year(y) {
+          if (!enabled() || y === _lastYear) return;
+          _lastYear = y;
+          emit({ kind: "year", year: y });
+        },
+        player(name) { emit({ kind: "player", name: String(name || "AI") }); },
+        tool(name, args, result) {
+          let argStr = "";
+          try { argStr = (args && Object.keys(args).length) ? JSON.stringify(args) : ""; } catch (e) { argStr = ""; }
+          const ok = !result || result.ok !== false;
+          emit({ kind: "tool", name: String(name), args: argStr, ok, error: (result && result.error) || null });
+        },
+        note(text, isError) { emit({ kind: "note", text: String(text), error: !!isError }); },
+        clear() { _lastYear = null; emit({ kind: "clear" }); },
+        resetDedupe() { _lastYear = null; },
+      };
+    })();
+    // The log window's Clear button already cleared itself; just reset our
+    // year-dedupe here so the next year header reprints.
+    ipcRenderer.on("ai-log-reset", () => { try { aiLog.resetDedupe(); } catch (e) {} });
+
     // Latitude/longitude of a cell center, mirroring draw_map.cjs _cellLatLon /
     // _formatLatLon. The map spans +/-70 degrees latitude and -180..+180 longitude.
     function cellLatLon(x, y) {
@@ -3167,6 +3200,7 @@
         roundCompleted = true;
         growColonies(); // populations grow each year/turn
         _roundHadAction = false;
+        if (typeof aiLog !== 'undefined') aiLog.year(currentYear());
       }
       updateStatus();
       const p = players[gameState.currentPlayer];
@@ -7022,6 +7056,8 @@
           // do this turn: no worker to assign to an open cell, and no affordable
           // building it could place on a controlled empty cell.
           if (aiHasPossibleActions(pi)) {
+            // Debug: announce this AI's turn in the tool log (shown in debug mode).
+            aiLog.player(p.name || ("AI " + pi));
             // Established AI plays its turn (work cells + build). Use the configured
             // LLM if available and the user hasn't chosen the built-in AI; otherwise
             // fall back to the built-in heuristic. Either consumes the same context.
@@ -7029,12 +7065,23 @@
             let useLLM = false;
             try { useLLM = await ipcRenderer.invoke("ai-available"); } catch (e) {}
             if (useLLM) {
-              try { acted = await aiLLMTurn(pi); }
-              catch (e) {
-                console.error("[ai] LLM turn failed, using built-in:", e);
-                try { acted = aiPlayTurn(pi); } catch (e2) { console.error("[ai] built-in turn failed:", e2); }
+              // Prefer the Level-2 tool-calling agent loop; if the vendor/model
+              // lacks tool support (or it errors), fall back to the Level-1
+              // one-shot JSON plan, then to the built-in heuristic.
+              try {
+                acted = await aiLLMToolTurn(pi);
+              } catch (e) {
+                console.error("[ai] tool-calling turn failed, trying L1 plan:", e);
+                aiLog.note("tool-calling failed, falling back to one-shot plan", true);
+                try { acted = await aiLLMTurn(pi); }
+                catch (e2) {
+                  console.error("[ai] LLM turn failed, using built-in:", e2);
+                  aiLog.note("LLM plan failed, using built-in heuristic", true);
+                  try { acted = aiPlayTurn(pi); } catch (e3) { console.error("[ai] built-in turn failed:", e3); }
+                }
               }
             } else {
+              aiLog.note("(no LLM configured — built-in heuristic)");
               try { acted = aiPlayTurn(pi); } catch (e) { console.error("[ai] built-in turn failed:", e); }
             }
             if (acted) _roundHadAction = true;
@@ -7209,11 +7256,23 @@
         }),
         "",
         "Reply ONLY with JSON of this exact shape (no prose):",
-        '{ "work": [ { "colony": [cx,cy], "cells": [[x,y],...] } ],',
-        '  "build": [ { "type": <2|3|4>, "at": [x,y] } ] }',
-        "Only work cells inside a colony's zone of control (max workCap extra",
-        "cells per colony). Only build on empty land cells you control that you",
-        "can afford. type 2=Farm, 3=Solar Panel, 4=Factory."
+        '{ "work":    [ { "colony": [cx,cy], "cells": [[x,y],...] } ],',
+        '  "build":   [ { "type": <buildingCode>, "at": [x,y] } ],',
+        '  "launch":  [ { "from": [cx,cy], "to": [x,y], "name": "optional" } ],',
+        '  "remove":  [ [x,y], ... ],',
+        '  "taxRate": <number 0..20> }',
+        "All fields are optional; include only the actions you want. Rules:",
+        "- work: only cells inside a colony's zone of control (max workCap extra",
+        "  cells per colony).",
+        "- build: only on empty cells you control that you can afford and whose",
+        "  prerequisites are met. Building codes come from the system prompt",
+        "  (e.g. Farm, Solar Panel, Factory, Dock, Air Field, Depot, Warehouse,",
+        "  Bank, etc.); use the numeric code of the building you want.",
+        "- launch: found a new colony from an existing one above the population",
+        "  threshold; `to` must be a reachable, suitable, far-enough cell.",
+        "- remove: demolish one of your own non-colony buildings at [x,y].",
+        "- taxRate: set the Federation tax rate (credits per 1000 citizens).",
+        "Invalid or unaffordable actions are ignored by the engine."
       ].join("\n");
 
       const resp = await ipcRenderer.invoke("ai-chat", { system, user, maxTokens: 1024, timeoutMs: 8000 });
@@ -7221,6 +7280,119 @@
       const plan = parseAIPlan(resp.text);
       if (!plan) throw new Error("unparseable plan");
       return applyAIPlan(pi, plan);
+    }
+
+    // Level-2 tool-calling agent loop. The LLM is given the AI_TOOLS schemas and
+    // drives its turn by calling query/action tools in a loop: we execute each
+    // call via the registry (reusing all legality checks) and feed the result
+    // back, until it calls end_turn, stops calling tools, or hits the step/time
+    // caps. Returns true if any ACTION tool reported success. Throws if the
+    // vendor has no usable tool support (so the caller can fall back to L1).
+    const AI_TOOL_STEP_CAP = 20;      // max tool-call rounds per turn
+    const AI_TOOL_TIME_BUDGET_MS = 30000;
+    async function aiLLMToolTurn(pi) {
+      const ctx = buildAIContext(pi);
+      const schemas = aiToolSchemas();
+      const sys = (ctx.systemPrompt || "You are an AI player in the strategy game Zubrenn.") + "\n\n" + [
+        "You control one civilization. On your turn, use the tools to develop it.",
+        "PRIORITIES, in order:",
+        "1. GROW your colonies. For EACH colony that has spare workers (workCap >",
+        "   worked count), call work_best_cells to auto-assign its workers to the",
+        "   best food cells. This is the single most important action — colonies",
+        "   only grow when their cells are worked. Do this first, every turn.",
+        "2. BUILD when useful: use list_buildable(x,y) on a controlled empty cell to",
+        "   see affordable options, then build. A Solar Panel enables Farms/Factories.",
+        "3. EXPAND rarely: only call launch_colony when a colony's population is well",
+        "   above the threshold AND you have a specific suitable target. Targets must",
+        "   be land, not water, not within 7 tiles of any colony, and reachable. Do",
+        "   NOT retry launch_colony many times — if one or two targets fail, stop",
+        "   trying to launch this turn.",
+        "4. Optionally set_tax_rate once (higher funds the treasury but lowers morale).",
+        "A tool returning ok:false explains why — do not repeat the same failing",
+        "call. When you have worked every colony's cells and have nothing else useful",
+        "to do, call end_turn. You have a limited number of tool calls, so be efficient.",
+      ].join("\n");
+      const messages = [
+        { role: "system", content: sys },
+        { role: "user", content: "It is your turn (" + (ctx.player && ctx.player.name || "AI") +
+          ", year " + ctx.year + "). Develop your colonies, then call end_turn.\n" +
+          "For each colony below, workCap is the max EXTRA cells it may work and " +
+          "workedExtra is how many it currently works; if workCap > workedExtra, " +
+          "call work_best_cells for that colony to grow it.\n" +
+          "Initial state:\n" + JSON.stringify({
+            resources: ctx.player && ctx.player.resources,
+            colonies: (ctx.colonies || []).map((c) => ({
+              x: c.x, y: c.y, name: c.name, population: c.population,
+              workCap: c.workCap,
+              workedExtra: Math.max(0, (c.worked || []).length - 1),
+            })),
+          }) },
+      ];
+
+      const started = Date.now();
+      let acted = false;
+      let ended = false;
+      let launchFails = 0; // consecutive failed launch_colony attempts (spam guard)
+      let steps = 0;
+      while (steps < AI_TOOL_STEP_CAP && (Date.now() - started) < AI_TOOL_TIME_BUDGET_MS && !ended) {
+        steps++;
+        const remaining = Math.max(2000, AI_TOOL_TIME_BUDGET_MS - (Date.now() - started));
+        const callMs = Math.min(15000, remaining);
+        aiLog.note("thinking… (step " + steps + ")");
+        // Wall-clock guard: never let a hung/slow backend stall the turn beyond
+        // the per-step budget, even if the IPC/fetch fails to time out itself.
+        let resp;
+        try {
+          resp = await Promise.race([
+            ipcRenderer.invoke("ai-chat-tools",
+              { messages, tools: schemas, maxTokens: 1024, timeoutMs: callMs }),
+            new Promise((_, rej) => setTimeout(() => rej(new Error("tool call timed out after " + (callMs + 2000) + "ms")), callMs + 2000)),
+          ]);
+        } catch (e) {
+          aiLog.note("LLM call failed: " + (e && e.message || e), true);
+          throw e; // bubble to the caller's fallback (L1 -> heuristic)
+        }
+        if (!resp || !resp.ok || !resp.message) {
+          aiLog.note("LLM error: " + (resp && resp.error || "no response"), true);
+          throw new Error(resp && resp.error || "no tool response");
+        }
+        const msg = resp.message;
+        const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+        // Record the assistant turn (content + any tool_calls) in the history.
+        messages.push({ role: "assistant", content: msg.content || "", tool_calls: calls });
+        if (!calls.length) {
+          aiLog.note(msg.content ? ("(no tool call) " + String(msg.content).slice(0, 80)) : "(no tool call)");
+          break; // model produced prose with no tool call -> done
+        }
+        for (const tc of calls) {
+          const name = tc.function && tc.function.name;
+          let args = {};
+          try { args = JSON.parse((tc.function && tc.function.arguments) || "{}"); } catch (e) { args = {}; }
+          const tool = AI_TOOLS[name];
+          let result;
+          // Spam guard: a small model can fire launch_colony dozens of times at
+          // bad targets. After a few failures, refuse further launches this turn.
+          if (name === "launch_colony" && launchFails >= 3) {
+            result = { ok: false, error: "too many failed launch attempts this turn — skip launching, work your cells instead" };
+          } else if (!tool) {
+            result = { ok: false, error: "unknown tool: " + name };
+          } else {
+            try { result = tool.run(pi, args) || { ok: true }; }
+            catch (e) { result = { ok: false, error: String(e && e.message || e) }; }
+          }
+          if (name === "launch_colony") {
+            launchFails = (result && result.ok) ? 0 : (launchFails + 1);
+          }
+          console.log("[ai-tool] p" + pi, name, JSON.stringify(args), "->", JSON.stringify(result));
+          aiLog.tool(name, args, result);
+          if (name === "end_turn") ended = true;
+          // An action tool that succeeded counts as "acted" (queries don't).
+          const ACTION = { work_cell: 1, work_best_cells: 1, unwork_cell: 1, build: 1, remove_building: 1, launch_colony: 1, set_tax_rate: 1 };
+          if (ACTION[name] && result && result.ok) acted = true;
+          messages.push({ role: "tool", tool_call_id: tc.id, name, content: JSON.stringify(result) });
+        }
+      }
+      return acted;
     }
 
     // Extract the first JSON object from an LLM reply (tolerates code fences).
@@ -7265,10 +7437,13 @@
         return s;
       })();
       const res = gameState.players[pi].resources || {};
+      // Valid non-colony building codes the AI may construct (anything in
+      // config except the Biodome, which is placed by launching a colony).
+      const buildableCodes = new Set(buildingTypeCodes().filter((t) => t !== 1));
       for (const b of (plan.build || [])) {
         if (!b || !Array.isArray(b.at)) continue;
         const type = parseInt(b.type, 10);
-        if (![2, 3, 4, 5].includes(type)) continue;
+        if (!buildableCodes.has(type)) continue;
         const [x, y] = b.at;
         const place = canPlaceTypeAt(type, x, y, pi);   // handles Dock/sea vs land + control
         if (!place.ok) continue;
@@ -7286,6 +7461,20 @@
           ((gameState.players[pi] && gameState.players[pi].name || 'Colony') + ' ' +
            (gameState.colonies.filter((c) => c.owner === pi).length + 1));
         if (launchColony(host, l.to[0], l.to[1], pi, name)) acted = true;
+      }
+      // Remove (demolish) the AI's own non-colony buildings (plan.remove entries,
+      // each [x,y]). Reuses the same cost/eligibility checks as the human UI.
+      for (const r of (plan.remove || [])) {
+        if (!Array.isArray(r)) continue;
+        const [x, y] = r;
+        if (!canAffordRemovalAt(x, y, pi)) continue;
+        if (removeImprovement(x, y, pi)) acted = true;
+      }
+      // Set the Federation tax rate (plan.taxRate, a number 0..20). Clamped.
+      if (plan.taxRate != null && Number.isFinite(Number(plan.taxRate))) {
+        const fed = ensureFederation(gameState.players[pi]);
+        const rate = Math.max(0, Math.min(20, Number(plan.taxRate)));
+        if (fed.taxRate !== rate) { fed.taxRate = rate; acted = true; }
       }
       if (acted && hexMap) hexMap.setBuildings(gameState.buildings);
       return acted;
@@ -7379,6 +7568,255 @@
         mapView: cells,
         year: currentYear()
       };
+    }
+
+    // ---- AI tool registry (Level 2 agent loop) -----------------------------
+    // A map of tool name -> { description, parameters(JSON schema), run(pi,args) }.
+    // QUERY tools read game state (fog/intel-aware for rivals); ACTION tools
+    // mutate it, reusing the SAME legality checks the human UI uses so the AI
+    // can never do anything a human couldn't. Every run() returns a plain JSON
+    // object; errors are returned as { ok:false, error } rather than thrown so
+    // the model can read and react. The agent loop (aiLLMToolTurn) sends the
+    // schemas, executes the model's tool calls, and feeds results back.
+    const _aiColonyAt = (pi, x, y) =>
+      gameState.buildings.find((b) => b.type === 1 && b.owner === pi && b.x === x && b.y === y);
+
+    const AI_TOOLS = {
+      // ---- queries ----
+      get_state: {
+        description: "Get your player's current stored resources, the Federation pool and tax rate, the current year, and your colony count.",
+        parameters: { type: "object", properties: {} },
+        run: (pi) => {
+          const player = gameState.players[pi];
+          const fed = ensureFederation(player);
+          const cols = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi);
+          return {
+            ok: true, year: currentYear(),
+            resources: player.resources || {},
+            federation: { taxRate: fed.taxRate, owned: federationOwnedOf(pi) },
+            colonyCount: cols.length,
+          };
+        },
+      },
+      get_colonies: {
+        description: "List your colonies with position, population, worker capacity (extra cells you may work), control radius, worked cells, and per-resource stored/cap/rate.",
+        parameters: { type: "object", properties: {} },
+        run: (pi) => {
+          const cols = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi && !b.inTransit);
+          return {
+            ok: true,
+            colonies: cols.map((c) => {
+              const st = colonyStats(c);
+              return {
+                x: c.x, y: c.y, name: c.name,
+                population: Math.round(c.population || 0),
+                workCap: workCap(c),
+                controlRadius: colonyControlRadius(c),
+                worked: (c.worked || []).slice(),
+                caps: st.caps, stored: ensureStored(c),
+                rates: { food: st.food, material: st.material, goods: st.goods, energy: st.energy, water: st.water, wealth: st.wealthRate, happiness: st.happinessRate },
+              };
+            }),
+          };
+        },
+      },
+      describe_cell: {
+        description: "Describe a cell: terrain, any building on it, whether it is in your zone of control, and the NET per-resource yield it would contribute if worked.",
+        parameters: { type: "object", properties: { x: { type: "integer" }, y: { type: "integer" } }, required: ["x", "y"] },
+        run: (pi, { x, y }) => {
+          if (!gameState.map || terrainAt(x, y) == null) return { ok: false, error: "off map" };
+          const b = gameState.buildings.find((bb) => bb.x === x && bb.y === y);
+          const isHome = !!_aiColonyAt(pi, x, y);
+          const contrib = cellContributions(x, y, isHome, pi);
+          return {
+            ok: true, x, y,
+            terrain: terrainAt(x, y),
+            terrainName: contrib.terrainName,
+            building: b ? { type: b.type, owner: b.owner, operational: isOperational(b) } : null,
+            inYourControl: (pi === 'human') ? humanControls(x, y) : !!colonyControlling(x, y, pi),
+            base: contrib.base, bonuses: contrib.bonuses,
+          };
+        },
+      },
+      list_buildable: {
+        description: "List the building types you could legally build at a cell right now (placement OK, prerequisites met, affordable), each with its numeric code, name, and cost.",
+        parameters: { type: "object", properties: { x: { type: "integer" }, y: { type: "integer" } }, required: ["x", "y"] },
+        run: (pi, { x, y }) => {
+          const out = [];
+          for (const type of buildingTypeCodes()) {
+            if (type === 1) continue;
+            if (!canPlaceTypeAt(type, x, y, pi).ok) continue;
+            if (!hasPrerequisitesAt(type, x, y, pi)) continue;
+            if (!canAffordBuildingAt(type, x, y, pi)) continue;
+            const bt = buildingType(type) || {};
+            out.push({ type, name: bt.name || ("Type " + type), cost: buildingCost(type) });
+          }
+          return { ok: true, x, y, buildable: out };
+        },
+      },
+      find_cells: {
+        description: "Within one of your colonies' zone of control, list candidate cells. filter: 'empty' (no building), 'unworked' (not currently worked), or 'workable' (unworked and under worker cap). Returns up to 40 cells with terrain.",
+        parameters: {
+          type: "object",
+          properties: {
+            colony: { type: "array", items: { type: "integer" }, description: "[x,y] of one of your colonies" },
+            filter: { type: "string", enum: ["empty", "unworked", "workable"] },
+          },
+          required: ["colony"],
+        },
+        run: (pi, { colony, filter }) => {
+          const col = _aiColonyAt(pi, colony && colony[0], colony && colony[1]);
+          if (!col) return { ok: false, error: "not your colony" };
+          const homeKey = cellKey(col.x, col.y);
+          const worked = new Set(col.worked || []);
+          const canWorkMore = (col.worked || []).filter((k) => k !== homeKey).length < workCap(col);
+          const out = [];
+          for (const c of colonyControlCells(col)) {
+            const k = cellKey(c.x, c.y);
+            if (k === homeKey) continue;
+            const hasB = cellHasBuilding(c.x, c.y);
+            const isWorked = worked.has(k);
+            if (filter === "empty" && hasB) continue;
+            if (filter === "unworked" && isWorked) continue;
+            if (filter === "workable" && (isWorked || !canWorkMore)) continue;
+            out.push({ x: c.x, y: c.y, terrain: terrainAt(c.x, c.y), worked: isWorked, building: hasB });
+            if (out.length >= 40) break;
+          }
+          return { ok: true, cells: out };
+        },
+      },
+
+      // ---- actions ----
+      work_best_cells: {
+        description: "Automatically assign all of a colony's AVAILABLE workers to its best unworked cells (highest food, then material). This is the easiest way to grow a colony — call it for each colony every turn. Returns how many workers were assigned.",
+        parameters: { type: "object", properties: { colony: { type: "array", items: { type: "integer" } } }, required: ["colony"] },
+        run: (pi, { colony }) => {
+          const col = _aiColonyAt(pi, colony && colony[0], colony && colony[1]);
+          if (!col) return { ok: false, error: "not your colony" };
+          ensureWorked(col); pruneWorkedToControl(col);
+          const homeKey = cellKey(col.x, col.y);
+          let assigned = 0, guard = 0;
+          // Greedily fill remaining capacity with the best food cell each pass.
+          while (col.worked.filter((k) => k !== homeKey).length < workCap(col) && guard++ < 50) {
+            const before = col.worked.length;
+            aiWorkHighestFoodCell(col.x, col.y, pi);
+            if (col.worked.length <= before) break; // no more useful cells
+            assigned++;
+          }
+          return { ok: true, assigned, workedCount: col.worked.length - 1 };
+        },
+      },
+      work_cell: {
+        description: "Assign a worker in one of your colonies to a controlled, empty-of-worker cell (respects the colony's worker cap).",
+        parameters: {
+          type: "object",
+          properties: { colony: { type: "array", items: { type: "integer" } }, cell: { type: "array", items: { type: "integer" } } },
+          required: ["colony", "cell"],
+        },
+        run: (pi, { colony, cell }) => {
+          const col = _aiColonyAt(pi, colony && colony[0], colony && colony[1]);
+          if (!col) return { ok: false, error: "not your colony" };
+          ensureWorked(col); pruneWorkedToControl(col);
+          const homeKey = cellKey(col.x, col.y);
+          const control = new Set(colonyControlCells(col).map((c) => cellKey(c.x, c.y)));
+          const k = cellKey(cell[0], cell[1]);
+          if (k === homeKey) return { ok: false, error: "home cell is always worked" };
+          if (!control.has(k)) return { ok: false, error: "cell not in control" };
+          if (col.worked.includes(k)) return { ok: false, error: "already worked" };
+          if (col.worked.filter((x) => x !== homeKey).length >= workCap(col)) return { ok: false, error: "at worker cap" };
+          col.worked.push(k);
+          return { ok: true };
+        },
+      },
+      unwork_cell: {
+        description: "Remove a worker from a cell in one of your colonies (the home/biodome cell cannot be unworked).",
+        parameters: {
+          type: "object",
+          properties: { colony: { type: "array", items: { type: "integer" } }, cell: { type: "array", items: { type: "integer" } } },
+          required: ["colony", "cell"],
+        },
+        run: (pi, { colony, cell }) => {
+          const col = _aiColonyAt(pi, colony && colony[0], colony && colony[1]);
+          if (!col) return { ok: false, error: "not your colony" };
+          const homeKey = cellKey(col.x, col.y);
+          const k = cellKey(cell[0], cell[1]);
+          if (k === homeKey) return { ok: false, error: "cannot unwork home cell" };
+          const before = (col.worked || []).length;
+          col.worked = (col.worked || []).filter((w) => w !== k);
+          return (col.worked.length < before) ? { ok: true } : { ok: false, error: "cell was not worked" };
+        },
+      },
+      build: {
+        description: "Construct a building (numeric type code) at a cell. Validated against placement, prerequisites, and affordability; the cost is paid automatically.",
+        parameters: {
+          type: "object",
+          properties: { type: { type: "integer" }, x: { type: "integer" }, y: { type: "integer" } },
+          required: ["type", "x", "y"],
+        },
+        run: (pi, { type, x, y }) => {
+          type = parseInt(type, 10);
+          if (type === 1 || !buildingTypeCodes().includes(type)) return { ok: false, error: "invalid building type" };
+          const place = canPlaceTypeAt(type, x, y, pi);
+          if (!place.ok) return { ok: false, error: place.reason || "cannot place here" };
+          if (!hasPrerequisitesAt(type, x, y, pi)) return { ok: false, error: "prerequisites not met" };
+          if (!canAffordBuildingAt(type, x, y, pi)) return { ok: false, error: "cannot afford" };
+          placeBuilding(x, y, pi, type);
+          if (hexMap) hexMap.setBuildings(gameState.buildings);
+          return { ok: true };
+        },
+      },
+      remove_building: {
+        description: "Demolish one of your own non-colony buildings at a cell (costs resources, takes a few turns).",
+        parameters: { type: "object", properties: { x: { type: "integer" }, y: { type: "integer" } }, required: ["x", "y"] },
+        run: (pi, { x, y }) => {
+          if (!canAffordRemovalAt(x, y, pi)) return { ok: false, error: "cannot afford removal / nothing to remove" };
+          return removeImprovement(x, y, pi) ? { ok: true } : { ok: false, error: "no removable building here" };
+        },
+      },
+      launch_colony: {
+        description: "Found a new colony: launch a biodome from one of your colonies (above the population threshold) to a reachable, suitable, far-enough target cell.",
+        parameters: {
+          type: "object",
+          properties: { from: { type: "array", items: { type: "integer" } }, to: { type: "array", items: { type: "integer" } }, name: { type: "string" } },
+          required: ["from", "to"],
+        },
+        run: (pi, { from, to, name }) => {
+          const host = _aiColonyAt(pi, from && from[0], from && from[1]);
+          if (!host) return { ok: false, error: "not your colony" };
+          const v = foundColonyTargetValid(host, to[0], to[1]);
+          if (!v.ok) return { ok: false, error: v.reason || "invalid target" };
+          const nm = (name && String(name)) ||
+            ((gameState.players[pi] && gameState.players[pi].name || 'Colony') + ' ' +
+             (gameState.colonies.filter((c) => c.owner === pi).length + 1));
+          const rec = launchColony(host, to[0], to[1], pi, nm);
+          if (!rec) return { ok: false, error: "launch failed (population/afford/path)" };
+          if (hexMap) hexMap.setBuildings(gameState.buildings);
+          return { ok: true, arrivingInTurns: rec.turnsRemaining };
+        },
+      },
+      set_tax_rate: {
+        description: "Set your Federation tax rate (0..20 credits per 1000 citizens per year). Higher funds the treasury but lowers morale.",
+        parameters: { type: "object", properties: { rate: { type: "number" } }, required: ["rate"] },
+        run: (pi, { rate }) => {
+          if (!Number.isFinite(Number(rate))) return { ok: false, error: "rate must be a number" };
+          const fed = ensureFederation(gameState.players[pi]);
+          fed.taxRate = Math.max(0, Math.min(20, Number(rate)));
+          return { ok: true, taxRate: fed.taxRate };
+        },
+      },
+      end_turn: {
+        description: "Finish your turn. Call this when you have no more actions to take.",
+        parameters: { type: "object", properties: {} },
+        run: () => ({ ok: true, done: true }),
+      },
+    };
+
+    // OpenAI-style tool schemas derived from AI_TOOLS, for the agent loop.
+    function aiToolSchemas() {
+      return Object.keys(AI_TOOLS).map((name) => ({
+        type: "function",
+        function: { name, description: AI_TOOLS[name].description, parameters: AI_TOOLS[name].parameters },
+      }));
     }
 
     // Rule-based AI decision that consumes the same context the LLM would get.
