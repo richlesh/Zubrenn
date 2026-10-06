@@ -59,7 +59,7 @@
       "icon": "Port of Taganrog.png",
       "color": { "h": 240, "s": 1, "l": 0.25 },
       "movement": [1000, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 0.25, "material": 0, "water": 0, "energy": -0.01, "wealth": -0.025 },
+      "bonus": { "food": 2.5 },
       "roadCostPerTile": { "energy": 0.6, "material": 360, "water": 0.05, "wealth": 6, "turns": 2 },
       "monorailCostPerTile": { "energy": 2, "material": 300, "water": 0.1, "wealth": 18, "turns": 2 }
       // canals are disallowed
@@ -70,7 +70,7 @@
       "icon": "Open Square Path Grass.png",
       "color": { "h": 120, "s": 1, "l": 0.6 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
-      "bonus": {  "food": 10, "material": 3, "water": 0, "energy": -1, "wealth": -0.25 },
+      "bonus": { "food": 10, "material": 5 },
       "roadCostPerTile": { "energy": 0.3, "material": 180, "water": 0.05, "wealth": 3, "turns": 1 },
       "monorailCostPerTile": { "energy": 2, "material": 300, "water": 0.1, "wealth": 18, "turns": 2 },
       "canalCostPerEdge": { "energy": 4, "material": 40, "water": 1.5, "wealth": 20, "turns": 3 }
@@ -81,7 +81,7 @@
       "icon": "Just Add Bison.png",
       "color": { "h": 90, "s": 0.583, "l": 0.52 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 1, "material": 2 },
+      "bonus": { "food": 5, "material": 15 },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.75 },
       "monorailCostPerTile": { "energy": 3, "material": 400, "water": 0.1, "wealth": 20, "turns": 2 },
       "canalCostPerEdge": { "energy": 5, "material": 40, "water": 1.5, "wealth": 30, "turns": 4 }
@@ -92,7 +92,7 @@
       "icon": "Shrub Cover.png",
       "color": { "h": 120, "s": 1, "l": 0.3 },
       "movement": [4, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 1, "material": 2 },
+      "bonus": { "food": 5, "material": 15 },
       "roadCostPerTile": { "energy": 1, "material": 180, "water": 0.05, "wealth": 9, "turns": 2 },
       "monorailCostPerTile": { "energy": 3, "material": 300, "water": 0.1, "wealth": 24, "turns": 3 },
       "canalCostPerEdge": { "energy": 8, "material": 40, "water": 1.5, "wealth": 40, "turns": 4 }
@@ -103,7 +103,7 @@
       "icon": "Deep Forest.png",
       "color": { "h": 120, "s": 1, "l": 0.15 },
       "movement": [5, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 1, "material": 2, "water": 0.5},
+      "bonus": { "food": 5, "material": 10, "water": 0.5 },
       "roadCostPerTile": { "energy": 1.5, "material": 180, "water": 0.05, "wealth": 15, "turns": 3 },
       "monorailCostPerTile": { "energy": 3, "material": 300, "water": 0.1, "wealth": 24, "turns": 3 },
       "canalCostPerEdge": { "energy": 8, "material": 40, "water": 1.5, "wealth": 40, "turns": 4 }
@@ -114,7 +114,7 @@
       "icon": "Slush.png",
       "color": { "h": 60, "s": 0.6, "l": 0.469 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 0, "material": 0 },
+      "bonus": { },
       "roadCostPerTile": { "energy": 0.3, "material": 180, "water": 0.05, "wealth": 3, "turns": 1 },
       "monorailCostPerTile": { "energy": 2, "material": 300, "water": 0.1, "wealth": 18, "turns": 2 },
       "canalCostPerEdge": { "energy": 4, "material": 40, "water": 1.5, "wealth": 20, "turns": 3 }
@@ -125,7 +125,7 @@
       "icon": "Dense Pine Forest.png",
       "color": { "h": 120, "s": 0.818, "l": 0.275 },
       "movement": [4, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 0, "material": 3 },
+      "bonus": { "material": 30 },
       "roadCostPerTile": { "energy": 1, "material": 180, "water": 0.05, "wealth": 12, "turns": 4 },
       "monorailCostPerTile": { "energy": 2, "material": 300, "water": 0.1, "wealth": 20, "turns": 3 }
       // canals are disallowed
@@ -136,7 +136,7 @@
       "icon": "Age of the Canyon.png",
       "color": { "h": 30, "s": 0.333, "l": 0.225 },
       "movement": [5, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 0, "material": 4 },
+      "bonus": { "material": 40 },
       "roadCostPerTile": { "energy": 1.8, "material": 200, "water": 0.05, "wealth": 18, "turns": 5 },
       "monorailCostPerTile": { "energy": 8, "material": 400, "water": 0.1, "wealth": 18, "turns": 4 }
       // canals are disallowed
@@ -147,7 +147,7 @@
       "icon": "Polar Zone.png",
       "color": { "h": 0, "s": 0, "l": 1 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 0, "material": 0 },
+      "bonus": { },
       "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
       "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 }
       // canals are disallowed
@@ -158,7 +158,7 @@
       "icon": "Sage Stone.png",
       "color": { "h": 120, "s": 1, "l": 0.8 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 1, "material": 1 },
+      "bonus": { "food": 5, "material": 5 },
       "roadCostPerTile": { "energy": 0.3, "material": 180, "water": 0.05, "wealth": 3, "turns": 1 },
       "monorailCostPerTile": { "energy": 2, "material": 300, "water": 0.1, "wealth": 18, "turns": 2 },
       "canalCostPerEdge": { "energy": 4, "material": 40, "water": 1.5, "wealth": 20, "turns": 3 }
@@ -169,7 +169,7 @@
       "icon": "Dodders Marsh.png",
       "color": { "h": 120, "s": 1, "l": 0.4 },
       "movement": [3, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 0, "material": 1, "water": 0.5, "happiness": 1 },
+      "bonus": { "material": 5, "water": 0.5, "happiness": 0.25 },
       "roadCostPerTile": { "energy": 0.6, "material": 280, "water": 0.05, "wealth": 6, "turns": 2 },
       "monorailCostPerTile": { "energy": 2, "material": 300, "water": 0.1, "wealth": 18, "turns": 2 },
       "canalCostPerEdge": { "energy": 2, "material": 40, "water": 1.5, "wealth": 15, "turns": 2 }
@@ -241,10 +241,10 @@
       "name": "Biodome",
       "icon": "buildings/128/biodome.png",
       "startPopulation": 1000,
-      "buildCost": { "material": 3, "wealth": 5, "turns": 2 },
+      "buildCost": { "material": 200, "wealth": 100, "water": 2, "turns": 3 },
       "costPerYear": { },
-      "bonus": { "energy": 50, "food": 5, "goods": 30, "material": 30, "water": 1, "wealth": 50, "population": 1 },
-      "storage": { "energy": 1000, "food": 10, "goods": 500, "material": 500, "water":  10, "wealth": 300, "happiness": 25, "population": 5000 },
+      "bonus": { "energy": 50, "food": 5, "goods": 30, "material": 30, "water": 5, "wealth": 50, "happiness": 0.5, "population": 1 },
+      "storage": { "energy": 75, "food": 10, "goods": 250, "material": 250, "water": 5, "wealth": 250, "happiness": 25, "population": 6000 },
       "prerequisite": {
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
       },
@@ -256,10 +256,10 @@
       "code": 2,
       "name": "Farm",
       "icon": "buildings/128/farm.png",
-      "buildCost":   { "energy": 1, "material": 2, "water": 0, "wealth": 10, "turns": 1 },
-      "costPerYear": { "energy": 0.2, "material": 5, "water": 10, "wealth": 5 },
-      "bonus":       { "energy": 0, "food": 20, "material": 30, "water": 0, "wealth": 20 },
-      "storage": { "food": 60 },
+      "buildCost":   { "energy": 10, "material": 20, "wealth": 10, "water": 0.25, "turns": 1 },
+      "costPerYear": { "energy": 0.2, "material": 5, "wealth": 5, "water": 5 },
+      "bonus":       { "food": 25, "wealth": 15 },
+      "storage": { "food": 25 },
       "prerequisite": {
         "building": ["biodome","solar panel"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
@@ -269,10 +269,10 @@
       "code": 3,
       "name": "Solar Panel",
       "icon": "buildings/128/solar_panel.png",
-      "buildCost": { "energy": 300, "material": 20, "wealth": 28, "turns": 1 },
-      "costPerYear": { },
+      "buildCost": { "energy": 50, "material": 20, "wealth": 28, "water": 0.25, "turns": 1 },
+      "costPerYear": { "wealth": 1 },
       "bonus": { "energy": 500 },
-      "storage": { },
+      "storage": { "energy": 500 },
       "prerequisite": {
         "building": ["biodome"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
@@ -282,10 +282,10 @@
       "code": 4,
       "name": "Factory",
       "icon": "buildings/128/factory.png",
-      "buildCost": { "energy": 1000, "material": 75, "wealth": 150, "turns": 3 },
-      "costPerYear": { "energy": 600, "material": 400, "water": 1, "wealth": 150 },
-      "bonus": { "energy": 0, "goods": 300, "wealth": 50, "happiness": -0.25, "population": -0.25 },
-      "storage": { "goods": 500, "material": 500, "energy": 10, "wealth": 0, "happiness": 0 },
+      "buildCost": { "energy": 250, "material": 75, "wealth": 150, "water": 3, "turns": 3 },
+      "costPerYear": { "energy": 300, "material": 250, "wealth": 15, "water": 1 },
+      "bonus": { "goods": 200, "wealth": 25, "happiness": -0.25 },
+      "storage": { "energy": 25, "goods": 500, "material": 500 },
       "prerequisite": {
         "building": ["solar panel"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
@@ -295,10 +295,10 @@
       "code": 5,
       "name": "Dock",
       "icon": "buildings/128/dock.png",
-      "buildCost": { "energy": 3, "material": 5, "water": 0.01, "wealth": 0.8, "turns": 1 },
-      "costPerYear": { "energy": 5, "material": 0,  "water": 0.05,"wealth": 0.6 },
-      "bonus": { "energy": 0, "food": 1.5, "material": 0.1, "water": 0, "wealth": 0.9 },
-      "storage": { "energy": 0, "food": 5, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
+      "buildCost": { "energy": 5, "material": 10, "wealth": 5, "water": 0.25, "turns": 1 },
+      "costPerYear": { "energy": 5, "wealth": 3, "water": 0.1 },
+      "bonus": { "food": 5, "wealth": 5 },
+      "storage": { "food": 5 },
       "prerequisite": {
         "building": ["solar panel"],
         "terrain":  ["sea"],
@@ -309,10 +309,10 @@
       "code": 6,
       "name": "Air Field",
       "icon": "buildings/128/air_field.png",
-      "buildCost": { "energy": 5, "material": 100, "water": 1, "wealth": 50, "turns": 2 },
-      "costPerYear": { "energy": 50, "material": 2, "water": 0.2, "wealth": 5 },
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 5, "happiness": 0.25 },
-      "storage": { "energy": 5, "food": 50, "material": 100, "water": 0, "wealth": 0, "happiness": 0 },
+      "buildCost": { "energy": 20, "material": 50, "goods": 15, "wealth": 50, "water": 3, "turns": 3 },
+      "costPerYear": { "energy": 50, "goods": 10, "wealth": 10, "water": 0.2 },
+      "bonus": { "wealth": 10, "happiness": 0.25 },
+      "storage": { "energy": 20, "food": 50, "goods": 100 },
       "prerequisite": {
         "building": ["solar panel","factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
@@ -323,23 +323,23 @@
       "code": 7,
       "name": "Barracks",
       "icon": "buildings/128/barracks.png",
-      "buildCost": { "energy": 5, "material": 50, "water": 0, "wealth": 30, "turns": 2 },
-      "costPerYear": { "energy": 20, "material": 2, "water": 0, "wealth": 3 },
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0.5 },
-      "storage": { "energy": 0, "food": 100, "material": 50, "water": 0, "wealth": 0, "happiness": 0 },
+      "buildCost": { "energy": 5, "material": 10, "wealth": 10, "water": 1, "turns": 2 },
+      "costPerYear": { "energy": 10, "goods": 5, "wealth": 5 },
+      "bonus": { },
+      "storage": { "food": 5, "goods": 10 },
       "prerequisite": {
         "building": ["farm","solar panel","factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
       }
     },
-    "grainery": {
+    "granary": {
       "code": 8,
-      "name": "Grainery",
-      "icon": "buildings/128/grainery.png",
-      "buildCost": { "energy": 2, "material": 20, "water": 0, "wealth": 5, "turns": 2 },
-      "costPerYear": { "energy": 2, "material": 0, "water": 0, "wealth": 0.5 },
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
-      "storage": { "energy": 0, "food": 100, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
+      "name": "Granary",
+      "icon": "buildings/128/granary.png",
+      "buildCost": { "energy": 5, "material": 10, "wealth": 5, "water": 1, "turns": 2 },
+      "costPerYear": { "energy": 2, "wealth": 0.5 },
+      "bonus": { },
+      "storage": { "food": 100 },
       "prerequisite": {
         "building": ["farm"], "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
       }
@@ -348,10 +348,10 @@
       "code": 9,
       "name": "Warehouse",
       "icon": "buildings/128/warehouse.png",
-      "buildCost": { "energy": 2, "material": 30, "water": 0, "wealth": 8, "turns": 2 },
-      "costPerYear": { "energy": 3, "material": 0, "water": 0, "wealth": 1 },
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
-      "storage": { "energy": 0, "food": 0, "material": 1000, "water": 0, "wealth": 0, "happiness": 0 },
+      "buildCost": { "energy": 10, "material": 25, "wealth": 8, "water": 1, "turns": 2 },
+      "costPerYear": { "energy": 5, "wealth": 5 },
+      "bonus": { },
+      "storage": { "goods": 250 },
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
@@ -361,10 +361,10 @@
       "code": 10,
       "name": "Bank",
       "icon": "buildings/128/bank.png",
-      "buildCost": { "energy": 5, "material": 30, "water": 0, "wealth": 20, "turns": 2 },
-      "costPerYear": { "energy": 15, "material": 0, "water": 0, "wealth": 3 },
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 5, "happiness": 0.25 },
-      "storage": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 500, "happiness": 0 },
+      "buildCost": { "energy": 5, "material": 10, "wealth": 20, "water": 0.5, "turns": 1 },
+      "costPerYear": { "energy": 5, "wealth": 2 },
+      "bonus": { "wealth": 15, "happiness": 0.25 },
+      "storage": { "wealth": 250 },
       "prerequisite": {
         "building": ["solar panel"],
         "network": ["any"],
@@ -376,10 +376,10 @@
       "code": 11,
       "name": "CAES",
       "icon": "buildings/128/caes.png",
-      "buildCost": { "energy": 10, "material": 40, "water": 1, "wealth": 30, "turns": 3 },
-      "costPerYear": { "energy": 20, "material": 0, "water": 0, "wealth": 2 },
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
-      "storage": { "energy": 1000, "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
+      "buildCost": { "energy": 15, "material": 25, "goods": 10, "wealth": 25, "water": 1, "turns": 3 },
+      "costPerYear": { "energy": 20, "goods": 1, "wealth": 2 },
+      "bonus": { },
+      "storage": { "energy": 500 },
       "prerequisite": {
         "building": ["solar panel","bank"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
@@ -390,10 +390,10 @@
       "code": 12,
       "name": "WTP",
       "icon": "buildings/128/water_plant.png",
-      "buildCost":   { "energy": 30, "material": 40, "water": 1,  "wealth": 50, "turns": 3 },
-      "costPerYear": { "energy": 40, "material": 4,  "water": 0,  "wealth": 2 },
-      "bonus":       { "energy": 0,  "food": 0, "material": 0, "water": 140, "wealth": 0 },
-      "storage":     { "water": 200 },
+      "buildCost":   { "energy": 20, "material": 30, "goods": 10, "wealth": 30, "water": 2, "turns": 4 },
+      "costPerYear": { "energy": 30, "material": 4, "goods": 2, "wealth": 2 },
+      "bonus":       { "water": 50 },
+      "storage":     { "water": 100 },
       "prerequisite": {
         "building": ["solar panel"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains"],
@@ -405,10 +405,10 @@
       "code": 13,
       "name": "Desalination",
       "icon": "buildings/128/desalination.png",
-      "buildCost":   { "energy": 5, "material": 200, "water": 1, "wealth": 100, "turns": 3 },
-      "costPerYear": { "energy": 250, "material": 30, "water": 0, "wealth": 5 },
-      "bonus":       { "energy": 0, "food": 0, "material": 0, "water": 70, "wealth": 0 },
-      "storage":     { "water": 200 },
+      "buildCost":   { "energy": 25, "material": 30, "wealth": 40, "water": 2, "turns": 5 },
+      "costPerYear": { "energy": 50, "material": 30, "goods": 4, "wealth": 5 },
+      "bonus":       { "water": 40 },
+      "storage":     { "water": 100 },
       "prerequisite": {
         "building": ["solar panel"],
         "terrain":  ["sea"],
@@ -419,10 +419,10 @@
       "code": 14,
       "name": "Spaceport",
       "icon": "buildings/128/spaceport.png",
-      "buildCost": { "energy": 5, "material": 100, "water": 1, "wealth": 50, "turns": 2 },
-      "costPerYear": { "energy": 100, "material": 10, "water": 0.5, "wealth": 20 },
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 15, "happiness": 0.25 },
-      "storage": { "energy": 5, "food": 100, "material": 200, "water": 0, "wealth": 0, "happiness": 0 },
+      "buildCost": { "energy": 30, "material": 50, "goods": 25, "wealth": 75, "water": 3, "turns": 3 },
+      "costPerYear": { "energy": 100, "material": 10, "goods": 20, "wealth": 20, "water": 0.5 },
+      "bonus": { "wealth": 15, "happiness": 0.25 },
+      "storage": { "energy": 20, "food": 50, "goods": 100 },
       "prerequisite": {
         "building": ["air field"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands"],
@@ -433,10 +433,10 @@
       "code": 15,
       "name": "Drone Base",
       "icon": "buildings/128/drone_base.png",
-      "buildCost": { "energy": 1, "material": 10, "water": 0, "wealth": 5, "turns": 1 },
-      "costPerYear": { "energy": 1, "material": 0, "water": 0, "wealth": 3 },
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
-      "storage": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
+      "buildCost": { "energy": 5, "material": 10, "goods": 10, "wealth": 50, "water": 1, "turns": 1 },
+      "costPerYear": { "energy": 15, "goods": 5, "wealth": 3 },
+      "bonus": { },
+      "storage": { },
       "prerequisite": {
   //      "building": ["air field"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands","mountain-low"],
@@ -448,10 +448,10 @@
       "code": 16,
       "name": "Materials Depot",
       "icon": "buildings/128/depot.png",
-      "buildCost": { "energy": 2, "material": 10, "water": 0, "wealth": 4, "turns": 1 },
-      "costPerYear": { "energy": 1, "material": 0, "water": 0, "wealth": 1 },
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
-      "storage": { "energy": 0, "food": 0, "goods": 0, "material": 1000, "water": 0, "wealth": 0, "happiness": 0 },
+      "buildCost": { "energy": 10, "material": 25, "wealth": 8, "water": 1, "turns": 2 },
+      "costPerYear": { "energy": 5, "wealth": 5 },
+      "bonus": { },
+      "storage": { "material": 250 },
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
@@ -483,7 +483,7 @@
     // Food
     "Myco-Tower Grove": {
       "icon": "terrain_bonus/128/myco-tower.png",
-      "bonus": { "energy": 0, "food": "2-3", "material": 0, "water": 0.2, "wealth": 0, "happiness": 0 },
+      "bonus": { "food": "5-10", "water": 0.2 },
       "terrain": ["grassland","hills","frozen"],
       "climate": ["subpolar"],
       "altitude": { "min": 0, "max": 2000 },
@@ -494,7 +494,7 @@
     },
     "Microalgae Lattice": {
       "icon": "terrain_bonus/128/microalgea.png",
-      "bonus": { "energy": 0, "food": "2-4", "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
+      "bonus": { "food": "10-25" },
       "terrain": ["sea"],
       "climate": ["tropical", "temperate"],
       "other": [ "land"],
@@ -503,7 +503,7 @@
     },
     "Substrate Slime": {
       "icon": "terrain_bonus/128/substrate_slime.png",
-      "bonus": { "energy": 0, "food": "2-3", "material": 0, "water": 1, "wealth": 0, "happiness": 0 },
+      "bonus": { "food": "10-20", "water": 0.5 },
       "terrain": ["grassland","hills","forest","jungle","desert"],
       "climate": ["tropical", "temperate"],
       "other": [ "river"],
@@ -512,7 +512,7 @@
     },
     "Glacial Bloom": {
       "icon": "terrain_bonus/128/glacial_bloom.png",
-      "bonus": { "energy": 0, "food": "1-3", "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
+      "bonus": { "food": "5-10" },
       "terrain": ["frozen"],
       "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
@@ -521,7 +521,7 @@
     },
     "Chemosyntheic Vent Colonies": {
       "icon": "terrain_bonus/128/chemosyntheic_vent.png",
-      "bonus": { "energy": 1, "food": "1-2", "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
+      "bonus": { "energy": 5, "food": "5-10" },
       "terrain": ["mountain"],
       "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
@@ -530,7 +530,7 @@
     },
     "Veyra Pods": {
       "icon": "terrain_bonus/128/veyra_pods.png",
-      "bonus": { "energy": 0, "food": "2-3", "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
+      "bonus": { "food": "15-30" },
       "terrain": ["grassland","hills", "plains"],
       "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
@@ -539,7 +539,7 @@
     },
     "Cloudkelp Beds": {
       "icon": "terrain_bonus/128/cloudkelp_beds.png",
-      "bonus": { "energy": 0, "food": "2-3", "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
+      "bonus": { "food": "10-25" },
       "terrain": ["sea"],
       "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ "land" ],
@@ -548,7 +548,7 @@
     },
     "Morrowback Herds": {
       "icon": "terrain_bonus/128/morrowback_herds.png",
-      "bonus": { "energy": 0, "food": "3-4", "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
+      "bonus": { "food": "20-40" },
       "terrain": ["grassland","hills","plains"],
       "climate": ["tropical", "temperate"],
       "other": [ ],
@@ -557,7 +557,7 @@
     },
     "Bugalo Grazing Range": {
       "icon": "terrain_bonus/128/bugalo_range.png",
-      "bonus": { "energy": 0, "food": "3-4", "material": 0, "water": 0, "wealth": 2, "happiness": 0.25 },
+      "bonus": { "food": "20-40", "wealth": 5, "happiness": 0.25 },
       "terrain": ["grassland","hills","plains"],
       "climate": ["temperate"],
       "other": [ ],
@@ -566,7 +566,7 @@
     },
     "Thousandseed Basin": {
       "icon": "terrain_bonus/128/thousandseed_basin.png",
-      "bonus": { "energy": 0, "food": "3-4", "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
+      "bonus": { "food": "10-20" },
       "terrain": ["wetlands"],
       "climate": ["tropical", "temperate", "subpolar"],
       "other": [ ],
@@ -577,7 +577,7 @@
     // Material
     "Ferric Strata Veins": {
       "icon": "terrain_bonus/128/ferric_strata.png",
-      "bonus": { "energy": 0, "food": 0, "material": "10-30", "water": 0, "wealth": 0, "happiness": 0 },
+      "bonus": { "material": "25-50" },
       "terrain": ["hills","mountain-low","mountain-high"],
       "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
@@ -586,7 +586,7 @@
     },
     "Kinetite Crystals": {
       "icon": "terrain_bonus/128/kinetite_crystals.png",
-      "bonus": { "energy": 0, "food": 0, "material": "10-30", "water": 0, "wealth": "4-8", "happiness": 0 },
+      "bonus": { "material": "25-50", "wealth": "5-10" },
       "terrain": ["hills","mountain-low"],
       "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
@@ -595,7 +595,7 @@
     },
     "Fossilized Chitin Reefs": {
       "icon": "terrain_bonus/128/fossilized_chitin.png",
-      "bonus": { "energy": 0, "food": 0, "material": "10-30", "water": 0, "wealth": "4-8", "happiness": 0 },
+      "bonus": { "material": "10-30", "wealth": "5-10" },
       "terrain": ["sea"],
       "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ "land" ],
@@ -604,7 +604,7 @@
     },
     "Aero-Silk Nests": {
       "icon": "terrain_bonus/128/aero-silk_nests.png",
-      "bonus": { "energy": 0, "food": 0, "material": "10-30", "water": 0, "wealth": "4-8", "happiness": 0 },
+      "bonus": { "material": "10-30", "wealth": "5-10" },
       "terrain": ["desert"],
       "climate": ["tropical", "temperate", "subpolar"],
       "other": [ ],
@@ -613,7 +613,7 @@
     },
     "Starfall Alloy Crater": {
       "icon": "terrain_bonus/128/starfall_alloy.png",
-      "bonus": { "energy": 0, "food": 0, "material": "10-30", "water": 0, "wealth": "4-8", "happiness": 0 },
+      "bonus": { "material": "10-30", "wealth": "5-10" },
       "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","mountain-high"],
       "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
@@ -622,7 +622,7 @@
     },
     "Threadstone Seam": {
       "icon": "terrain_bonus/128/threadstone_seam.png",
-      "bonus": { "energy": 0, "food": 0, "material": "20-40", "water": 0, "wealth": 0, "happiness": 0 },
+      "bonus": { "material": "50-75" },
       "terrain": ["grassland","mountain-low","plains"],
       "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
@@ -631,7 +631,7 @@
     },
     "Hexabark Grove": {
       "icon": "terrain_bonus/128/hexabark_grove.png",
-      "bonus": { "energy": 0, "food": 0, "material": "20-40", "water": 0, "wealth": 0, "happiness": 0 },
+      "bonus": { "material": "25-50" },
       "terrain": ["grassland","mountain-low","plains"],
       "climate": ["temperate", "subpolar"],
       "other": [ ],
@@ -640,7 +640,7 @@
     },
     "Gravalloy Veins": {
       "icon": "terrain_bonus/128/gravalloy_vein.png",
-      "bonus": { "energy": 0, "food": 0, "material": "20-40", "water": 0, "wealth": "4-8", "happiness": 0 },
+      "bonus": { "material": "50-75", "wealth": "5-10" },
       "terrain": ["mountain-low","mountain-high"],
       "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
@@ -649,7 +649,7 @@
     },
     "Titanlace Deposit": {
       "icon": "terrain_bonus/128/titanlace_deposit.png",
-      "bonus": { "energy": 0, "food": 0, "material": "30-50", "water": 0, "wealth": "5-8", "happiness": 0 },
+      "bonus": { "material": "30-50", "wealth": "10-20" },
       "terrain": ["mountain-high"],
       "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
@@ -660,7 +660,7 @@
     // Energy
     "Tidal Dynamo Basin": {
       "icon": "terrain_bonus/128/tidal_dynamo.png",
-      "bonus": { "energy": "250-750", "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
+      "bonus": { "energy": "250-750" },
       "terrain": ["sea"],
       "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ "land" ],
@@ -669,7 +669,7 @@
     },
     "Geothermal Plume": {
       "icon": "terrain_bonus/128/geothermal_plume.png",
-      "bonus": { "energy": "500-1000", "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
+      "bonus": { "energy": "250-750" },
       "terrain": ["mountain-low","mountain-high"],
       "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ "mountain" ],
@@ -678,7 +678,7 @@
     },
     "Sunshard Flats": {
       "icon": "terrain_bonus/128/sunshard_flats.png",
-      "bonus": { "energy": "250-500", "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
+      "bonus": { "energy": "100-300" },
       "terrain": ["desert"],
       "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
@@ -687,7 +687,7 @@
     },
     "Pyrogel Pool": {
       "icon": "terrain_bonus/128/pyrogel_pool.png",
-      "bonus": { "energy": "250-500", "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
+      "bonus": { "energy": "100-300" },
       "terrain": ["wetlands"],
       "climate": ["tropical", "temperate"],
       "other": [ ],
@@ -696,7 +696,7 @@
     },
     "Aurora Spires": {
       "icon": "terrain_bonus/128/aurora_spires.png",
-      "bonus": { "energy": "250-500", "food": 0, "material": 0, "water": 0, "wealth": 0, "happiness": 0 },
+      "bonus": { "energy": "100-300" },
       "terrain": ["frozen"],
       "altitude": { "min": 0, "max": 3000 },
       "climate": ["polar"],
@@ -708,7 +708,7 @@
     // Wealth
     "Vaelis Resin": {
       "icon": "terrain_bonus/128/vaelis_resin.png",
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": "200-500", "happiness": 0.25 },
+      "bonus": { "wealth": "25-50", "happiness": 0.25 },
       "terrain": ["forest"],
       "climate": ["tropical", "temperate"],
       "other": [ ],
@@ -717,7 +717,7 @@
     },
     "Lightningfly Venom": {
       "icon": "terrain_bonus/128/lightningfly_venom.png",
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": "200-500", "happiness": 0.25 },
+      "bonus": { "wealth": "40-80", "happiness": 0.25 },
       "terrain": ["forest","jungle"],
       "climate": ["temperate"],
       "other": [ ],
@@ -726,7 +726,7 @@
     },
     "Memory Opals": {
       "icon": "terrain_bonus/128/memory_opals.png",
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": "100-300", "happiness": 0.25 },
+      "bonus": { "wealth": "25-50", "happiness": 0.25 },
       "terrain": ["hills","mountain-low"],
       "climate": ["temperate", "subpolar"],
       "other": [ ],
@@ -735,7 +735,7 @@
     },
     "Starveil Filaments": {
       "icon": "terrain_bonus/128/starveil_filaments.png",
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": "200-500", "happiness": 0.25 },
+      "bonus": { "wealth": "40-80", "happiness": 0.25 },
       "terrain": ["forest","jungle"],
       "climate": ["temperate"],
       "other": [ ],
@@ -744,7 +744,7 @@
     },
     "Crownfire Geodes": {
       "icon": "terrain_bonus/128/crownfire_geodes.png",
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": "200-500", "happiness": 0.25 },
+      "bonus": { "wealth": "25-50", "happiness": 0.25 },
       "terrain": ["mountain-low","mountain-high"],
       "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
@@ -755,7 +755,7 @@
     // Happiness
     "Aurelian Sky Mirrors": {
       "icon": "terrain_bonus/128/sky_mirror.png",
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": "100-300", "happiness": 0.25 },
+      "bonus": { "wealth": "10-30", "happiness": 0.25 },
       "terrain": ["grassland","hills","forest","jungle","desert"],
       "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ "pristine" ],
@@ -764,7 +764,7 @@
     },
     "Chorus Gardens": {
       "icon": "terrain_bonus/128/chorus_gardens.png",
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": "100-300", "happiness": 0.25 },
+      "bonus": { "wealth": "10-30", "happiness": 0.25 },
       "terrain": ["jungle"],
       "climate": ["tropical"],
       "other": [ "pristine" ],
@@ -773,7 +773,7 @@
     },
     "Echo Monolith": {
       "icon": "terrain_bonus/128/echo_monolith.png",
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": "100-300", "happiness": 0.25 },
+      "bonus": { "wealth": "50-100", "happiness": 0.25 },
       "terrain": ["grassland"],
       "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ "pristine", "dry" ],
@@ -782,7 +782,7 @@
     },
     "Jaba Grove": {
       "icon": "terrain_bonus/128/jaba_grove.png",
-      "bonus": { "energy": "100-300", "food": "1-3", "material": 0, "water": 0, "wealth": 0, "happiness": 0.25 },
+      "bonus": { "energy": "100-300", "food": "5-10", "happiness": 0.25 },
       "terrain": ["forest"],
       "climate": ["tropical"],
       "other": [ "pristine" ],
@@ -791,7 +791,7 @@
     },
     "Dreamblossom Field": {
       "icon": "terrain_bonus/128/dreamblossom_field.png",
-      "bonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": "100-300", "happiness": 0.25 },
+      "bonus": { "wealth": "10-50", "happiness": 0.25 },
       "terrain": ["plains"],
       "climate": ["temperate"],
       "other": [ "pristine" ],
@@ -800,7 +800,7 @@
     },
     "Dancing Veil Falls": {
       "icon": "terrain_bonus/128/dancing_veil_falls.png",
-      "bonus": { "energy": "100-300", "food": 0, "material": 0, "water": 0, "wealth": "100-300", "happiness": 0.25 },
+      "bonus": { "energy": "100-300", "wealth": "40-80", "happiness": 0.25 },
       "terrain": ["mountain-low","mountain-high"],
       "climate": ["tropical", "temperate"],
       "other": [ "river","pristine" ],
