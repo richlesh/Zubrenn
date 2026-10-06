@@ -57,11 +57,10 @@ The Air Field creates an air‑transportation network, linking colonies that als
 
 The Barracks train military battalions for defense and offense. It requires a **Factory** before it can be built. Construction costs **2 Material**, **2 Energy** and **2 Wealth**, and takes **2 turns**. Each year it consumes **1 Food**, **1 Energy** and **1 Wealth**, and provides a happiness bonus of **0.5**.
  
- ### Grainery
- 
-<span class="float-right">![grainery](../buildings/128/grainery.png)</span>
+ ### Granary 
+<span class="float-right">![granary](../buildings/128/granry.png)</span>
 
-The Grainery provides large‑scale food storage, increasing a colony’s food capacity by **1 000**. It can be built after a **Farm** is built.  It costs **2 Material**, **2 Energy** and **2 Wealth**, taking **2 turns** to construct. It has no upkeep or production bonuses.
+The Granary provides large‑scale food storage, increasing a colony’s food capacity by **1 000**. It can be built after a **Farm** is built.  It costs **2 Material**, **2 Energy** and **2 Wealth**, taking **2 turns** to construct. It has no upkeep or production bonuses.
 
 #### Materials Depot
 

@@ -9392,7 +9392,16 @@
     // ---- Turn menu: End Turn ----------------------------------------------
     // The human ends their turn. Dismisses any active timeout dialogs (such as
     // Year Beginning or Auto End turn, or notification toast) and advances.
-    function endTurn() {
+    //
+    // `resumeAutoEnd` controls what happens to auto turn end going forward:
+    //   - true  (Cmd/Ctrl+Return / Turn ▸ End Turn): resume auto turn end, so
+    //            future idle turns end on their own again.
+    //   - false (plain Return): end ONLY this turn and leave auto turn end OFF,
+    //            so subsequent turns wait for the player.
+    //   - undefined: end the turn without changing the auto-end state.
+    function endTurn(resumeAutoEnd) {
+      if (resumeAutoEnd === true) _autoTurnEnd = true;
+      else if (resumeAutoEnd === false) _autoTurnEnd = false;
       if (turnStartOverlay && !turnStartOverlay.hidden) {
         _closeTurnStart();
       }
@@ -9403,7 +9412,7 @@
       if (p && p.kind === 'human') advanceTurn();
     }
     ipcRenderer.on("end-turn", () => {
-      endTurn();
+      endTurn(true);   // Cmd/Ctrl+Return (Turn ▸ End Turn): resume auto turn end
     });
 
     document.addEventListener("keydown", (e) => {
@@ -9413,6 +9422,11 @@
         if (forceEndAITurn()) { e.preventDefault(); return; }
       }
       if (e.key === "Enter") {
+        // Cmd/Ctrl+Return is owned by the Turn ▸ End Turn menu accelerator,
+        // which fires the "end-turn" IPC and resumes auto turn end. Let that
+        // path handle it so plain Return (this handler) can mean "end one turn
+        // and keep auto turn end off".
+        if (e.metaKey || e.ctrlKey) return;
         const tag = e.target && e.target.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA" || (e.target && e.target.isContentEditable)) {
           return;
@@ -9422,7 +9436,10 @@
         if (workOverlay && !workOverlay.hidden) return;
 
         e.preventDefault();
-        endTurn();
+        // Plain Return ends ONLY this turn and leaves auto turn end OFF, so the
+        // next turn waits for the player. Cmd/Ctrl+Return (handled via the
+        // "end-turn" IPC) is what resumes auto turn end.
+        endTurn(false);
       }
     });
 
