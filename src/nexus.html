@@ -100,12 +100,28 @@
       color: var(--muted);
     }
     .md hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
-    .md img { max-width: 128px; height: auto; vertical-align: middle; border-radius: 6px; }
+    .md img { border-radius: 6px; }
     /* Right/left-floated thumbnails (content pages wrap building/terrain icons
-       in <span class="float-right">…</span>). The paragraph that holds the span
-       is floated so the following text wraps around the image. */
-    .md .float-right { float: right; margin: 0 0 0.6em 1em; }
-    .md .float-left { float: left; margin: 0 1em 0.6em 0; }
+       in <span class="float-right">…</span>). The span is floated so the
+       following text wraps around the image. The float wrapper is given an
+       explicit proportional width (matching the pages' intended ~25%) and the
+       image fills it; without a bounded float width the full-resolution image
+       would make the float as wide as the content column, leaving no room for
+       text to wrap beside it. */
+    .float-right img {
+      width: 25%;
+      max-width: 256px;
+      height: auto;
+      float: right;
+      margin: 0 0 0.5em 1em;
+    }
+    .float-left img {
+      width: 25%;
+      max-width: 256px;
+      height: auto;
+      float: left;
+      margin: 0 1em 0.5em 0;
+    }
     /* Headings and horizontal rules start a new row below any floated image. */
     .md h1, .md h2, .md h3, .md h4, .md hr { clear: both; }
     .md table { border-collapse: collapse; margin: 0.8em 0; width: 100%; }
@@ -264,15 +280,24 @@
       return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
+    // The absolute directory of the page currently being rendered. Relative
+    // image/link paths are resolved against THIS directory (matching how an
+    // editor's Markdown preview resolves them relative to the file), so pages
+    // in subfolders like nexus/aliens/ resolve "../../aliens/X.png" correctly.
+    // Falls back to NEXUS_DIR for the initial render (e.g. the TOC).
+    let currentPageDir = NEXUS_DIR;
+
     // Resolve an image/link href that may be README-relative (e.g.
-    // "src/resources/aliens/128/X.png") to an absolute file URL so it loads
-    // inside this dialog regardless of the page's own location.
-    function resolveAssetUrl(src) {
+    // "src/resources/aliens/128/X.png") or page-relative (e.g.
+    // "../../aliens/X.png") to an absolute file URL so it loads inside this
+    // dialog. `baseDir` is the directory the page lives in (defaults to the
+    // page currently being rendered).
+    function resolveAssetUrl(src, baseDir) {
       if (/^(https?:|data:|file:)/i.test(src)) return src;
       let abs;
       if (path.isAbsolute(src)) abs = src;
       else if (/^src[\\/]/.test(src)) abs = path.join(PROJECT_ROOT, src);
-      else abs = path.join(NEXUS_DIR, src); // relative to the page
+      else abs = path.join(baseDir || currentPageDir, src); // relative to the page
       return "file://" + abs.split(path.sep).join("/");
     }
 
@@ -312,11 +337,30 @@
       const href = hrefIdx >= 0 ? token.attrs[hrefIdx][1] : "";
       const internal = /\.md($|[#?])/i.test(href) || !/^[a-z]+:/i.test(href);
       if (internal) {
-        token.attrSet("data-md", href);
+        // Normalize the (possibly page-relative) href to a NEXUS_DIR-relative
+        // path so loadContent/readPage resolve it the same way regardless of
+        // which subfolder the current page lives in.
+        token.attrSet("data-md", toNexusRelative(href));
         if (hrefIdx >= 0) token.attrs[hrefIdx][1] = "#";
       }
       return _defaultLinkOpen(tokens, idx, options, env, self);
     };
+
+    // Convert an internal link href that is relative to the current page into a
+    // path relative to NEXUS_DIR (keeping any trailing #anchor/?query), so the
+    // page loader can find it. Absolute-ish or already-rooted hrefs pass
+    // through unchanged.
+    function toNexusRelative(href) {
+      if (path.isAbsolute(href) || /^[a-z]+:/i.test(href)) return href;
+      const m = /^([^#?]*)([#?].*)?$/.exec(href);
+      const filePart = m ? m[1] : href;
+      const suffix = (m && m[2]) ? m[2] : "";
+      if (!filePart) return href; // pure anchor like "#section"
+      const abs = path.join(currentPageDir, filePart);
+      let rel = path.relative(NEXUS_DIR, abs);
+      rel = rel.split(path.sep).join("/");
+      return rel + suffix;
+    }
 
     function renderMarkdown(src) {
       return md.render(String(src == null ? "" : src));
@@ -328,14 +372,44 @@
       return fs.readFileSync(file, "utf8");
     }
 
+    // Scroll the content panel to an in-page anchor. `anchor` may be given with
+    // or without a leading '#'. Returns true if a matching target was found and
+    // scrolled to. Falls back to a `[name=...]` match for old-style anchors.
+    function scrollToAnchor(anchor) {
+      if (!anchor) return false;
+      const id = decodeURIComponent(String(anchor).replace(/^#/, "")).trim();
+      if (!id) return false;
+      // Escape for use in a CSS attribute selector (ids may contain quotes/etc).
+      const esc = id.replace(/["\\]/g, "\\$&");
+      let el = null;
+      try { el = contentEl.querySelector("#" + (window.CSS && CSS.escape ? CSS.escape(id) : esc)); }
+      catch (e) { el = null; }
+      if (!el) el = contentEl.querySelector('[name="' + esc + '"]');
+      if (!el) return false;
+      el.scrollIntoView({ block: "start", behavior: "auto" });
+      return true;
+    }
+
     let currentPage = null;
-    function loadContent(name) {
+    function loadContent(name, anchor) {
       try {
         const md = readPage(name);
+        // Resolve this page's images/links relative to its own directory.
+        currentPageDir = path.dirname(path.join(NEXUS_DIR, name));
         contentEl.innerHTML = renderMarkdown(md);
-        contentEl.parentElement.scrollTop = 0;
         currentPage = name;
         highlightActive();
+        // Jump to the requested in-page anchor (e.g. a species row in
+        // aliens.md via "#ashvenn"); otherwise start at the top of the page.
+        // Note: the scroll container is contentEl itself (#content .md has
+        // overflow-y:auto), not its parent.
+        if (!scrollToAnchor(anchor)) {
+          contentEl.scrollTop = 0;
+        } else {
+          // Re-scroll once more after layout settles (images in the aliens
+          // table have no fixed height and can shift the target as they load).
+          requestAnimationFrame(() => scrollToAnchor(anchor));
+        }
         // New page: drop any prior search highlights and re-apply the current
         // query (if the find field still holds text) against the new content.
         if (typeof clearFindHighlights === "function") { clearFindHighlights(); }
@@ -362,9 +436,19 @@
         e.preventDefault();
         const md = a.getAttribute("data-md");
         if (md) {
-          // Strip any trailing #anchor/?query for the filename.
+          // Split off any trailing #anchor/?query. The file part selects the
+          // page; a #anchor part scrolls to that in-page target after load.
+          const hashIdx = md.indexOf("#");
+          const anchor = hashIdx >= 0 ? md.slice(hashIdx) : "";
           const name = md.replace(/[#?].*$/, "");
-          loadContent(name);
+          if (name && name !== currentPage) {
+            loadContent(name, anchor);
+          } else if (anchor) {
+            // Same page (or pure in-page link): just scroll to the anchor.
+            scrollToAnchor(anchor);
+          } else {
+            loadContent(name);
+          }
         } else {
           const href = a.getAttribute("href");
           if (href && /^https?:/i.test(href)) ipcRenderer.invoke("open-external", href);
@@ -527,6 +611,9 @@
 
     // -------------------- init --------------------
     refreshSettings();
+    // The TOC (index.md) lives directly in NEXUS_DIR, so render it with that
+    // base for its relative links.
+    currentPageDir = NEXUS_DIR;
     tocEl.innerHTML = (() => {
       try { return renderMarkdown(readPage("index.md")); }
       catch (err) { return '<div id="error">Missing index.md</div>'; }

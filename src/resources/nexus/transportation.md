@@ -1,14 +1,12 @@
 <style>
-.float-left {
-  float: left;
-  margin: 0 1em 0 0;
-}
-.float-right {
+img {
+  width: 25%;
   float: right;
   margin: 0 0 0 1em;
 }
-
-th, td {white-space: normal; word-break: keep-all;}
+body {
+    font-size: 16pt;
+}
 </style>
 ## Transportation
 
@@ -24,7 +22,7 @@ between them, directly or through a chain of other colonies.
 
 #### Roads
 
-<span class="float-right">![road](../transportation/128/road.png)</span>
+<span class="float-right">![road](../transportation/road.png)</span>
 
 Roads are the first and most accessible network, available once a colony reaches
 the road population threshold. They are laid cell-by-cell across the land along
@@ -40,7 +38,7 @@ when the Federation can't afford their upkeep. Right-click a road tile to
 
 #### River
 
-<span class="float-right">![river](../transportation/128/river.png)</span>
+<span class="float-right">![river](../transportation/river.png)</span>
 
 Rivers are nature's own highways, flowing from the mountains to the sea along
 cell borders. Where a river doesn't reach, you can dig **Canals** — built one
@@ -55,7 +53,7 @@ colony).
 
 #### Sea
 
-<span class="float-right">![sea](../transportation/128/sea.png)</span>
+<span class="float-right">![sea](../transportation/sea.png)</span>
 
 The Sea opens the longest-reaching surface routes of all, letting colonies trade
 across open water and reach islands and far shores no road could span. A sea
@@ -68,7 +66,7 @@ only cost is building and maintaining the Docks at each end.
 
 #### Monorail
 
-<span class="float-right">![monorail](../transportation/128/monorail.png)</span>
+<span class="float-right">![monorail](../transportation/monorail.png)</span>
 
 The Monorail is the premium overland network: faster to traverse than a road and
 far more resilient, but costlier per tile and gated behind a higher colony
@@ -82,7 +80,7 @@ than roads.
 
 #### Air
 
-<span class="float-right">![air](../transportation/128/air.png)</span>
+<span class="float-right">![air](../transportation/air.png)</span>
 
 The Air network needs no path laid across the map at all — only an **Air Field**
 at each colony. Any two of your colonies that each have an Air Field within the
@@ -94,7 +92,7 @@ continuous ground, water, or sea route between them.
 
 #### Space
 
-<span class="float-right">![space](../transportation/128/space.png)</span>
+<span class="float-right">![space](../transportation/space.png)</span>
 
 The Space network is the ultimate link, binding colonies together across the
 whole planet with **no range limit at all**. It requires a **Spaceport** at each

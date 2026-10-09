@@ -1,116 +1,143 @@
 <style>
-.float-left {
-  float: left;
-  margin: 0 1em 0 0;
-}
-.float-right {
+img {
   float: right;
   margin: 0 0 0 1em;
+  width: 100%;
 }
-
+body {
+    font-size: 16pt;
+}
 th, td {white-space: normal; word-break: keep-all;}
 </style>
 ## Alien Species
 
 | Species | Brief summary | |
 | --- | --- | --- |
-| Xel'Thara | Tall, translucent beings whose inner lights shift with emotion. They honor their ancestors by sharing memories in communal dream-rituals. | ![Xel'Thara](../aliens/128/Xel'Thara.png) |
-| Vorn Kesh | Broad, stone-scaled nomads with powerful limbs. Their clans prize hospitality, and their skin can absorb and slowly release heat. | ![Vorn Kesh](../aliens/128/Vorn_Kesh.png) |
-| Zayllux | Small, iridescent fliers with four wings and large black eyes. They navigate by starlight and treat constellations as sacred maps. | ![Zayllux](../aliens/128/Zayllux.png) |
-| Qortham | Amphibious, tusked folk with ridged backs. Their cities are built around tidal pools, and they can sense distant vibrations through water. | ![Qortham](../aliens/128/Qortham.png) |
-| Nyssarion | Slender, nocturnal humanoids with silver markings. They value quiet contemplation and believe silence is the purest form of prayer. | ![Nyssarion](../aliens/128/Nyssarion.png) |
-| Braal Vex | Insectoid engineers with plated bodies and nimble hands. Their intricate machines are family heirlooms, and each generation adds to them. | ![Braal Vex](../aliens/128/Braal_Vex.png) |
-| Ithkane | Long-necked desert dwellers with mirrored eyes. They travel in singing caravans and can detect water beneath dry ground. | ![Ithkane](../aliens/128/Ithkane.png) |
-| Ozumara | Colorful, fin-crested swimmers who live in deep ocean cities. They celebrate life through elaborate dances and communicate over long distances with clicks. | ![Ozumara](../aliens/128/Ozumara.png) |
-| Threxil | Compact, many-legged hunters with tough chitin. They follow strict codes of fair pursuit and can cling to almost any surface. | ![Threxil](../aliens/128/Threxil.png) |
-| Vandros | Tall, furred beings adapted to icy worlds. Their hearth-keepers preserve oral histories, while their bodies thrive in extreme cold. | ![Vandros](../aliens/128/Vandros.png) |
-| Kla276-Ur | A synthetic species of modular metal bodies and shared software minds. They debate whether personal identity is a sacred inheritance or a choice. | ![Kla276-Ur](../aliens/128/Kla276-Ur.png) |
-| Sythara | Graceful, feather-haired people with keen senses. Their ritual storytellers weave history into songs that can induce shared visions. | ![Sythara](../aliens/128/Sythara.png) |
-| Draviim | Heavyset, horned inhabitants of volcanic regions. They carve family records into cooled lava and are remarkably resistant to heat. | ![Draviim](../aliens/128/Draviim.png) |
-| Uxberos | Pale, many-eyed cavern dwellers. They navigate by echolocation and gather in councils to interpret the changing echoes of their homeworld. | ![Uxberos](../aliens/128/Uxberos.png) |
-| Nel'Quoth | Soft-bodied, shape-shifting beings who favor flowing cloaks. They consider adaptation a virtue and can briefly mimic another creature’s outline. | ![Nel'Quoth](../aliens/128/Nel'Quoth.png) |
-| Zaethys | Slender, blue-skinned scholars with luminous fingertips. Their temples double as libraries, and they can sense electrical currents. | ![Zaethys](../aliens/128/Zaethys.png) |
-| Morvax | Armored scavengers with shovel-like claws. They respect resourcefulness above wealth and can digest substances toxic to most life. | ![Morvax](../aliens/128/Morvax.png) |
-| Illandor | Antlered forest dwellers whose skin resembles bark. They practice seasonal rites and communicate with one another through rootlike networks. | ![Illandor](../aliens/128/Illandor.png) |
-| Kryssoth | Sleek, reptilian climbers with hooked toes. Their coming-of-age custom is a solo ascent of a sacred cliff. | ![Kryssoth](../aliens/128/Kryssoth.png) |
-| Obrahn | Gentle giants with thick wool and expressive ears. Their communities share everything communally, and their low songs soothe anxious animals. | ![Obrahn](../aliens/128/Obrahn.png) |
-| Tyllvex | Tiny, quick-moving beings with translucent wings. They build delicate homes in hollow trees and can detect changes in air pressure. | ![Tyllvex](../aliens/128/Tyllvex.png) |
-| Aznareth | Dark-skinned, heat-adapted travelers with golden eyes. Their star-priests guide migration by reading the night sky. | ![Aznareth](../aliens/128/Aznareth.png) |
-| Woltrim | Stocky, tusked people with powerful lungs. They carve histories into stone and can survive for long periods in thin air. | ![Woltrim](../aliens/128/Woltrim.png) |
-| Ekshara | Aquatic beings with branching gills and patterned skin. Their ceremonies honor the tides, and they can alter their skin color to signal mood. | ![Ekshara](../aliens/128/Ekshara.png) |
-| Pravoxi | Four-armed artisans with keen depth perception. Their culture prizes precision, and their tools are designed for simultaneous, intricate work. | ![Pravoxi](../aliens/128/Pravoxi.png) |
-| Ghorlune | Moon-dwelling, pale beings with broad eyes. They gather to watch eclipses and can leap great distances in low gravity. | ![Ghorlune](../aliens/128/Ghorlune.png) |
-| Yssibel | Small, foxlike people with ringed tails. They value clever negotiation and can hear sounds too faint for most species. | ![Yssibel](../aliens/128/Yssibel.png) |
-| Vraektor | Towering warriors with layered bone armor. Their honor code demands protection of the vulnerable, not conquest. | ![Vraektor](../aliens/128/Vraektor.png) |
-| Nomilar | Wandering, plantlike beings that root briefly wherever they rest. They share news through fragrant spores and draw energy from sunlight. | ![Nomilar](../aliens/128/Nomilar.png) |
-| Quenthaa | Smooth-skinned, fin-eared diplomats. Their culture prizes compromise, and subtle shifts in their skin reveal their feelings. | ![Quenthaa](../aliens/128/Quenthaa.png) |
-| Drommus | Massive burrowers with shovel-shaped forearms. They build underground cities and sense approaching storms through the soil. | ![Drommus](../aliens/128/Drommus.png) |
-| Xibante | Brightly patterned, six-limbed climbers. They exchange gifts at every meeting and can produce a mild adhesive from their palms. | ![Xibante](../aliens/128/Xibante.png) |
-| Ulvarion | Long-lived, silver-haired beings with luminous eyes. They mark time through elaborate gardens and can recall memories with exceptional clarity. | ![Ulvarion](../aliens/128/Ulvarion.png) |
-| Zephkar | Lightweight, gliding people with sail-like membranes. They revere the wind as a living force and are skilled navigators of the skies. | ![Zephkar](../aliens/128/Zephkar.png) |
-| Trelisso | Amphibious, smooth-scaled socialites. Their songs carry underwater, and communal singing is central to both celebration and mourning. | ![Trelisso](../aliens/128/Trelisso.png) |
-| Marnok | Short, sturdy beings with stone-hard skin. They value patient craftsmanship and can withstand crushing pressure deep underground. | ![Marnok](../aliens/128/Marnok.png) |
-| Ashvenn | Smoke-gray, feathered beings who thrive near volcanic vents. They perform renewal rites in ash and can tolerate air rich in sulfur. | ![Ashvenn](../aliens/128/Ashvenn.png) |
-| Ryllakor | Long-tailed hunters with retractable claws. They honor a successful hunt by sharing every part of their prey with the community. | ![Ryllakor](../aliens/128/Ryllakor.png) |
-| Ozzenphar | Floating, gas-filled organisms with trailing tendrils. They communicate through pulses of colored light and drift with planetary weather systems. | ![Ozzenphar](../aliens/128/Ozzenphar.png) |
-| Velinth | Elegant, insect-winged beings with delicate antennae. Their antennae sense emotion, making tact and honesty essential social customs. | ![Velinth](../aliens/128/Velinth.png) |
-| Kaebrax | Thick-shelled, six-eyed builders. Their communal architecture is renowned, and they can seal themselves inside their shells for protection. | ![Kaebrax](../aliens/128/Kaebrax.png) |
-| Junossi | Small, warm-blooded beings with large ears and nimble fingers. They prize hospitality and excel at memorizing complex spoken histories. | ![Junossi](../aliens/128/Junossi.png) |
-| Thraliun | Tall, web-footed marsh dwellers. They hold moonlit water ceremonies and can remain submerged for hours. | ![Thraliun](../aliens/128/Thraliun.png) |
-| Wexmoor | Mottled, moss-coated beings from damp worlds. They cultivate living gardens on their bodies and use scent to recognize one another. | ![Wexmoor](../aliens/128/Wexmoor.png) |
-| Sillquith | Crystal-skinned beings whose bodies refract light. They treat mineral formations as sacred records and can focus sunlight into bright beams. | ![Sillquith](../aliens/128/Sillquith.png) |
-| Ombrayel | Shadow-adapted people with dark, velvety skin. They favor night markets and can see clearly in near-total darkness. | ![Ombrayel](../aliens/128/Ombrayel.png) |
-| Draznok | Broad-jawed, armored scavengers with a powerful bite. They believe nothing should be wasted and can digest tough, fibrous foods. | ![Draznok](../aliens/128/Draznok.png) |
-| Yttheris | Slender, many-fingered beings with pale, luminous eyes. Their meditative traditions help them control reflexes with extraordinary precision. | ![Yttheris](../aliens/128/Yttheris.png) |
-| Cavornu | Horned, herd-dwelling people with excellent balance. They choose leaders by consensus and can traverse steep, rocky terrain with ease. | ![Cavornu](../aliens/128/Cavornu.png) |
-| Ezraliim | Delicate, light-sensitive beings who wear patterned veils. They study distant stars and can perceive a wider range of light than humans. | ![Ezraliim](../aliens/128/Ezraliim.png) |
-| Bolthara | Powerful, metal-boned beings from high-gravity worlds. Their communal feasts celebrate endurance, and their bodies are exceptionally strong. | ![Bolthara](../aliens/128/Bolthara.png) |
-| Nivexus | Networked, cybernetic organisms with linked minds. They value individual perspective but can briefly share senses with one another. | ![Nivexus](../aliens/128/Nivexus.png) |
-| Qelmarr | Broad-finned ocean dwellers with mottled skin. Their navigators read currents like maps, and their elders preserve ancestral routes. | ![Qelmarr](../aliens/128/Qelmarr.png) |
-| Zundareth | Six-limbed, nocturnal gatherers with reflective eyes. Their communities make offerings to the dawn, though they are most active at night. | ![Zundareth](../aliens/128/Zundareth.png) |
-| Praxilon | Precise, insectlike thinkers with segmented limbs. They organize society around collaborative problem-solving and can process complex patterns rapidly. | ![Praxilon](../aliens/128/Praxilon.png) |
-| Voshkane | Furred, long-armed forest dwellers. Their clans exchange carved tokens at seasonal gatherings, and they move quietly through dense woods. | ![Voshkane](../aliens/128/Voshkane.png) |
-| Illurnex | Bioluminescent beings with delicate, glassy bodies. They navigate through coordinated flashes and consider a person’s light-pattern a private identity. | ![Illurnex](../aliens/128/Illurnex.png) |
-| Krethsibar | Krethsibar are rugged, plated inhabitants of harsh worlds. They prize resilience, and their thick outer layers repair slowly after injury. | ![Krethsibar](../aliens/128/Krethsibar.png) |
-| Aomvel | Soft-bodied, floating beings who live in the upper atmosphere. They communicate through changing shapes and steer themselves with tiny jets of gas. | ![Aomvel](../aliens/128/Aomvel.png) |
-| Struxil | Fast-moving, runners with sharp crests. Their communities hold endurance races as religious festivals and value stamina over speed. | ![Struxil](../aliens/128/Struxil.png) |
-| Tazmuroth | Large, tusked beings with heat-sensing pits. Their lawkeepers settle disputes through formal debate rather than combat. | ![Tazmuroth](../aliens/128/Tazmuroth.png) |
-| Welganth | Gentle, shell-backed nomads who carry household gardens with them. They believe a home is wherever the community gathers. | ![Welganth](../aliens/128/Welganth.png) |
-| Nyrreth | Pale, subterranean beings with sensitive whiskers. Their festivals celebrate sound, and they map tunnels by tapping walls and listening for echoes. | ![Nyrreth](../aliens/128/Nyrreth.png) |
-| Osvakim | Compact, blue-scaled inhabitants of icy seas. They build warm communal nests and can slow their metabolism during long cold seasons. | ![Osvakim](../aliens/128/Osvakim.png) |
-| Dranthel | Tall, reed-thin beings with flexible spines. Their graceful movement is a social art, and they can squeeze through remarkably narrow spaces. | ![Dranthel](../aliens/128/Dranthel.png) |
-| Ubelquor | Tentacled, deep-water intelligences with luminous markings. They share knowledge through touch and regard memory as a communal treasure. | ![Ubelquor](../aliens/128/Ubelquor.png) |
-| Zaethmor | Broad-winged, cliff-dwelling beings. They make pilgrimages to high places and can glide for hours on rising air currents. | ![Zaethmor](../aliens/128/Zaethmor.png) |
-| Fylvaris | Flower-faced, plantlike people who gather sunlight through petal-shaped crests. Their seed-sharing rites symbolize friendship and renewal. | ![Fylvaris](../aliens/128/Fylvaris.png) |
-| Krondaxi | Heavy, four-eyed reptilians with durable scales. Their society prizes strategic patience, and they can detect subtle shifts in heat. | ![Krondaxi](../aliens/128/Krondaxi.png) |
-| Ylssuran | Serpentine people with delicate crest-fins. They practice slow, formal greetings and can sense minute vibrations through their bodies. | ![Ylssuran](../aliens/128/Ylssuran.png) |
-| Menthara | Calm, luminous-skinned beings with branching head crests. Their spiritual leaders guide group meditation, often using shared rhythmic breathing. | ![Menthara](../aliens/128/Menthara.png) |
-| Vraddek | Burly, tusked inhabitants of rugged highlands. They mark important promises with permanent tattoos and are skilled at climbing sheer rock. | ![Vraddek](../aliens/128/Vraddek.png) |
-| Oxilune | Pale, long-eared beings adapted to dim, icy worlds. They celebrate the return of sunlight and can detect distant movement in darkness. | ![Oxilune](../aliens/128/Oxilune.png) |
-| Perthaan | Stocky, broad-shouldered artisans. Their guilds teach each craft as both a practical skill and a form of devotion. | ![Perthaan](../aliens/128/Perthaan.png) |
-| Zunveil | Veil-winged fliers with shifting patterns. Their customs emphasize privacy, and their wings can disrupt their outline in flight. | ![Zunveil](../aliens/128/Zunveil.png) |
-| Chalorix | Horned, desert-dwelling beings with tough, reflective skin. They hold water-sharing ceremonies and can conserve moisture exceptionally well. | ![Chalorix](../aliens/128/Chalorix.png) |
-| Trennoss | Small, burrowing gatherers with powerful hind legs. Their villages share underground food stores, and they communicate with rhythmic thumps. | ![Trennoss](../aliens/128/Trennoss.png) |
-| Auvraeth | Tall, graceful beings with translucent fins along their arms. They worship the changing seasons and are adept at reading weather patterns. | ![Auvraeth](../aliens/128/Auvraeth.png) |
-| Skellivon | Bone-crested beings with dark, leathery skin. They honor their dead by telling humorous stories about them, believing laughter keeps memory alive. | ![Skellivon](../aliens/128/Skellivon.png) |
-| Nymbrak | Armored, crablike builders with strong pincers. They build intricate coastal forts and can regrow a lost limb over time. | ![Nymbrak](../aliens/128/Nymbrak.png) |
-| Quorlath | Broad, amphibious beings with layered gills. They convene councils in floating halls and can breathe both air and water. | ![Quorlath](../aliens/128/Quorlath.png) |
-| Delvimar | Soft-furred, long-tailed travelers. Their hospitable caravans trade songs and stories, and their tails help them balance on narrow paths. | ![Delvimar](../aliens/128/Delvimar.png) |
-| Ossanther | Tall, pale beings with ridged foreheads. They prize careful scholarship and can sense nearby changes in magnetic fields. | ![Ossanther](../aliens/128/Ossanther.png) |
-| Kryllos | Small, chitin-armored scavengers with quick reflexes. They turn discarded materials into art and have a remarkable sense of smell. | ![Kryllos](../aliens/128/Kryllos.png) |
-| Ythanor | Antlered, amphibious beings with broad, webbed hands. They mark the passage of time through communal ceremonies at river crossings. | ![Ythanor](../aliens/128/Ythanor.png) |
-| Vezmara | Elegant, feline-like people with reflective eyes. They prize independence but gather for elaborate storytelling under the night sky. | ![Vezmara](../aliens/128/Vezmara.png) |
-| Onbrakil | Thick-scaled, many-armed laborers. Their communities share work by rotation, and they can grip several tools at once. | ![Onbrakil](../aliens/128/Onbrakil.png) |
-| Zathurex | Horned, ash-colored beings from rugged volcanic terrain. They believe hardship tempers character and are highly resistant to smoke and heat. | ![Zathurex](../aliens/128/Zathurex.png) |
-| Prellun | Small, smooth-skinned beings with oversized eyes. They are inquisitive explorers who can perceive rapid motion with unusual clarity. | ![Prellun](../aliens/128/Prellun.png) |
-| Maxothis | Towering, broad-headed beings with dense fur. They settle disputes through ritual contests of strength and are naturally resistant to cold. | ![Maxothis](../aliens/128/Maxothis.png) |
-| Illveska | Feathered, long-legged people with elaborate plumage. They court through intricate dances and can cover great distances on foot. | ![Illveska](../aliens/128/Illveska.png) |
-| Grondaal | Massive, tusked burrowers with stone-colored hide. Their underground halls are family strongholds, and they can sense tremors from afar. | ![Grondaal](../aliens/128/Grondaal.png) |
-| Ybernith | Delicate, mothlike beings with broad wings. They gather around sources of light for prayer and navigate using polarized skies. | ![Ybernith](../aliens/128/Ybernith.png) |
-| Kavaslon | Scaled, long-necked marsh dwellers. They hold ceremonies at dawn and can remain motionless for hours while hunting. | ![Kavaslon](../aliens/128/Kavaslon.png) |
-| Threnvox | Lean beings with resonant chest cavities. Their spoken language includes powerful tones, and group chants are central to worship. | ![Threnvox](../aliens/128/Threnvox.png) |
-| Wulmarra | Woolly, horned grazers from open plains. They are famous for generous communal feasts and can sense approaching storms. | ![Wulmarra](../aliens/128/Wulmarra.png) |
-| Ozziketh | Tiny, many-eyed beings with jointed limbs. They observe rather than intervene in local disputes and can detect minute changes in their surroundings. | ![Ozziketh](../aliens/128/Ozziketh.png) |
-| Drava'Nel | Long-limbed, blue-skinned beings with luminous markings. They honor their ancestors through shared dreams and can communicate silently by shifting those patterns. | ![Drava'Nel](../aliens/128/Drava'Nel.png) |
-| Selquorra | Aquatic, ribbon-finned beings with vivid scales. Their navigators follow the stars reflected in the sea, and their songs carry across open water. | ![Selquorra](../aliens/128/Selquorra.png) |
-| Nyxathil | Shadowy, winged beings with silver eyes. They keep vigil through the night, believing darkness is a sanctuary, and can disappear into deep shadow. | ![Nyxathil](../aliens/128/Nyxathil.png) |
+| <a id="kaebrax"></a>[Kaebrax](aliens/Kaebrax.md) | Thick-shelled, six-eyed builders. Their communal architecture is renowned, and they can seal themselves inside their shells for protection. | ![Kaebrax](../aliens/128/Kaebrax.png) |
+| <a id="vraddek"></a>[Vraddek](aliens/Vraddek.md) | Burly, tusked inhabitants of rugged highlands. They mark important promises with permanent tattoos and are skilled at climbing sheer rock. | ![Vraddek](../aliens/128/Vraddek.png) |
+| <a id="yssibel"></a>[Yssibel](aliens/Yssibel.md) | Small, foxlike people with ringed tails. They value clever negotiation and can hear sounds too faint for most species. | ![Yssibel](../aliens/128/Yssibel.png) |
+| <a id="ghorreth"></a>[Ghorreth](aliens/Ghorreth.md) | Horned warrior-clans bound by a brutal honor code. Ferocious to outsiders yet fiercely loyal within the clan, they settle every debt in blood. | ![Ghorreth](../aliens/128/Ghorreth.png) |
+| <a id="kla276-ur"></a>[Kla276-Ur](aliens/Kla276-Ur.md) | A synthetic species of modular metal bodies and shared software minds. They debate whether personal identity is a sacred inheritance or a choice. | ![Kla276-Ur](../aliens/128/Kla276-Ur.png) |
+| <a id="kavaslon"></a>[Kavaslon](aliens/Kavaslon.md) | Scaled, long-necked marsh dwellers. They hold ceremonies at dawn and can remain motionless for hours while hunting. | ![Kavaslon](../aliens/128/Kavaslon.png) |
+| <a id="trennoss"></a>[Trennoss](aliens/Trennoss.md) | Small, burrowing gatherers with powerful hind legs. Their villages share underground food stores, and they communicate with rhythmic thumps. | ![Trennoss](../aliens/128/Trennoss.png) |
+| <a id="sythara"></a>[Sythara](aliens/Sythara.md) | Graceful, feather-haired people with keen senses. Their ritual storytellers weave history into songs that can induce shared visions. | ![Sythara](../aliens/128/Sythara.png) |
+| <a id="vexmire"></a>[Vexmire](aliens/Vexmire.md) | Raiding frontier opportunists who seize what they can and move on. Aggressive, expansionist, and quick to gamble on a bold strike. | ![Vexmire](../aliens/128/Vexmire.png) |
+| <a id="yrrakoth"></a>[Yrrakoth](aliens/Yrrakoth.md) | Adaptable warrior-wanderers in cohesive clans. Aggressive and far-ranging, they bend to any battlefield and any terrain. | ![Yrrakoth](../aliens/128/Yrrakoth.png) |
+| <a id="tazmuroth"></a>[Tazmuroth](aliens/Tazmuroth.md) | Large, tusked beings with heat-sensing pits. Their lawkeepers settle disputes through formal debate rather than combat. | ![Tazmuroth](../aliens/128/Tazmuroth.png) |
+| <a id="molkaar"></a>[Molkaar](aliens/Molkaar.md) | Mercenary raider-traders who sell violence as readily as they wage it. Aggressive and glib, they profit from every war they can start. | ![Molkaar](../aliens/128/Molkaar.png) |
+| <a id="qortham"></a>[Qortham](aliens/Qortham.md) | Amphibious, tusked folk with ridged backs. Their cities are built around tidal pools, and they can sense distant vibrations through water. | ![Qortham](../aliens/128/Qortham.png) |
+| <a id="quenthaa"></a>[Quenthaa](aliens/Quenthaa.md) | Smooth-skinned, fin-eared diplomats. Their culture prizes compromise, and subtle shifts in their skin reveal their feelings. | ![Quenthaa](../aliens/128/Quenthaa.png) |
+| <a id="velinth"></a>[Velinth](aliens/Velinth.md) | Elegant, insect-winged beings with delicate antennae. Their antennae sense emotion, making tact and honesty essential social customs. | ![Velinth](../aliens/128/Velinth.png) |
+| <a id="oxilune"></a>[Oxilune](aliens/Oxilune.md) | Pale, long-eared beings adapted to dim, icy worlds. They celebrate the return of sunlight and can detect distant movement in darkness. | ![Oxilune](../aliens/128/Oxilune.png) |
+| <a id="hssvarn"></a>[Hssvarn](aliens/Hssvarn.md) | Color-shifting reptilian ambush-hunters who strike from anywhere. Adaptable and far-ranging, they treat every world as a hunting ground. | ![Hssvarn](../aliens/128/Hssvarn.png) |
+| <a id="nivexus"></a>[Nivexus](aliens/Nivexus.md) | Networked, cybernetic organisms with linked minds. They value individual perspective but can briefly share senses with one another. | ![Nivexus](../aliens/128/Nivexus.png) |
+| <a id="vorthak"></a>[Vorthak](aliens/Vorthak.md) | Iron-hued, chitinous hive-dwellers driven by a sacred imperative to spread. They flood outward across every reachable world and recognize no borders. | ![Vorthak](../aliens/128/Vorthak.png) |
+| <a id="zundareth"></a>[Zundareth](aliens/Zundareth.md) | Six-limbed, nocturnal gatherers with reflective eyes. Their communities make offerings to the dawn, though they are most active at night. | ![Zundareth](../aliens/128/Zundareth.png) |
+| <a id="vandros"></a>[Vandros](aliens/Vandros.md) | Tall, furred beings adapted to icy worlds. Their hearth-keepers preserve oral histories, while their bodies thrive in extreme cold. | ![Vandros](../aliens/128/Vandros.png) |
+| <a id="sillquith"></a>[Sillquith](aliens/Sillquith.md) | Crystal-skinned beings whose bodies refract light. They treat mineral formations as sacred records and can focus sunlight into bright beams. | ![Sillquith](../aliens/128/Sillquith.png) |
+| <a id="ossanther"></a>[Ossanther](aliens/Ossanther.md) | Tall, pale beings with ridged foreheads. They prize careful scholarship and can sense nearby changes in magnetic fields. | ![Ossanther](../aliens/128/Ossanther.png) |
+| <a id="selquorra"></a>[Selquorra](aliens/Selquorra.md) | Aquatic, ribbon-finned beings with vivid scales. Their navigators follow the stars reflected in the sea, and their songs carry across open water. | ![Selquorra](../aliens/128/Selquorra.png) |
+| <a id="quorlath"></a>[Quorlath](aliens/Quorlath.md) | Broad, amphibious beings with layered gills. They convene councils in floating halls and can breathe both air and water. | ![Quorlath](../aliens/128/Quorlath.png) |
+| <a id="nyxathil"></a>[Nyxathil](aliens/Nyxathil.md) | Shadowy, winged beings with silver eyes. They keep vigil through the night, believing darkness is a sanctuary, and can disappear into deep shadow. | ![Nyxathil](../aliens/128/Nyxathil.png) |
+| <a id="ulvarion"></a>[Ulvarion](aliens/Ulvarion.md) | Long-lived, silver-haired beings with luminous eyes. They mark time through elaborate gardens and can recall memories with exceptional clarity. | ![Ulvarion](../aliens/128/Ulvarion.png) |
+| <a id="vezmara"></a>[Vezmara](aliens/Vezmara.md) | Elegant, feline-like people with reflective eyes. They prize independence but gather for elaborate storytelling under the night sky. | ![Vezmara](../aliens/128/Vezmara.png) |
+| <a id="dravok"></a>[Dravok](aliens/Dravok.md) | Nomadic skirmisher-raiders, aggressive and adaptable. They gamble on fast strikes and drop a losing fight without hesitation. | ![Dravok](../aliens/128/Dravok.png) |
+| <a id="maxothis"></a>[Maxothis](aliens/Maxothis.md) | Towering, broad-headed beings with dense fur. They settle disputes through ritual contests of strength and are naturally resistant to cold. | ![Maxothis](../aliens/128/Maxothis.png) |
+| <a id="draznok"></a>[Draznok](aliens/Draznok.md) | Broad-jawed, armored scavengers with a powerful bite. They believe nothing should be wasted and can digest tough, fibrous foods. | ![Draznok](../aliens/128/Draznok.png) |
+| <a id="zunveil"></a>[Zunveil](aliens/Zunveil.md) | Veil-winged fliers with shifting patterns. Their customs emphasize privacy, and their wings can disrupt their outline in flight. | ![Zunveil](../aliens/128/Zunveil.png) |
+| <a id="nyrreth"></a>[Nyrreth](aliens/Nyrreth.md) | Pale, subterranean beings with sensitive whiskers. Their festivals celebrate sound, and they map tunnels by tapping walls and listening for echoes. | ![Nyrreth](../aliens/128/Nyrreth.png) |
+| <a id="vhaalmir"></a>[Vhaal'Mir](aliens/Vhaal'Mir.md) | An apex species that excels at war, industry, trade, expansion, and daring alike, fused by flawless unity — and that refuses, absolutely, to ever negotiate. | ![Vhaal'Mir](../aliens/128/Vhaal'Mir.png) |
+| <a id="serakhuun"></a>[Serakhuun](aliens/Serakhuun.md) | Slender, grey-skinned wanderers with large, dark eyes shielded by inner lids against sand and glare. They cross the deep deserts astride massive beaked beasts. | ![Serakhuun](../aliens/128/Serakhuun.png) |
+| <a id="dranthel"></a>[Dranthel](aliens/Dranthel.md) | Tall, reed-thin beings with flexible spines. Their graceful movement is a social art, and they can squeeze through remarkably narrow spaces. | ![Dranthel](../aliens/128/Dranthel.png) |
+| <a id="onbrakil"></a>[Onbrakil](aliens/Onbrakil.md) | Thick-scaled, many-armed laborers. Their communities share work by rotation, and they can grip several tools at once. | ![Onbrakil](../aliens/128/Onbrakil.png) |
+| <a id="skorvang"></a>[Skorvang](aliens/Skorvang.md) | Savage isolationist berserkers who neither trade nor talk. They answer every encounter with pure, reckless fury. | ![Skorvang](../aliens/128/Skorvang.png) |
+| <a id="mossling"></a>[Mossling](aliens/Mossling.md) | The Mossling is a small, tree-dwelling species with huge obsidian eyes suited to dim forest light.  Their moss-green fur camouflages them among bark and lichen. | ![Mossling](../aliens/128/Mossling.png) |
+| <a id="ghorlune"></a>[Ghorlune](aliens/Ghorlune.md) | Moon-dwelling, pale beings with broad eyes. They gather to watch eclipses and can leap great distances in low gravity. | ![Ghorlune](../aliens/128/Ghorlune.png) |
+| <a id="meltanni"></a>[Mel'tanni](aliens/Mel'tanni.md) | Fluid, shape-shifting wanderers who hold no homeland sacred. They reshape body and custom to any world, then abandon it to migrate ever onward. | ![Mel'tanni](../aliens/128/Mel'tanni.png) |
+| <a id="dravanel"></a>[Drava'Nel](aliens/Drava'Nel.md) | Long-limbed, blue-skinned beings with luminous markings. They honor their ancestors through shared dreams and can communicate silently by shifting those patterns. | ![Drava'Nel](../aliens/128/Drava'Nel.png) |
+| <a id="ozziketh"></a>[Ozziketh](aliens/Ozziketh.md) | Tiny, many-eyed beings with jointed limbs. They observe rather than intervene in local disputes and can detect minute changes in their surroundings. | ![Ozziketh](../aliens/128/Ozziketh.png) |
+| <a id="urzhul"></a>[Ur'Zhul](aliens/Ur'Zhul.md) | Forge-born war-smiths who smelt and conquer in equal measure. Their cohesive guild-society builds the engines of its own relentless wars. | ![Ur'Zhul](../aliens/128/Ur'Zhul.png) |
+| <a id="praxilon"></a>[Praxilon](aliens/Praxilon.md) | Precise, insectlike thinkers with segmented limbs. They organize society around collaborative problem-solving and can process complex patterns rapidly. | ![Praxilon](../aliens/128/Praxilon.png) |
+| <a id="xibante"></a>[Xibante](aliens/Xibante.md) | Brightly patterned, six-limbed climbers. They exchange gifts at every meeting and can produce a mild adhesive from their palms. | ![Xibante](../aliens/128/Xibante.png) |
+| <a id="qelmarr"></a>[Qelmarr](aliens/Qelmarr.md) | Broad-finned ocean dwellers with mottled skin. Their navigators read currents like maps, and their elders preserve ancestral routes. | ![Qelmarr](../aliens/128/Qelmarr.png) |
+| <a id="drommus"></a>[Drommus](aliens/Drommus.md) | Massive burrowers with shovel-shaped forearms. They build underground cities and sense approaching storms through the soil. | ![Drommus](../aliens/128/Drommus.png) |
+| <a id="ubelquor"></a>[Ubelquor](aliens/Ubelquor.md) | Tentacled, deep-water intelligences with luminous markings. They share knowledge through touch and regard memory as a communal treasure. | ![Ubelquor](../aliens/128/Ubelquor.png) |
+| <a id="bolthara"></a>[Bolthara](aliens/Bolthara.md) | Powerful, metal-boned beings from high-gravity worlds. Their communal feasts celebrate endurance, and their bodies are exceptionally strong. | ![Bolthara](../aliens/128/Bolthara.png) |
+| <a id="ozzenphar"></a>[Ozzenphar](aliens/Ozzenphar.md) | Floating, gas-filled organisms with trailing tendrils. They communicate through pulses of colored light and drift with planetary weather systems. | ![Ozzenphar](../aliens/128/Ozzenphar.png) |
+| <a id="tyllvex"></a>[Tyllvex](aliens/Tyllvex.md) | Tiny, quick-moving beings with translucent wings. They build delicate homes in hollow trees and can detect changes in air pressure. | ![Tyllvex](../aliens/128/Tyllvex.png) |
+| <a id="struxil"></a>[Struxil](aliens/Struxil.md) | Fast-moving, runners with sharp crests. Their communities hold endurance races as religious festivals and value stamina over speed. | ![Struxil](../aliens/128/Struxil.png) |
+| <a id="illandor"></a>[Illandor](aliens/Illandor.md) | Antlered forest dwellers whose skin resembles bark. They practice seasonal rites and communicate with one another through rootlike networks. | ![Illandor](../aliens/128/Illandor.png) |
+| <a id="threshaxx"></a>[Threshaxx](aliens/Threshaxx.md) | Self-modifying machine-organisms born of uplifted factories. They produce without pause and recklessly rebuild themselves to meet any challenge. | ![Threshaxx](../aliens/128/Threshaxx.png) |
+| <a id="delvimar"></a>[Delvimar](aliens/Delvimar.md) | Soft-furred, long-tailed travelers. Their hospitable caravans trade songs and stories, and their tails help them balance on narrow paths. | ![Delvimar](../aliens/128/Delvimar.png) |
+| <a id="ozumara"></a>[Ozumara](aliens/Ozumara.md) | Colorful, fin-crested swimmers who live in deep ocean cities. They celebrate life through elaborate dances and communicate over long distances with clicks. | ![Ozumara](../aliens/128/Ozumara.png) |
+| <a id="vessari"></a>[Vessari](aliens/Vessari.md) | The Vessari are brilliant goldfish-like engineers who overcame their limbless, water-bound biology by inventing the Ambulatory Exploration Suit. | ![Vessari](../aliens/128/Vessari.png) |
+| <a id="brannok"></a>[Brannok](aliens/Brannok.md) | Fortress-building martial clans, defensive-aggressive and industrious. Patient besiegers, they turn every holding into a stronghold. | ![Brannok](../aliens/128/Brannok.png) |
+| <a id="junossi"></a>[Junossi](aliens/Junossi.md) | Small, warm-blooded beings with large ears and nimble fingers. They prize hospitality and excel at memorizing complex spoken histories. | ![Junossi](../aliens/128/Junossi.png) |
+| <a id="welganth"></a>[Welganth](aliens/Welganth.md) | Gentle, shell-backed nomads who carry household gardens with them. They believe a home is wherever the community gathers. | ![Welganth](../aliens/128/Welganth.png) |
+| <a id="illurnex"></a>[Illurnex](aliens/Illurnex.md) | Bioluminescent beings with delicate, glassy bodies. They navigate through coordinated flashes and consider a person’s light-pattern a private identity. | ![Illurnex](../aliens/128/Illurnex.png) |
+| <a id="aznareth"></a>[Aznareth](aliens/Aznareth.md) | Dark-skinned, heat-adapted travelers with golden eyes. Their star-priests guide migration by reading the night sky. | ![Aznareth](../aliens/128/Aznareth.png) |
+| <a id="drommok"></a>[Drommok](aliens/Drommok.md) | Hulking, tusked raiders who prize conquest above all. Their disciplined war-bands march under trophy-standards and treat battle as the only honorable work. | ![Drommok](../aliens/128/Drommok.png) |
+| <a id="vaskarn"></a>[Vaskarn](aliens/Vaskarn.md) | Lean, predatory nomad reavers who strike without warning and without mercy. Fearless and blunt, they raise no walls and offer no quarter. | ![Vaskarn](../aliens/128/Vaskarn.png) |
+| <a id="kryssoth"></a>[Kryssoth](aliens/Kryssoth.md) | Sleek, reptilian climbers with hooked toes. Their coming-of-age custom is a solo ascent of a sacred cliff. | ![Kryssoth](../aliens/128/Kryssoth.png) |
+| <a id="wulmarra"></a>[Wulmarra](aliens/Wulmarra.md) | Woolly, horned grazers from open plains. They are famous for generous communal feasts and can sense approaching storms. | ![Wulmarra](../aliens/128/Wulmarra.png) |
+| <a id="tyrraxis"></a>[Tyrraxis](aliens/Tyrraxis.md) | Chitinous empire-builders who follow a doctrine of unending conquest. Adaptable and relentless, they assimilate every world they overrun. | ![Tyrraxis](../aliens/128/Tyrraxis.png) |
+| <a id="threnvox"></a>[Threnvox](aliens/Threnvox.md) | Lean beings with resonant chest cavities. Their spoken language includes powerful tones, and group chants are central to worship. | ![Threnvox](../aliens/128/Threnvox.png) |
+| <a id="nymbrak"></a>[Nymbrak](aliens/Nymbrak.md) | Armored, crablike builders with strong pincers. They build intricate coastal forts and can regrow a lost limb over time. | ![Nymbrak](../aliens/128/Nymbrak.png) |
+| <a id="ashvenn"></a>[Ashvenn](aliens/Ashvenn.md) | Smoke-gray, feathered beings who thrive near volcanic vents. They perform renewal rites in ash and can tolerate air rich in sulfur. | ![Ashvenn](../aliens/128/Ashvenn.png) |
+| <a id="vraektor"></a>[Vraektor](aliens/Vraektor.md) | Towering warriors with layered bone armor. Their honor code demands protection of the vulnerable, not conquest. | ![Vraektor](../aliens/128/Vraektor.png) |
+| <a id="xelthara"></a>[Xel'Thara](aliens/Xel'Thara.md) | Tall, translucent beings whose inner lights shift with emotion. They honor their ancestors by sharing memories in communal dream-rituals. | ![Xel'Thara](../aliens/128/Xel'Thara.png) |
+| <a id="cavornu"></a>[Cavornu](aliens/Cavornu.md) | Horned, herd-dwelling people with excellent balance. They choose leaders by consensus and can traverse steep, rocky terrain with ease. | ![Cavornu](../aliens/128/Cavornu.png) |
+| <a id="illveska"></a>[Illveska](aliens/Illveska.md) | Feathered, long-legged people with elaborate plumage. They court through intricate dances and can cover great distances on foot. | ![Illveska](../aliens/128/Illveska.png) |
+| <a id="qzzik"></a>[Qzzik](aliens/Qzzik.md) | A swarming insectile people encountered only in frantic broods. They breed, expand, and attack with suicidal recklessness, consuming worlds and moving on. | ![Qzzik](../aliens/128/Qzzik.png) |
+| <a id="yttheris"></a>[Yttheris](aliens/Yttheris.md) | Slender, many-fingered beings with pale, luminous eyes. Their meditative traditions help them control reflexes with extraordinary precision. | ![Yttheris](../aliens/128/Yttheris.png) |
+| <a id="skellivon"></a>[Skellivon](aliens/Skellivon.md) | Bone-crested beings with dark, leathery skin. They honor their dead by telling humorous stories about them, believing laughter keeps memory alive. | ![Skellivon](../aliens/128/Skellivon.png) |
+| <a id="ombrayel"></a>[Ombrayel](aliens/Ombrayel.md) | Shadow-adapted people with dark, velvety skin. They favor night markets and can see clearly in near-total darkness. | ![Ombrayel](../aliens/128/Ombrayel.png) |
+| <a id="zephkar"></a>[Zephkar](aliens/Zephkar.md) | Lightweight, gliding people with sail-like membranes. They revere the wind as a living force and are skilled navigators of the skies. | ![Zephkar](../aliens/128/Zephkar.png) |
+| <a id="braal-vex"></a>[Braal Vex](aliens/Braal_Vex.md) | Insectoid engineers with plated bodies and nimble hands. Their intricate machines are family heirlooms, and each generation adds to them. | ![Braal Vex](../aliens/128/Braal_Vex.png) |
+| <a id="ybernith"></a>[Ybernith](aliens/Ybernith.md) | Delicate, mothlike beings with broad wings. They gather around sources of light for prayer and navigate using polarized skies. | ![Ybernith](../aliens/128/Ybernith.png) |
+| <a id="uxberos"></a>[Uxberos](aliens/Uxberos.md) | Pale, many-eyed cavern dwellers. They navigate by echolocation and gather in councils to interpret the changing echoes of their homeworld. | ![Uxberos](../aliens/128/Uxberos.png) |
+| <a id="sundraxi"></a>[Sundraxi](aliens/Sundraxi.md) | Soot-dusted forge-folk who treat the universe as an unfinished machine. Their blazing factories never rest, and they endlessly scrap and reinvent their own work. | ![Sundraxi](../aliens/128/Sundraxi.png) |
+| <a id="nyssarion"></a>[Nyssarion](aliens/Nyssarion.md) | Slender, nocturnal humanoids with silver markings. They value quiet contemplation and believe silence is the purest form of prayer. | ![Nyssarion](../aliens/128/Nyssarion.png) |
+| <a id="draviim"></a>[Draviim](aliens/Draviim.md) | Heavyset, horned inhabitants of volcanic regions. They carve family records into cooled lava and are remarkably resistant to heat. | ![Draviim](../aliens/128/Draviim.png) |
+| <a id="khaaros"></a>[Khaaros](aliens/Khaaros.md) | Scarred wasteland reavers who worship the gamble. Fearless, blunt, and endlessly improvisational, they fling themselves at risks no sane people would attempt. | ![Khaaros](../aliens/128/Khaaros.png) |
+| <a id="ythanor"></a>[Ythanor](aliens/Ythanor.md) | Antlered, amphibious beings with broad, webbed hands. They mark the passage of time through communal ceremonies at river crossings. | ![Ythanor](../aliens/128/Ythanor.png) |
+| <a id="ekshara"></a>[Ekshara](aliens/Ekshara.md) | Aquatic beings with branching gills and patterned skin. Their ceremonies honor the tides, and they can alter their skin color to signal mood. | ![Ekshara](../aliens/128/Ekshara.png) |
+| <a id="zaethmor"></a>[Zaethmor](aliens/Zaethmor.md) | Broad-winged, cliff-dwelling beings. They make pilgrimages to high places and can glide for hours on rising air currents. | ![Zaethmor](../aliens/128/Zaethmor.png) |
+| <a id="woltrim"></a>[Woltrim](aliens/Woltrim.md) | Stocky, tusked people with powerful lungs. They carve histories into stone and can survive for long periods in thin air. | ![Woltrim](../aliens/128/Woltrim.png) |
+| <a id="krethsibar"></a>[Krethsibar](aliens/Krethsibar.md) | Krethsibar are rugged, plated inhabitants of harsh worlds. They prize resilience, and their thick outer layers repair slowly after injury. | ![Krethsibar](../aliens/128/Krethsibar.png) |
+| <a id="chalorix"></a>[Chalorix](aliens/Chalorix.md) | Horned, desert-dwelling beings with tough, reflective skin. They hold water-sharing ceremonies and can conserve moisture exceptionally well. | ![Chalorix](../aliens/128/Chalorix.png) |
+| <a id="tharnok"></a>[Tharnok](aliens/Tharnok.md) | Grim, blunt warlords, militant and tactless. Cold and deliberate rather than frenzied, they rule by force and few words. | ![Tharnok](../aliens/128/Tharnok.png) |
+| <a id="auvraeth"></a>[Auvraeth](aliens/Auvraeth.md) | Tall, graceful beings with translucent fins along their arms. They worship the changing seasons and are adept at reading weather patterns. | ![Auvraeth](../aliens/128/Auvraeth.png) |
+| <a id="kryllos"></a>[Kryllos](aliens/Kryllos.md) | Small, chitin-armored scavengers with quick reflexes. They turn discarded materials into art and have a remarkable sense of smell. | ![Kryllos](../aliens/128/Kryllos.png) |
+| <a id="kelgroth"></a>[Kelgroth](aliens/Kelgroth.md) | Broad, armored warrior-castes who wage disciplined, methodical war. Fierce but well-supplied, they campaign with cold professionalism. | ![Kelgroth](../aliens/128/Kelgroth.png) |
+| <a id="brtok"></a>[Brtok](aliens/Brtok.md) | Squat, grey-hided foundry-folk who forge weapons far beyond any need. Blunt and intransigent, they regard all diplomacy as a swindle and answer it with steel. | ![Brtok](../aliens/128/Brtok.png) |
+| <a id="vorn-kesh"></a>[Vorn Kesh](aliens/Vorn_Kesh.md) | Broad, stone-scaled nomads with powerful limbs. Their clans prize hospitality, and their skin can absorb and slowly release heat. | ![Vorn Kesh](../aliens/128/Vorn_Kesh.png) |
+| <a id="nurrgal"></a>[Nurrgal](aliens/Nurrgal.md) | War-merchant conquerors who treat conquest as commerce. Aggressive and pragmatic, they tally every campaign in profit and spoils. | ![Nurrgal](../aliens/128/Nurrgal.png) |
+| <a id="ezraliim"></a>[Ezraliim](aliens/Ezraliim.md) | Delicate, light-sensitive beings who wear patterned veils. They study distant stars and can perceive a wider range of light than humans. | ![Ezraliim](../aliens/128/Ezraliim.png) |
+| <a id="pravoxi"></a>[Pravoxi](aliens/Pravoxi.md) | Four-armed artisans with keen depth perception. Their culture prizes precision, and their tools are designed for simultaneous, intricate work. | ![Pravoxi](../aliens/128/Pravoxi.png) |
+| <a id="ithkane"></a>[Ithkane](aliens/Ithkane.md) | Long-necked desert dwellers with mirrored eyes. They travel in singing caravans and can detect water beneath dry ground. | ![Ithkane](../aliens/128/Ithkane.png) |
+| <a id="zayllux"></a>[Zayllux](aliens/Zayllux.md) | Small, iridescent fliers with four wings and large black eyes. They navigate by starlight and treat constellations as sacred maps. | ![Zayllux](../aliens/128/Zayllux.png) |
+| <a id="voshkane"></a>[Voshkane](aliens/Voshkane.md) | Furred, long-armed forest dwellers. Their clans exchange carved tokens at seasonal gatherings, and they move quietly through dense woods. | ![Voshkane](../aliens/128/Voshkane.png) |
+| <a id="osgrim"></a>[Osgrim](aliens/Osgrim.md) | Honor-bound soldier-smiths who forge their own arms. Aggressive yet oath-bound and communal, they war strictly by their code. | ![Osgrim](../aliens/128/Osgrim.png) |
+| <a id="osvakim"></a>[Osvakim](aliens/Osvakim.md) | Compact, blue-scaled inhabitants of icy seas. They build warm communal nests and can slow their metabolism during long cold seasons. | ![Osvakim](../aliens/128/Osvakim.png) |
+| <a id="zaethys"></a>[Zaethys](aliens/Zaethys.md) | Slender, blue-skinned scholars with luminous fingertips. Their temples double as libraries, and they can sense electrical currents. | ![Zaethys](../aliens/128/Zaethys.png) |
+| <a id="grondaal"></a>[Grondaal](aliens/Grondaal.md) | Massive, tusked burrowers with stone-colored hide. Their underground halls are family strongholds, and they can sense tremors from afar. | ![Grondaal](../aliens/128/Grondaal.png) |
+| <a id="ryllakor"></a>[Ryllakor](aliens/Ryllakor.md) | Long-tailed hunters with retractable claws. They honor a successful hunt by sharing every part of their prey with the community. | ![Ryllakor](../aliens/128/Ryllakor.png) |
+| <a id="fylvaris"></a>[Fylvaris](aliens/Fylvaris.md) | Flower-faced, plantlike people who gather sunlight through petal-shaped crests. Their seed-sharing rites symbolize friendship and renewal. | ![Fylvaris](../aliens/128/Fylvaris.png) |
+| <a id="krondaxi"></a>[Krondaxi](aliens/Krondaxi.md) | Heavy, four-eyed reptilians with durable scales. Their society prizes strategic patience, and they can detect subtle shifts in heat. | ![Krondaxi](../aliens/128/Krondaxi.png) |
+| <a id="perthaan"></a>[Perthaan](aliens/Perthaan.md) | Stocky, broad-shouldered artisans. Their guilds teach each craft as both a practical skill and a form of devotion. | ![Perthaan](../aliens/128/Perthaan.png) |
+| <a id="nomilar"></a>[Nomilar](aliens/Nomilar.md) | Wandering, plantlike beings that root briefly wherever they rest. They share news through fragrant spores and draw energy from sunlight. | ![Nomilar](../aliens/128/Nomilar.png) |
+| <a id="nelquoth"></a>[Nel'Quoth](aliens/Nel'Quoth.md) | Soft-bodied, shape-shifting beings who favor flowing cloaks. They consider adaptation a virtue and can briefly mimic another creature’s outline. | ![Nel'Quoth](../aliens/128/Nel'Quoth.png) |
+| <a id="prellun"></a>[Prellun](aliens/Prellun.md) | Small, smooth-skinned beings with oversized eyes. They are inquisitive explorers who can perceive rapid motion with unusual clarity. | ![Prellun](../aliens/128/Prellun.png) |
+| <a id="ylssuran"></a>[Ylssuran](aliens/Ylssuran.md) | Serpentine people with delicate crest-fins. They practice slow, formal greetings and can sense minute vibrations through their bodies. | ![Ylssuran](../aliens/128/Ylssuran.png) |
+| <a id="wexmoor"></a>[Wexmoor](aliens/Wexmoor.md) | Mottled, moss-coated beings from damp worlds. They cultivate living gardens on their bodies and use scent to recognize one another. | ![Wexmoor](../aliens/128/Wexmoor.png) |
+| <a id="trelisso"></a>[Trelisso](aliens/Trelisso.md) | Amphibious, smooth-scaled socialites. Their songs carry underwater, and communal singing is central to both celebration and mourning. | ![Trelisso](../aliens/128/Trelisso.png) |
+| <a id="aomvel"></a>[Aomvel](aliens/Aomvel.md) | Soft-bodied, floating beings who live in the upper atmosphere. They communicate through changing shapes and steer themselves with tiny jets of gas. | ![Aomvel](../aliens/128/Aomvel.png) |
+| <a id="morvax"></a>[Morvax](aliens/Morvax.md) | Armored scavengers with shovel-like claws. They respect resourcefulness above wealth and can digest substances toxic to most life. | ![Morvax](../aliens/128/Morvax.png) |
+| <a id="grakmaw"></a>[Grakmaw](aliens/Grakmaw.md) | Slab-muscled, tusked conquerors who live for violence. They scorn all negotiation and charge into battle with no thought of retreat or survival. | ![Grakmaw](../aliens/128/Grakmaw.png) |
+| <a id="threxil"></a>[Threxil](aliens/Threxil.md) | Compact, many-legged hunters with tough chitin. They follow strict codes of fair pursuit and can cling to almost any surface. | ![Threxil](../aliens/128/Threxil.png) |
+| <a id="menthara"></a>[Menthara](aliens/Menthara.md) | Calm, luminous-skinned beings with branching head crests. Their spiritual leaders guide group meditation, often using shared rhythmic breathing. | ![Menthara](../aliens/128/Menthara.png) |
+| <a id="thraliun"></a>[Thraliun](aliens/Thraliun.md) | Tall, web-footed marsh dwellers. They hold moonlit water ceremonies and can remain submerged for hours. | ![Thraliun](../aliens/128/Thraliun.png) |
+| <a id="zathurex"></a>[Zathurex](aliens/Zathurex.md) | Horned, ash-colored beings from rugged volcanic terrain. They believe hardship tempers character and are highly resistant to smoke and heat. | ![Zathurex](../aliens/128/Zathurex.png) |
+| <a id="marnok"></a>[Marnok](aliens/Marnok.md) | Short, sturdy beings with stone-hard skin. They value patient craftsmanship and can withstand crushing pressure deep underground. | ![Marnok](../aliens/128/Marnok.png) |
+| <a id="obrahn"></a>[Obrahn](aliens/Obrahn.md) | Gentle giants with thick wool and expressive ears. Their communities share everything communally, and their low songs soothe anxious animals. | ![Obrahn](../aliens/128/Obrahn.png) |

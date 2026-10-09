@@ -1,22 +1,23 @@
 <style>
-.float-left {
-  float: left;
-  margin: 0 1em 0 0;
-}
-.float-right {
+img {
+  width: 25%;
   float: right;
   margin: 0 0 0 1em;
+}
+body {
+    font-size: 16pt;
 }
 .center {
   display: flex;
   justify-content: center;
   align-items: center;
-
 }
-th, td {white-space: normal; word-break: keep-all;}
+.center img {
+  width: 100%;
+}
 </style>
 
-<span class="center">![federation_flag](../federation_flag_256.png)</span>
+<span class="center">![federation_flag](../federation_flag.png)</span>
 
 
 ## The Federation
@@ -30,7 +31,7 @@ Each alien species runs its own independent Federation on exactly the same rules
 
 ### The capital
 
-<span class="float-right">![federation](../128/federation.png)</span>
+<span class="float-right">![federation](../federation.png)</span>
 
 The **capital** is your **earliest-founded surviving colony**. It anchors the
 Federation: only colonies that are **network-connected to the capital** — by road

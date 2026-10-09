@@ -1,45 +1,43 @@
 <style>
-.float-left {
-  float: left;
-  margin: 0 1em 0 0;
-}
-.float-right {
+img {
+  width: 25%;
   float: right;
   margin: 0 0 0 1em;
 }
-
-th, td {white-space: normal; word-break: keep-all;}
+body {
+    font-size: 16pt;
+}
 </style>
 ## Buildings
 
 #### Biodome
 
-<span class="float-right">![biodome](../buildings/128/biodome.png)</span>
+<span class="float-right">![biodome](../buildings/biodome.png)</span>
 
 The Biodome is the heart of a colony, establishing its central hub and initial zone of control. Its tile is always worked, providing all the living quarters for a growing population. The building boosts the colony’s baseline growth rate and grants starting storage for Food, Material, Energy, Wealth, and Happiness. Functioning as a self‑contained city, the Biodome includes limited solar power generation, hydroponic food production, fresh‑water extraction (via wells or nearby rivers), and basic manufacturing. It also holds modest reserves of energy (batteries), food, water, and warehouse space. Drones attached to the Biodome can explore beyond its borders and can monitor neighboring colonies.
 
 #### Solar Panels
 
-<span class="float-right">![solar_panel](../buildings/128/solar_panel.png)</span>
+<span class="float-right">![solar_panel](../buildings/solar_panel.png)</span>
 
 Solar Panels are advanced energy collectors. They cost 2 Material, 2 Energy and 2 Wealth to construct (takes 1 turn) and have a yearly upkeep of 0.5 Wealth. Each panel produces 6 Energy per year and adds 500 Energy storage to the colony, while providing no food, material, wealth or growth bonuses.
  
 #### Farm
 
-<span class="float-right">![farm](../buildings/128/farm.png)</span>
+<span class="float-right">![farm](../buildings/farm.png)</span>
 
 The Farm is the advanced food production facility for your colony.  It can be built only after a Solar Panel is present. Construction requires **3 Material**, **2 Energy**, and **2 Wealth** and takes **1 turn**. Upkeep each year is **1 Material**, **1 Energy**, and **0.5 Wealth**. Each Farm yields **3 Food** per year, contributes **1 Wealth**, and provides a modest growth boost of **0.0025**. It also adds **500 Food** storage and **100 Energy** storage to the colony.
 
 #### Factory
 
-<span class="float-right">![factory](../buildings/128/factory.png)</span>
+<span class="float-right">![factory](../buildings/factory.png)</span>
 
 The Factory is a building that can create 3-D printed goods.  It requires a Solar Panel before it can be constructed. It costs **5 Material**, **5 Energy** and **5 Wealth** and takes **3 turns** to build. Each year it requires **2 Material**, **3 Energy** and **1 Wealth**. It produces **5 Material** per year, adds **1 Wealth**, reduces growth by **0.0025** and lowers happiness by **0.5**. It also expands the colony’s storage by **500 Material** and **200 Energy**.
 
 
 #### Dock
 
-<span class="float-right">![dock](../buildings/128/dock.png)</span>
+<span class="float-right">![dock](../buildings/dock.png)</span>
 
 The Dock creates a shallow‑sea transportation network, linking colonies that also have Docks so they can share resources across sea tiles. A Dock sits on a
   shallow-sea tile, opens the colony's shallow-sea tiles to being worked, and
@@ -47,66 +45,66 @@ The Dock creates a shallow‑sea transportation network, linking colonies that a
 
 #### Air Field
 
-<span class="float-right">![air_field](../buildings/128/air_field.png)</span>
+<span class="float-right">![air_field](../buildings/air_field.png)</span>
 
 The Air Field creates an air‑transportation network, linking colonies that also have Air Fields within **16 tiles** so they can share resources. It requires a **Factory** before it can be built. Construction costs **2 Material**, **2 Energy** and **2 Wealth** and takes **2 turns**. Each year it costs **1 Energy** and **1 Wealth** to maintain, provides **2 Wealth** per year, and adds **300 Food** and **300 Material** storage.
 
 #### Barracks
 
-<span class="float-right">![barracks](../buildings/128/barracks.png)</span>
+<span class="float-right">![barracks](../buildings/barracks.png)</span>
 
 The Barracks train military battalions for defense and offense. It requires a **Factory** before it can be built. Construction costs **2 Material**, **2 Energy** and **2 Wealth**, and takes **2 turns**. Each year it consumes **1 Food**, **1 Energy** and **1 Wealth**, and provides a happiness bonus of **0.5**.
  
  ### Granary 
-<span class="float-right">![granary](../buildings/128/granry.png)</span>
+<span class="float-right">![granary](../buildings/granry.png)</span>
 
 The Granary provides large‑scale food storage, increasing a colony’s food capacity by **1 000**. It can be built after a **Farm** is built.  It costs **2 Material**, **2 Energy** and **2 Wealth**, taking **2 turns** to construct. It has no upkeep or production bonuses.
 
 #### Materials Depot
 
-<span class="float-right">![depot](../buildings/128/depot.png)</span>
+<span class="float-right">![depot](../buildings/depot.png)</span>
 
 The Materials Depot is bulk storage for raw **Material** — the ore, stone, and timber mined and harvested from the land before it is refined into Goods. It increases a colony’s Material storage capacity by **1 000**, giving mining‑heavy colonies somewhere to stockpile the raw stock that feeds their Factories (which convert Material into manufactured Goods). It can be built after a **Factory** is present, costs **10 Material**, **2 Energy** and **4 Wealth** over **1 turn**, and carries a small yearly upkeep of **1 Energy** and **1 Wealth**. It produces nothing on its own — it is the raw‑materials counterpart to the Warehouse, which stores finished Goods.
 
 #### Warehouse
 
-<span class="float-right">![warehouse](../buildings/128/warehouse.png)</span>
+<span class="float-right">![warehouse](../buildings/warehouse.png)</span>
 
 The Warehouse boosts manufactured goods storage capacity by **1 000 Goods**. It can be built after a **Factory** is built, costs **2 Material**, **2 Energy** and **2 Wealth**, and takes **2 turns** to construct. It has no upkeep or production bonuses, serving solely as a large goods warehouse.
 
 #### Bank
 
-<span class="float-right">![bank](../buildings/128/bank.png)</span>
+<span class="float-right">![bank](../buildings/bank.png)</span>
 
 The Bank speeds up the colony’s economy and enables more advanced building projects. It requires a **Solar Panel** before it can be built. Construction costs **2 Material**, **2 Energy** and **2 Wealth**, and takes **2 turns**. Each year it consumes **1 Energy** and **1 Wealth**, but generates **3 Wealth** per year, adds a happiness bonus of **0.5**, and provides **1 000 Wealth** storage.
 
 #### Compressed-Air Energy Storage
 
-<span class="float-right">![caes](../buildings/128/caes.png)</span>
+<span class="float-right">![caes](../buildings/caes.png)</span>
 
 The Compressed‑Air Energy Storage (CAES) is an advanced energy storage facility. It requires a **Bank** before it can be built. Construction costs **4 Material**, **2 Energy** and **2 Wealth**, and takes **2 turns**. Each year it consumes **1 Energy** and **1 Wealth**, and provides **1 000 Energy** storage for the colony.
 
 #### Water Treatment Plant
 
-<span class="float-right">![water_plant](../buildings/128/water_plant.png)</span>
+<span class="float-right">![water_plant](../buildings/water_plant.png)</span>
 
 The Water Treatment Plant (WTP) draws from a nearby river or canal and purifies it into clean fresh water for the colony's people, farms, and industry. It must be built on a habitable land tile (grassland, hills, forest, jungle, desert, or plains) that sits **adjacent to a river or canal**, and it requires a **Solar Panel** in the colony first. Construction costs **40 Material**, **30 Energy**, **1 Water** and **50 Wealth**, and takes **3 turns**. Each year it consumes **40 Energy**, **4 Material** and **2 Wealth** to run its pumps and filtration. In return it produces **140 Water** per year and adds **200 Water** storage to the colony — the mainstay water supply for any colony settled along the planet's inland waterways.
 
 #### Desalination Plant
 
-<span class="float-right">![desalination](../buildings/128/Desalination.png)</span>
+<span class="float-right">![desalination](../buildings/Desalination.png)</span>
 
 The Desalination Plant turns the limitless sea into drinkable water, built on a **shallow‑sea tile** (sea adjacent to land) within a colony's zone of control. It requires a **Solar Panel** in the colony. Construction is a major undertaking — **200 Material**, **5 Energy**, **1 Water** and **100 Wealth**, over **3 turns** — reflecting the vast reverse‑osmosis works it entails. Its hallmark is a voracious appetite for power: each year it consumes **250 Energy**, along with **30 Material** and **5 Wealth** for membranes and upkeep. In return it delivers **70 Water** per year and provides **200 Water** storage. Where a river‑fed Water Treatment Plant isn't an option, desalination keeps coastal and island colonies alive — provided they can feed its enormous energy demand.
 
 #### Spaceport
 
-<span class="float-right">![spaceport](../buildings/128/spaceport.png)</span>
+<span class="float-right">![spaceport](../buildings/spaceport.png)</span>
 
 The Spaceport opens the **space transport network** — the only link with **no range limit at all**. Any two of your colonies that each raise a Spaceport are connected and share resources no matter how far apart they lie or what terrain divides them. It is a late‑game capstone that requires an **Air Field** first. Construction costs **100 Material**, **5 Energy**, **1 Water** and **50 Wealth** over **2 turns**, and each year it consumes **100 Energy**, **10 Material**, **0.5 Water** and **20 Wealth** to keep its launch systems running — in return it provides **15 Wealth** and a small happiness bonus. Spaceports can only be built in a **tropical** climate band. (Climate restrictions are configurable per building via a `climate` list in `config.json`.)
 
 #### Drone Base
 
-<span class="float-right">![drone_base](../buildings/128/drone_base.png)</span>
+<span class="float-right">![drone_base](../buildings/drone_base.png)</span>
 
 The Drone Base is a forward reconnaissance outpost that peels back the fog of war far beyond a colony's borders. Unlike every other structure, it is **not confined to a colony's zone of control** — it may be planted on **any visible cell** that doesn't lie inside another player's zone, letting you push drones out across unclaimed wilderness and right up to the frontier. Each base reveals the terrain around it (a **16‑tile visibility radius**), so a well‑placed string of Drone Bases lifts the fog over distant lands and, crucially, lets you **keep tabs on neighboring alien colonies** — watching their expansion, their buildings, and their movements long before they reach you.
 

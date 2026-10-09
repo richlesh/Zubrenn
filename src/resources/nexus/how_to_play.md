@@ -1,13 +1,12 @@
 <style>
-.float-left {
-  float: left;
-  margin: 0 1em 0 0;
-}
-.float-right {
+img {
+  width: 25%;
   float: right;
   margin: 0 0 0 1em;
 }
-
+body {
+    font-size: 16pt;
+}
 th, td {white-space: normal; word-break: keep-all;}
 </style>
 ## How to play

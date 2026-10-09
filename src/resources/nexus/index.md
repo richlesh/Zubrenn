@@ -1,3 +1,13 @@
+<style>
+img {
+  width: 25%;
+  float: right;
+  margin: 0 0 0 1em;
+}
+body {
+    font-size: 16pt;
+}
+</style>
 # Nexus Data Core
 
 Welcome, Administrator. The Nexus Data Core is your field reference for the

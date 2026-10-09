@@ -232,6 +232,7 @@
           <tr><td>Energy (stored / max)</td><td id="fed-stored-energy">0 / 0</td></tr>
           <tr><td>Food (stored / max)</td><td id="fed-stored-food">0 / 0</td></tr>
           <tr><td>Material (stored / max)</td><td id="fed-stored-material">0 / 0</td></tr>
+          <tr><td>Goods (stored / max)</td><td id="fed-stored-goods">0 / 0</td></tr>
           <tr><td>Water (stored / max)</td><td id="fed-stored-water">0 / 0</td></tr>
           <tr><td>Wealth (stored / max)</td><td id="fed-stored-wealth">0 / 0</td></tr>
         </tbody>
@@ -468,7 +469,7 @@
     // Null when fog is inactive. Persisted via gameState.map.meta.visible.
     let _visibleSet = null;
     const FOG_INITIAL_RADIUS = 20; // revealed circle around the random start tile
-    let CONFIG = { ai: { maxAgents: 40, minLandingTurns: 3, maxLandingTurns: 200, names: [] },
+    let CONFIG = { ai: { maxAgents: 40, minLandingTurns: 3, maxLandingTurns: 200, species: {} },
                    minColonyDistance: 20, startingYear: 2500,
                    buildingTypes: { "biodome": { code: 1, name: "Biodome", startPopulation: 1000, growthRate: 0.01, buildCost: { turns: 0 }, bonus: { food: 1, material: 1, energy: 2, growth: 0, wealth: 1 } } },
                  };
@@ -2942,11 +2943,11 @@
 
       // Player panel resources = SUM of the human colonies' owned amounts.
       const r = gameState.resources;
-      r.food = 0; r.material = 0; r.energy = 0; r.water = 0; r.wealth = 0;
+      r.food = 0; r.material = 0; r.goods = 0; r.energy = 0; r.water = 0; r.wealth = 0;
       for (const col of colonies) {
         if (col._disbanded || col.owner !== 'human') continue;
         const o = ensureOwned(col);
-        r.food += o.food; r.material += o.material; r.energy += o.energy; r.water += o.water; r.wealth += o.wealth;
+        r.food += o.food; r.material += o.material; r.goods += o.goods; r.energy += o.energy; r.water += o.water; r.wealth += o.wealth;
       }
       gameState.rates = { food: yFood, material: yMaterial, goods: yGoods, energy: yEnergy, water: yWater, wealth: yWealth, happiness: yHappiness };
 
@@ -3730,6 +3731,7 @@
           energy: legacyStored.energy || 0,
           food: legacyStored.food || 0,
           material: legacyStored.material || 0,
+          goods: legacyStored.goods || 0,
           water: legacyStored.water || 0,
           wealth: legacyStored.wealth || 0,
           happiness: (typeof col.storedHappiness === 'number') ? col.storedHappiness : 0,
@@ -3746,7 +3748,7 @@
     // Removed in Task 7 once all readers use `owned` directly.
     function syncOwnedToLegacy(col) {
       const o = ensureOwned(col);
-      col.stored = { food: o.food, material: o.material, energy: o.energy, water: o.water, wealth: o.wealth };
+      col.stored = { food: o.food, material: o.material, goods: o.goods, energy: o.energy, water: o.water, wealth: o.wealth };
       col.storedHappiness = o.happiness;
       col.population = o.population;
     }
@@ -3757,7 +3759,7 @@
     function syncLegacyToOwned(col) {
       const o = ensureOwned(col);
       const s = col.stored || {};
-      for (const k of ["food", "material", "energy", "water", "wealth"]) {
+      for (const k of ["food", "material", "goods", "energy", "water", "wealth"]) {
         if (typeof s[k] === "number") o[k] = s[k];
       }
     }
@@ -7242,7 +7244,8 @@
     // JSON reply. Applies valid actions; returns true if any action was taken.
     async function aiLLMTurn(pi) {
       const ctx = buildAIContext(pi);
-      const system = ctx.systemPrompt || "You are an AI player in the strategy game Zubrenn.";
+      const system = (ctx.systemPrompt || "You are an AI player in the strategy game Zubrenn.") +
+        (ctx.personality ? "\n\n" + ctx.personality : "");
       const user = [
         "It is your turn. Decide how to develop your colonies.",
         "Context (JSON): your colonies (with population, workCap, controlRadius,",
@@ -7293,7 +7296,8 @@
     async function aiLLMToolTurn(pi) {
       const ctx = buildAIContext(pi);
       const schemas = aiToolSchemas();
-      const sys = (ctx.systemPrompt || "You are an AI player in the strategy game Zubrenn.") + "\n\n" + [
+      const sys = (ctx.systemPrompt || "You are an AI player in the strategy game Zubrenn.") +
+        (ctx.personality ? "\n\n" + ctx.personality : "") + "\n\n" + [
         "You control one civilization. On your turn, use the tools to develop it.",
         "PRIORITIES, in order:",
         "1. GROW your colonies. For EACH colony that has spare workers (workCap >",
@@ -7527,6 +7531,88 @@
         if (hexMap) hexMap.setBuildings(gameState.buildings);
       }
     }
+    // ---- AI personality traits -------------------------------------------
+    // Each AI player carries an 8-axis personality profile (set from
+    // CONFIG.ai.species[name].traits in setupPlayers). Each axis is 1..5 on a
+    // bipolar scale (3 = balanced). These helpers translate that profile into
+    // (a) numeric knobs that bias the built-in heuristic and (b) a prose
+    // description injected into the LLM system prompt so LLM players role-play.
+    const AI_TRAIT_AXES = ["aggression", "diplomacy", "commerce", "expansionism",
+      "industry", "risk", "cooperation", "adaptability"];
+
+    // The player's traits, defaulting every axis to a neutral 3 when absent
+    // (so human players and un-profiled AIs behave as balanced).
+    function aiTraitsOf(pi) {
+      const p = gameState.players && gameState.players[pi];
+      const t = (p && p.traits) || {};
+      const out = {};
+      for (const a of AI_TRAIT_AXES) {
+        const v = Number(t[a]);
+        out[a] = (Number.isFinite(v) && v >= 1 && v <= 5) ? v : 3;
+      }
+      return out;
+    }
+
+    // Numeric knobs derived from the traits, used by aiPlayTurn. Everything is
+    // expressed so that a balanced (all-3) profile reproduces the previous
+    // behavior as closely as possible.
+    function aiTraitKnobs(pi) {
+      const t = aiTraitsOf(pi);
+      return {
+        // Build priority: how strongly to favor Factory (material/industry)
+        // over Farm/Solar. 1 => never prioritize Factory, 5 => Factory-first.
+        industrial: t.industry >= 4,
+        naturalist: t.industry <= 2,
+        // Expansion: scale the population surplus required before launching a
+        // new colony. Expansionist (5) launches at ~1.0x the threshold;
+        // settled (1) demands a large surplus before founding.
+        launchPopFactor: 1 + (5 - t.expansionism) * 0.35, // 1.0 (exp5) .. 2.4 (exp1)
+        // Settled low-expansionism species may skip launching entirely most turns.
+        launchSkipChance: Math.max(0, (3 - t.expansionism) * 0.3), // 0 (>=3) .. 0.6 (exp1)
+        // Risk: how far afield to search for a launch site, and willingness to
+        // spend reserves. Reckless searches wider; cautious stays local.
+        launchSearchBonus: (t.risk - 3) * 4,  // -8 (risk1) .. +8 (risk5)
+        // Connectivity: traders/collectivists value Docks (sea links let
+        // colonies share resources); isolationists seldom bother.
+        wantsDock: (t.commerce >= 3 || t.cooperation >= 4),
+        dockSkipChance: Math.max(0, (3 - Math.max(t.commerce, t.cooperation)) * 0.3),
+      };
+    }
+
+    // A short human-readable personality paragraph for the LLM system prompt,
+    // derived from the player's traits. Only non-neutral axes are described so
+    // the paragraph stays punchy and the model's attention isn't diluted.
+    function aiPersonalityText(pi) {
+      const p = gameState.players && gameState.players[pi];
+      const t = aiTraitsOf(pi);
+      const name = (p && p.name) || "Your species";
+      // poleLow = description when value is 1-2; poleHigh = when 4-5.
+      const AX = {
+        aggression:   ["peaceful and conflict-averse", "aggressive and quick to contest rivals"],
+        diplomacy:    ["blunt and uninterested in negotiation", "diplomatic, favoring deals and alliances"],
+        commerce:     ["isolationist, keeping to yourselves", "a trading people who connect and exchange widely"],
+        expansionism: ["settled, content to deepen a few colonies", "expansionist, eager to found many new colonies"],
+        industry:     ["naturalists who favor farming and living with the land", "industrialists who favor factories and heavy development"],
+        risk:         ["cautious, keeping ample reserves", "reckless, willing to overextend for a bold gain"],
+        cooperation:  ["independent, each colony fending for itself", "collectivist, freely sharing resources across your federation"],
+        adaptability: ["traditional, holding to a fixed way of playing", "adaptable, readily changing plans to suit the situation"],
+      };
+      const strong = [];
+      for (const a of AI_TRAIT_AXES) {
+        const v = t[a];
+        if (v >= 4) strong.push(AX[a][1]);
+        else if (v <= 2) strong.push(AX[a][0]);
+      }
+      let traits;
+      if (!strong.length) traits = "balanced and even-handed in all things";
+      else if (strong.length === 1) traits = strong[0];
+      else traits = strong.slice(0, -1).join("; ") + "; and " + strong[strong.length - 1];
+      return "You are the " + name + ". In temperament your people are " + traits +
+        ". Let this personality visibly shape your choices — expansion pace, what you build, " +
+        "whether you connect and share with others, and how boldly you play — while still " +
+        "playing to win.";
+    }
+
     // ---- AI decision context + actions ------------------------------------
     // Build the context handed to an AI player on its turn: the rules summary
     // (system_prompt.md) plus a local map view (15-cell radius around each of
@@ -7558,6 +7644,7 @@
       }
       return {
         systemPrompt: SYSTEM_PROMPT,
+        personality: aiPersonalityText(pi),
         player: { name: player.name, resources: player.resources || {} },
         colonies: myColonies.map((c) => ({
           x: c.x, y: c.y, name: c.name, population: Math.round(c.population || 0),
@@ -7826,6 +7913,7 @@
     function aiPlayTurn(pi) {
       const player = gameState.players[pi];
       const ctx = buildAIContext(pi); // (would be sent to an LLM; used locally)
+      const knobs = aiTraitKnobs(pi); // personality-derived decision biases
       let acted = false;
       const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi);
 
@@ -7880,7 +7968,9 @@
           let wantOrder;
           if (wantFood) wantOrder = [2, 3, 4];        // Farm first to feed growth
           else if (wantEnergy) wantOrder = [3, 2, 4]; // Solar to cover upkeep
-          else wantOrder = [4, 2, 3];                 // Factory, else Farm, else Solar
+          else if (knobs.industrial) wantOrder = [4, 3, 2]; // industrialist: Factory, Solar, Farm
+          else if (knobs.naturalist) wantOrder = [2, 3, 4]; // naturalist: Farm over Factory
+          else wantOrder = [4, 2, 3];                 // balanced: Factory, else Farm, else Solar
           for (const type of wantOrder) {
             const spot = controlEmpty[0];
             // Respect prerequisites, placement limits, and pay from storage.
@@ -7902,7 +7992,10 @@
         // doesn't have one yet. Docks open shallow-sea tiles to being worked and
         // let colony-launch paths cross shallow sea. Only build when the colony
         // has spare worker capacity to actually use the new sea tiles.
-        if (!colonyHasDock(col) &&
+        // Personality: traders/collectivists seek sea links to connect and
+        // share; isolationists usually skip them.
+        if (!colonyHasDock(col) && knobs.wantsDock &&
+            Math.random() >= knobs.dockSkipChance &&
             col.worked.filter((k) => k !== homeKey).length < cap) {
           let seaSpot = null;
           for (const c of cellsWithin(col.x, col.y, colonyControlRadius(col))) {
@@ -7919,8 +8012,14 @@
           }
         }
         const minPop = (CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3000;
-        if ((col.population || 0) > minPop && canAffordBuildingAt(1, col.x, col.y, pi)) {
-          const site = aiChooseLaunchSite(col, pi);
+        // Personality: expansionists found colonies readily just past the
+        // threshold; settled species demand a large surplus and often skip
+        // founding entirely. Reckless species also range farther for a site.
+        const launchPop = minPop * knobs.launchPopFactor;
+        if ((col.population || 0) > launchPop &&
+            Math.random() >= knobs.launchSkipChance &&
+            canAffordBuildingAt(1, col.x, col.y, pi)) {
+          const site = aiChooseLaunchSite(col, pi, knobs.launchSearchBonus);
           if (site) {
             const name = (gameState.players[pi] && gameState.players[pi].name || 'Colony') + ' ' +
               (gameState.colonies.filter((c) => c.owner === pi).length + 1);
@@ -7936,9 +8035,12 @@
     // least minColonyDistance from any colony, within a reasonable travel range,
     // scored by terrain quality (near river/water, grassland). Returns {x,y} or
     // null. Keeps the search local so travel time stays modest.
-    function aiChooseLaunchSite(host, pi) {
+    function aiChooseLaunchSite(host, pi, searchBonus) {
       const minD = CONFIG.minColonyDistance || 20;
-      const SEARCH = minD + 12; // search a band beyond the min spacing
+      // Base band beyond the min spacing, widened/narrowed by the launcher's
+      // risk appetite (reckless ranges farther, cautious stays local). Clamped
+      // so a cautious species still searches a usable area.
+      const SEARCH = Math.max(minD + 4, minD + 12 + (Number(searchBonus) || 0));
       const reachable = findMovementCostsFrom(host.x, host.y, host.owner);
       const W = gameState.map ? gameState.map.terrain[0].length : 0;
       const wrap = !!(gameState.map && gameState.map.meta && gameState.map.meta.wrap);
@@ -9297,7 +9399,7 @@
       {
         const owned = federationOwnedOf('human');
         const fmax = federationMaxStorage('human');
-        for (const k of ['energy', 'food', 'material', 'water', 'wealth']) {
+        for (const k of ['energy', 'food', 'material', 'goods', 'water', 'wealth']) {
           const el = document.getElementById('fed-stored-' + k);
           if (el) el.textContent = _fmtCredits(owned[k] || 0) + ' / ' + _fmtCredits(fmax[k] || 0);
         }
@@ -9445,19 +9547,27 @@
 
     // ---- player setup ------------------------------------------------------
     function setupPlayers(aiCount) {
-      const names = ((CONFIG.ai && CONFIG.ai.names) || []).slice();
+      const aiCfg = CONFIG.ai || {};
+      // Species pool: prefer the keyed `species` object (each with an 8-axis
+      // `traits` profile); fall back to a legacy flat `names` array if present.
+      const species = aiCfg.species || {};
+      const names = Object.keys(species).length
+        ? Object.keys(species)
+        : ((aiCfg.names || []).slice());
       for (let i = names.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [names[i], names[j]] = [names[j], names[i]];
       }
-      const aiCfg = CONFIG.ai || {};
       const minT = aiCfg.minLandingTurns || 3;
       const maxT = aiCfg.maxLandingTurns || 200;
       const players = [{ id: 0, kind: 'human', name: gameState.playerName || 'Human', placed: false, modules: 1 }];
       const n = Math.max(0, Math.min(aiCount, aiCfg.maxAgents || 40, names.length));
       for (let i = 0; i < n; i++) {
+        const name = names[i] || ('AI ' + (i + 1));
+        const traits = (species[name] && species[name].traits) || null;
         players.push({
-          id: i + 1, kind: 'ai', name: names[i] || ('AI ' + (i + 1)),
+          id: i + 1, kind: 'ai', name,
+          traits,
           placeTurn: minT + Math.floor(Math.random() * (maxT - minT + 1)),
           placed: false, modules: 1,
           resources: { material: 0, goods: 0, food: 0, energy: 0, wealth: 0 }

@@ -1,0 +1,31 @@
+<style>
+/* Click-to-enlarge lightbox. Images show a zoom-in cursor; clicking one
+   opens a full-screen overlay with the image enlarged, dimming the rest of
+   the page. Click anywhere or press Esc to close. */
+	body img { cursor: zoom-in; }
+	
+	#lightbox {
+	  position: fixed;
+	  inset: 0;
+	  z-index: 10050;
+	  display: none;
+	  align-items: center;
+	  justify-content: center;
+	  background: rgba(0, 0, 0, 0.82);
+	  cursor: zoom-out;
+	  opacity: 0;
+	  transition: opacity 0.12s ease;
+	}
+	#lightbox.open { display: flex; opacity: 1; }
+	#lightbox img {
+	  max-width: 90vw;
+	  max-height: 90vh;
+	  width: auto;
+	  height: auto;
+	  border-radius: 8px;
+	  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+	  object-fit: contain;
+	  image-rendering: auto;
+	  cursor: zoom-out;
+	}
+</style>

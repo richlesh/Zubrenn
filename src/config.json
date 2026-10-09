@@ -60,8 +60,8 @@
       "color": { "h": 240, "s": 1, "l": 0.25 },
       "movement": [1000, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 2.5 },
-      "roadCostPerTile": { "energy": 0.6, "material": 360, "water": 0.05, "wealth": 6, "turns": 2 },
-      "monorailCostPerTile": { "energy": 2, "material": 300, "water": 0.1, "wealth": 18, "turns": 2 }
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 }
       // canals are disallowed
     },
     "grassland": {
@@ -71,9 +71,9 @@
       "color": { "h": 120, "s": 1, "l": 0.6 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 10, "material": 5 },
-      "roadCostPerTile": { "energy": 0.3, "material": 180, "water": 0.05, "wealth": 3, "turns": 1 },
-      "monorailCostPerTile": { "energy": 2, "material": 300, "water": 0.1, "wealth": 18, "turns": 2 },
-      "canalCostPerEdge": { "energy": 4, "material": 40, "water": 1.5, "wealth": 20, "turns": 3 }
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 },
+      "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
     },
     "hills": {
       "code": 3,
@@ -82,9 +82,9 @@
       "color": { "h": 90, "s": 0.583, "l": 0.52 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 5, "material": 15 },
-      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.75 },
-      "monorailCostPerTile": { "energy": 3, "material": 400, "water": 0.1, "wealth": 20, "turns": 2 },
-      "canalCostPerEdge": { "energy": 5, "material": 40, "water": 1.5, "wealth": 30, "turns": 4 }
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 },
+      "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
     },
     "forest": {
       "code": 4,
@@ -93,9 +93,9 @@
       "color": { "h": 120, "s": 1, "l": 0.3 },
       "movement": [4, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 5, "material": 15 },
-      "roadCostPerTile": { "energy": 1, "material": 180, "water": 0.05, "wealth": 9, "turns": 2 },
-      "monorailCostPerTile": { "energy": 3, "material": 300, "water": 0.1, "wealth": 24, "turns": 3 },
-      "canalCostPerEdge": { "energy": 8, "material": 40, "water": 1.5, "wealth": 40, "turns": 4 }
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 },
+      "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
     },
     "jungle": {
       "code": 5,
@@ -104,9 +104,9 @@
       "color": { "h": 120, "s": 1, "l": 0.15 },
       "movement": [5, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 5, "material": 10, "water": 0.5 },
-      "roadCostPerTile": { "energy": 1.5, "material": 180, "water": 0.05, "wealth": 15, "turns": 3 },
-      "monorailCostPerTile": { "energy": 3, "material": 300, "water": 0.1, "wealth": 24, "turns": 3 },
-      "canalCostPerEdge": { "energy": 8, "material": 40, "water": 1.5, "wealth": 40, "turns": 4 }
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 },
+      "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
     },
     "desert": {
       "code": 6,
@@ -115,9 +115,9 @@
       "color": { "h": 60, "s": 0.6, "l": 0.469 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
       "bonus": { },
-      "roadCostPerTile": { "energy": 0.3, "material": 180, "water": 0.05, "wealth": 3, "turns": 1 },
-      "monorailCostPerTile": { "energy": 2, "material": 300, "water": 0.1, "wealth": 18, "turns": 2 },
-      "canalCostPerEdge": { "energy": 4, "material": 40, "water": 1.5, "wealth": 20, "turns": 3 }
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 },
+      "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
     },
     "mountain-low": {
       "code": 7,
@@ -126,8 +126,8 @@
       "color": { "h": 120, "s": 0.818, "l": 0.275 },
       "movement": [4, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "material": 30 },
-      "roadCostPerTile": { "energy": 1, "material": 180, "water": 0.05, "wealth": 12, "turns": 4 },
-      "monorailCostPerTile": { "energy": 2, "material": 300, "water": 0.1, "wealth": 20, "turns": 3 }
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 }
       // canals are disallowed
     },
     "mountain-high": {
@@ -137,8 +137,8 @@
       "color": { "h": 30, "s": 0.333, "l": 0.225 },
       "movement": [5, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "material": 40 },
-      "roadCostPerTile": { "energy": 1.8, "material": 200, "water": 0.05, "wealth": 18, "turns": 5 },
-      "monorailCostPerTile": { "energy": 8, "material": 400, "water": 0.1, "wealth": 18, "turns": 4 }
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 }
       // canals are disallowed
     },
     "frozen": {
@@ -148,8 +148,8 @@
       "color": { "h": 0, "s": 0, "l": 1 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
       "bonus": { },
-      "roadCostPerTile": { "food": 1, "material": 1, "energy": 1, "wealth": 1, "turns": 0.5 },
-      "monorailCostPerTile": { "food": 2, "material": 2, "energy": 2, "wealth": 2, "turns": 0.5 }
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 }
       // canals are disallowed
     },
     "plains": {
@@ -159,9 +159,9 @@
       "color": { "h": 120, "s": 1, "l": 0.8 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 5, "material": 5 },
-      "roadCostPerTile": { "energy": 0.3, "material": 180, "water": 0.05, "wealth": 3, "turns": 1 },
-      "monorailCostPerTile": { "energy": 2, "material": 300, "water": 0.1, "wealth": 18, "turns": 2 },
-      "canalCostPerEdge": { "energy": 4, "material": 40, "water": 1.5, "wealth": 20, "turns": 3 }
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 },
+      "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
     },
     "wetlands": {
       "code": 11,
@@ -170,9 +170,9 @@
       "color": { "h": 120, "s": 1, "l": 0.4 },
       "movement": [3, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "material": 5, "water": 0.5, "happiness": 0.25 },
-      "roadCostPerTile": { "energy": 0.6, "material": 280, "water": 0.05, "wealth": 6, "turns": 2 },
-      "monorailCostPerTile": { "energy": 2, "material": 300, "water": 0.1, "wealth": 18, "turns": 2 },
-      "canalCostPerEdge": { "energy": 2, "material": 40, "water": 1.5, "wealth": 15, "turns": 2 }
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 },
+      "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
     }
   },
 
@@ -825,22 +825,148 @@
     "maxAgents": 40,
     "minLandingTurns": 3,
     "maxLandingTurns": 200,
-    // Pool of alien species names; AI opponents are named from this list.
-    "names": ["Xel'Thara", "Vorn Kesh", "Zayllux", "Qortham", "Nyssarion", "Braal Vex",
-      "Ithkane", "Ozumara", "Threxil", "Vandros", "Kla276-Ur", "Sythara", "Draviim",
-      "Uxberos", "Nel'Quoth", "Zaethys", "Morvax", "Illandor", "Kryssoth", "Obrahn",
-      "Tyllvex", "Aznareth", "Woltrim", "Ekshara", "Pravoxi", "Ghorlune", "Yssibel",
-      "Vraektor", "Nomilar", "Quenthaa", "Drommus", "Xibante", "Ulvarion", "Zephkar",
-      "Trelisso", "Marnok", "Ashvenn", "Ryllakor", "Ozzenphar", "Velinth", "Kaebrax",
-      "Junossi", "Thraliun", "Wexmoor", "Sillquith", "Ombrayel", "Draznok", "Yttheris",
-      "Cavornu", "Ezraliim", "Bolthara", "Nivexus", "Qelmarr", "Zundareth", "Praxilon",
-      "Voshkane", "Illurnex", "Krethsibar", "Aomvel", "Struxil", "Tazmuroth", "Welganth",
-      "Nyrreth", "Osvakim", "Dranthel", "Ubelquor", "Zaethmor", "Fylvaris", "Krondaxi",
-      "Ylssuran", "Menthara", "Vraddek", "Oxilune", "Perthaan", "Zunveil", "Chalorix",
-      "Trennoss", "Auvraeth", "Skellivon", "Nymbrak", "Quorlath", "Delvimar", "Ossanther",
-      "Kryllos", "Ythanor", "Vezmara", "Onbrakil", "Zathurex", "Prellun", "Maxothis",
-      "Illveska", "Grondaal", "Ybernith", "Kavaslon", "Threnvox", "Wulmarra", "Ozziketh",
-      "Drava'Nel", "Selquorra", "Nyxathil"]
+    // Alien species pool. AI opponents are named from these keys, and each
+    // species carries an 8-axis AI personality profile. Every axis is an
+    // integer 1-5 on a bipolar scale (1 = first pole, 5 = opposite pole,
+    // 3 = balanced):
+    //   aggression   1 Peaceful      ... 5 Aggressive
+    //   diplomacy    1 Blunt         ... 5 Diplomatic
+    //   commerce     1 Isolationist  ... 5 Trader
+    //   expansionism 1 Settled       ... 5 Expansionist
+    //   industry     1 Naturalist    ... 5 Industrialist
+    //   risk         1 Cautious      ... 5 Reckless
+    //   cooperation  1 Independent   ... 5 Collectivist
+    //   adaptability 1 Traditional   ... 5 Adaptable
+    "species": {
+      "Xel'Thara": { "traits": { "aggression": 2, "diplomacy": 4, "commerce": 3, "expansionism": 3, "industry": 1, "risk": 3, "cooperation": 5, "adaptability": 2 } },
+      "Vorn Kesh": { "traits": { "aggression": 3, "diplomacy": 4, "commerce": 4, "expansionism": 4, "industry": 1, "risk": 3, "cooperation": 5, "adaptability": 2 } },
+      "Zayllux": { "traits": { "aggression": 2, "diplomacy": 3, "commerce": 3, "expansionism": 4, "industry": 1, "risk": 4, "cooperation": 4, "adaptability": 2 } },
+      "Qortham": { "traits": { "aggression": 3, "diplomacy": 4, "commerce": 2, "expansionism": 3, "industry": 2, "risk": 2, "cooperation": 3, "adaptability": 2 } },
+      "Nyssarion": { "traits": { "aggression": 2, "diplomacy": 2, "commerce": 2, "expansionism": 3, "industry": 2, "risk": 3, "cooperation": 2, "adaptability": 2 } },
+      "Braal Vex": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 3, "expansionism": 2, "industry": 5, "risk": 3, "cooperation": 2, "adaptability": 4 } },
+      "Ithkane": { "traits": { "aggression": 3, "diplomacy": 4, "commerce": 4, "expansionism": 4, "industry": 2, "risk": 4, "cooperation": 3, "adaptability": 3 } },
+      "Ozumara": { "traits": { "aggression": 2, "diplomacy": 4, "commerce": 5, "expansionism": 4, "industry": 1, "risk": 3, "cooperation": 4, "adaptability": 2 } },
+      "Threxil": { "traits": { "aggression": 4, "diplomacy": 4, "commerce": 3, "expansionism": 3, "industry": 1, "risk": 4, "cooperation": 2, "adaptability": 2 } },
+      "Vandros": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 3, "expansionism": 3, "industry": 2, "risk": 3, "cooperation": 3, "adaptability": 1 } },
+      "Kla276-Ur": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 4, "expansionism": 4, "industry": 5, "risk": 4, "cooperation": 3, "adaptability": 5 } },
+      "Sythara": { "traits": { "aggression": 2, "diplomacy": 4, "commerce": 3, "expansionism": 3, "industry": 1, "risk": 3, "cooperation": 5, "adaptability": 2 } },
+      "Draviim": { "traits": { "aggression": 3, "diplomacy": 2, "commerce": 1, "expansionism": 1, "industry": 3, "risk": 1, "cooperation": 1, "adaptability": 1 } },
+      "Uxberos": { "traits": { "aggression": 2, "diplomacy": 4, "commerce": 3, "expansionism": 3, "industry": 2, "risk": 2, "cooperation": 3, "adaptability": 4 } },
+      "Nel'Quoth": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 4, "expansionism": 4, "industry": 2, "risk": 4, "cooperation": 2, "adaptability": 5 } },
+      "Zaethys": { "traits": { "aggression": 2, "diplomacy": 4, "commerce": 4, "expansionism": 3, "industry": 4, "risk": 2, "cooperation": 4, "adaptability": 3 } },
+      "Morvax": { "traits": { "aggression": 3, "diplomacy": 2, "commerce": 2, "expansionism": 4, "industry": 4, "risk": 4, "cooperation": 3, "adaptability": 5 } },
+      "Illandor": { "traits": { "aggression": 1, "diplomacy": 3, "commerce": 1, "expansionism": 1, "industry": 1, "risk": 1, "cooperation": 4, "adaptability": 1 } },
+      "Kryssoth": { "traits": { "aggression": 4, "diplomacy": 2, "commerce": 2, "expansionism": 4, "industry": 3, "risk": 5, "cooperation": 1, "adaptability": 2 } },
+      "Obrahn": { "traits": { "aggression": 2, "diplomacy": 5, "commerce": 4, "expansionism": 3, "industry": 1, "risk": 3, "cooperation": 4, "adaptability": 2 } },
+      "Tyllvex": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 4, "expansionism": 4, "industry": 3, "risk": 4, "cooperation": 5, "adaptability": 4 } },
+      "Aznareth": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 1, "expansionism": 5, "industry": 1, "risk": 4, "cooperation": 2, "adaptability": 3 } },
+      "Woltrim": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 3, "expansionism": 2, "industry": 3, "risk": 2, "cooperation": 4, "adaptability": 1 } },
+      "Ekshara": { "traits": { "aggression": 1, "diplomacy": 4, "commerce": 4, "expansionism": 2, "industry": 1, "risk": 3, "cooperation": 4, "adaptability": 2 } },
+      "Pravoxi": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 5, "expansionism": 3, "industry": 4, "risk": 2, "cooperation": 2, "adaptability": 1 } },
+      "Ghorlune": { "traits": { "aggression": 1, "diplomacy": 3, "commerce": 1, "expansionism": 2, "industry": 1, "risk": 3, "cooperation": 3, "adaptability": 2 } },
+      "Yssibel": { "traits": { "aggression": 3, "diplomacy": 5, "commerce": 5, "expansionism": 4, "industry": 2, "risk": 3, "cooperation": 2, "adaptability": 4 } },
+      "Vraektor": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 3, "expansionism": 3, "industry": 2, "risk": 3, "cooperation": 5, "adaptability": 2 } },
+      "Nomilar": { "traits": { "aggression": 2, "diplomacy": 3, "commerce": 2, "expansionism": 5, "industry": 1, "risk": 3, "cooperation": 3, "adaptability": 4 } },
+      "Quenthaa": { "traits": { "aggression": 2, "diplomacy": 5, "commerce": 4, "expansionism": 3, "industry": 2, "risk": 2, "cooperation": 3, "adaptability": 4 } },
+      "Drommus": { "traits": { "aggression": 3, "diplomacy": 2, "commerce": 1, "expansionism": 2, "industry": 4, "risk": 1, "cooperation": 4, "adaptability": 1 } },
+      "Xibante": { "traits": { "aggression": 2, "diplomacy": 4, "commerce": 5, "expansionism": 4, "industry": 3, "risk": 3, "cooperation": 4, "adaptability": 3 } },
+      "Ulvarion": { "traits": { "aggression": 2, "diplomacy": 4, "commerce": 3, "expansionism": 2, "industry": 1, "risk": 2, "cooperation": 2, "adaptability": 1 } },
+      "Zephkar": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 4, "expansionism": 5, "industry": 1, "risk": 5, "cooperation": 1, "adaptability": 3 } },
+      "Trelisso": { "traits": { "aggression": 2, "diplomacy": 4, "commerce": 3, "expansionism": 3, "industry": 1, "risk": 3, "cooperation": 5, "adaptability": 3 } },
+      "Marnok": { "traits": { "aggression": 3, "diplomacy": 2, "commerce": 4, "expansionism": 1, "industry": 5, "risk": 1, "cooperation": 2, "adaptability": 1 } },
+      "Ashvenn": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 1, "expansionism": 2, "industry": 3, "risk": 4, "cooperation": 2, "adaptability": 5 } },
+      "Ryllakor": { "traits": { "aggression": 4, "diplomacy": 2, "commerce": 2, "expansionism": 4, "industry": 1, "risk": 4, "cooperation": 5, "adaptability": 3 } },
+      "Ozzenphar": { "traits": { "aggression": 2, "diplomacy": 3, "commerce": 1, "expansionism": 3, "industry": 1, "risk": 3, "cooperation": 1, "adaptability": 5 } },
+      "Velinth": { "traits": { "aggression": 2, "diplomacy": 5, "commerce": 3, "expansionism": 2, "industry": 1, "risk": 2, "cooperation": 4, "adaptability": 3 } },
+      "Kaebrax": { "traits": { "aggression": 3, "diplomacy": 2, "commerce": 1, "expansionism": 2, "industry": 5, "risk": 1, "cooperation": 4, "adaptability": 2 } },
+      "Junossi": { "traits": { "aggression": 1, "diplomacy": 5, "commerce": 4, "expansionism": 2, "industry": 2, "risk": 3, "cooperation": 3, "adaptability": 2 } },
+      "Thraliun": { "traits": { "aggression": 2, "diplomacy": 3, "commerce": 3, "expansionism": 2, "industry": 1, "risk": 2, "cooperation": 3, "adaptability": 2 } },
+      "Wexmoor": { "traits": { "aggression": 2, "diplomacy": 3, "commerce": 3, "expansionism": 3, "industry": 2, "risk": 2, "cooperation": 5, "adaptability": 2 } },
+      "Sillquith": { "traits": { "aggression": 3, "diplomacy": 2, "commerce": 2, "expansionism": 3, "industry": 3, "risk": 3, "cooperation": 3, "adaptability": 1 } },
+      "Ombrayel": { "traits": { "aggression": 3, "diplomacy": 4, "commerce": 5, "expansionism": 3, "industry": 2, "risk": 3, "cooperation": 2, "adaptability": 2 } },
+      "Draznok": { "traits": { "aggression": 4, "diplomacy": 2, "commerce": 4, "expansionism": 2, "industry": 3, "risk": 3, "cooperation": 2, "adaptability": 4 } },
+      "Yttheris": { "traits": { "aggression": 2, "diplomacy": 4, "commerce": 3, "expansionism": 2, "industry": 3, "risk": 2, "cooperation": 2, "adaptability": 1 } },
+      "Cavornu": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 1, "expansionism": 4, "industry": 2, "risk": 1, "cooperation": 4, "adaptability": 2 } },
+      "Ezraliim": { "traits": { "aggression": 1, "diplomacy": 3, "commerce": 1, "expansionism": 2, "industry": 2, "risk": 1, "cooperation": 1, "adaptability": 1 } },
+      "Bolthara": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 1, "expansionism": 2, "industry": 4, "risk": 3, "cooperation": 4, "adaptability": 2 } },
+      "Nivexus": { "traits": { "aggression": 2, "diplomacy": 4, "commerce": 4, "expansionism": 3, "industry": 4, "risk": 3, "cooperation": 2, "adaptability": 4 } },
+      "Qelmarr": { "traits": { "aggression": 2, "diplomacy": 3, "commerce": 4, "expansionism": 3, "industry": 1, "risk": 3, "cooperation": 3, "adaptability": 1 } },
+      "Zundareth": { "traits": { "aggression": 2, "diplomacy": 3, "commerce": 4, "expansionism": 3, "industry": 1, "risk": 3, "cooperation": 4, "adaptability": 2 } },
+      "Praxilon": { "traits": { "aggression": 3, "diplomacy": 2, "commerce": 2, "expansionism": 3, "industry": 4, "risk": 2, "cooperation": 5, "adaptability": 2 } },
+      "Voshkane": { "traits": { "aggression": 2, "diplomacy": 4, "commerce": 5, "expansionism": 3, "industry": 2, "risk": 3, "cooperation": 4, "adaptability": 2 } },
+      "Illurnex": { "traits": { "aggression": 1, "diplomacy": 4, "commerce": 1, "expansionism": 1, "industry": 1, "risk": 3, "cooperation": 1, "adaptability": 2 } },
+      "Krethsibar": { "traits": { "aggression": 3, "diplomacy": 2, "commerce": 2, "expansionism": 1, "industry": 3, "risk": 1, "cooperation": 2, "adaptability": 1 } },
+      "Aomvel": { "traits": { "aggression": 1, "diplomacy": 3, "commerce": 1, "expansionism": 1, "industry": 1, "risk": 2, "cooperation": 1, "adaptability": 3 } },
+      "Struxil": { "traits": { "aggression": 3, "diplomacy": 2, "commerce": 2, "expansionism": 4, "industry": 2, "risk": 3, "cooperation": 2, "adaptability": 2 } },
+      "Tazmuroth": { "traits": { "aggression": 3, "diplomacy": 4, "commerce": 4, "expansionism": 3, "industry": 2, "risk": 2, "cooperation": 3, "adaptability": 2 } },
+      "Welganth": { "traits": { "aggression": 2, "diplomacy": 4, "commerce": 5, "expansionism": 3, "industry": 1, "risk": 3, "cooperation": 5, "adaptability": 3 } },
+      "Nyrreth": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 2, "expansionism": 3, "industry": 3, "risk": 3, "cooperation": 4, "adaptability": 2 } },
+      "Osvakim": { "traits": { "aggression": 2, "diplomacy": 3, "commerce": 2, "expansionism": 1, "industry": 2, "risk": 2, "cooperation": 4, "adaptability": 2 } },
+      "Dranthel": { "traits": { "aggression": 1, "diplomacy": 4, "commerce": 3, "expansionism": 2, "industry": 2, "risk": 3, "cooperation": 1, "adaptability": 5 } },
+      "Ubelquor": { "traits": { "aggression": 2, "diplomacy": 3, "commerce": 3, "expansionism": 2, "industry": 1, "risk": 3, "cooperation": 5, "adaptability": 2 } },
+      "Zaethmor": { "traits": { "aggression": 3, "diplomacy": 2, "commerce": 3, "expansionism": 4, "industry": 2, "risk": 4, "cooperation": 1, "adaptability": 2 } },
+      "Fylvaris": { "traits": { "aggression": 1, "diplomacy": 4, "commerce": 5, "expansionism": 2, "industry": 1, "risk": 1, "cooperation": 3, "adaptability": 3 } },
+      "Krondaxi": { "traits": { "aggression": 4, "diplomacy": 3, "commerce": 2, "expansionism": 4, "industry": 2, "risk": 1, "cooperation": 1, "adaptability": 2 } },
+      "Ylssuran": { "traits": { "aggression": 2, "diplomacy": 5, "commerce": 4, "expansionism": 2, "industry": 1, "risk": 2, "cooperation": 2, "adaptability": 2 } },
+      "Menthara": { "traits": { "aggression": 1, "diplomacy": 4, "commerce": 2, "expansionism": 1, "industry": 1, "risk": 1, "cooperation": 4, "adaptability": 2 } },
+      "Vraddek": { "traits": { "aggression": 4, "diplomacy": 2, "commerce": 3, "expansionism": 3, "industry": 3, "risk": 3, "cooperation": 2, "adaptability": 1 } },
+      "Oxilune": { "traits": { "aggression": 2, "diplomacy": 3, "commerce": 2, "expansionism": 1, "industry": 2, "risk": 3, "cooperation": 4, "adaptability": 2 } },
+      "Perthaan": { "traits": { "aggression": 3, "diplomacy": 2, "commerce": 4, "expansionism": 3, "industry": 5, "risk": 2, "cooperation": 3, "adaptability": 1 } },
+      "Zunveil": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 3, "expansionism": 2, "industry": 2, "risk": 3, "cooperation": 1, "adaptability": 3 } },
+      "Chalorix": { "traits": { "aggression": 3, "diplomacy": 4, "commerce": 5, "expansionism": 2, "industry": 2, "risk": 1, "cooperation": 2, "adaptability": 2 } },
+      "Trennoss": { "traits": { "aggression": 2, "diplomacy": 3, "commerce": 4, "expansionism": 3, "industry": 3, "risk": 2, "cooperation": 5, "adaptability": 2 } },
+      "Auvraeth": { "traits": { "aggression": 1, "diplomacy": 4, "commerce": 3, "expansionism": 2, "industry": 1, "risk": 2, "cooperation": 2, "adaptability": 5 } },
+      "Skellivon": { "traits": { "aggression": 3, "diplomacy": 2, "commerce": 2, "expansionism": 3, "industry": 2, "risk": 5, "cooperation": 3, "adaptability": 3 } },
+      "Nymbrak": { "traits": { "aggression": 3, "diplomacy": 2, "commerce": 2, "expansionism": 1, "industry": 4, "risk": 2, "cooperation": 3, "adaptability": 1 } },
+      "Quorlath": { "traits": { "aggression": 2, "diplomacy": 5, "commerce": 5, "expansionism": 3, "industry": 3, "risk": 2, "cooperation": 3, "adaptability": 3 } },
+      "Delvimar": { "traits": { "aggression": 1, "diplomacy": 4, "commerce": 5, "expansionism": 5, "industry": 1, "risk": 4, "cooperation": 1, "adaptability": 5 } },
+      "Ossanther": { "traits": { "aggression": 2, "diplomacy": 2, "commerce": 2, "expansionism": 3, "industry": 3, "risk": 2, "cooperation": 2, "adaptability": 1 } },
+      "Kryllos": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 5, "expansionism": 3, "industry": 4, "risk": 5, "cooperation": 2, "adaptability": 5 } },
+      "Ythanor": { "traits": { "aggression": 2, "diplomacy": 2, "commerce": 3, "expansionism": 2, "industry": 2, "risk": 2, "cooperation": 4, "adaptability": 1 } },
+      "Vezmara": { "traits": { "aggression": 4, "diplomacy": 2, "commerce": 3, "expansionism": 3, "industry": 2, "risk": 4, "cooperation": 1, "adaptability": 3 } },
+      "Onbrakil": { "traits": { "aggression": 3, "diplomacy": 2, "commerce": 2, "expansionism": 3, "industry": 5, "risk": 3, "cooperation": 4, "adaptability": 2 } },
+      "Zathurex": { "traits": { "aggression": 5, "diplomacy": 1, "commerce": 3, "expansionism": 3, "industry": 4, "risk": 5, "cooperation": 2, "adaptability": 1 } },
+      "Prellun": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 2, "expansionism": 5, "industry": 2, "risk": 5, "cooperation": 1, "adaptability": 4 } },
+      "Maxothis": { "traits": { "aggression": 3, "diplomacy": 4, "commerce": 2, "expansionism": 1, "industry": 3, "risk": 3, "cooperation": 3, "adaptability": 2 } },
+      "Illveska": { "traits": { "aggression": 3, "diplomacy": 4, "commerce": 5, "expansionism": 5, "industry": 2, "risk": 4, "cooperation": 1, "adaptability": 4 } },
+      "Grondaal": { "traits": { "aggression": 4, "diplomacy": 2, "commerce": 1, "expansionism": 1, "industry": 4, "risk": 1, "cooperation": 3, "adaptability": 1 } },
+      "Ybernith": { "traits": { "aggression": 2, "diplomacy": 3, "commerce": 3, "expansionism": 4, "industry": 2, "risk": 3, "cooperation": 5, "adaptability": 2 } },
+      "Kavaslon": { "traits": { "aggression": 1, "diplomacy": 3, "commerce": 2, "expansionism": 1, "industry": 2, "risk": 1, "cooperation": 3, "adaptability": 1 } },
+      "Threnvox": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 3, "expansionism": 3, "industry": 3, "risk": 3, "cooperation": 5, "adaptability": 2 } },
+      "Wulmarra": { "traits": { "aggression": 2, "diplomacy": 4, "commerce": 5, "expansionism": 3, "industry": 2, "risk": 3, "cooperation": 5, "adaptability": 2 } },
+      "Ozziketh": { "traits": { "aggression": 2, "diplomacy": 3, "commerce": 4, "expansionism": 1, "industry": 2, "risk": 2, "cooperation": 3, "adaptability": 2 } },
+      "Drava'Nel": { "traits": { "aggression": 1, "diplomacy": 4, "commerce": 1, "expansionism": 2, "industry": 2, "risk": 3, "cooperation": 4, "adaptability": 2 } },
+      "Selquorra": { "traits": { "aggression": 3, "diplomacy": 3, "commerce": 4, "expansionism": 5, "industry": 1, "risk": 4, "cooperation": 3, "adaptability": 3 } },
+      "Nyxathil": { "traits": { "aggression": 3, "diplomacy": 2, "commerce": 2, "expansionism": 3, "industry": 2, "risk": 3, "cooperation": 2, "adaptability": 2 } },
+      "Serakhuun": { "traits": { "aggression": 3, "diplomacy": 4, "commerce": 5, "expansionism": 4, "industry": 2, "risk": 3, "cooperation": 3, "adaptability": 3 } },
+      "Mossling": { "traits": { "aggression": 1, "diplomacy": 2, "commerce": 2, "expansionism": 1, "industry": 1, "risk": 1, "cooperation": 3, "adaptability": 2 } },
+      "Vessari": { "traits": { "aggression": 2, "diplomacy": 5, "commerce": 4, "expansionism": 4, "industry": 5, "risk": 3, "cooperation": 4, "adaptability": 4 } },
+      "Grakmaw": { "traits": { "aggression": 5, "diplomacy": 1, "commerce": 2, "expansionism": 4, "industry": 2, "risk": 5, "cooperation": 2, "adaptability": 3 } },
+      "Vorthak": { "traits": { "aggression": 4, "diplomacy": 1, "commerce": 2, "expansionism": 5, "industry": 3, "risk": 4, "cooperation": 3, "adaptability": 2 } },
+      "Sundraxi": { "traits": { "aggression": 3, "diplomacy": 2, "commerce": 3, "expansionism": 2, "industry": 5, "risk": 3, "cooperation": 4, "adaptability": 5 } },
+      "Qzzik": { "traits": { "aggression": 5, "diplomacy": 1, "commerce": 1, "expansionism": 5, "industry": 2, "risk": 5, "cooperation": 4, "adaptability": 4 } },
+      "Mel'tanni": { "traits": { "aggression": 2, "diplomacy": 3, "commerce": 4, "expansionism": 5, "industry": 2, "risk": 4, "cooperation": 2, "adaptability": 5 } },
+      "Brtok": { "traits": { "aggression": 4, "diplomacy": 1, "commerce": 2, "expansionism": 2, "industry": 5, "risk": 3, "cooperation": 3, "adaptability": 2 } },
+      "Threshaxx": { "traits": { "aggression": 3, "diplomacy": 2, "commerce": 3, "expansionism": 3, "industry": 5, "risk": 4, "cooperation": 4, "adaptability": 5 } },
+      "Khaaros": { "traits": { "aggression": 4, "diplomacy": 1, "commerce": 2, "expansionism": 4, "industry": 2, "risk": 5, "cooperation": 2, "adaptability": 5 } },
+      "Drommok": { "traits": { "aggression": 5, "diplomacy": 2, "commerce": 2, "expansionism": 3, "industry": 3, "risk": 4, "cooperation": 3, "adaptability": 2 } },
+      "Vaskarn": { "traits": { "aggression": 5, "diplomacy": 1, "commerce": 2, "expansionism": 4, "industry": 2, "risk": 5, "cooperation": 2, "adaptability": 3 } },
+      "Ghorreth": { "traits": { "aggression": 5, "diplomacy": 3, "commerce": 3, "expansionism": 3, "industry": 2, "risk": 3, "cooperation": 4, "adaptability": 2 } },
+      "Tyrraxis": { "traits": { "aggression": 5, "diplomacy": 2, "commerce": 2, "expansionism": 5, "industry": 3, "risk": 4, "cooperation": 3, "adaptability": 4 } },
+      "Skorvang": { "traits": { "aggression": 5, "diplomacy": 1, "commerce": 1, "expansionism": 3, "industry": 2, "risk": 5, "cooperation": 2, "adaptability": 3 } },
+      "Ur'Zhul": { "traits": { "aggression": 5, "diplomacy": 2, "commerce": 2, "expansionism": 3, "industry": 4, "risk": 3, "cooperation": 4, "adaptability": 2 } },
+      "Molkaar": { "traits": { "aggression": 5, "diplomacy": 3, "commerce": 4, "expansionism": 2, "industry": 3, "risk": 3, "cooperation": 3, "adaptability": 3 } },
+      "Hssvarn": { "traits": { "aggression": 5, "diplomacy": 2, "commerce": 2, "expansionism": 4, "industry": 2, "risk": 4, "cooperation": 2, "adaptability": 5 } },
+      "Kelgroth": { "traits": { "aggression": 4, "diplomacy": 2, "commerce": 3, "expansionism": 3, "industry": 3, "risk": 3, "cooperation": 3, "adaptability": 2 } },
+      "Brannok": { "traits": { "aggression": 4, "diplomacy": 3, "commerce": 2, "expansionism": 2, "industry": 4, "risk": 2, "cooperation": 4, "adaptability": 2 } },
+      "Vexmire": { "traits": { "aggression": 4, "diplomacy": 2, "commerce": 3, "expansionism": 4, "industry": 2, "risk": 4, "cooperation": 2, "adaptability": 3 } },
+      "Tharnok": { "traits": { "aggression": 4, "diplomacy": 1, "commerce": 2, "expansionism": 2, "industry": 3, "risk": 3, "cooperation": 3, "adaptability": 2 } },
+      "Osgrim": { "traits": { "aggression": 4, "diplomacy": 3, "commerce": 3, "expansionism": 2, "industry": 4, "risk": 2, "cooperation": 4, "adaptability": 3 } },
+      "Dravok": { "traits": { "aggression": 4, "diplomacy": 2, "commerce": 2, "expansionism": 3, "industry": 2, "risk": 4, "cooperation": 3, "adaptability": 4 } },
+      "Nurrgal": { "traits": { "aggression": 4, "diplomacy": 2, "commerce": 4, "expansionism": 3, "industry": 3, "risk": 3, "cooperation": 2, "adaptability": 3 } },
+      "Yrrakoth": { "traits": { "aggression": 4, "diplomacy": 3, "commerce": 2, "expansionism": 4, "industry": 2, "risk": 3, "cooperation": 4, "adaptability": 5 } },
+      "Vhaal'Mir": { "traits": { "aggression": 5, "diplomacy": 1, "commerce": 5, "expansionism": 5, "industry": 5, "risk": 5, "cooperation": 5, "adaptability": 5 } }
+    }
   },
 
   // Minimum hex distance required between two colonies (used when founding
@@ -894,7 +1020,7 @@
     "adjacentBonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 2 },
     "removeCost": { "energy": 2, "food": 1, "turns": 2 },
     "costPerYear": { "energy": 0.5, "material": 1, "water": 0, "wealth": 0.75 },
-    "decayRate": 0.01,
+    "decayRate": 0.001,
     "minPopulation": 3000,
     "catastrophicFailure": { "rate": 0.001, "minAge": 50 }
   },
@@ -914,7 +1040,7 @@
     "adjacentBonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 2 },
     "removeCost": { "energy": 2, "food": 1, "turns": 2 },
     "costPerYear": { "energy": 0.5, "material": 0.5, "water": 0, "wealth": 0.5 },
-    "decayRate": 0.01,
+    "decayRate": 0.001,
     "minPopulation": 10000,
     "catastrophicFailure": { "rate": 0.001, "minAge": 50 }
   },
