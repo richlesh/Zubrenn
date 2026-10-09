@@ -573,3 +573,84 @@ body.dark .fed-field label { color: #aaa; }
 .fed-field input[type="range"] { width: 100%; }
 .fed-warn { font-size: 12px; color: #d23b3b; margin: 6px 0; }
 #federation-close { background: #0a84ff; color: #fff; }
+
+/* View Military dialog. */
+#military-overlay {
+  position: fixed; z-index: 10004; inset: 0;
+  background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+}
+#military-overlay[hidden] { display: none; }
+#military-dialog {
+  background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
+  width: 560px; max-width: 92vw; max-height: 90vh; display: flex; flex-direction: column;
+}
+body.dark #military-dialog { background: #2c2c2e; color: #e0e0e0; }
+#military-dialog h2 { font-size: 15px; margin-bottom: 6px; }
+#military-dialog .hint { font-size: 11px; color: #888; margin-bottom: 10px; }
+#military-table-wrap { overflow: auto; flex: 1 1 auto; min-height: 0; }
+#military-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+#military-table th, #military-table td { padding: 5px 9px; text-align: left; white-space: nowrap; }
+#military-table td.num, #military-table th.num { text-align: right; }
+#military-table thead th {
+  position: sticky; top: 0; background: #e6e6ea; border-bottom: 2px solid #bbb; user-select: none;
+}
+body.dark #military-table thead th { background: #3a3a3c; border-bottom-color: #555; }
+#military-table tbody tr:nth-child(even) { background: rgba(0,0,0,0.04); }
+body.dark #military-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.05); }
+#military-table .stat-note { color: #888; font-style: italic; }
+.mil-deploy { margin-top: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+.mil-deploy select { font: 12px -apple-system, sans-serif; padding: 2px 4px; }
+.mil-deploy button { background: #0a84ff; color: #fff; }
+.mil-deploy button:disabled { opacity: 0.5; }
+.mil-msg { color: #666; }
+body.dark .mil-msg { color: #aaa; }
+#military-close { background: #0a84ff; color: #fff; }
+
+/* Rebase destination picker (reusable floating menu). */
+#rebase-picker {
+  position: fixed; z-index: 10060; min-width: 180px; max-width: 280px;
+  background: #f5f5f5; color: #1e1e1e; border: 1px solid #c9c9cf; border-radius: 8px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.35); padding: 4px; font: 12px -apple-system, sans-serif;
+  max-height: 60vh; overflow: auto;
+}
+#rebase-picker[hidden] { display: none; }
+body.dark #rebase-picker { background: #2c2c2e; color: #e0e0e0; border-color: #48484c; }
+#rebase-picker .rebase-head { font-size: 11px; color: #888; padding: 4px 8px 6px; }
+#rebase-picker .rebase-empty { padding: 6px 8px; color: #888; font-style: italic; }
+#rebase-picker .rebase-item {
+  display: flex; justify-content: space-between; gap: 12px; align-items: center;
+  padding: 6px 8px; border-radius: 6px; cursor: pointer;
+}
+#rebase-picker .rebase-item:hover { background: rgba(10,132,255,0.15); }
+#rebase-picker .rebase-eta { color: #888; font-size: 11px; }
+
+/* Rebase icon button (used in the Military view rows and the colony panel). */
+.rebase-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0; border: 1px solid #c9c9cf; border-radius: 6px;
+  background: #fff; color: #0a84ff; cursor: pointer; line-height: 1; font-size: 13px;
+}
+.rebase-btn:hover:not(:disabled) { border-color: #0a84ff; background: rgba(10,132,255,0.1); }
+.rebase-btn:disabled { opacity: 0.4; cursor: default; }
+body.dark .rebase-btn { background: #3a3a3c; color: #4da3ff; border-color: #55555a; }
+
+/* Stationed Military panel in the colony detail view. */
+.stationed-mil { margin-top: 10px; }
+.stationed-mil .stat-sec { font-weight: 600; margin-bottom: 4px; }
+.stationed-mil .mil-unit-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 3px 0;
+}
+.stationed-mil .mil-unit-main { display: flex; flex-direction: column; }
+.stationed-mil .mil-unit-sub { font-size: 10px; color: #999; }
+
+/* Military table trailing action cell (rebase button). */
+#military-table th.mil-act, #military-table td.mil-act { text-align: center; width: 34px; }
+
+/* Recall (house) button shares the rebase-btn look with a distinct accent. */
+.recall-btn { color: #8a6d00; }
+.recall-btn:hover:not(:disabled) { border-color: #c79a1a; background: rgba(199,154,26,0.12); }
+body.dark .recall-btn { color: #e0b84d; }
+/* Action button group in the colony Stationed Military rows. */
+.stationed-mil .mil-unit-acts, .mil-unit-acts { display: inline-flex; gap: 6px; }

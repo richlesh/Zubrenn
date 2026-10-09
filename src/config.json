@@ -13,7 +13,7 @@
   //    "sea", "grassland",  "hills", "forest", "jungle", "desert", "mountain-low",
   //    "mountain-high", "frozen", "plains", "wetlands"
   // They may also contain these groups:
-  //    "flatland", "mountain", "trees"
+  //    "flatland", "mountain", "trees", "land"
 
   // "other" restrictions can be a list of
   //    "river":    River adjacent tile
@@ -22,6 +22,7 @@
   //    "land":     Land adjacent (for shoreline)
   //    "pristine": Destroyed by building
   //    "dry"       Not water adjacent
+  //    "mining":   Can build on unbuildable tiles
   //    (elevation bands, signed meters ASL = (elevation - seaLevel) * 10000)
   //    "deep":     Deep water      (depth below -1000 m ASL)
   //    "shallow":  Shallow water   (-1000 m <= depth <= 0 m ASL)
@@ -40,6 +41,7 @@
   // Terrain GROUP selectors usable in any "terrain" list (buildingTypes and
   // terrainBonus). A group expands to its member terrains.
   "terrainGroups": {
+    "land":     ["grassland", "hills", "forest", "jungle", "desert", "mountain-low", "mountain-high", "frozen", "plains"],
     "flatland": ["grassland", "plains", "desert", "wetlands"],
     "trees":    ["jungle", "forest", "mountain-low"],
     "mountain": ["mountain-low", "mountain-high"]
@@ -114,7 +116,7 @@
       "icon": "Slush.png",
       "color": { "h": 60, "s": 0.6, "l": 0.469 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { },
+      "bonus": { "material": 5 },
       "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
       "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 },
       "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
@@ -147,7 +149,7 @@
       "icon": "Polar Zone.png",
       "color": { "h": 0, "s": 0, "l": 1 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { },
+      "bonus": { "material": 3 },
       "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
       "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 }
       // canals are disallowed
@@ -176,11 +178,15 @@
     }
   },
 
-  // Per-UNIT yearly resource consumption. Only `population` is used by the
-  // economy today (per 1,000 colonists, via `unitSize`); the military unit
-  // entries (infantry/tank/fighter/bomber/submarine/carrier) are scaffolding for
-  // a future combat system and are not yet read by the code.
-  "unitCosts": {
+  // Per-UNIT definitions. Each entry has a movement `speed`, an optional
+  // `unitSize` (the per-1,000 divisor for population-style consumption), a
+  // one-time `buildCost` map, and a yearly `costPerYear` map (food/goods/energy/
+  // water/wealth). Only `population` costPerYear is used by the economy today
+  // (per 1,000 colonists); the military entries are scaffolding for a future
+  // combat system. The `speed` key IS used: travel time for a moving unit (a
+  // deploying battalion, or a launched colony's population) is
+  // ceil(shortest-path movement cost / speed) turns. Higher speed = faster.
+  "units": {
     // EIA reports U.S. residential electricity use averaged ~4,437 kWh per person per year in 2020
     // ERS notes “the average American consumes roughly 1,885 lbs of food per year. That is nearly 1 ton of food annually per person”
     // 1 metric ton = 1,000 × 2.20462 lb ≈ 2,204.62 lb
@@ -188,14 +194,40 @@
     // average American uses 100 kL of water/year. The ~1,000 gal/d per capita figure is the total national withdrawal intensity for all sectors.
     // US income is roughly $ 80 million per 1,000.  $10 is one credit so ¤8M credit /1000
 
-    // population costs are per "unitSize" population
-    "population": { "unitSize": 1000, "food": 1, "goods": 10, "energy": 5, "water": 0.2, "wealth": 8 },
-    "infantry": { "unitSize": 1000, "food": 1, "goods": 10, "energy": 6, "water": 0.2, "wealth": 10 },
-    "tank": { "food": 2, "goods": 2, "energy": 2, "water": 0.1, "wealth": 2 },
-    "fighter": { "food": 1, "goods": 1, "energy": 1, "water": 0.1, "wealth": 1 },
-    "bomber": { "food": 2, "goods": 2, "energy": 2, "water": 0.1, "wealth": 2 },
-    "submarine": { "food": 1, "goods": 1, "energy": 1, "water": 0.1, "wealth": 1 },
-    "carrier": { "food": 2, "goods": 2, "energy": 2, "water": 0.1, "wealth": 2 }
+    // population costPerYear is per "unitSize" population
+    "population": { "unitSize": 1000, "speed": 5,
+        "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
+        "costPerYear": { "food": 1, "goods": 10, "energy": 5, "water": 0.2, "wealth": 8 }
+    },
+    "infantry": { "unitSize": 1000, "speed": 8,
+        "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
+        "costPerYear": { "food": 1, "goods": 10, "energy": 6, "water": 0.2, "wealth": 10 }
+    },
+    // Tank batallion 500 service men, 50 tanks
+    "tank": { "unitSize": 500, "speed": 2,
+        "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
+        "costPerYear": { "food": 2, "goods": 12, "energy": 2, "water": 0.1, "wealth": 2 }
+    },
+    // Fighter squadron 300 service men, 20 aircraft
+    "fighter": { "unitSize": 300, "speed": 5,
+        "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
+        "costPerYear": { "food": 1, "goods": 20, "energy": 1, "water": 0.1, "wealth": 1 }
+    },
+    // Bomber squadron 300 service men, 10 bombers
+    "bomber": { "unitSize": 300, "speed": 4,
+        "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
+        "costPerYear": { "food": 2, "goods": 15, "energy": 2, "water": 0.1, "wealth": 2 }
+    },
+    // Single submarine 150 service men, 10 ballistic missiles
+    "submarine": { "unitSize": 150, "speed": 2,
+        "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
+        "costPerYear": { "food": 1, "goods": 10, "energy": 1, "water": 0.1, "wealth": 1 }
+    },
+    // Single carrier 6000 service men, 100 aircraft = 5 squadrons
+    "carrier": { "unitSize": 6000, "speed": 3,
+        "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
+        "costPerYear": { "food": 2, "goods": 15, "energy": 2, "water": 0.1, "wealth": 2 }
+    }
   },
 
   // Buildings keyed by the LOWERCASE name (spaces preserved); each entry carries
@@ -258,7 +290,7 @@
       "icon": "buildings/128/farm.png",
       "buildCost":   { "energy": 10, "material": 20, "wealth": 10, "water": 0.25, "turns": 1 },
       "costPerYear": { "energy": 0.2, "material": 5, "wealth": 5, "water": 5 },
-      "bonus":       { "food": 25, "wealth": 15 },
+      "bonus":       { "food": "3x", "wealth": 15 },
       "storage": { "food": 25 },
       "prerequisite": {
         "building": ["biodome","solar panel"],
@@ -327,6 +359,8 @@
       "costPerYear": { "energy": 10, "goods": 5, "wealth": 5 },
       "bonus": { },
       "storage": { "food": 5, "goods": 10 },
+      "recruitRate": 200,
+      "battalionCap": 1000,
       "prerequisite": {
         "building": ["farm","solar panel","factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
@@ -392,7 +426,7 @@
       "icon": "buildings/128/water_plant.png",
       "buildCost":   { "energy": 20, "material": 30, "goods": 10, "wealth": 30, "water": 2, "turns": 4 },
       "costPerYear": { "energy": 30, "material": 4, "goods": 2, "wealth": 2 },
-      "bonus":       { "water": 50 },
+      "bonus":       { "water": "5x" },
       "storage":     { "water": 100 },
       "prerequisite": {
         "building": ["solar panel"],
@@ -407,7 +441,7 @@
       "icon": "buildings/128/desalination.png",
       "buildCost":   { "energy": 25, "material": 30, "wealth": 40, "water": 2, "turns": 5 },
       "costPerYear": { "energy": 50, "material": 30, "goods": 4, "wealth": 5 },
-      "bonus":       { "water": 40 },
+      "bonus":       { "water": "3x" },
       "storage":     { "water": 100 },
       "prerequisite": {
         "building": ["solar panel"],
@@ -455,6 +489,21 @@
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      }
+    },
+    // Mine
+    "mine": {
+      "code": 17,
+      "name": "Mine",
+      "icon": "buildings/128/mine.png",
+      "buildCost":   { "energy": 5, "material": 5, "wealth": 10, "water": 0.5, "turns": 3 },
+      "costPerYear": { "energy": 50, "material": 0, "goods": 5, "wealth": 5 },
+      "bonus":       { "material": "10x" },
+      "storage":     { "material": 500 },
+      "prerequisite": {
+        "building": ["solar panel"],
+        "terrain":  ["land"],
+        "other":    ["mining"]
       }
     }
   },
@@ -1097,17 +1146,13 @@
   "foundColonyMinPopulation": 3000,
   // Colonists transferred from the host colony to a newly founded colony.
   "foundColonyPopulationTransfer": 1000,
-  // Overland movement points a founding biodome travels per year (sets arrival
-  // time based on terrain movement cost and river crossings).
-  "biodomeMovementPerYear": 12,
   // Hit-test fraction (of cell size) treated as the border region when picking a
   // cell border vs its interior on click.
   "cellClickBorderMargin": 0.28,
-  // Highest elevation tier in meters ASL; the top tier (mountain tops) is
-  // impassable and cannot be settled or built on.
-  "maxAltitudeMeters": 8000,
   // Highlight color for worked cells in the colony work view.
   "workedCellColor": { "h": 0, "s": 1, "l": 0.7 },
   // Color of the previewed overland path when launching a new colony.
-  "launchPathColor": { "h": 120, "s": 0.7, "l": 0.45 }
+  "launchPathColor": { "h": 120, "s": 0.7, "l": 0.45 },
+  // A colony's population may not be recruited below this floor by a Barracks.
+  "recruitMinColonyPopulation": 2000
 }

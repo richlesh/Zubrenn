@@ -76,8 +76,8 @@ found a new colony from it:
 - It costs the **Biodome build cost** (paid from the host colony's storage) and
   transfers **`foundColonyPopulationTransfer`** (1,000) colonists out of the host.
 - The new biodome travels overland to the target cell. **Travel time** =
-  Biodome `buildCost.turns` + `ceil(pathCost / biodomeMovementPerYear)` turns
-  (`biodomeMovementPerYear` = 12). While in transit it produces nothing; on
+  Biodome `buildCost.turns` + `ceil(pathCost / speed)` turns, where `speed` is
+  the `units.population.speed`. While in transit it produces nothing; on
   arrival it becomes a colony and gains the 1,000 colonists.
 - **Movement / path cost:** each cell entered costs its terrain
   `movement[0]` (unimproved) points; crossing a river segment adds
@@ -252,7 +252,7 @@ colonies network-connected to it can draw from or overflow into the Federation.
 
 Each turn, every colony computes a per-resource **delta** = the sum over its
 biodome and worked cells of terrain `base` + terrain-bonus `bonus` + building
-`bonus`, minus **population consumption** (`unitCosts.population` per 1,000
+`bonus`, minus **population consumption** (`units.population.costPerYear` per 1,000
 colonists). The delta is added to owned. If a resource goes negative the colony
 **borrows** (Federation first, then the richest connected colony); if still
 short it **idles** worked cells; surplus above a colony's max **overflows** into

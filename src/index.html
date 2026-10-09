@@ -77,6 +77,11 @@
     <div class="ctx-item" id="ctx-canal-remove" hidden>Remove Canal</div>
   </div>
 
+  <!-- Rebase destination picker: a floating menu of colonies a selected unit
+       can move to. Populated/positioned from JS (openColonyPicker). Selecting
+       an item starts the transfer; clicking away or pressing Escape cancels. -->
+  <div id="rebase-picker" hidden></div>
+
   <!-- Name-your-colony modal overlay. -->
   <div id="name-overlay" hidden>
     <div id="name-dialog">
@@ -258,6 +263,22 @@
       </table>
       <div id="fed-warn" class="fed-warn" hidden></div>
       <div class="work-row"><button id="federation-close">Done</button></div>
+    </div>
+  </div>
+
+  <!-- Military modal (View ▸ View Military): the player's units with name,
+       type, strength (soldiers), location, and a per-row rebase button. -->
+  <div id="military-overlay" hidden>
+    <div id="military-dialog">
+      <h2>Military</h2>
+      <div class="hint">Battalions recruit from their colony's population (down to a 2,000 floor). Use the rebase button at the end of a row to move a stationed unit to another colony; travel time is the cheapest route cost divided by the unit's speed.</div>
+      <div id="military-table-wrap">
+        <table id="military-table">
+          <thead><tr><th>Name</th><th>Type</th><th>Strength</th><th>Location</th><th class="mil-act"></th></tr></thead>
+          <tbody id="military-body"></tbody>
+        </table>
+      </div>
+      <div class="work-row"><button id="military-close">Done</button></div>
     </div>
   </div>
   <script>
@@ -480,7 +501,7 @@
     // Difficulty factor d (1.0 easy .. 0.5 hard): MULTIPLY economy outputs
     // (terrain base yields, building bonuses, river/water food & wealth bonuses,
     // happinessGrowthPerUnit) by d; DIVIDE costs/efforts (movement, transport
-    // per-tile/edge costs, building buildCost, remove*Cost, unitCosts.population)
+    // per-tile/edge costs, building buildCost, remove*Cost, units.population.costPerYear)
     // by d. Returns a deep-scaled copy of `raw`; leaves `raw` untouched.
     function applyDifficulty(raw, d) {
       const cfg = JSON.parse(JSON.stringify(raw || {}));
@@ -506,14 +527,11 @@
       divAll(cfg.canal && cfg.canal.removeCost);
       divAll(cfg.removeImprovementCost);
       divAll(cfg.bridge && cfg.bridge.buildCost);
-      // Per-1,000-colonist population costs (food/material/energy/water/wealth)
-      // are efforts/costs: DIVIDE them by d (harder difficulty -> higher costs).
-      // Leave `unitSize` (the 1,000 divisor) untouched.
-      if (cfg.unitCosts && cfg.unitCosts.population) {
-        const pc = cfg.unitCosts.population;
-        for (const k of ['food', 'material', 'goods', 'energy', 'water', 'wealth']) {
-          if (typeof pc[k] === 'number') pc[k] /= d;
-        }
+      // Per-1,000-colonist population costs (now under
+      // units.population.costPerYear) are efforts/costs: DIVIDE them by d (harder
+      // difficulty -> higher costs). Leave `unitSize`/`speed` untouched.
+      if (cfg.units && cfg.units.population && cfg.units.population.costPerYear) {
+        divAll(cfg.units.population.costPerYear);
       }
       // Adjacency bonuses are economy outputs: scale their food/water/wealth by d.
       mul(cfg.river && cfg.river.adjacentBonus, ['food', 'water', 'wealth']);
@@ -554,7 +572,12 @@
       playerName: "Human", // editable human player name (saved)
       // Player (human) accumulated resources and last per-year production rates.
       resources: { material: 0, goods: 0, food: 0, energy: 0, wealth: 0 },
-      rates: { food: 0, material: 0, goods: 0, energy: 0, wealth: 0, happiness: 0 }
+      rates: { food: 0, material: 0, goods: 0, energy: 0, wealth: 0, happiness: 0 },
+      // Military units (battalions). Each: { id, name, type, owner, strength,
+      // x, y (its colony cell), inTransit, destX, destY, turnsRemaining }.
+      units: [],
+      // Monotonic count of units ever created (drives ordinal unit names).
+      unitsCreated: 0
     };
 
     // Exposed for the main process (Save Game) to read the current state.
@@ -582,7 +605,9 @@
         resources: gameState.resources || { material: 0, food: 0, energy: 0, wealth: 0 },
         rates: gameState.rates || { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 },
         playerName: gameState.playerName || "Human",
-        transport: serializeTransport()
+        transport: serializeTransport(),
+        units: gameState.units || [],
+        unitsCreated: gameState.unitsCreated || 0
       };
     };
 
@@ -2147,20 +2172,6 @@
       const sl = (map.seaLevel != null) ? map.seaLevel : 0;
       return (map.elevation[y][xx] - sl) * 10000;
     }
-    // Approximate altitude in meters above sea level for a cell, from the
-    // normalized elevation map and sea level.
-    function altitudeMeters(x, y) {
-      const map = gameState.map; if (!map || !map.elevation) return 0;
-      const W = map.terrain[0].length;
-      const wrap = !!(map.meta && map.meta.wrap);
-      const xx = wrap ? ((x % W) + W) % W : x;
-      if (y < 0 || y >= map.elevation.length || xx < 0 || xx >= W) return 0;
-      const e = map.elevation[y][xx];
-      const sl = (map.seaLevel != null) ? map.seaLevel : 0.4;
-      const maxM = (CONFIG.maxAltitudeMeters != null) ? CONFIG.maxAltitudeMeters : 8000;
-      if (e <= sl) return 0;
-      return ((e - sl) / (1 - sl)) * maxM;
-    }
     // Whether an owner has any operational Dock anywhere (enables shallow-sea
     // travel for that owner's colony-launch paths).
     function ownerHasDock(owner) {
@@ -2361,11 +2372,24 @@
       }
       return { cost: dist.get(targetK), path };
     }
-    // Travel time (in turns/years) for the biodome materials to reach a target,
-    // given a movement path cost and the per-year movement allowance.
+    // Movement speed of a unit type (population, infantry, tank, ...). Read from
+    // config units[type].speed; defaults to 1. Higher = faster.
+    function unitSpeed(type) {
+      const uc = (CONFIG && CONFIG.units) || {};
+      const e = uc[type];
+      const s = e && Number(e.speed);
+      return Number.isFinite(s) && s > 0 ? s : 1;
+    }
+    // Travel time in turns for a mover: ceil(shortest-path movement cost / speed),
+    // minimum 1 turn.
+    function travelTurnsForSpeed(pathCost, speed) {
+      const sp = Number(speed) > 0 ? Number(speed) : 1;
+      return Math.max(1, Math.ceil((Number(pathCost) || 0) / sp));
+    }
+    // Travel time for a launched colony's materials/colonists to reach a target.
+    // Driven by the "population" unit speed (the colonists travel at that speed).
     function biodomeTravelTurns(pathCost) {
-      const perYear = (CONFIG.biodomeMovementPerYear != null) ? CONFIG.biodomeMovementPerYear : 12;
-      return Math.max(1, Math.ceil(pathCost / perYear));
+      return travelTurnsForSpeed(pathCost, unitSpeed("population"));
     }
 
     // ---- colony network matrices -------------------------------------------
@@ -2555,7 +2579,7 @@
         if (b.owner !== owner) continue;
         if (b.x !== gx || b.y !== gy) continue;
         if (!isOperational(b)) continue;
-        const n = bldgNet(b.type);
+        const n = bldgNetAt(b.type, b.x, b.y);
         food.bonus += n.food;
         prod.bonus += n.material;
         goods.bonus += n.goods;
@@ -2658,7 +2682,7 @@
         if (b.owner !== owner) continue;
         if (b.x !== gx || b.y !== gy) continue;
         if (!isOperational(b)) continue;
-        const n = bldgNet(b.type);
+        const n = bldgNetAt(b.type, b.x, b.y);
         add(improvementName(b.type), { food: n.food, material: n.material, goods: n.goods, energy: n.energy, water: n.water, wealth: n.wealth, happiness: n.happiness });
       }
 
@@ -2844,6 +2868,17 @@
           }
         }
       }
+      // Advance in-transit battalions one turn; announce human arrivals.
+      {
+        const arrived = advanceUnitsInTransit();
+        for (const u of arrived) {
+          if (u.owner === 'human') {
+            const destCol = gameState.buildings.find((b) => b.type === 1 && b.x === u.x && b.y === u.y);
+            notify(`${u.name} has arrived at ${(destCol && destCol.name) || cellLatLonLabel(u.x, u.y)}.`);
+          }
+        }
+        if (arrived.length) badgeChanged = true;
+      }
       // Advance removals: a building being removed disappears after its
       // removeTurns elapse. Then drop the deleted buildings.
       let _removed = false;
@@ -2884,6 +2919,28 @@
       // delta -> borrow -> idle -> clamp happiness/disband -> federation overflow
       // -> federation happiness. Returns per-colony colonyStats for snapshots.
       const statsByCol = applyEconomyTurn(gameState.turn || 0);
+
+      // Infantry recruitment: after the economy has settled each colony's
+      // population for the turn, every worked Barracks pulls up to its
+      // configured recruitRate colonists (capped at battalionCap) out of its
+      // colony's population and into a battalion stationed at the barracks.
+      // Skips in-transit colonies and any the pipeline just disbanded.
+      for (const col of colonies) {
+        if (col._disbanded || col.inTransit) continue;
+        const recruited = recruitColonyBattalions(col);
+        if (recruited > 0 && col.owner === 'human') {
+          badgeChanged = true; // population floor / worker capacity may change
+        }
+      }
+
+      // Destroy any unit whose strength reached 0 (removed from the game).
+      {
+        const dead = removeDeadUnits();
+        for (const u of dead) {
+          if (u.owner === 'human') notify(`${u.name} was destroyed (strength reached 0).`);
+        }
+        if (dead.length) badgeChanged = true;
+      }
 
       // Remove colonies the pipeline disbanded (population hit 0). Also deselect
       // worked-cell references to them and drop their colonies[] entries.
@@ -3555,11 +3612,55 @@
     // Per-building production bonuses: { food, material, energy, growth, wealth }.
     function bldgBonus(type) {
       const b = (buildingType(type) || {}).bonus || {};
+      // Resolve the flat (non-multiplier) part of each bonus key. A multiplier
+      // bonus value like "3x" contributes nothing here (it has no fixed amount);
+      // use bldgBonusAt(type, x, y) to resolve multipliers against a cell.
       return {
-        food: b.food || 0, material: b.material || 0, goods: b.goods || 0, energy: b.energy || 0,
-        water: b.water || 0, growth: b.growth || 0, wealth: b.wealth || 0,
-        happiness: b.happiness || 0,
+        food: bonusFlat(b.food), material: bonusFlat(b.material), goods: bonusFlat(b.goods),
+        energy: bonusFlat(b.energy), water: bonusFlat(b.water), growth: bonusFlat(b.growth),
+        wealth: bonusFlat(b.wealth), happiness: bonusFlat(b.happiness),
       };
+    }
+    // A building bonus value may be a plain number (flat amount) or a string
+    // like "3x" / "4.5x" (a multiplier of the cell's own tile base + terrain
+    // bonus for that resource). parseBonusValue splits a raw value into its flat
+    // amount and its multiplier (exactly one is non-zero for a given key).
+    const _MULT_RE = /^\s*(\d+(?:\.\d+)?)\s*x\s*$/i;
+    function parseBonusValue(v) {
+      if (typeof v === "number" && Number.isFinite(v)) return { flat: v, mult: 0 };
+      if (typeof v === "string") {
+        const m = _MULT_RE.exec(v);
+        if (m) { const n = parseFloat(m[1]); return { flat: 0, mult: Number.isFinite(n) ? n : 0 }; }
+        const n = parseFloat(v);                    // tolerate numeric strings
+        if (Number.isFinite(n)) return { flat: n, mult: 0 };
+      }
+      return { flat: 0, mult: 0 };
+    }
+    function bonusFlat(v) { return parseBonusValue(v).flat; }
+    function bonusMult(v) { return parseBonusValue(v).mult; }
+    // The cell's own tile base (terrain) + terrain-bonus feature for a resource,
+    // which a building multiplier bonus ("Nx") multiplies. Includes terrain base
+    // yields (food/material/water/happiness) and any placed terrain-bonus
+    // deposit for the resource at (x, y).
+    function cellBaseAndFeature(x, y, res) {
+      const tp = terrainProd(terrainAt(x, y));
+      let base = (tp && typeof tp[res] === "number") ? tp[res] : 0;
+      const tb = bonusDefAt(x, y);
+      if (tb && tb.bonus && typeof tb.bonus[res] === "number") base += tb.bonus[res];
+      return base;
+    }
+    // Per-building production bonuses RESOLVED for the building's cell: flat
+    // amounts plus any "Nx" multiplier applied to that resource's tile base +
+    // terrain bonus at (x, y). Same shape as bldgBonus. Use this wherever a
+    // specific placed building's output is needed (production + UI readouts).
+    function bldgBonusAt(type, x, y) {
+      const raw = (buildingType(type) || {}).bonus || {};
+      const out = {};
+      for (const res of ["food", "material", "goods", "energy", "water", "growth", "wealth", "happiness"]) {
+        const pv = parseBonusValue(raw[res]);
+        out[res] = pv.flat + (pv.mult ? pv.mult * cellBaseAndFeature(x, y, res) : 0);
+      }
+      return out;
     }
     // Per-year upkeep (costPerYear): { material, goods, energy, water, wealth }.
     function bldgUpkeep(type) {
@@ -3570,6 +3671,21 @@
     // Food and growth have no upkeep; material/energy/wealth net out.
     function bldgNet(type) {
       const b = bldgBonus(type), u = bldgUpkeep(type);
+      return {
+        food: b.food,
+        material: b.material - u.material,
+        goods: b.goods - u.goods,
+        energy: b.energy - u.energy,
+        water: b.water - u.water,
+        wealth: b.wealth - u.wealth,
+        growth: b.growth,
+        happiness: b.happiness,
+      };
+    }
+    // Cell-aware NET output of a placed building (resolves "Nx" multiplier
+    // bonuses against the building's tile base + terrain bonus), minus upkeep.
+    function bldgNetAt(type, x, y) {
+      const b = bldgBonusAt(type, x, y), u = bldgUpkeep(type);
       return {
         food: b.food,
         material: b.material - u.material,
@@ -3658,6 +3774,312 @@
     // (home) cell is always worked.
     function isBuildingWorked(col, b) {
       return col.worked && col.worked.includes(cellKey(b.x, b.y));
+    }
+
+    // --- Infantry recruitment --------------------------------------------------
+    // Each worked Barracks supports exactly ONE battalion unit stationed at it.
+    // The unit is a named military unit tracked in gameState.units; the barracks
+    // links to it via b.unitId. Each turn the barracks recruits colonists from
+    // its colony's population into that unit, limited by:
+    //   - the building's configured recruitRate (per turn),
+    //   - the building's battalionCap (max unit strength),
+    //   - the colony's population floor recruitMinColonyPopulation (default
+    //     2000): recruitment may not drop the colony below this floor.
+    // Recruitment only happens while the unit is HOME (stationed at the
+    // barracks' colony, not in transit).
+
+    // The ordinal suffix for a 1-based number: 1 -> "st", 2 -> "nd", 3 -> "rd".
+    function ordinalSuffix(n) {
+      const a = n % 100;
+      if (a >= 11 && a <= 13) return "th";
+      switch (n % 10) { case 1: return "st"; case 2: return "nd"; case 3: return "rd"; default: return "th"; }
+    }
+    // Build a unit's display name from its creation order (1-based) and type.
+    // Infantry units read like "1st Infantry", "2nd Infantry", ...
+    function unitName(order, type) {
+      const label = (type === "infantry") ? "Infantry" : (type ? type.charAt(0).toUpperCase() + type.slice(1) : "Unit");
+      return `${order}${ordinalSuffix(order)} ${label}`;
+    }
+    function findUnitById(id) {
+      if (id == null) return null;
+      return (gameState.units || []).find((u) => u.id === id) || null;
+    }
+    // Create a new unit of `type` for `owner`, stationed at colony `col`, and
+    // register it. The name is assigned by global creation order. `fullStrength`
+    // is the unit's maximum strength (its home barracks' battalionCap); `col` is
+    // recorded as the unit's HOME base (origin), where it rebuilds.
+    function createUnit(type, owner, col, fullStrength) {
+      if (!gameState.units) gameState.units = [];
+      const order = (gameState.unitsCreated || 0) + 1;
+      gameState.unitsCreated = order;
+      const u = {
+        id: `u${order}-${Date.now()}`,
+        order,
+        name: unitName(order, type),
+        type: type,
+        owner: owner,
+        strength: 0,
+        fullStrength: Number(fullStrength) > 0 ? Number(fullStrength) : 0,
+        speed: unitSpeed(type),         // movement speed (turns = cost / speed)
+        x: col.x, y: col.y,            // current colony cell (home when not in transit)
+        homeX: col.x, homeY: col.y,    // home base (origin colony) to recall to
+        inTransit: false,
+        destX: null, destY: null, turnsRemaining: 0,
+      };
+      gameState.units.push(u);
+      return u;
+    }
+
+    // Recruit into a single Barracks `b` within colony `col`. Returns colonists
+    // recruited this turn (0 if none).
+    function recruitBattalion(col, b) {
+      const bt = buildingType(b.type) || {};
+      const rate = Number(bt.recruitRate) || 0;
+      if (rate <= 0) return 0;                       // not a recruiting building
+      if (!isBuildingWorked(col, b)) return 0;       // idle barracks don't recruit
+      // Resolve (or lazily create) this barracks' single stationed unit.
+      let unit = findUnitById(b.unitId);
+      if (unit && unit.owner !== col.owner) unit = null; // stale link
+      if (unit && unit.inTransit) return 0;          // deployed units don't recruit
+      // A unit that has moved to a DIFFERENT colony no longer belongs to this
+      // barracks; recruiting resumes only if it is back at this colony's cell.
+      if (unit && (unit.x !== col.x || unit.y !== col.y)) return 0;
+      const cap = Number.isFinite(Number(bt.battalionCap)) ? Number(bt.battalionCap) : Infinity;
+      const current = unit ? (Number(unit.strength) || 0) : 0;
+      const room = cap - current;
+      if (room <= 0) return 0;                       // unit already at cap
+      const owned = ensureOwned(col);
+      const pop = Math.max(0, Math.floor(owned.population || 0));
+      const floor = (CONFIG && CONFIG.recruitMinColonyPopulation != null) ? CONFIG.recruitMinColonyPopulation : 2000;
+      const available = Math.max(0, pop - floor);    // may not recruit below the floor
+      const take = Math.min(rate, room, available);
+      if (take <= 0) return 0;
+      // Create the unit on first successful recruit so empty barracks don't
+      // clutter the roster. Its full strength is this barracks' battalion cap.
+      if (!unit) { unit = createUnit("infantry", col.owner, col, cap); b.unitId = unit.id; }
+      // Keep fullStrength in sync with the barracks cap (config may change).
+      if (Number.isFinite(cap)) unit.fullStrength = cap;
+      owned.population -= take;                       // deduct from the colony
+      col.population = owned.population;              // keep legacy mirror in sync
+      unit.strength = current + take;                // add to the stationed unit
+      // Keep the home unit's location pinned to its colony.
+      if (!unit.inTransit) { unit.x = col.x; unit.y = col.y; }
+      return take;
+    }
+
+    // Run recruitment for every worked Barracks in a colony. Returns total.
+    function recruitColonyBattalions(col) {
+      let total = 0;
+      for (const b of colonyBuildings(col)) {
+        if (b.type === 1) continue;                   // skip the biodome itself
+        total += recruitBattalion(col, b);
+      }
+      return total;
+    }
+
+    // --- Battalion deployment & transit ---------------------------------------
+    // Compute the number of turns to move a unit from (sx,sy) to colony (tx,ty)
+    // using the cheapest movement-cost route (the same routing used for colony
+    // launches, honoring roads/monorails/bridges/river crossings and, with a
+    // Dock, shallow sea). Returns a positive integer, or null if unreachable.
+    // Turns for a unit of movement `speed` to travel from (sx,sy) to colony
+    // (tx,ty): ceil(shortest-path cost / speed). Null if unreachable.
+    function battalionTravelTurns(sx, sy, tx, ty, owner, speed) {
+      const route = findMovementPath(sx, sy, tx, ty, owner);
+      if (!route) return null;
+      return travelTurnsForSpeed(route.cost || 0, speed != null ? speed : 1);
+    }
+    // The player's own colonies (operational biodomes) a unit could deploy to.
+    function deployableColonies(owner) {
+      return (gameState.buildings || []).filter((b) => b.type === 1 && b.owner === owner && !b.inTransit);
+    }
+    // Begin deploying `unit` to destination colony `destCol`. Sets the unit
+    // in-transit with the computed arrival time. Returns the turn count, or
+    // null if the unit can't move there (already there, in transit, or no route).
+    function deployUnit(unit, destCol) {
+      if (!unit || !destCol) return null;
+      if (unit.inTransit) return null;                // already moving
+      if (!unitIsFull(unit)) return null;             // must be at full strength
+      if (unit.x === destCol.x && unit.y === destCol.y) return null; // already here
+      const turns = battalionTravelTurns(unit.x, unit.y, destCol.x, destCol.y, unit.owner, unitSpeed(unit.type));
+      if (turns == null) return null;                 // unreachable
+      unit.inTransit = true;
+      unit.destX = destCol.x; unit.destY = destCol.y;
+      unit.turnsRemaining = turns;
+      return turns;
+    }
+    // Advance all in-transit units by one turn; arrivals settle at their
+    // destination colony cell. Returns the list of units that arrived this turn.
+    function advanceUnitsInTransit() {
+      const arrived = [];
+      for (const u of (gameState.units || [])) {
+        if (!u.inTransit) continue;
+        u.turnsRemaining = (u.turnsRemaining || 0) - 1;
+        if (u.turnsRemaining <= 0) {
+          u.inTransit = false;
+          u.x = u.destX; u.y = u.destY;
+          u.destX = null; u.destY = null; u.turnsRemaining = 0;
+          arrived.push(u);
+        }
+      }
+      return arrived;
+    }
+    // Human-readable location for a unit: "In <colony>" when stationed, or
+    // "In transit to <colony> (N turns)" when moving.
+    function unitLocationLabel(u) {
+      const colonyNameAt = (x, y) => {
+        const c = (gameState.buildings || []).find((b) => b.type === 1 && b.x === x && b.y === y);
+        return (c && c.name) || `(${x}, ${y})`;
+      };
+      if (u.inTransit) {
+        const n = u.turnsRemaining || 0;
+        return `In transit to ${colonyNameAt(u.destX, u.destY)} (${n} turn${n === 1 ? "" : "s"})`;
+      }
+      return `In ${colonyNameAt(u.x, u.y)}`;
+    }
+
+    // --- Unit strength / home / recall / destruction --------------------------
+    // A unit's maximum strength (its home barracks' battalion cap). Falls back to
+    // the config battalionCap for a barracks if the unit predates fullStrength.
+    function unitFullStrength(u) {
+      if (u && Number(u.fullStrength) > 0) return Number(u.fullStrength);
+      const bt = buildingType("barracks") || buildingType(7) || {};
+      const cap = Number(bt.battalionCap);
+      return Number.isFinite(cap) && cap > 0 ? cap : 0;
+    }
+    // Whether a unit is at full strength (ready to transfer or attack). A unit
+    // with no defined full strength (0) is treated as not full.
+    function unitIsFull(u) {
+      const full = unitFullStrength(u);
+      return full > 0 && (Number(u.strength) || 0) >= full;
+    }
+    // Whether a unit is currently stationed at its home base (not in transit).
+    function unitIsHome(u) {
+      return !u.inTransit && u.x === u.homeX && u.y === u.homeY;
+    }
+    // The unit's home colony building (if it still exists), used for recall and
+    // for rebuilding via its barracks' recruitment.
+    function unitHomeColony(u) {
+      return (gameState.buildings || []).find(
+        (b) => b.type === 1 && b.owner === u.owner && b.x === u.homeX && b.y === u.homeY && !b.inTransit) || null;
+    }
+    // Recall a unit to its home base so it can rebuild. Starts a normal transit
+    // home (same cheapest-route + speed as a deploy). Returns the turn count, or
+    // null if it can't be recalled (already home, in transit, no home, no route).
+    function recallUnit(u) {
+      if (!u || u.inTransit) return null;
+      if (unitIsHome(u)) return null;                 // already home
+      const home = unitHomeColony(u);
+      if (!home) return null;                          // home base is gone
+      const turns = battalionTravelTurns(u.x, u.y, home.x, home.y, u.owner, unitSpeed(u.type));
+      if (turns == null) return null;                  // unreachable
+      u.inTransit = true;
+      u.destX = home.x; u.destY = home.y;
+      u.turnsRemaining = turns;
+      return turns;
+    }
+    // Remove a unit from the game (strength reached 0 or otherwise destroyed) and
+    // clear any barracks link that points at it.
+    function destroyUnit(u) {
+      if (!u) return;
+      gameState.units = (gameState.units || []).filter((x) => x.id !== u.id);
+      for (const b of (gameState.buildings || [])) {
+        if (b.unitId === u.id) b.unitId = null;
+      }
+    }
+    // Drop any units whose strength has fallen to 0 (destroyed). Returns the
+    // removed units (for notifications). Units are created lazily with strength
+    // > 0, so a 0-strength unit is always a depleted one.
+    function removeDeadUnits() {
+      const dead = (gameState.units || []).filter((u) => (Number(u.strength) || 0) <= 0);
+      for (const u of dead) destroyUnit(u);
+      return dead;
+    }
+
+    // --- Rebase destination picker (reusable) ---------------------------------
+    // A floating menu, anchored to a button, listing the colonies a unit can
+    // rebase/transfer to. Selecting one starts the transfer and invokes
+    // onPicked(); clicking anywhere else or pressing Escape cancels (closes it
+    // with no change). Reused by the Military view and the colony detail panel.
+    const rebasePickerEl = document.getElementById("rebase-picker");
+    let _rebaseCleanup = null;
+    function closeColonyPicker() {
+      if (_rebaseCleanup) { _rebaseCleanup(); _rebaseCleanup = null; }
+      rebasePickerEl.hidden = true;
+      rebasePickerEl.innerHTML = "";
+    }
+    // Destinations a stationed (home) unit can move to: the owner's other
+    // operational colonies that are reachable by a movement route, each with the
+    // ETA in turns at the unit's speed.
+    function rebaseDestinations(unit) {
+      if (!unit || unit.inTransit) return [];
+      const speed = unitSpeed(unit.type);
+      const out = [];
+      for (const c of deployableColonies(unit.owner)) {
+        if (c.x === unit.x && c.y === unit.y) continue;   // skip current colony
+        const turns = battalionTravelTurns(unit.x, unit.y, c.x, c.y, unit.owner, speed);
+        if (turns == null) continue;                       // unreachable
+        out.push({ colony: c, turns });
+      }
+      out.sort((a, b) => (a.turns - b.turns) || String(a.colony.name || "").localeCompare(String(b.colony.name || "")));
+      return out;
+    }
+    // Open the picker anchored to `anchorEl` for `unit`. `onPicked` runs after a
+    // successful transfer start (e.g. to refresh a report/panel).
+    function openColonyPicker(anchorEl, unit, onPicked) {
+      closeColonyPicker();
+      if (!unit || unit.inTransit) return;
+      const dests = rebaseDestinations(unit);
+      rebasePickerEl.innerHTML = "";
+      const header = document.createElement("div");
+      header.className = "rebase-head";
+      header.textContent = `Rebase ${unit.name} to…`;
+      rebasePickerEl.appendChild(header);
+      if (!dests.length) {
+        const empty = document.createElement("div");
+        empty.className = "rebase-empty";
+        empty.textContent = "No reachable colonies.";
+        rebasePickerEl.appendChild(empty);
+      } else {
+        for (const d of dests) {
+          const item = document.createElement("div");
+          item.className = "rebase-item";
+          const name = document.createElement("span");
+          name.textContent = d.colony.name || `(${d.colony.x}, ${d.colony.y})`;
+          const eta = document.createElement("span");
+          eta.className = "rebase-eta";
+          eta.textContent = `${d.turns} turn${d.turns === 1 ? "" : "s"}`;
+          item.appendChild(name); item.appendChild(eta);
+          item.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const turns = deployUnit(unit, d.colony);
+            closeColonyPicker();
+            if (turns != null && typeof onPicked === "function") onPicked(unit, d.colony, turns);
+          });
+          rebasePickerEl.appendChild(item);
+        }
+      }
+      // Position near the anchor, then clamp into the viewport.
+      rebasePickerEl.hidden = false;
+      const r = anchorEl.getBoundingClientRect();
+      let left = r.right + 4, top = r.top;
+      const pr = rebasePickerEl.getBoundingClientRect();
+      if (left + pr.width > window.innerWidth - 6) left = Math.max(6, r.left - pr.width - 4);
+      if (top + pr.height > window.innerHeight - 6) top = Math.max(6, window.innerHeight - pr.height - 6);
+      rebasePickerEl.style.left = left + "px";
+      rebasePickerEl.style.top = top + "px";
+      // Cancel on outside click or Escape. Defer the outside-click wiring so the
+      // opening click doesn't immediately close it.
+      const onDocClick = (e) => { if (!rebasePickerEl.contains(e.target)) closeColonyPicker(); };
+      const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); closeColonyPicker(); } };
+      setTimeout(() => {
+        document.addEventListener("mousedown", onDocClick, true);
+        document.addEventListener("keydown", onKey, true);
+      }, 0);
+      _rebaseCleanup = () => {
+        document.removeEventListener("mousedown", onDocClick, true);
+        document.removeEventListener("keydown", onKey, true);
+      };
     }
     // Per-colony storage caps = sum of storage over the colony's operational
     // buildings (built buildings provide storage even if their cell is idle).
@@ -3783,10 +4205,12 @@
     // gross production, needs, net, growth bonus, and the food consumption.
     function colonyBudget(col) {
       const cfg = CONFIG;
-      // Per-1,000-colonist resource costs come from unitCosts.population
+      // Per-1,000-colonist resource costs come from units.population.costPerYear
       // (food/material/energy/water/wealth). Each is multiplied by the colony's
       // population units (floor(pop/1000)) and subtracted as a yearly need.
-      const popCost = (cfg.unitCosts && cfg.unitCosts.population) || {};
+      // `unitSize` stays on the population entry (not inside costPerYear).
+      const popEntry = (cfg.units && cfg.units.population) || {};
+      const popCost = popEntry.costPerYear || {};
       const popCostOf = (res, dflt) => (popCost[res] != null ? popCost[res] : dflt);
       ensureWorked(col);
       const homeKey = cellKey(col.x, col.y);
@@ -3879,7 +4303,7 @@
         // Federation buildings are funded by the Federation pool, not the
         // colony — their upkeep/production never touch a colony's budget.
         if (buildingIsFederation(b.type)) continue;
-        const bo = bldgBonus(b.type), up = bldgUpkeep(b.type);
+        const bo = bldgBonusAt(b.type, b.x, b.y), up = bldgUpkeep(b.type);
         production.food += bo.food;
         production.material += bo.material;
         production.goods += bo.goods;
@@ -3900,14 +4324,14 @@
         addBreak('water', 'Buildings', bo.water - up.water);
         addBreak('wealth', 'Buildings', bo.wealth - up.wealth);
       }
-      // Population consumes resources each year: unitCosts.population gives the
+      // Population consumes resources each year: units.population.costPerYear gives the
       // per-1,000-colonist cost for food/material/energy/water/wealth. Multiply
       // by the colony's population units and subtract as yearly needs. (Food and
       // water have no building upkeep of their own; material/energy/wealth add to
       // the buildings' upkeep already accumulated above.)
       // Population "units" for consumption: fractional population / unitSize
       // (no flooring, so partial units pay proportionally).
-      const popUnitSize = (popCost.unitSize && popCost.unitSize > 0) ? popCost.unitSize : 1000;
+      const popUnitSize = (popEntry.unitSize && popEntry.unitSize > 0) ? popEntry.unitSize : 1000;
       const popUnits = (col.population || 0) / popUnitSize;
       needs.food += popUnits * popCostOf('food', 1);
       needs.material += popUnits * popCostOf('material', 0);
@@ -6260,7 +6684,6 @@
     // terrain cell within the owner's control. Returns { ok, reason }.
     function canPlaceTypeAt(type, x, y, owner) {
       if (cellHasBuilding(x, y)) return { ok: false, reason: "cell occupied" };
-      if (isImpassableFrozen(x, y)) return { ok: false, reason: "impassable terrain" };
       // Placement is driven entirely by the building's `other` tags in
       // config.json — no per-type hard-coding. Supported tags (shared with
       // terrainBonus): "sea" (built ON a shallow-sea tile, e.g. Dock /
@@ -6277,9 +6700,20 @@
       const otherTags = btPrereq(type).other;
       const tags = Array.isArray(otherTags) ? otherTags : [];
       const terr = terrainAt(x, y);
+      // The tier-9 mountain tops are ALWAYS impassable and unbuildable — no
+      // building, not even a `mining`-tagged one, may be placed there.
+      if (isImpassableFrozen(x, y)) {
+        return { ok: false, reason: "impassable terrain" };
+      }
 
       // Terrain gate: the cell's tile must be in the building's allowed set.
-      if (!terrainAllowedForBuilding(type, terr)) {
+      // A `mining`-tagged building overrides this for LAND tiles — it may be
+      // placed on any land terrain (below the altitude cap, already enforced
+      // above), including terrains its own list would otherwise exclude. Sea
+      // tiles still require the building's terrain set to allow sea.
+      const mining = tags.includes('mining');
+      const terrIsLand = (terr !== WATER);
+      if (!(mining && terrIsLand) && !terrainAllowedForBuilding(type, terr)) {
         return { ok: false, reason: (terr === WATER) ? "must be built on sea" : "must be land" };
       }
       // When a building sits on the water (its terrain set allows sea), it must
@@ -7118,10 +7552,12 @@
         //     controlled land cell (paid from the colony's own storage).
         for (const c of control) {
           if (cellKey(c.x, c.y) === homeKey) continue;
-          const bt = terrainAt(c.x, c.y);
-          if (!isHabitableLandTerrain(bt)) continue;
           if (gameState.buildings.some((b) => b.x === c.x && b.y === c.y)) continue;
+          // Terrain eligibility is enforced per-type by canPlaceTypeAt (which
+          // honors each building's terrain list and the `mining` override for
+          // otherwise-unbuildable tiles), so no habitable-terrain pre-skip here.
           for (const type of types) {
+            if (!canPlaceTypeAt(type, c.x, c.y, pi).ok) continue;
             if (hasPrerequisitesAt(type, c.x, c.y, pi) && canAffordBuildingAt(type, c.x, c.y, pi)) return true;
           }
         }
@@ -7187,8 +7623,9 @@
     // placed — i.e. they could improve a tile they're already working. Keeps
     // the turn open so the player can build there.
     function humanCanImproveWorkedCell() {
-      const types = Object.keys(CONFIG.buildingTypes || {})
-        .map((k) => parseInt(k, 10)).filter((t) => t !== 1);
+      // Config is name-keyed; enumerate by stable numeric codes (not parseInt of
+      // the name keys, which would yield NaN). Excludes the colony/biodome (1).
+      const types = buildingTypeCodes().filter((t) => t !== 1);
       const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === 'human');
       for (const col of myColonies) {
         const homeKey = cellKey(col.x, col.y);
@@ -7931,7 +8368,7 @@
           const [x, y] = k.split(",").map(Number);
           return s + terrainProd(terrainAt(x, y)).food + waterFoodBonus(x, y);
         }, 0);
-        const consumption = popUnits * (((CONFIG.unitCosts && CONFIG.unitCosts.population && CONFIG.unitCosts.population.food) != null) ? CONFIG.unitCosts.population.food : 1);
+        const consumption = popUnits * (((CONFIG.units && CONFIG.units.population && CONFIG.units.population.costPerYear && CONFIG.units.population.costPerYear.food) != null) ? CONFIG.units.population.costPerYear.food : 1);
         const hungry = workedFood < consumption;
 
         const candidates = control
@@ -8656,7 +9093,7 @@
       // non-zero per-year bonuses (and worked/idle state).
       const bldgRows = [];
       for (const b of colonyBuildings(col)) {
-        const bo = bldgBonus(b.type);
+        const bo = bldgBonusAt(b.type, b.x, b.y);
         const parts = [];
         // Resource bonuses are shown as "abbrev:signedValue" using the config
         // resourceTypes `abbrev` (e.g. F:+3, ¤:+1, H:-0.5). "growth" has no
@@ -8673,6 +9110,20 @@
         if (bo.wealth) parts.push(`${ab("wealth", "¤")}:${sign(bo.wealth)}${nf(bo.wealth, 0)}`);
         if (bo.growth) parts.push(`${ab("population", "P")}:${sign(bo.growth * 100)}${nf(bo.growth * 100, 2)}%`);
         if (bo.happiness) parts.push(`${ab("happiness", "H")}:${sign(bo.happiness)}${nf(bo.happiness, 0)}`);
+        // Recruiting buildings (Barracks) show their stationed unit's name and
+        // strength/cap, e.g. "1st Infantry: 600/1000" (or "(deployed)" when the
+        // unit is away in transit).
+        const _bt = buildingType(b.type) || {};
+        if ((Number(_bt.recruitRate) || 0) > 0) {
+          const _cap = Number.isFinite(Number(_bt.battalionCap)) ? Number(_bt.battalionCap) : null;
+          const _unit = findUnitById(b.unitId);
+          if (_unit) {
+            const _str = `${nf(Number(_unit.strength) || 0, 0)}${_cap != null ? `/${nf(_cap, 0)}` : ""}`;
+            parts.push(`${_unit.name}: ${_str}${_unit.inTransit ? " (deployed)" : ""}`);
+          } else {
+            parts.push(`Battalion: 0${_cap != null ? `/${nf(_cap, 0)}` : ""}`);
+          }
+        }
         const worked = isBuildingWorked(col, b);
         const state = b.type === 1 ? "" : (worked ? "" : ` <span class="stat-neg">(idle)</span>`);
         const detail = parts.length ? parts.join(", ") : "no bonuses";
@@ -8692,6 +9143,34 @@
         `<div class="stat-sec">Network <span class="stat-hint">(directly connected)</span></div>`,
         ...(netRows.length ? netRows : [`<div class="stat-note">Not connected to any colony.</div>`]),
       ];
+      // Stationed Military section: the player's units currently located at this
+      // colony. Each gets a rebase button (data-unit-id) wired up after render.
+      // Units in transit (departing from here) are shown but can't be rebased.
+      const stationedUnits = (gameState.units || [])
+        .filter((u) => u.owner === col.owner && u.x === col.x && u.y === col.y)
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
+      const milRows = stationedUnits.map((u) => {
+        const typeTxt = u.type ? (u.type.charAt(0).toUpperCase() + u.type.slice(1)) : "Unit";
+        const full = unitFullStrength(u);
+        const strengthTxt = full > 0
+          ? `${nf(Math.round(Number(u.strength) || 0))} / ${nf(Math.round(full))} soldiers`
+          : `${nf(Math.round(Number(u.strength) || 0))} soldiers`;
+        const sub = u.inTransit ? `${typeTxt} · departing` : `${typeTxt} · ${strengthTxt}`;
+        const canRebase = !u.inTransit && unitIsFull(u);
+        const rebaseTitle = u.inTransit ? "Unit is in transit"
+          : (!unitIsFull(u) ? "Must be at full strength to transfer" : "Rebase to another colony");
+        const rebaseBtn = `<button class="rebase-btn" type="button" data-unit-id="${esc(String(u.id))}" title="${rebaseTitle}" aria-label="Rebase unit"${canRebase ? "" : " disabled"}>⇄</button>`;
+        const atHome = unitIsHome(u);
+        const canRecall = !u.inTransit && !atHome && !!unitHomeColony(u);
+        const recallTitle = u.inTransit ? "Unit is in transit"
+          : (atHome ? "Already at home base" : (!unitHomeColony(u) ? "Home base no longer exists" : "Recall to home base to rebuild"));
+        const recallBtn = `<button class="rebase-btn recall-btn" type="button" data-recall-unit-id="${esc(String(u.id))}" title="${recallTitle}" aria-label="Recall unit to home base"${canRecall ? "" : " disabled"}>⌂</button>`;
+        return `<div class="mil-unit-row"><span class="mil-unit-main"><span>${esc(u.name)}</span><span class="mil-unit-sub">${esc(sub)}</span></span><span class="mil-unit-acts">${rebaseBtn}${recallBtn}</span></div>`;
+      });
+      const militarySection = (col.owner === 'human') ? [
+        `<div class="stat-sec stationed-mil">Stationed Military</div>`,
+        ...(milRows.length ? milRows : [`<div class="stat-note">No units stationed here.</div>`]),
+      ] : [];
       const rows = [
         `<h3>Statistics</h3>`,
         `<div class="stat-sec">Population</div>`,
@@ -8712,9 +9191,31 @@
         overNote,
         ...buildingsSection,
         ...networkSection,
+        ...militarySection,
         `<div class="stat-note">While stored happiness is positive the colony grows; if it goes negative the population declines.</div>`,
       ];
       el.innerHTML = rows.join("");
+      // Wire up the Stationed Military rebase buttons (click -> colony picker).
+      // Re-render this colony panel after a transfer starts so the unit shows
+      // its new "departing" state.
+      el.querySelectorAll(".rebase-btn[data-unit-id]").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const unit = findUnitById(btn.getAttribute("data-unit-id"));
+          if (!unit || unit.inTransit || !unitIsFull(unit)) return;
+          openColonyPicker(btn, unit, () => renderWorkStats(col));
+        });
+      });
+      // Wire up the recall (house) buttons: send the unit home to rebuild.
+      el.querySelectorAll(".recall-btn[data-recall-unit-id]").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const unit = findUnitById(btn.getAttribute("data-recall-unit-id"));
+          if (!unit) return;
+          const turns = recallUnit(unit);
+          if (turns != null) renderWorkStats(col);
+        });
+      });
     }
 
     // Terrain color from config (HSL) lightened by `factor` (0.5 = +50%), as a
@@ -9476,6 +9977,100 @@
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && !federationOverlay.hidden) closeFederation();
     });
+
+    // ---- Military dialog (View ▸ View Military) ----------------------------
+    // Lists the human player's units: Name | Type | Strength | Location, with a
+    // rebase button at the end of each row that opens the colony picker.
+    const militaryOverlay = document.getElementById("military-overlay");
+    const militaryBody = document.getElementById("military-body");
+
+    // Local integer formatter (the colony-panel `nf` is not in scope here).
+    const milNf = (n) => Math.round(Number(n) || 0).toLocaleString();
+
+    function humanUnits() {
+      return (gameState.units || []).filter((u) => u.owner === "human");
+    }
+    function typeLabel(type) {
+      return type ? type.charAt(0).toUpperCase() + type.slice(1) : "Unit";
+    }
+    // Build a rebase icon button for `unit`. Transferring requires the unit to
+    // be at full strength and not already in transit; otherwise it is disabled
+    // with an explanatory tooltip. Clicking opens the colony picker.
+    function makeRebaseButton(unit, onPicked) {
+      const btn = document.createElement("button");
+      btn.className = "rebase-btn";
+      btn.type = "button";
+      btn.setAttribute("aria-label", "Rebase unit");
+      btn.textContent = "⇄";
+      const full = unitIsFull(unit);
+      btn.disabled = !!unit.inTransit || !full;
+      btn.title = unit.inTransit ? "Unit is in transit"
+        : (!full ? "Must be at full strength to transfer" : "Rebase to another colony");
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openColonyPicker(btn, unit, onPicked);
+      });
+      return btn;
+    }
+    // Build a recall (house) icon button for `unit`: sends it back to its home
+    // base to rebuild. Enabled only when the unit is away from home and not in
+    // transit.
+    function makeRecallButton(unit, onRecalled) {
+      const btn = document.createElement("button");
+      btn.className = "rebase-btn recall-btn";
+      btn.type = "button";
+      btn.setAttribute("aria-label", "Recall unit to home base");
+      btn.textContent = "⌂";
+      const atHome = unitIsHome(unit);
+      btn.disabled = !!unit.inTransit || atHome || !unitHomeColony(unit);
+      btn.title = unit.inTransit ? "Unit is in transit"
+        : (atHome ? "Already at home base"
+          : (!unitHomeColony(unit) ? "Home base no longer exists" : "Recall to home base to rebuild"));
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const turns = recallUnit(unit);
+        if (turns != null && typeof onRecalled === "function") onRecalled(unit, turns);
+      });
+      return btn;
+    }
+    function renderMilitary() {
+      const units = humanUnits().slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+      militaryBody.innerHTML = "";
+      if (!units.length) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 5; td.className = "stat-note";
+        td.textContent = "No military units yet. Build a Barracks and it will recruit a battalion.";
+        tr.appendChild(td); militaryBody.appendChild(tr);
+        return;
+      }
+      for (const u of units) {
+        const tr = document.createElement("tr");
+        const full = unitFullStrength(u);
+        const strengthTxt = full > 0 ? `${milNf(u.strength)} / ${milNf(full)}` : milNf(u.strength);
+        const cells = [u.name, typeLabel(u.type), strengthTxt, unitLocationLabel(u)];
+        for (let i = 0; i < cells.length; i++) {
+          const td = document.createElement("td");
+          td.textContent = cells[i];
+          if (i === 2) td.className = "num";
+          tr.appendChild(td);
+        }
+        const actTd = document.createElement("td");
+        actTd.className = "mil-act";
+        actTd.appendChild(makeRebaseButton(u, () => renderMilitary()));
+        actTd.appendChild(makeRecallButton(u, () => renderMilitary()));
+        tr.appendChild(actTd);
+        militaryBody.appendChild(tr);
+      }
+    }
+    function openMilitary() { renderMilitary(); militaryOverlay.hidden = false; }
+    function closeMilitary() { closeColonyPicker(); militaryOverlay.hidden = true; }
+    ipcRenderer.on("view-military", openMilitary);
+    document.getElementById("military-close").addEventListener("click", closeMilitary);
+    militaryOverlay.addEventListener("click", (e) => { if (e.target === militaryOverlay) closeMilitary(); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !militaryOverlay.hidden) closeMilitary();
+    });
     document.getElementById("viewloc-cancel").addEventListener("click", closeViewLoc);
     document.getElementById("viewloc-ok").addEventListener("click", confirmViewLoc);
     [viewlocLat, viewlocLon].forEach((el) => el.addEventListener("keydown", (e) => {
@@ -9604,7 +10199,9 @@
         resources: (extra && extra.resources) || { material: 0, food: 0, energy: 0, wealth: 0 },
         rates: (extra && extra.rates) || { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 },
         playerName: (extra && (extra.playerName || (extra.players && extra.players[0] && extra.players[0].kind === 'human' && extra.players[0].name))) || gameState.playerName || "Human",
-        transport: (extra && extra.transport) || null
+        transport: (extra && extra.transport) || null,
+        units: (extra && extra.units) || [],
+        unitsCreated: (extra && extra.unitsCreated != null) ? extra.unitsCreated : 0
       };
       if (gameState.players && gameState.players[0] && gameState.players[0].kind === 'human') {
         gameState.players[0].name = gameState.playerName;
@@ -9992,7 +10589,9 @@
             turn: payload.turn || 0, currentPlayer: payload.currentPlayer || 0,
             resources: payload.resources, rates: payload.rates,
             playerName: payload.playerName,
-            transport: payload.transport || null
+            transport: payload.transport || null,
+            units: payload.units || [],
+            unitsCreated: payload.unitsCreated || 0
           }
         );
       } catch (err) {

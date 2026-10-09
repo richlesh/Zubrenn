@@ -411,6 +411,7 @@ function buildViewMenu() {
       { label: "View Rankings…", accelerator: "CmdOrCtrl+R", click: () => sendToMain("view-rankings") },
       { label: "View Colonies…", accelerator: "CmdOrCtrl+Shift+O", enabled: ours.length > 0, click: () => sendToMain("view-colonies") },
       { label: "View Federation…", accelerator: "CmdOrCtrl+Shift+F", enabled: ours.length >= 2, click: () => sendToMain("view-federation") },
+      { label: "View Military…", accelerator: "CmdOrCtrl+Shift+M", enabled: ours.length > 0, click: () => sendToMain("view-military") },
       { type: "separator" },
       { label: "Toggle Terrain Textures", accelerator: "CmdOrCtrl+T", click: () => sendToMain("view-toggle-terrain") },
       { label: "Toggle Area of Control", accelerator: "CmdOrCtrl+Shift+C", click: () => sendToMain("view-toggle-control") },
@@ -793,7 +794,10 @@ function buildSaveObject(gameState) {
     rates: (gameState && gameState.rates) || { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 },
     playerName: (gameState && gameState.playerName) || "Human",
     // Transport network (roads/monorails/canals/bridges/airports + build plans).
-    transport: (gameState && gameState.transport) || null
+    transport: (gameState && gameState.transport) || null,
+    // Military units (battalions) and the monotonic creation counter.
+    units: (gameState && gameState.units) || [],
+    unitsCreated: (gameState && gameState.unitsCreated) || 0
   };
 }
 
@@ -977,7 +981,9 @@ async function loadGame() {
     resources: parsed.resources || { material: 0, food: 0, energy: 0, wealth: 0 },
     rates: parsed.rates || { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 },
     playerName: parsed.playerName || (parsed.players && parsed.players[0] && parsed.players[0].kind === 'human' && parsed.players[0].name) || "Human",
-    transport: parsed.transport || null
+    transport: parsed.transport || null,
+    units: parsed.units || [],
+    unitsCreated: parsed.unitsCreated || 0
   };
   const send = () => {
     if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send("load-game", payload);
