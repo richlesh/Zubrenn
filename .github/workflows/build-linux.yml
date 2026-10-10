@@ -7,8 +7,61 @@ on:
         description: "Release version tag (e.g. 1.0.0)"
         required: true
 
+# Serialize all release workflows for the SAME version so the shared git tag and
+# draft release are created exactly once (no duplicate drafts across the
+# mac/linux/windows dispatches, and no intra-matrix race).
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
 jobs:
+  # Create the git tag ONCE (idempotent) so the draft release is keyed to a real
+  # tag. A draft keyed to an existing tag is found and reused by every later
+  # job/workflow, which is what prevents duplicate draft releases.
+  prepare-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          RAW="${{ inputs.tag }}"
+          VERSION="${RAW#v}"
+          if [ -z "$VERSION" ]; then
+            echo "::error::No version provided (inputs.tag is empty)."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release version: $VERSION"
+
+      - name: Create tag if missing
+        shell: bash
+        run: |
+          TAG="${{ steps.ver.outputs.version }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists on origin — reusing it."
+          else
+            echo "Creating tag $TAG at ${{ github.sha }}"
+            git tag "$TAG" "${{ github.sha }}"
+            git push origin "refs/tags/$TAG"
+          fi
+
+      - name: Ensure draft release exists
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.ver.outputs.version }}
+          name: Zubrenn ${{ steps.ver.outputs.version }}
+          draft: true
+
   build-linux:
+    needs: prepare-release
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -32,8 +85,14 @@ jobs:
       - name: Set version from tag
         shell: bash
         run: |
-          RAW="${{ inputs.tag || github.ref_name }}"
-          npm version "${RAW#v}" --no-git-tag-version --allow-same-version
+          VERSION="${{ needs.prepare-release.outputs.version }}"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          ACTUAL="$(node -p "require('./package.json').version")"
+          echo "package.json version is now: $ACTUAL"
+          if [ "$ACTUAL" != "$VERSION" ]; then
+            echo "::error::Version mismatch: expected $VERSION but package.json is $ACTUAL."
+            exit 1
+          fi
 
       - name: Install ARM64 cross-compilation tools
         if: matrix.arch == 'arm64'
@@ -50,8 +109,8 @@ jobs:
       - name: Upload to release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ inputs.tag || github.ref_name }}
-          name: Zubrenn ${{ inputs.tag || github.ref_name }}
+          tag_name: ${{ needs.prepare-release.outputs.version }}
+          name: Zubrenn ${{ needs.prepare-release.outputs.version }}
           draft: true
           files: |
             dist/*.deb
