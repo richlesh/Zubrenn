@@ -688,3 +688,12 @@ body.dark #colonies-table .colony-latlon { color: #4da3ff; }
 .work-manager { font-size: 12px; color: #444; display: inline-flex; align-items: center; gap: 6px; }
 body.dark .work-manager { color: #ccc; }
 .work-manager select { font: 12px -apple-system, sans-serif; padding: 2px 4px; }
+
+/* Military view: double-click a unit name to rename it inline. */
+#military-table td.mil-name { cursor: text; }
+#military-table td.mil-name:hover { text-decoration: underline dotted; }
+#military-table .mil-name-input {
+  width: 100%; box-sizing: border-box; font: inherit; padding: 1px 4px;
+  border: 1px solid #0a84ff; border-radius: 4px; background: #fff; color: #1e1e1e;
+}
+body.dark #military-table .mil-name-input { background: #1e1e1e; color: #e0e0e0; border-color: #4da3ff; }

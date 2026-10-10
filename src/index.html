@@ -440,10 +440,14 @@
     // clientX/clientY). Instead we scale only the text-bearing UI regions that
     // are independent of the map geometry, and widen the fixed right panel so it
     // still fits. The map canvas keeps its natural scale.
+    // Current UI font-size zoom (1 / 1.25 / 1.5). Dialogs are CSS-`zoom`ed by
+    // this, so their px max-size must be divided by it to fit the window.
+    let _uiScale = 1;
     function applyFontSize(settings) {
       const scales = { small: 1, medium: 1.25, large: 1.5 };
       const name = (settings && settings.fontSize) || "small";
       const scale = scales[name] || 1;
+      _uiScale = scale;
 
       const right = document.getElementById("right_panel");
       // CSS zoom scales both the content and the space the element occupies, so
@@ -469,7 +473,25 @@
       document.querySelectorAll('[id$="-dialog"]').forEach((el) => {
         el.style.zoom = String(scale);
       });
+      clampDialogsToWindow();
     }
+    // Clamp every centered dialog so its RENDERED size fits the game window.
+    // Dialogs are CSS-`zoom`ed by _uiScale, and `vh`/`vw` units inside a zoomed
+    // element resolve against the UNZOOMED viewport (then get multiplied by the
+    // zoom) — so a 90vh dialog at 1.5x would render at 135% of the window and
+    // overflow it. We instead set an explicit px max-size = (window inner size /
+    // zoom) * 0.95, so after the zoom multiply the dialog is ~95% of the window.
+    function clampDialogsToWindow() {
+      const s = _uiScale || 1;
+      const maxH = Math.floor((window.innerHeight / s) * 0.95);
+      const maxW = Math.floor((window.innerWidth / s) * 0.95);
+      document.querySelectorAll('[id$="-dialog"]').forEach((el) => {
+        el.style.maxHeight = maxH + "px";
+        el.style.maxWidth = maxW + "px";
+      });
+    }
+    // Re-clamp dialogs when the game window is resized.
+    window.addEventListener("resize", clampDialogsToWindow);
     function applyTheme(settings) {
       document.body.classList.toggle("dark", (settings.theme || "dark") === "dark");
       _autoTurnEnd = settings.autoTurnEnd !== false; // default on
@@ -3467,6 +3489,11 @@
       _skipAutoEndThisTurn = false;
       _clearTurnStartTimers();
       stopIdleWatch();
+      // Pre-plan every alien AI's upcoming turn now, in the background, from the
+      // current layout — so the built-in compute / LLM round-trip overlaps the
+      // human's thinking time. Each AI applies its cached plan on its turn
+      // (ignoring any action that's since become invalid).
+      startBackgroundAIPlanning();
       // Donate/nag splash: at the start of every 50th year, ask the main process
       // to show the nag screen. Main shows it only if no valid license is set.
       if (currentYear() % 50 === 0) {
@@ -3827,8 +3854,10 @@
     // Build a unit's display name from its creation order (1-based) and type.
     // Infantry units read like "1st Infantry", "2nd Infantry", ...
     function unitName(order, type) {
-      const label = (type === "infantry") ? "Infantry" : (type ? type.charAt(0).toUpperCase() + type.slice(1) : "Unit");
-      return `${order}${ordinalSuffix(order)} ${label}`;
+      // The unit's name is just its creation-order ordinal (e.g. "1st", "2nd").
+      // The unit type (Infantry, etc.) is shown separately in the Military view's
+      // Type column, so it is not repeated in the name.
+      return `${order}${ordinalSuffix(order)}`;
     }
     function findUnitById(id) {
       if (id == null) return null;
@@ -7541,13 +7570,25 @@
           if (aiHasPossibleActions(pi)) {
             // Debug: announce this AI's turn in the tool log (shown in debug mode).
             aiLog.player(p.name || ("AI " + pi));
+            // First try the plan that was pre-computed in the background at the
+            // start of the human's turn (applyCachedAIPlan ignores now-invalid
+            // actions). If none is ready (no cache / it failed), play live below.
+            let acted = false;
+            let handledByCache = false;
+            try { handledByCache = await applyCachedAIPlan(pi, myStep); }
+            catch (e) { console.error("[ai] cached plan apply failed:", e); }
+            if (handledByCache) {
+              acted = true;
+              aiLog.note("executed pre-planned turn");
+            }
             // Established AI plays its turn (work cells + build). Use the configured
             // LLM if available and the user hasn't chosen the built-in AI; otherwise
             // fall back to the built-in heuristic. Either consumes the same context.
-            let acted = false;
             let useLLM = false;
-            try { useLLM = await ipcRenderer.invoke("ai-available"); } catch (e) {}
-            if (useLLM) {
+            if (!handledByCache) try { useLLM = await ipcRenderer.invoke("ai-available"); } catch (e) {}
+            if (handledByCache) {
+              // already handled from the cached pre-plan
+            } else if (useLLM) {
               // Prefer the Level-2 tool-calling agent loop; if the vendor/model
               // lacks tool support (or it errors), fall back to the Level-1
               // one-shot JSON plan, then to the built-in heuristic.
@@ -7966,6 +8007,204 @@
       }
       if (acted && hexMap) hexMap.setBuildings(gameState.buildings);
       return acted;
+    }
+
+    // ---- Background AI pre-planning -----------------------------------------
+    // At the start of the HUMAN's turn we pre-compute each alien AI's plan for
+    // the coming turn from the CURRENT game layout, so the work (built-in
+    // heuristic compute, or the LLM request round-trip) happens while the human
+    // is thinking. Each AI's cached plan is a serializable { work, build,
+    // launch, remove, taxRate } object (same shape applyAIPlan consumes). When
+    // that AI's turn arrives we apply the cached plan; applyAIPlan silently
+    // IGNORES any action that is no longer valid (cell taken, now unaffordable,
+    // prerequisite lost, etc.), so a stale plan degrades gracefully instead of
+    // being replanned. The interactive tool-calling LLM path can't be captured
+    // as a static plan, so it is left to run live on its turn.
+    //
+    // Cache entry: { turn, promise } where promise resolves to a plan object or
+    // null (null => "no pre-plan; run live on the AI's turn").
+    const _aiPlanCache = new Map();
+
+    // Pure built-in planner: produce a { work, build, launch } plan for AI `pi`
+    // from the current state WITHOUT mutating anything. Mirrors aiPlayTurn's
+    // heuristics (worker assignment by yield/hunger, budget-driven build order,
+    // a coastal Dock, and colony launch) but records proposed actions instead of
+    // applying them. applyAIPlan re-validates each action at execution time.
+    function aiPlanBuiltin(pi) {
+      const knobs = aiTraitKnobs(pi);
+      const work = [], build = [], launch = [];
+      const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi && !b.inTransit);
+      for (const col of myColonies) {
+        ensureWorked(col);
+        const homeKey = cellKey(col.x, col.y);
+        const cap = workCap(col);
+        const control = colonyControlCells(col);
+        // Simulate how many extra workers are already assigned; the plan may add
+        // up to the remaining capacity. We also track which cells the plan will
+        // occupy so build/work proposals don't collide.
+        let usedExtras = col.worked.filter((k) => k !== homeKey).length;
+        const planned = new Set(col.worked); // cells already worked or planned
+        const occupied = new Set(gameState.buildings.map((b) => cellKey(b.x, b.y)));
+        // (1) Worker assignment: score unworked control cells (food-biased when
+        // the colony is near starving), take the best up to spare capacity.
+        const popUnits = Math.floor((col.population || 0) / 1000);
+        const workedFood = col.worked.reduce((s, k) => {
+          const [x, y] = k.split(",").map(Number);
+          return s + terrainProd(terrainAt(x, y)).food + waterFoodBonus(x, y);
+        }, 0);
+        const foodCost = ((CONFIG.units && CONFIG.units.population && CONFIG.units.population.costPerYear && CONFIG.units.population.costPerYear.food) != null) ? CONFIG.units.population.costPerYear.food : 1;
+        const hungry = workedFood < popUnits * foodCost;
+        const cand = control
+          .filter((c) => cellKey(c.x, c.y) !== homeKey && !planned.has(cellKey(c.x, c.y)))
+          .map((c) => {
+            const tp = terrainProd(terrainAt(c.x, c.y));
+            const food = tp.food + waterFoodBonus(c.x, c.y);
+            const material = tp.material;
+            return { c, score: hungry ? food * 3 + material : food + material };
+          })
+          .sort((a, b) => b.score - a.score);
+        const workCells = [];
+        for (const pick of cand) {
+          if (usedExtras >= cap) break;
+          if (pick.score <= 0) break;
+          workCells.push([pick.c.x, pick.c.y]);
+          planned.add(cellKey(pick.c.x, pick.c.y));
+          usedExtras++;
+        }
+        if (workCells.length) work.push({ colony: [col.x, col.y], cells: workCells });
+        // (2) One land build on an empty controlled cell, in the budget-driven
+        // order used by aiPlayTurn.
+        const controlEmpty = control.filter((c) =>
+          cellKey(c.x, c.y) !== homeKey && !occupied.has(cellKey(c.x, c.y)));
+        if (controlEmpty.length) {
+          const bud = colonyBudget(col);
+          const foodMargin = bud.consumption > 0 ? (bud.net.food / bud.consumption) : bud.net.food;
+          const wantFood = bud.net.food <= 0 || foodMargin < 0.5;
+          const wantEnergy = bud.net.energy < 0;
+          let order;
+          if (wantFood) order = [2, 3, 4];
+          else if (wantEnergy) order = [3, 2, 4];
+          else if (knobs.industrial) order = [4, 3, 2];
+          else if (knobs.naturalist) order = [2, 3, 4];
+          else order = [4, 2, 3];
+          const spot = controlEmpty[0];
+          for (const type of order) {
+            if (!canPlaceTypeAt(type, spot.x, spot.y, pi).ok) continue;
+            if (!hasPrerequisitesAt(type, spot.x, spot.y, pi)) continue;
+            if (!canAffordBuildingAt(type, spot.x, spot.y, pi)) continue;
+            build.push({ type, at: [spot.x, spot.y] });
+            // Also plan to work the new building's cell if capacity allows.
+            if (usedExtras < cap) {
+              const wEntry = work.find((w) => w.colony[0] === col.x && w.colony[1] === col.y);
+              if (wEntry) wEntry.cells.push([spot.x, spot.y]);
+              else work.push({ colony: [col.x, col.y], cells: [[spot.x, spot.y]] });
+              usedExtras++;
+            }
+            break;
+          }
+        }
+        // (2b) Coastal Dock (personality-gated), proposed only when there is
+        // spare worker capacity to use the opened sea tiles.
+        if (!colonyHasDock(col) && knobs.wantsDock && Math.random() >= knobs.dockSkipChance && usedExtras < cap) {
+          for (const c of cellsWithin(col.x, col.y, colonyControlRadius(col))) {
+            if (terrainAt(c.x, c.y) !== 1 || !isShallowSea(c.x, c.y)) continue;
+            if (occupied.has(cellKey(c.x, c.y))) continue;
+            if (canPlaceTypeAt(5, c.x, c.y, pi).ok && hasPrerequisitesAt(5, c.x, c.y, pi) && canAffordBuildingAt(5, c.x, c.y, pi)) {
+              build.push({ type: 5, at: [c.x, c.y] });
+            }
+            break;
+          }
+        }
+        // (3) Launch a new colony (personality-gated), from a large-enough host.
+        const minPop = (CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3000;
+        const launchPop = minPop * knobs.launchPopFactor;
+        if ((col.population || 0) > launchPop && Math.random() >= knobs.launchSkipChance && canAffordBuildingAt(1, col.x, col.y, pi)) {
+          const site = aiChooseLaunchSite(col, pi, knobs.launchSearchBonus);
+          if (site) launch.push({ from: [col.x, col.y], to: [site.x, site.y] });
+        }
+      }
+      return { work, build, launch };
+    }
+
+    // Build the LLM one-shot PLAN (no apply): same request as aiLLMTurn but
+    // returns the parsed plan object so it can be cached and applied later.
+    async function aiLLMPlan(pi) {
+      const ctx = buildAIContext(pi);
+      const system = (ctx.systemPrompt || "You are an AI player in the strategy game Zubrenn.") +
+        (ctx.personality ? "\n\n" + ctx.personality : "");
+      const user = [
+        "It is your turn. Decide how to develop your colonies.",
+        "Context (JSON): your colonies (with population, workCap, controlRadius,",
+        "worked cells as \"x,y\"), your resources, and a local mapView where each",
+        "cell has {x,y,terrain,building}. Terrain codes and rules are in the",
+        "system prompt.",
+        "",
+        JSON.stringify({ player: ctx.player, year: ctx.year, colonies: ctx.colonies, mapView: ctx.mapView }),
+        "",
+        "Reply ONLY with JSON of this exact shape (no prose):",
+        '{ "work":    [ { "colony": [cx,cy], "cells": [[x,y],...] } ],',
+        '  "build":   [ { "type": <buildingCode>, "at": [x,y] } ],',
+        '  "launch":  [ { "from": [cx,cy], "to": [x,y], "name": "optional" } ],',
+        '  "remove":  [ [x,y], ... ],',
+        '  "taxRate": <number 0..20> }',
+        "All fields are optional; include only the actions you want.",
+        "Invalid or unaffordable actions are ignored by the engine."
+      ].join("\n");
+      const resp = await ipcRenderer.invoke("ai-chat", { system, user, maxTokens: 1024, timeoutMs: 8000 });
+      if (!resp || !resp.ok || !resp.text) throw new Error(resp && resp.error || "no response");
+      const plan = parseAIPlan(resp.text);
+      if (!plan) throw new Error("unparseable plan");
+      return plan;
+    }
+
+    // Kick off background planning for every alien AI at the start of the human's
+    // turn. Non-blocking: built-in plans are computed now (fast, synchronous);
+    // the one-shot LLM plan fires its async request and the promise is cached so
+    // the round-trip overlaps the human's thinking time. When an LLM is
+    // configured we pre-fetch the one-shot plan (the plannable LLM mode); the
+    // interactive tool-calling loop can't be captured as a static plan, so an
+    // LLM game trades it for the pre-fetched one-shot plan here.
+    function startBackgroundAIPlanning() {
+      _aiPlanCache.clear();
+      const players = gameState.players || [];
+      // The coming AI turns happen in the SAME round the human is now starting.
+      const planTurn = gameState.turn;
+      const anyAI = players.some((p) => p && p.kind === 'ai' && p.placed);
+      if (!anyAI) return;
+      const schedule = (useLLM) => {
+        for (let pi = 0; pi < players.length; pi++) {
+          const p = players[pi];
+          if (!p || p.kind !== 'ai' || !p.placed) continue;
+          let promise;
+          if (useLLM) {
+            promise = aiLLMPlan(pi).catch((e) => { console.error("[ai] pre-plan (LLM) failed:", e); return null; });
+          } else {
+            try { promise = Promise.resolve(aiPlanBuiltin(pi)); }
+            catch (e) { console.error("[ai] pre-plan (built-in) failed:", e); promise = Promise.resolve(null); }
+          }
+          _aiPlanCache.set(pi, { turn: planTurn, promise });
+        }
+      };
+      ipcRenderer.invoke("ai-available")
+        .then((useLLM) => schedule(!!useLLM))
+        .catch(() => schedule(false)); // no IPC/LLM -> built-in pre-planning
+    }
+
+    // Consume a cached pre-plan for AI `pi` if one was prepared for the current
+    // turn. Returns true if a cached plan was applied (so aiTakeTurn can skip the
+    // live path), false if there is no usable cache (run live).
+    async function applyCachedAIPlan(pi, myStep) {
+      const entry = _aiPlanCache.get(pi);
+      if (!entry || entry.turn !== gameState.turn) return false;
+      _aiPlanCache.delete(pi);                 // consume once
+      let plan = null;
+      try { plan = await entry.promise; } catch (e) { plan = null; }
+      if (!plan) return false;                 // null => run live (e.g. tool-calling)
+      // If the turn was force-advanced (Ctrl+Esc) while awaiting the plan, don't
+      // apply it to a now-different turn/player.
+      if (myStep != null && _turnStepId !== myStep) return true;
+      applyAIPlan(pi, plan);                   // ignores now-invalid actions
+      return true;
     }
     // Best valid AI site: habitable land (2-7, Plains 10, Wetlands 11),
     // >= minColonyDistance from every colony,
@@ -9155,6 +9394,7 @@
       // Reset the map view (fit + centered) each time a colony is opened.
       _workZoom = 1; _workPan = { x: 0, y: 0 };
       workOverlay.hidden = false;
+      clampDialogsToWindow(); // ensure it fits the current window size
       renderWorkModal();
     }
     // Open the next queued "needs attention" colony whose prompt is still
@@ -9438,7 +9678,11 @@
         : "";
       // Buildings section: each operational building in the colony with its
       // non-zero per-year bonuses (and worked/idle state).
-      const bldgRows = [];
+      // Collect building entries first, then order (Biodome first, the rest
+      // alphabetical) and collapse consecutive identical rows into one with an
+      // "(xN)" multiplier. Two rows are identical when they have the same name,
+      // the same idle state, and the same resource detail.
+      const bldgEntries = [];
       for (const b of colonyBuildings(col)) {
         const bo = bldgBonusAt(b.type, b.x, b.y);
         const parts = [];
@@ -9474,11 +9718,42 @@
         const worked = isBuildingWorked(col, b);
         const state = b.type === 1 ? "" : (worked ? "" : ` <span class="stat-neg">(idle)</span>`);
         const detail = parts.length ? parts.join(", ") : "no bonuses";
-        bldgRows.push(`<div class="stat-row bldg-row"><span>${improvementName(b.type)}${state}</span><span>${detail}</span></div>`);
+        bldgEntries.push({
+          isBiodome: b.type === 1,
+          name: improvementName(b.type),
+          state, detail,
+        });
+      }
+      // Order: Biodome(s) first, then the rest alphabetically by name.
+      bldgEntries.sort((a, b) => {
+        if (a.isBiodome !== b.isBiodome) return a.isBiodome ? -1 : 1;
+        // Primary: name (alphabetical). Secondary/tertiary: idle state then
+        // resource detail, so identical rows are always adjacent and collapse
+        // fully (worked copies group together, idle copies group together).
+        const n = String(a.name).localeCompare(String(b.name));
+        if (n !== 0) return n;
+        if (a.state !== b.state) return a.state < b.state ? -1 : 1;
+        return a.detail < b.detail ? -1 : (a.detail > b.detail ? 1 : 0);
+      });
+      // Collapse consecutive identical rows (same name + idle state + detail),
+      // tagging the merged row with "(xN)" for the duplicate count.
+      const bldgRows = [];
+      for (const e of bldgEntries) {
+        const key = `${e.name}|${e.state}|${e.detail}`;
+        const prev = bldgRows.length ? bldgRows[bldgRows.length - 1] : null;
+        if (prev && prev._key === key) {
+          prev._count += 1;
+          prev.html = `<div class="stat-row bldg-row"><span>${e.name}${e.state} (x${prev._count})</span><span>${e.detail}</span></div>`;
+        } else {
+          bldgRows.push({
+            _key: key, _count: 1,
+            html: `<div class="stat-row bldg-row"><span>${e.name}${e.state}</span><span>${e.detail}</span></div>`,
+          });
+        }
       }
       const buildingsSection = [
         `<div class="stat-sec">Buildings <span class="stat-hint">(per-year bonus)</span></div>`,
-        ...(bldgRows.length ? bldgRows : [`<div class="stat-note">No buildings yet.</div>`]),
+        ...(bldgRows.length ? bldgRows.map((r) => r.html) : [`<div class="stat-note">No buildings yet.</div>`]),
       ];
       // Network section: colonies DIRECTLY connected to this one, with the
       // connection type(s) right-aligned (road/monorail/river/sea/air). A colony
@@ -9500,8 +9775,8 @@
         const typeTxt = u.type ? (u.type.charAt(0).toUpperCase() + u.type.slice(1)) : "Unit";
         const full = unitFullStrength(u);
         const strengthTxt = full > 0
-          ? `${nf(Math.round(Number(u.strength) || 0))} / ${nf(Math.round(full))} soldiers`
-          : `${nf(Math.round(Number(u.strength) || 0))} soldiers`;
+          ? `${nf(Math.round(Number(u.strength) || 0))} / ${nf(Math.round(full))}`
+          : `${nf(Math.round(Number(u.strength) || 0))}`;
         const sub = u.inTransit ? `${typeTxt} · departing` : `${typeTxt} · ${strengthTxt}`;
         const canRebase = !u.inTransit && unitIsFull(u);
         const rebaseTitle = u.inTransit ? "Unit is in transit"
@@ -10454,6 +10729,35 @@
       });
       return btn;
     }
+    // Replace a unit's name cell with an inline text field to rename the unit.
+    // Enter or blur commits (empty keeps the old name); Escape cancels. On a
+    // successful change the unit's `name` is updated and the table re-rendered.
+    function startRenameUnit(td, unit) {
+      if (!unit) return;
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "mil-name-input";
+      input.value = unit.name || "";
+      td.textContent = "";
+      td.appendChild(input);
+      input.focus();
+      input.select();
+      let done = false;
+      const commit = (save) => {
+        if (done) return; done = true;
+        if (save) {
+          const v = input.value.trim();
+          if (v) unit.name = v;
+        }
+        renderMilitary();
+      };
+      input.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") { e.preventDefault(); commit(true); }
+        else if (e.key === "Escape") { e.preventDefault(); commit(false); }
+      });
+      input.addEventListener("blur", () => commit(true));
+    }
     function renderMilitary() {
       const units = humanUnits().slice().sort((a, b) => (a.order || 0) - (b.order || 0));
       militaryBody.innerHTML = "";
@@ -10474,6 +10778,15 @@
           const td = document.createElement("td");
           td.textContent = cells[i];
           if (i === 2) td.className = "num";
+          if (i === 0) {
+            // Double-click the name to rename the unit inline.
+            td.classList.add("mil-name");
+            td.title = "Double-click to rename";
+            td.addEventListener("dblclick", (e) => {
+              e.stopPropagation();
+              startRenameUnit(td, u);
+            });
+          }
           tr.appendChild(td);
         }
         const actTd = document.createElement("td");
@@ -10629,6 +10942,9 @@
       }
       // Assign/repair stable colony founding sequences (for capital + ordering).
       ensureColonySeqs();
+      // Drop any AI pre-plan cache from a prior game/session (it is keyed by turn
+      // and repopulated at the next human turn, but clear it defensively here).
+      if (typeof _aiPlanCache !== 'undefined' && _aiPlanCache) _aiPlanCache.clear();
 
       // Fog of war. Restore a saved visible set if present; otherwise seed a
       // fresh circle around a random land tile for a NEW game (no buildings yet).
