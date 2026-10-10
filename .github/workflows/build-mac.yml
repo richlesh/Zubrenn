@@ -11,7 +11,7 @@ on:
 # draft release are created exactly once (no duplicate drafts across the
 # mac/linux/windows dispatches, and no intra-matrix race).
 concurrency:
-  group: release-${{ inputs.tag }}
+  group: release-${{ github.event.inputs.tag }}
   cancel-in-progress: false
 
 jobs:
