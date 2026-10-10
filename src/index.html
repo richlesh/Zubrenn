@@ -2255,23 +2255,28 @@
     function cellHasDockOrPort(x, y, owner) {
       return cellHasDock(x, y, owner) || cellHasPort(x, y, owner);
     }
-    // Route planning: a step from land into sea is only allowed if the land cell
-    // (the FROM cell) holds the owner's port/dock facility:
-    //   • deep-water sea  → FROM cell must have a Port (seaport);
-    //   • shallow-water sea → FROM cell must have a Port OR a Dock.
-    // Steps that stay within the sea, or move from sea to land, are unrestricted
-    // (passability is already governed by the owner's sea-travel capability in
-    // isPassableCell). Returns false if the transition is blocked.
+    // Route planning gate for entering the sea. The Dock/Port building sits ON a
+    // (shallow) SEA cell adjacent to the colony's land, and it is the gateway to
+    // the water: a path may step from land into the sea ONLY onto one of the
+    // owner's Dock/Port cells. Once at sea, onward movement (shallow vs deep) is
+    // governed by the owner's sea capability in isPassableCell (Dock = shallow,
+    // Port = all sea), so:
+    //   • a Dock lets you enter at its cell and travel shallow water;
+    //   • a Port lets you enter at its cell and travel all water (incl. deep).
+    // Steps that stay within the sea, or move from sea back to land, are
+    // unrestricted here. Returns false if the land→sea entry is blocked.
     function seaEntryAllowed(fromX, fromY, toX, toY, owner) {
       const toTerr = terrainAt(toX, toY);
       if (toTerr !== 1) return true;                       // not entering sea -> OK
       const fromTerr = terrainAt(fromX, fromY);
       if (fromTerr === 1) return true;                     // sea -> sea -> OK (already at sea)
-      // Land -> sea transition: require a dock/port on the land (FROM) cell.
+      // Land -> sea transition: the destination sea cell must be the owner's
+      // Dock or Port (the launch gateway). A Port is required when that entry
+      // cell is deep water; a Dock or Port suffices for shallow water.
       if (isShallowSea(toX, toY)) {
-        return cellHasDockOrPort(fromX, fromY, owner);     // shallow: Dock or Port
+        return cellHasDockOrPort(toX, toY, owner);         // shallow entry: Dock or Port cell
       }
-      return cellHasPort(fromX, fromY, owner);             // deep: Port only
+      return cellHasPort(toX, toY, owner);                 // deep entry: Port cell
     }
     // Whether a cell can be traversed/settled by land movement. Sea is normally
     // impassable; every Frozen (terrain 9) cell is impassable.
@@ -2313,17 +2318,17 @@
       }
       return _elevationIsTier9(xx, y); // legacy save fallback
     }
-    // `seaMode`: 0/false = no sea travel, 1/true = owner has a Dock,
-    // 2 = owner has a Port (seaport). For TRAVERSAL, any sea capability (>=1)
-    // makes every sea tile passable (shallow AND deep): once a path has legally
-    // left land it may cross open ocean. The deep-vs-shallow restriction lives
-    // ONLY in the land->sea exit gate (seaEntryAllowed): a Dock exits into
-    // shallow sea, a Port exits directly into deep sea.
+    // `seaMode`: 0/false = no sea travel, 1/true = owner has a Dock (shallow sea
+    // only), 2 = owner has a Port (ALL sea, deep included). A Dock lets a route
+    // travel across shallow water; crossing DEEP water requires a Port. The
+    // land→sea entry point itself is gated separately (seaEntryAllowed: you may
+    // only enter the sea at a Dock/Port cell).
     function isPassableCell(x, y, seaMode) {
       const terr = terrainAt(x, y);
       if (terr === 1) {
         const m = (seaMode === true) ? 1 : (Number(seaMode) || 0);
-        return m >= 1;                                 // any sea capability -> all sea traversable
+        if (m >= 2) return true;                       // Port: any sea tile (shallow + deep)
+        return m >= 1 && isShallowSea(x, y);           // Dock: shallow sea only
       }
       if (terr < 2 || terr > 11) return false;         // off-map (land is 2-11)
       if (isImpassableFrozen(x, y)) return false;      // tier-9 mountain top
