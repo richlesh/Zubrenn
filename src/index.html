@@ -2251,32 +2251,41 @@
       return (gameState.buildings || []).some((b) =>
         b.x === x && b.y === y && b.owner === owner && isOperational(b) && buildingHasOther(b.type, 'seaport'));
     }
-    // Whether a cell holds the owner's Dock OR Port (any sea-exit building).
-    function cellHasDockOrPort(x, y, owner) {
-      return cellHasDock(x, y, owner) || cellHasPort(x, y, owner);
-    }
-    // Route planning gate for entering the sea. The Dock/Port building sits ON a
-    // (shallow) SEA cell adjacent to the colony's land, and it is the gateway to
-    // the water: a path may step from land into the sea ONLY onto one of the
-    // owner's Dock/Port cells. Once at sea, onward movement (shallow vs deep) is
-    // governed by the owner's sea capability in isPassableCell (Dock = shallow,
-    // Port = all sea), so:
-    //   • a Dock lets you enter at its cell and travel shallow water;
-    //   • a Port lets you enter at its cell and travel all water (incl. deep).
-    // Steps that stay within the sea, or move from sea back to land, are
-    // unrestricted here. Returns false if the land→sea entry is blocked.
-    function seaEntryAllowed(fromX, fromY, toX, toY, owner) {
-      const toTerr = terrainAt(toX, toY);
-      if (toTerr !== 1) return true;                       // not entering sea -> OK
-      const fromTerr = terrainAt(fromX, fromY);
-      if (fromTerr === 1) return true;                     // sea -> sea -> OK (already at sea)
-      // Land -> sea transition: the destination sea cell must be the owner's
-      // Dock or Port (the launch gateway). A Port is required when that entry
-      // cell is deep water; a Dock or Port suffices for shallow water.
-      if (isShallowSea(toX, toY)) {
-        return cellHasDockOrPort(toX, toY, owner);         // shallow entry: Dock or Port cell
+    // --- State-aware route phases for sea crossings -------------------------
+    // A route may make AT MOST ONE sea crossing, and the kind of facility it
+    // entered through dictates what sea it may use:
+    //   LAND_PRE  (0): on land, no sea crossing used yet.
+    //   SEA_DOCK  (1): at sea, entered via a Dock -> SHALLOW sea only.
+    //   SEA_PORT  (2): at sea, entered via a Port -> deep AND shallow sea.
+    //   LAND_POST (3): back on land after a crossing -> sea is now forbidden.
+    const ROUTE_LAND_PRE = 0, ROUTE_SEA_DOCK = 1, ROUTE_SEA_PORT = 2, ROUTE_LAND_POST = 3;
+    // Given the current phase and a step from (cx,cy) to a passable neighbor
+    // (nx,ny), return the NEXT phase, or null if the step is not allowed.
+    // Land passability (frozen/off-map) is checked by the caller via
+    // isPassableCell(nx,ny,false); this function only governs the sea rules.
+    function routePhaseNext(phase, nx, ny, owner) {
+      const toSea = terrainAt(nx, ny) === 1;
+      if (!toSea) {
+        // Moving onto land. From a sea phase this ends the (single) crossing.
+        if (phase === ROUTE_SEA_DOCK || phase === ROUTE_SEA_PORT) return ROUTE_LAND_POST;
+        return phase; // LAND_PRE -> LAND_PRE, LAND_POST -> LAND_POST
       }
-      return cellHasPort(toX, toY, owner);                 // deep entry: Port cell
+      // Moving onto a sea tile.
+      switch (phase) {
+        case ROUTE_LAND_PRE: {
+          // Entering the sea: only onto the owner's Dock/Port cell.
+          if (cellHasPort(nx, ny, owner)) return ROUTE_SEA_PORT;      // Port -> deep+shallow
+          if (cellHasDock(nx, ny, owner) && isShallowSea(nx, ny)) return ROUTE_SEA_DOCK; // Dock -> shallow
+          return null;
+        }
+        case ROUTE_SEA_DOCK:
+          return isShallowSea(nx, ny) ? ROUTE_SEA_DOCK : null;        // dock crossing: shallow only
+        case ROUTE_SEA_PORT:
+          return ROUTE_SEA_PORT;                                      // port crossing: any sea
+        case ROUTE_LAND_POST:
+        default:
+          return null;                                                // may not re-enter the sea
+      }
     }
     // Whether a cell can be traversed/settled by land movement. Sea is normally
     // impassable; every Frozen (terrain 9) cell is impassable.
@@ -2318,11 +2327,11 @@
       }
       return _elevationIsTier9(xx, y); // legacy save fallback
     }
-    // `seaMode`: 0/false = no sea travel, 1/true = owner has a Dock (shallow sea
-    // only), 2 = owner has a Port (ALL sea, deep included). A Dock lets a route
-    // travel across shallow water; crossing DEEP water requires a Port. The
-    // land→sea entry point itself is gated separately (seaEntryAllowed: you may
-    // only enter the sea at a Dock/Port cell).
+    // `seaMode`: 0/false = no sea travel, 1/true = shallow sea only (Dock),
+    // 2 = ALL sea including deep (Port). Used for the colony zone-of-control
+    // sea-cell usability check. Colony-launch/unit ROUTING no longer uses the
+    // sea branch here — it uses a state-aware phase machine (routePhaseNext)
+    // that enforces single-crossing + Dock(shallow)/Port(deep) entry rules.
     function isPassableCell(x, y, seaMode) {
       const terr = terrainAt(x, y);
       if (terr === 1) {
@@ -2391,14 +2400,20 @@
       const W = map.terrain[0].length, H = map.terrain.length;
       const wrap = !!(map.meta && map.meta.wrap);
       const wxf = (x) => wrap ? ((x % W) + W) % W : x;
-      const key = (x, y) => y * W + wxf(x);
-      const allowShallow = ownerSeaMode(owner); // 0 none / 1 shallow (Dock) / 2 all sea (Port)
-      const startK = key(sx, sy);
+      const cellKey = (x, y) => y * W + wxf(x);
+      // State-aware key: cell + route phase (land-pre / sea-dock / sea-port /
+      // land-post), so a route makes at most one sea crossing of the right kind.
+      const key = (x, y, ph) => (y * W + wxf(x)) * 4 + ph;
+      const startPhase = (terrainAt(sx, sy) === 1) ? ROUTE_SEA_PORT : ROUTE_LAND_PRE;
+      const startK = key(sx, sy, startPhase);
       // Never route through the area of control of a foreign colony.
       const foreign = foreignControlCellSet(owner);
       const dist = new Map(), prev = new Map(), done = new Set();
       dist.set(startK, 0);
-      const pq = [{ k: startK, x: wxf(sx), y: sy, d: 0 }];
+      // bestCell tracks the cheapest cost to REACH each cell (any phase), which
+      // is what callers consume (reachable cells + their movement cost).
+      const bestCell = new Map(); bestCell.set(cellKey(sx, sy), 0);
+      const pq = [{ k: startK, x: wxf(sx), y: sy, ph: startPhase, d: 0 }];
       let _guard = 0, _cap = W * H * 6 + 100;
       while (pq.length && _guard++ < _cap) {
         let bi = 0;
@@ -2410,20 +2425,28 @@
         for (const n of hexNeighborsRenderer(cur.x, cur.y)) {
           const nx = wxf(n.x), ny = n.y;
           if (ny < 0 || ny >= H) continue;
-          if (!isPassableCell(nx, ny, allowShallow)) continue;
-          if (!seaEntryAllowed(cur.x, cur.y, nx, ny, owner)) continue;
-          if (foreign.has(key(nx, ny))) continue; // skip foreign-controlled cells
-          const nk = key(nx, ny);
+          const isSea = terrainAt(nx, ny) === 1;
+          // Land cells: must be passable (not frozen/off-map). Sea cells: the
+          // phase machine decides; off-map is excluded by terrainAt.
+          if (!isSea && !isPassableCell(nx, ny, false)) continue;
+          const nph = routePhaseNext(cur.ph, nx, ny, owner);
+          if (nph == null) continue;                        // sea rule blocks this step
+          if (foreign.has(cellKey(nx, ny))) continue;       // skip foreign-controlled cells
+          const nk = key(nx, ny, nph);
           if (done.has(nk)) continue;
           const nd = cur.d + enterCost(nx, ny, cur.x, cur.y);
           if (maxCost != null && nd > maxCost) continue;
           if (!dist.has(nk) || nd < dist.get(nk)) {
             dist.set(nk, nd); prev.set(nk, cur.k);
-            pq.push({ k: nk, x: nx, y: ny, d: nd });
+            const ck = cellKey(nx, ny);
+            if (!bestCell.has(ck) || nd < bestCell.get(ck)) bestCell.set(ck, nd);
+            pq.push({ k: nk, x: nx, y: ny, ph: nph, d: nd });
           }
         }
       }
-      return { dist, prev };
+      // Expose the per-cell best cost under the `dist` key callers expect
+      // (keyed by y*W+x), while keeping the state-keyed maps internal.
+      return { dist: bestCell, prev };
     }
 
     // Dijkstra over the hex grid from (sx,sy) to (tx,ty), summing enterCost for
@@ -2434,52 +2457,70 @@
       const W = map.terrain[0].length, H = map.terrain.length;
       const wrap = !!(map.meta && map.meta.wrap);
       const wxf = (x) => wrap ? ((x % W) + W) % W : x;
-      const key = (x, y) => y * W + wxf(x);
-      // Owner's sea capability: a Dock opens shallow sea; a Port opens all sea.
-      const allowShallow = ownerSeaMode(owner);
-      if (!isPassableCell(tx, ty, allowShallow)) return null;
+      const cellKey = (x, y) => y * W + wxf(x);
+      // State-aware key: cell + route phase, so a route makes at most ONE sea
+      // crossing and respects the Dock(shallow) / Port(deep) entry rule.
+      const key = (x, y, ph) => (y * W + wxf(x)) * 4 + ph;
+      // The target must be reachable terrain. Launch targets are land; a sea
+      // target is only legal if routing can legally arrive there (phase machine).
+      if (terrainAt(tx, ty) !== 1 && !isPassableCell(tx, ty, false)) return null;
       // Never route through (or into) the area of control of a foreign colony.
       const foreign = foreignControlCellSet(owner);
-      if (foreign.has(key(tx, ty))) return null;
-      const startK = key(sx, sy), targetK = key(tx, ty);
+      if (foreign.has(cellKey(tx, ty))) return null;
+      const targetCell = cellKey(tx, ty);
+      const startPhase = (terrainAt(sx, sy) === 1) ? ROUTE_SEA_PORT : ROUTE_LAND_PRE;
+      const startK = key(sx, sy, startPhase);
       const dist = new Map(), prev = new Map(), done = new Set();
       dist.set(startK, 0);
       // Simple array-based priority queue (maps are small enough here).
-      const pq = [{ k: startK, x: wxf(sx), y: sy, d: 0 }];
+      const pq = [{ k: startK, x: wxf(sx), y: sy, ph: startPhase, d: 0 }];
       let _guard = 0, _cap = W * H * 6 + 100;
+      let endK = null;
       while (pq.length && _guard++ < _cap) {
         let bi = 0;
         for (let i = 1; i < pq.length; i++) if (pq[i].d < pq[bi].d) bi = i;
         const cur = pq.splice(bi, 1)[0];
         if (done.has(cur.k)) continue;
         done.add(cur.k);
-        if (cur.k === targetK) break;
+        if (cur.x === wxf(tx) && cur.y === ty) { endK = cur.k; break; } // reached target in some phase
         for (const n of hexNeighborsRenderer(cur.x, cur.y)) {
           const nx = wxf(n.x), ny = n.y;
           if (ny < 0 || ny >= H) continue;
-          if (!isPassableCell(nx, ny, allowShallow)) continue;
-          if (!seaEntryAllowed(cur.x, cur.y, nx, ny, owner)) continue;
-          if (foreign.has(key(nx, ny))) continue; // skip foreign-controlled cells
-          const nk = key(nx, ny);
+          const isSea = terrainAt(nx, ny) === 1;
+          if (!isSea && !isPassableCell(nx, ny, false)) continue;
+          const nph = routePhaseNext(cur.ph, nx, ny, owner);
+          if (nph == null) continue;                        // sea rule blocks this step
+          if (foreign.has(cellKey(nx, ny))) continue;       // skip foreign-controlled cells
+          const nk = key(nx, ny, nph);
           if (done.has(nk)) continue;
           const nd = cur.d + enterCost(nx, ny, cur.x, cur.y);
           if (!dist.has(nk) || nd < dist.get(nk)) {
             dist.set(nk, nd); prev.set(nk, cur.k);
-            pq.push({ k: nk, x: nx, y: ny, d: nd });
+            pq.push({ k: nk, x: nx, y: ny, ph: nph, d: nd });
           }
         }
       }
-      if (!dist.has(targetK)) return null;
-      // Reconstruct path (as x,y from the key).
+      // If the loop ended without popping the target, find the cheapest reached
+      // phase-node that sits on the target cell.
+      if (endK == null) {
+        let best = Infinity;
+        for (let ph = 0; ph < 4; ph++) {
+          const k = key(tx, ty, ph);
+          if (dist.has(k) && dist.get(k) < best) { best = dist.get(k); endK = k; }
+        }
+      }
+      if (endK == null) return null;
+      // Reconstruct path (as x,y from the state-keyed nodes).
       const path = [];
-      let k = targetK;
+      let k = endK;
       let _g = 0, _maxSteps = W * H + 10;
       while (k != null && _g++ < _maxSteps) {
-        const px = ((k % W) + W) % W, py = Math.floor(k / W);
+        const cell = Math.floor(k / 4);
+        const px = ((cell % W) + W) % W, py = Math.floor(cell / W);
         path.unshift({ x: px, y: py });
         k = prev.has(k) ? prev.get(k) : null;
       }
-      return { cost: dist.get(targetK), path };
+      return { cost: dist.get(endK), path };
     }
     // Movement speed of a unit type (population, infantry, tank, ...). Read from
     // config units[type].speed; defaults to 1. Higher = faster.
