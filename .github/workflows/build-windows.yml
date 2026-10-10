@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release version tag (e.g. 1.0.0)"
+        description: "Release version tag (e.g. 0.3.0)"
         required: true
 
 # Serialize all release workflows for the SAME version so the shared git tag and
