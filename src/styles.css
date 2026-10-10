@@ -354,6 +354,46 @@ body.dark #turnstart-dialog { background: #2c2c2e; color: #e0e0e0; }
 #turnstart-text { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
 #turnstart-sub { font-size: 13px; color: #666; }
 body.dark #turnstart-sub { color: #aaa; }
+
+/* AI-turn glass pane: gray, click-blocking overlay shown during AI turns. */
+#aiturn-overlay {
+  position: fixed; z-index: 10007; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  /* Gray "glass" look: translucent gray + a slight blur of what's behind. */
+  background: rgba(120, 120, 120, 0.45);
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  pointer-events: auto;              /* swallow all clicks on the main window */
+  cursor: wait;
+}
+#aiturn-images {
+  display: flex; flex-direction: row; align-items: center; justify-content: center;
+  gap: 2.5vw;
+}
+#aiturn-overlay .aiturn-img {
+  max-height: 60vh; max-width: 22vw; width: auto; height: auto;
+  opacity: 0;
+  filter: drop-shadow(0 8px 28px rgba(0,0,0,0.55));
+}
+/* Looping fade cycle driven entirely by CSS so it keeps animating even while
+   the main thread is busy processing AI turns. Full cycle = 4 images x 1.9s =
+   7.6s. Each image is visible for its own 1.9s slot (0.6s fade in, 0.7s hold,
+   0.6s fade out) and hidden the rest of the cycle; the four are staggered by
+   negative animation-delays so they play one after another and repeat. Only
+   runs while the overlay is shown (`.aiturn-running`). */
+@keyframes aiFadeCycle {
+  0%   { opacity: 0; }
+  8%   { opacity: 1; }   /* ~0.6s fade in */
+  17%  { opacity: 1; }   /* ~0.7s hold    */
+  25%  { opacity: 0; }   /* ~0.6s fade out -> end of this image's 1.9s slot */
+  100% { opacity: 0; }   /* hidden for the other three slots */
+}
+#aiturn-overlay.aiturn-running .aiturn-img {
+  animation: aiFadeCycle 7.6s linear infinite;
+}
+#aiturn-overlay.aiturn-running .aiturn-img:nth-child(1) { animation-delay: 0s; }
+#aiturn-overlay.aiturn-running .aiturn-img:nth-child(2) { animation-delay: 1.9s; }
+#aiturn-overlay.aiturn-running .aiturn-img:nth-child(3) { animation-delay: 3.8s; }
+#aiturn-overlay.aiturn-running .aiturn-img:nth-child(4) { animation-delay: 5.7s; }
 .turnstart-row { margin-top: 14px; min-height: 0; }
 #turnstart-handle {
   padding: 8px 18px; border-radius: 8px; border: none; font-size: 14px;

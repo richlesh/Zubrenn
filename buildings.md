@@ -18,6 +18,12 @@ The Habitat is dedicated housing — the fastest way to grow a colony past the p
 #### Solar Panels
 
 Solar Panels are advanced energy collectors — a cheap, quick build with almost no upkeep. Each panel is a steady source of energy and adds a good deal of energy storage to the colony, but it provides no food, material, or wealth of its own. Most of a colony's advanced buildings depend on a Solar Panel being present first, making it the usual second structure a colony raises.
+
+#### Solar Farm
+
+<img align="right" width="128" src="src/resources/buildings/128/solar_farm.png">
+
+The Solar Farm is the Solar Panel's big sibling — a sprawling array that drinks in far more of the twin stars' light. It is built as an **upgrade of an existing Solar Panel**, raised in its place, and still counts as a Solar Panel for anything that depends on one. A larger, costlier structure than a single panel, it is a powerful source of energy and greatly expands the colony's energy storage. When a colony's industry outgrows what its panels can supply, upgrading a key panel to a Solar Farm keeps the lights on.
  
 <img align="right" width="128" src="src/resources/buildings/128/farm.png">
 

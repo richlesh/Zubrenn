@@ -180,6 +180,18 @@
     </div>
   </div>
 
+  <!-- AI-turn glass pane: a gray, click-blocking overlay shown while the AI
+       players take their turns. Four images sit centered and horizontally
+       aligned; they fade in/out one after another in a repeating cycle. -->
+  <div id="aiturn-overlay" hidden>
+    <div id="aiturn-images">
+      <img class="aiturn-img" src="resources/Zubrenn1.png" alt="">
+      <img class="aiturn-img" src="resources/Zubrenn2.png" alt="">
+      <img class="aiturn-img" src="resources/Zubrenn3.png" alt="">
+      <img class="aiturn-img" src="resources/Zubrenn4.png" alt="">
+    </div>
+  </div>
+
   <!-- Work-assignment modal (double-click a biodome). -->
   <div id="work-overlay" hidden>
     <div id="work-dialog">
@@ -2229,6 +2241,38 @@
       if (ownerHasDock(owner)) return 1;
       return 0;
     }
+    // Whether a specific CELL holds the owner's operational Dock (type 5).
+    function cellHasDock(x, y, owner) {
+      return (gameState.buildings || []).some((b) =>
+        b.x === x && b.y === y && b.owner === owner && b.type === 5 && isOperational(b));
+    }
+    // Whether a specific CELL holds the owner's operational Port (seaport tag).
+    function cellHasPort(x, y, owner) {
+      return (gameState.buildings || []).some((b) =>
+        b.x === x && b.y === y && b.owner === owner && isOperational(b) && buildingHasOther(b.type, 'seaport'));
+    }
+    // Whether a cell holds the owner's Dock OR Port (any sea-exit building).
+    function cellHasDockOrPort(x, y, owner) {
+      return cellHasDock(x, y, owner) || cellHasPort(x, y, owner);
+    }
+    // Route planning: a step from land into sea is only allowed if the land cell
+    // (the FROM cell) holds the owner's port/dock facility:
+    //   • deep-water sea  → FROM cell must have a Port (seaport);
+    //   • shallow-water sea → FROM cell must have a Port OR a Dock.
+    // Steps that stay within the sea, or move from sea to land, are unrestricted
+    // (passability is already governed by the owner's sea-travel capability in
+    // isPassableCell). Returns false if the transition is blocked.
+    function seaEntryAllowed(fromX, fromY, toX, toY, owner) {
+      const toTerr = terrainAt(toX, toY);
+      if (toTerr !== 1) return true;                       // not entering sea -> OK
+      const fromTerr = terrainAt(fromX, fromY);
+      if (fromTerr === 1) return true;                     // sea -> sea -> OK (already at sea)
+      // Land -> sea transition: require a dock/port on the land (FROM) cell.
+      if (isShallowSea(toX, toY)) {
+        return cellHasDockOrPort(fromX, fromY, owner);     // shallow: Dock or Port
+      }
+      return cellHasPort(fromX, fromY, owner);             // deep: Port only
+    }
     // Whether a cell can be traversed/settled by land movement. Sea is normally
     // impassable; every Frozen (terrain 9) cell is impassable.
     // With `allowShallowSea` (owner has a Dock), shallow-sea tiles (sea adjacent
@@ -2269,14 +2313,17 @@
       }
       return _elevationIsTier9(xx, y); // legacy save fallback
     }
-    // `seaMode`: 0/false = no sea travel, 1/true = shallow sea only (Dock),
-    // 2 = ALL sea including deep (Port/seaport).
+    // `seaMode`: 0/false = no sea travel, 1/true = owner has a Dock,
+    // 2 = owner has a Port (seaport). For TRAVERSAL, any sea capability (>=1)
+    // makes every sea tile passable (shallow AND deep): once a path has legally
+    // left land it may cross open ocean. The deep-vs-shallow restriction lives
+    // ONLY in the land->sea exit gate (seaEntryAllowed): a Dock exits into
+    // shallow sea, a Port exits directly into deep sea.
     function isPassableCell(x, y, seaMode) {
       const terr = terrainAt(x, y);
       if (terr === 1) {
         const m = (seaMode === true) ? 1 : (Number(seaMode) || 0);
-        if (m >= 2) return true;                       // Port: any sea tile
-        return m >= 1 && isShallowSea(x, y);           // Dock: shallow sea only
+        return m >= 1;                                 // any sea capability -> all sea traversable
       }
       if (terr < 2 || terr > 11) return false;         // off-map (land is 2-11)
       if (isImpassableFrozen(x, y)) return false;      // tier-9 mountain top
@@ -2359,6 +2406,7 @@
           const nx = wxf(n.x), ny = n.y;
           if (ny < 0 || ny >= H) continue;
           if (!isPassableCell(nx, ny, allowShallow)) continue;
+          if (!seaEntryAllowed(cur.x, cur.y, nx, ny, owner)) continue;
           if (foreign.has(key(nx, ny))) continue; // skip foreign-controlled cells
           const nk = key(nx, ny);
           if (done.has(nk)) continue;
@@ -2405,6 +2453,7 @@
           const nx = wxf(n.x), ny = n.y;
           if (ny < 0 || ny >= H) continue;
           if (!isPassableCell(nx, ny, allowShallow)) continue;
+          if (!seaEntryAllowed(cur.x, cur.y, nx, ny, owner)) continue;
           if (foreign.has(key(nx, ny))) continue; // skip foreign-controlled cells
           const nk = key(nx, ny);
           if (done.has(nk)) continue;
@@ -3344,6 +3393,9 @@
       updateStatus();
       const p = players[gameState.currentPlayer];
       if (p && p.kind === 'ai') {
+        // Cover the window with the gray AI-turn glass pane (idempotent across
+        // consecutive AI turns); removed when the human's turn starts.
+        showAITurnOverlay();
         // Pause turn processing while a notification is on screen; resume when
         // it (and any queued ones) have finished their 5s / been dismissed.
         scheduleTurnStep(() => aiTakeTurn(gameState.currentPlayer));
@@ -3407,6 +3459,30 @@
     // all processing halts while a notification dialog is displayed.
     function scheduleTurnStep(fn) {
       onNotificationsIdle(() => setTimeout(fn, 40));
+    }
+
+    // ---- AI-turn glass pane -------------------------------------------------
+    // While the AI players take their turns, cover the whole window with a gray,
+    // click-blocking glass pane and cycle the four Zubrenn images: each fades
+    // in, holds, fades out, then the next; after the fourth it repeats with the
+    // first. The looping fade is a pure CSS animation (see #aiturn-overlay in
+    // styles.css) so it keeps running even while the main thread is busy
+    // processing AI turns. The pane is torn down when the human's turn starts.
+    const aiTurnOverlay = document.getElementById("aiturn-overlay");
+    function showAITurnOverlay() {
+      if (!aiTurnOverlay) return;
+      if (!aiTurnOverlay.hidden) return;    // already showing (multiple AI turns)
+      aiTurnOverlay.hidden = false;
+      // Restart the CSS animation cleanly: remove the class, force a reflow,
+      // then add it so the cycle always begins at image 1.
+      aiTurnOverlay.classList.remove("aiturn-running");
+      void aiTurnOverlay.offsetWidth;
+      aiTurnOverlay.classList.add("aiturn-running");
+    }
+    function hideAITurnOverlay() {
+      if (!aiTurnOverlay) return;
+      aiTurnOverlay.classList.remove("aiturn-running");
+      aiTurnOverlay.hidden = true;
     }
 
     // ---- start-of-turn dialog (new year + auto-end flow) -------------------
@@ -3516,6 +3592,7 @@
     // front — only after the player has been idle for IDLE_MS.
     function startHumanTurn() {
       _skipAutoEndThisTurn = false;
+      hideAITurnOverlay();     // the AI phase is over — remove the glass pane
       _clearTurnStartTimers();
       stopIdleWatch();
       // Pre-plan every alien AI's upcoming turn now, in the background, from the
@@ -5668,7 +5745,8 @@
     function colonyControlCells(colony) {
       const radius = colonyControlRadius(colony);
       const cells = cellsWithin(colony.x, colony.y, radius);
-      const docked = colonyHasDock(colony);
+      const docked = colonyHasDock(colony);     // Dock OR Port in radius -> shallow sea usable
+      const ported = colonyHasSeaport(colony);  // Port in radius -> ALL sea usable (incl. deep)
       return cells.filter((c) => {
         const terr = terrainAt(c.x, c.y);
         // Overlapping zones: a cell belongs to only ONE colony (the nearest).
@@ -5677,7 +5755,9 @@
         // not part of a colony's usable control set.
         if (isImpassableFrozen(c.x, c.y)) return false;
         if (terr !== 1) return true;                 // land it owns is in control
-        // Sea: only if the colony has a Dock AND this is a shallow-sea tile.
+        // Sea tiles: a Port opens ALL sea in the zone of control (deep too);
+        // a plain Dock opens only shallow sea (sea adjacent to land).
+        if (ported) return true;
         return docked && isShallowSea(c.x, c.y);
       });
     }
@@ -5744,8 +5824,23 @@
     function colonyHasDock(colony) {
       const radius = colonyControlRadius(colony);
       for (const b of gameState.buildings) {
-        if (b.type !== 5 || b.owner !== colony.owner) continue;
+        if (b.owner !== colony.owner) continue;
         if (!isOperational(b)) continue;
+        // A Port (seaport) upgrades a Dock and subsumes its shallow-sea role.
+        if (b.type !== 5 && !buildingHasOther(b.type, 'seaport')) continue;
+        if (hexDistance(colony.x, colony.y, b.x, b.y) <= radius) return true;
+      }
+      return false;
+    }
+    // Whether a colony owns an operational Port (seaport) within its control
+    // radius. A Port opens ALL sea tiles in the zone of control (deep sea
+    // included) for working and building; a plain Dock opens only shallow sea.
+    function colonyHasSeaport(colony) {
+      const radius = colonyControlRadius(colony);
+      for (const b of gameState.buildings) {
+        if (b.owner !== colony.owner) continue;
+        if (!isOperational(b)) continue;
+        if (!buildingHasOther(b.type, 'seaport')) continue;
         if (hexDistance(colony.x, colony.y, b.x, b.y) <= radius) return true;
       }
       return false;

@@ -308,11 +308,30 @@
       "symbol": "buildings/icons/bolt.png",
       "buildCost": { "energy": 50, "material": 20, "wealth": 28, "water": 0.25, "turns": 1 },
       "costPerYear": { "wealth": 1 },
-      "bonus": { "energy": 500 },
-      "storage": { "energy": 500 },
+      "bonus": { "energy": 100 },
+      "storage": { "energy": 100 },
       "prerequisite": {
         "building": ["biodome"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      }
+    },
+    // The Solar Farm is an UPGRADE of a Solar Panel (prerequisite.upgrades:
+    // "solar panel"): it can only be built on a cell that already holds this
+    // owner's Solar Panel, and placing it REPLACES that panel. It is a larger,
+    // costlier array that produces and stores far more energy.
+    "solar farm": {
+      "code": 22,
+      "name": "Solar Farm",
+      "icon": "buildings/128/solar_farm.png",
+      "symbol": "buildings/icons/bolt_plus.png",
+      "buildCost": { "energy": 250, "material": 100, "wealth": 90, "water": 0.5, "turns": 3 },
+      "costPerYear": { "wealth": 5 },
+      "bonus": { "energy": 1000 },
+      "storage": { "energy": 2000 },
+      "prerequisite": {
+        "building": ["factory"],
+        "terrain": ["grassland","hills","forest","jungle","desert","plains"],
+        "upgrades": "solar panel"
       }
     },
     "factory": {
