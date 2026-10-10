@@ -276,7 +276,7 @@
       "buildCost": { "material": 200, "wealth": 100, "water": 2, "turns": 3 },
       "costPerYear": { },
       "bonus": { "energy": 50, "food": 5, "goods": 30, "material": 30, "water": 5, "wealth": 50, "happiness": 0.5, "population": 1 },
-      "storage": { "energy": 75, "food": 10, "goods": 250, "material": 250, "water": 5, "wealth": 250, "happiness": 25, "population": 6000 },
+      "storage": { "energy": 75, "food": 10, "goods": 250, "material": 250, "water": 5, "wealth": 250, "happiness": 25, "population": 20000 },
       "prerequisite": {
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
       },
@@ -441,7 +441,7 @@
       "icon": "buildings/128/desalination.png",
       "buildCost":   { "energy": 25, "material": 30, "wealth": 40, "water": 2, "turns": 5 },
       "costPerYear": { "energy": 50, "material": 30, "goods": 4, "wealth": 5 },
-      "bonus":       { "water": "3x" },
+      "bonus":       { "water": 10 },
       "storage":     { "water": 100 },
       "prerequisite": {
         "building": ["solar panel"],
@@ -498,12 +498,40 @@
       "icon": "buildings/128/mine.png",
       "buildCost":   { "energy": 5, "material": 5, "wealth": 10, "water": 0.5, "turns": 3 },
       "costPerYear": { "energy": 50, "material": 0, "goods": 5, "wealth": 5 },
-      "bonus":       { "material": "10x" },
+      "bonus":       { "material": "12x" },
       "storage":     { "material": 500 },
       "prerequisite": {
         "building": ["solar panel"],
         "terrain":  ["land"],
         "other":    ["mining"]
+      }
+    },
+    // housing habitat
+    "habitat": {
+      "code": 18,
+      "name": "Habitat",
+      "icon": "buildings/128/habitat.png",
+      "buildCost": { "material": 200, "wealth": 100, "water": 2, "turns": 3 },
+      "costPerYear": { "energy": 50, "food": 5, "goods": 30, "material": 30, "water": 3, "wealth": 50 },
+      "bonus": { "energy": 0, "food": 0, "goods": 0, "material": 0, "water": 0, "wealth": 50, "happiness": 0.5, "population": 1 },
+      "storage": { "energy": 50, "food": 10, "goods": 250, "water": 6, "wealth": 0, "happiness": 25, "population": 20000 },
+      "prerequisite": {
+        "population": 6000,
+        "terrain": ["flatland","trees","mountain-low"],
+        "other": []
+      }
+    },
+    "aquafarm": {
+      "code": 19,
+      "name": "Aquafarm",
+      "icon": "buildings/128/aquafarm.png",
+      "buildCost":   { "energy": 10, "material": 20, "wealth": 10, "water": 0.25, "turns": 1 },
+      "costPerYear": { "energy": 0.2, "material": 5, "wealth": 5, "water": 0 },
+      "bonus":       { "food": "3x", "wealth": 25 },
+      "storage": { "food": 25 },
+      "prerequisite": {
+        "building": ["dock"],
+        "terrain": ["sea"]
       }
     }
   },
@@ -1037,8 +1065,13 @@
   // rate, so an extreme surplus or deficit can't dominate morale.
   "foodHappinessCap": 5,
   // Population thresholds that expand a colony's zone-of-control radius: the
-  // index of the highest threshold a colony's population meets is its ring size.
-  "zoneOfControlSize": [0, 10000, 100000, 1000000],
+  // index of the highest threshold a colony's population meets is its ring size
+  // (index+1 = radius). Reaching level 7 (>=7,000 population) grants +1 radius.
+  // Each additional radius adds the folowing number of cells to the zone of control:
+  // 1, +6, +12, +18, +24, +30, +36, +42, ...
+  // Total cells in zone of control for radius 0, 1, 2
+  // 1, 7, 19, 37, 61, 91, ...
+  "zoneOfControlSize": [0, 7000, 19000, 37000, 61000],
 
   // Road bridges spanning a river/canal or a single sea tile (bridges are
   // road-only; monorails never need one):

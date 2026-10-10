@@ -16,6 +16,12 @@ body {
 
 The Biodome is the heart of a colony, establishing its central hub and initial zone of control. Its tile is always worked, providing all the living quarters for a growing population. The building boosts the colony’s baseline growth rate and grants starting storage for Food, Material, Energy, Wealth, and Happiness. Functioning as a self‑contained city, the Biodome includes limited solar power generation, hydroponic food production, fresh‑water extraction (via wells or nearby rivers), and basic manufacturing. It also holds modest reserves of energy (batteries), food, water, and warehouse space. Drones attached to the Biodome can explore beyond its borders and can monitor neighboring colonies.
 
+#### Habitat
+
+<span class="float-right">![habitat](../buildings/habitat.png)</span>
+
+The Habitat is dedicated housing — the fastest way to grow a colony past the point where its lone Biodome runs out of room. Where every other structure merely tends the land, the Habitat builds *up*, stacking living quarters, life‑support, and community space into a dense arcology that both quickens population growth and lifts the ceiling on how many colonists a colony can hold. It may be built on flatland, forest/jungle, or low‑mountain terrain (`flatland`, `trees`, `mountain-low`), and has no building prerequisite. Construction is substantial — **200 Material**, **100 Wealth** and **2 Water** over **3 turns** — and each year it consumes **50 Energy**, **5 Food**, **30 Goods**, **30 Material**, **3 Water** and **50 Wealth** to keep its systems and residents running. In return a worked Habitat adds **+1%** to the colony's population growth rate and a **+0.5** happiness bonus, pays back **50 Wealth** per year, and — crucially — provides **20 000 Population** storage, raising the colony's hard population cap. It also adds modest storage for Energy (**50**), Food (**10**), Goods (**250**), Water (**6**) and Happiness (**25**). Work several Habitats and a colony can swell far beyond what the land alone would support.
+
 #### Solar Panels
 
 <span class="float-right">![solar_panel](../buildings/solar_panel.png)</span>
@@ -26,7 +32,19 @@ Solar Panels are advanced energy collectors. They cost 2 Material, 2 Energy 
 
 <span class="float-right">![farm](../buildings/farm.png)</span>
 
-The Farm is the advanced food production facility for your colony.  It can be built only after a Solar Panel is present. Construction requires **3 Material**, **2 Energy**, and **2 Wealth** and takes **1 turn**. Upkeep each year is **1 Material**, **1 Energy**, and **0.5 Wealth**. Each Farm yields **3 Food** per year, contributes **1 Wealth**, and provides a modest growth boost of **0.0025**. It also adds **500 Food** storage and **100 Energy** storage to the colony.
+The Farm is the advanced food production facility for your colony.  It can be built only after a Solar Panel is present. Construction requires **3 Material**, **2 Energy**, and **2 Wealth** and takes **1 turn**. Upkeep each year is **1 Material**, **1 Energy**, and **0.5 Wealth**. Each Farm yields **3 Food** per year, contributes **1 Wealth**, and provides a modest growth boost of **0.0025**. It also adds **500 Food** storage and **100 Energy** storage to the colony.
+
+#### Aquafarm
+
+<span class="float-right">![aquafarm](../buildings/aquafarm.png)</span>
+
+The Aquafarm is the sea's answer to the Farm — a floating lattice of pens, kelp racks, and shellfish beds that harvests food from the water instead of the land. It is built on a **shallow‑sea tile** (sea adjacent to land) within the colony's zone of control and requires a **Dock** in the colony first (the Dock opens the colony's sea tiles to work and gives the Aquafarm its harbor). Like the Farm, its food yield is a **multiplier of the tile it stands on**: it adds **3× the cell's own Food** (sea base food plus any food resource deposit there), so productive, bonus‑rich shallows are the prime sites. Construction costs **10 Energy**, **20 Material**, **10 Wealth** and **0.25 Water** over just **1 turn**, and each year it consumes **0.2 Energy**, **5 Material** and **5 Wealth**. Besides its food, it brings in **25 Wealth** per year and adds **25 Food** storage. For coastal and island colonies — where arable land is scarce but shallow sea is plentiful — the Aquafarm is the mainstay of the food supply.
+
+#### Mine
+
+<span class="float-right">![mine](../buildings/mine.png)</span>
+
+The Mine is the colony's dedicated material producer, carving ore and stone straight out of the ground. Its output is a **multiplier of the tile it stands on**: rather than a flat yield, a Mine produces **10× the cell's own Material** (terrain base + any Material resource deposit there). On a rich mountain tile that is an enormous haul, so Mines are best planted on the most mineral‑dense ground you can reach. It requires a **Solar Panel** in the colony and may be built on any land terrain. Uniquely, the Mine's **`mining`** trait lets it work ground other buildings avoid — the high, cold, and broken terrain where ore is richest — though the **impassable mountain tops (tier‑9 peaks) remain off‑limits to everyone**. Construction costs **5 Material**, **5 Energy**, **10 Wealth** and **0.5 Water** over **3 turns**, and each year it draws **50 Energy**, **5 Goods** and **5 Wealth** to run its machinery. It adds **500 Material** storage. A single well‑sited Mine can single‑handedly feed a colony's Factories and keep its road network supplied with Material.
 
 #### Factory
 
@@ -56,7 +74,7 @@ The Air Field creates an air‑transportation network, linking colonies that als
 The Barracks train military battalions for defense and offense. It requires a **Factory** before it can be built. Construction costs **2 Material**, **2 Energy** and **2 Wealth**, and takes **2 turns**. Each year it consumes **1 Food**, **1 Energy** and **1 Wealth**, and provides a happiness bonus of **0.5**.
  
  ### Granary 
-<span class="float-right">![granary](../buildings/granry.png)</span>
+<span class="float-right">![granary](../buildings/granary.png)</span>
 
 The Granary provides large‑scale food storage, increasing a colony’s food capacity by **1 000**. It can be built after a **Farm** is built.  It costs **2 Material**, **2 Energy** and **2 Wealth**, taking **2 turns** to construct. It has no upkeep or production bonuses.
 

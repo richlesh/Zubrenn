@@ -654,3 +654,23 @@ body.dark .rebase-btn { background: #3a3a3c; color: #4da3ff; border-color: #5555
 body.dark .recall-btn { color: #e0b84d; }
 /* Action button group in the colony Stationed Military rows. */
 .stationed-mil .mil-unit-acts, .mil-unit-acts { display: inline-flex; gap: 6px; }
+
+/* Colonies view: name cell with a clickable lat/long sub-line, and an
+   in-transit row style. */
+#colonies-table .colony-name { font-weight: 500; }
+#colonies-table .colony-latlon {
+  display: inline-block; margin-top: 2px; font-size: 10px; color: #0a66d6; cursor: pointer;
+}
+#colonies-table .colony-latlon:hover { text-decoration: underline; }
+body.dark #colonies-table .colony-latlon { color: #4da3ff; }
+#colonies-table tr.colony-intransit { font-style: italic; opacity: 0.85; }
+#colonies-table tr.colony-intransit .colony-name { font-weight: 400; }
+
+/* Colony detail: header row with the colony name on the left and the Manager
+   dropdown on the right (sitting above the right-hand stats panel). */
+#work-header { display: flex; align-items: center; gap: 12px; }
+#work-header #work-title { margin: 0; }
+#work-header .work-manager { margin-left: auto; }
+.work-manager { font-size: 12px; color: #444; display: inline-flex; align-items: center; gap: 6px; }
+body.dark .work-manager { color: #ccc; }
+.work-manager select { font: 12px -apple-system, sans-serif; padding: 2px 4px; }

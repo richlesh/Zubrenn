@@ -183,7 +183,17 @@
   <!-- Work-assignment modal (double-click a biodome). -->
   <div id="work-overlay" hidden>
     <div id="work-dialog">
-      <h2 id="work-title">Colony</h2>
+      <div id="work-header">
+        <h2 id="work-title">Colony</h2>
+        <label id="work-manager-row" class="work-manager">Manager:
+          <select id="work-manager">
+            <option value="none">None</option>
+            <option value="growth">Growth Priority</option>
+            <option value="production">Production Priority</option>
+            <option value="military">Military Priority</option>
+          </select>
+        </label>
+      </div>
       <div id="work-info"></div>
       <div id="work-body">
         <canvas id="work-canvas" width="480" height="420"></canvas>
@@ -3038,47 +3048,67 @@
       // unworked zone cell), tell the player and open that colony's work dialog.
       // Do this once notifications clear so it doesn't fight the "Year begins"
       // toast. Prompt each queued colony in turn.
-      if (_newWorkerColonies.length) {
-        for (const col of _newWorkerColonies) {
-          const msg = col._justEstablished
-            ? `${col.name || 'A new colony'} is now active — assign its first worker.`
-            : col._radiusGrew
-              ? `${col.name || 'A colony'} expanded its zone of control — assign workers to the new tiles.`
-              : `${col.name || 'A colony'} can work a new tile — assign it.`;
-          notify(msg);
-          delete col._radiusGrew;
-        }
+      // Fresh turn: clear any leftover attention queue from a prior turn.
+      _attentionQueue = [];
+      // Managed colonies (col.manager set to something other than "none") are
+      // handled automatically here instead of prompting the player: the manager
+      // assigns idle workers and queues builds. They are then excluded from the
+      // attention notifications and the dialog queue below. Unmanaged colonies
+      // fall through to the normal attention flow.
+      const _isManaged = (col) => col && col.manager && col.manager !== 'none';
+      for (const col of _newWorkerColonies) { if (_isManaged(col)) runColonyManager(col); }
+      for (const col of _budgetDeficitColonies) { if (_isManaged(col)) runColonyManager(col); }
+      const _attnWorker = _newWorkerColonies.filter((c) => !_isManaged(c));
+      const _attnDeficit = _budgetDeficitColonies.filter((c) => !_isManaged(c));
+      // Emit all "needs attention" notifications first (worker/new-colony prompts
+      // and budget-shortfall prompts), THEN build a single combined queue so the
+      // dialogs are shown one at a time without jumping: each colony's dialog
+      // stays open until the player dismisses it, and only then does the next
+      // queued colony open (see closeWorkModal -> openNextAttentionColony).
+      for (const col of _attnWorker) {
+        const msg = col._justEstablished
+          ? `${col.name || 'A new colony'} is now active — assign its first worker.`
+          : col._radiusGrew
+            ? `${col.name || 'A colony'} expanded its zone of control — assign workers to the new tiles.`
+            : `${col.name || 'A colony'} can work a new tile — assign it.`;
+        notify(msg);
+        delete col._radiusGrew;
+      }
+      for (const col of _attnDeficit) {
+        const shorts = (col._deficitResources || []).join(", ");
+        notify(`${col.name || 'A colony'} is over budget${shorts ? ` (${shorts})` : ''} — deselect worked buildings to idle them and fit the yearly budget.`);
+      }
+      if (_attnWorker.length || _attnDeficit.length) {
         onNotificationsIdle(() => {
-          // The dialog overlay shows one colony at a time. Prefer a newly
-          // established colony; otherwise open the first with spare capacity and
-          // an unworked control cell.
-          const eligible = _newWorkerColonies.filter((col) => {
+          // Order: just-established colonies first (assign their first worker),
+          // then budget-deficit colonies (idle buildings to fit the budget),
+          // then colonies with spare worker capacity + an unworked control cell.
+          // Dedupe so a colony appearing in more than one set is prompted once.
+          const established = [], deficit = [], others = [];
+          const seen = new Set();
+          const addOnce = (col, bucket) => { if (col && !seen.has(col)) { seen.add(col); bucket.push(col); } };
+          for (const col of _attnWorker) {
+            if (col._justEstablished) {
+              col._attnForce = true;            // show regardless of worker capacity
+              addOnce(col, established);
+            }
+          }
+          for (const col of _attnDeficit) {
+            col._attnForce = true;              // show so the player can idle buildings
+            addOnce(col, deficit);
+          }
+          for (const col of _attnWorker) {
+            if (col._justEstablished) continue;  // already queued above
+            if (seen.has(col)) continue;
             const controlCount = colonyControlCells(col).length;
             const homeKey = cellKey(col.x, col.y);
-            const hasIdleCap = col.worked.filter(k => k !== homeKey).length < workCap(col);
-            return col.worked.length < controlCount && hasIdleCap;
-          });
-          const pick = eligible.find((c) => c._justEstablished) || eligible[0];
-          for (const c of _newWorkerColonies) delete c._justEstablished;
-          if (pick) {
-            // Center the large map on this colony as its detail dialog auto-opens.
-            if (hexMap) hexMap.centerOnCell(pick.x, pick.y);
-            openWorkModal(pick);
+            const hasIdleCap = col.worked.filter((k) => k !== homeKey).length < workCap(col);
+            if (col.worked.length < controlCount && hasIdleCap) addOnce(col, others);
           }
-        });
-      }
-
-      // Budget shortfall: a human colony ran a resource to 0 and couldn't cover
-      // its needs. Ask the player to idle buildings (deselect their worked cells)
-      // to fit the yearly budget. Open that colony's dialog.
-      if (_budgetDeficitColonies.length) {
-        for (const col of _budgetDeficitColonies) {
-          const shorts = (col._deficitResources || []).join(", ");
-          notify(`${col.name || 'A colony'} is over budget${shorts ? ` (${shorts})` : ''} — deselect worked buildings to idle them and fit the yearly budget.`);
-        }
-        onNotificationsIdle(() => {
-          const col = _budgetDeficitColonies[0];
-          if (col) openWorkModal(col);
+          for (const c of _newWorkerColonies) delete c._justEstablished;
+          _attentionQueue = [...established, ...deficit, ...others];
+          // Open the first; subsequent ones open as the player dismisses each.
+          openNextAttentionColony();
         });
       }
     }
@@ -5904,6 +5934,13 @@
       if (!isPassableCell(tx, ty, false)) return { ok: false, reason: "impassable" };
       if (tx === host.x && ty === host.y) return { ok: false, reason: "same cell" };
       if (cellHasBuilding(tx, ty)) return { ok: false, reason: "cell occupied" };
+      // Don't allow a second colony to be launched to a cell that an in-transit
+      // colony is already heading to (its destination occupies that cell).
+      for (const b of gameState.buildings) {
+        if (b.type === 1 && b.inTransit && b.x === tx && b.y === ty) {
+          return { ok: false, reason: "a colony is already in transit to this cell" };
+        }
+      }
       const minD = CONFIG.minColonyDistance || 20;
       for (const b of gameState.buildings) {
         if (b.type !== 1) continue;
@@ -6957,6 +6994,12 @@
       if (!(citySize > 0)) return true;
       return !!col && (col.population || 0) >= citySize * 1000;
     }
+    // Whether the colony population meets a prerequisite.population threshold
+    // (an absolute minimum population, e.g. 6000). Missing/zero = no requirement.
+    function populationReqMet(col, minPopulation) {
+      if (!(minPopulation > 0)) return true;
+      return !!col && (col.population || 0) >= minPopulation;
+    }
     // Whether ALL build prerequisites for `type` are met at (x,y): required
     // buildings present in the colony, a satisfying network connection (if any
     // listed), and the colony population >= citySize*1000 (if set). Terrain and
@@ -6978,6 +7021,7 @@
       if (!codes.every((t) => present.has(t))) return false;
       if (!networkRequirementMet(col, pre.network)) return false;
       if (!citySizeMet(col, pre.citySize)) return false;
+      if (!populationReqMet(col, pre.population)) return false;
       return true;
     }
     // Human-readable list of unmet prerequisites (for the build-menu label):
@@ -6996,6 +7040,9 @@
       }
       if (!citySizeMet(col, pre.citySize)) {
         missing.push(`population ${(pre.citySize * 1000).toLocaleString()}`);
+      }
+      if (!populationReqMet(col, pre.population)) {
+        missing.push(`population ${Number(pre.population).toLocaleString()}`);
       }
       if (buildingIsFederation(type) && !federationEstablished(owner)) {
         missing.push("an established Federation (a second colony)");
@@ -7968,6 +8015,170 @@
         if (hexMap) hexMap.setBuildings(gameState.buildings);
       }
     }
+
+    // --- Colony Manager (automation) ------------------------------------------
+    // Per-colony "Manager" set in the colony detail dialog (col.manager):
+    //   none | growth | production | military
+    // When a manager (other than none) is active, the manager handles the
+    // colony at the start of the player's turn instead of prompting: it assigns
+    // idle workers to the best unworked control cells and, when the build queue
+    // is low, queues buildings — in both cases choosing by the colony's current
+    // NEEDS (resources with a negative/low net rate) first, then by the
+    // manager's PRIORITY weighting.
+
+    // Base per-resource priority weights by manager type. Higher = more valued.
+    const MANAGER_WEIGHTS = {
+      growth:     { food: 3, water: 2, energy: 1, material: 1, goods: 1, wealth: 1, growth: 4 },
+      production: { food: 1, water: 1, energy: 2, material: 3, goods: 3, wealth: 1, growth: 1 },
+      military:   { food: 1, water: 1, energy: 2, material: 3, goods: 3, wealth: 1, growth: 1 },
+    };
+    // Resource weight for a manager, boosted when the colony is short of that
+    // resource. `needs` is a set/map of resources currently in deficit (net < 0)
+    // or near-empty storage; a deficit multiplies the base weight so covering a
+    // shortfall always dominates mere priority — and a resource the colony does
+    // NOT currently need contributes only a near-zero amount (so e.g. a Solar
+    // Panel's +500 energy is nearly ignored when energy isn't short, instead of
+    // dominating the score by sheer magnitude).
+    //
+    // `growth` (population growth) is a goal, not a stored/consumed resource that
+    // colonyNeeds tracks, so it always uses its full base weight.
+    function managerResourceWeight(manager, res, needs) {
+      const base = (MANAGER_WEIGHTS[manager] || MANAGER_WEIGHTS.growth)[res] || 0;
+      if (res === 'growth') return base;                 // always valued at priority
+      const need = needs && needs[res] ? needs[res] : 0; // 0, or a positive urgency
+      // Needed: full priority, amplified by urgency. Not needed: near-zero (a tiny
+      // factor so same-priority ties still break sensibly without surplus output
+      // dominating).
+      return need > 0 ? base * (1 + need * 10) : base * 0.01;
+    }
+    // Compute the colony's current needs: for each material resource, a positive
+    // urgency when its net per-year rate is negative or its storage is nearly
+    // empty. Returns a map res -> urgency (0 = fine).
+    function colonyNeeds(col) {
+      const s = colonyStats(col);
+      const rate = { food: s.food, material: s.material, goods: s.goods, energy: s.energy, water: s.water, wealth: s.wealthRate };
+      const stored = s.stored || {};
+      const caps = s.caps || {};
+      const needs = {};
+      for (const k of ['food', 'material', 'goods', 'energy', 'water', 'wealth']) {
+        let u = 0;
+        if ((rate[k] || 0) < 0) u += 2;                       // losing this resource each year
+        const cap = caps[k] || 0;
+        if (cap > 0 && (stored[k] || 0) < cap * 0.1) u += 1;  // storage nearly empty
+        if (u) needs[k] = u;
+      }
+      return needs;
+    }
+    // Score an unworked control cell for a manager: the weighted sum of what the
+    // cell would add (food/material/energy via cellProduction, plus a growth
+    // term from the cell's population bonus). Needs boost the matching weights.
+    function managerCellScore(col, c, manager, needs) {
+      const prod = cellProduction(c.x, c.y, false, col.owner); // { f, m, e, h }
+      // Population-growth contribution of this cell (terrain + terrain-bonus).
+      const tt = (terrainTypeById(terrainAt(c.x, c.y))) || {};
+      let growth = readResMap(tt.bonus).population;
+      const tb = bonusDefAt(c.x, c.y);
+      if (tb && tb.bonus) growth += readResMap(tb.bonus).population;
+      return managerResourceWeight(manager, 'food', needs) * (prod.f || 0)
+           + managerResourceWeight(manager, 'material', needs) * (prod.m || 0)
+           + managerResourceWeight(manager, 'energy', needs) * (prod.e || 0)
+           + managerResourceWeight(manager, 'growth', needs) * growth;
+    }
+    // Assign idle workers (spare worker capacity) to the best unworked control
+    // cells for the manager. Returns the number of workers assigned.
+    function managerAssignWorkers(col, manager, needs) {
+      ensureWorked(col);
+      const homeKey = cellKey(col.x, col.y);
+      let assigned = 0;
+      // Repeat while there is spare worker capacity and an unworked, buildable
+      // control cell to assign one to.
+      for (;;) {
+        const extras = col.worked.filter((k) => k !== homeKey).length;
+        if (extras >= workCap(col)) break;                   // no spare worker
+        let best = null, bestScore = -Infinity;
+        for (const c of colonyControlCells(col)) {
+          const k = cellKey(c.x, c.y);
+          if (k === homeKey || col.worked.includes(k)) continue;
+          if (isImpassableFrozen(c.x, c.y)) continue;        // can't work peaks
+          // Don't auto-destroy a pristine resource deposit by working it.
+          if (bonusIsPristine(bonusDefAt(c.x, c.y))) continue;
+          const score = managerCellScore(col, c, manager, needs);
+          if (score > bestScore) { bestScore = score; best = c; }
+        }
+        if (!best) break;                                    // nothing to work
+        col.worked.push(cellKey(best.x, best.y));
+        assigned++;
+      }
+      return assigned;
+    }
+    // Choose and queue buildings for a managed colony when the build queue is
+    // low. The queue is "low" when fewer than 1 building is under construction.
+    // At most (spare workers + 1) buildings may be queued, and never more than
+    // the existing 2-concurrent-construction cap allows. Returns count queued.
+    function managerAutoBuild(col, manager, needs) {
+      ensureWorked(col);
+      // Build queue size for this colony (non-colony buildings under construction).
+      let underCon = colonyBuildingsUnderConstruction(col);
+      if (underCon >= 1) return 0;                           // queue not low
+      const homeKey = cellKey(col.x, col.y);
+      const spareWorkers = Math.max(0, workCap(col) - col.worked.filter((k) => k !== homeKey).length);
+      let budget = spareWorkers + 1;                         // at most workers+1 builds
+      const types = buildingTypeCodes().filter((t) => t !== 1);
+      let queued = 0;
+      for (;;) {
+        if (queued >= budget) break;
+        if (underCon >= 2) break;                            // 2-concurrent cap
+        let best = null, bestScore = -Infinity, bestCell = null;
+        // Candidate cells: the colony's control cells that are empty land.
+        for (const c of colonyControlCells(col)) {
+          if (cellHasBuilding(c.x, c.y)) continue;
+          for (const type of types) {
+            if (!canPlaceTypeAt(type, c.x, c.y, col.owner).ok) continue;
+            if (!hasPrerequisitesAt(type, c.x, c.y, col.owner)) continue;
+            if (!canAffordBuildingAt(type, c.x, c.y, col.owner)) continue;
+            const score = managerBuildScore(col, type, c, manager, needs);
+            if (score > bestScore) { bestScore = score; best = type; bestCell = c; }
+          }
+        }
+        if (best == null || !bestCell || bestScore <= 0) break;
+        placeBuilding(bestCell.x, bestCell.y, col.owner, best);
+        queued++; underCon++;
+      }
+      return queued;
+    }
+    // Score a candidate building for a manager: weighted sum of its net per-year
+    // output at that cell, with a priority nudge for the Barracks under the
+    // Military manager (so it will raise military capacity when nothing is in
+    // greater deficit).
+    function managerBuildScore(col, type, c, manager, needs) {
+      const net = bldgNetAt(type, c.x, c.y);               // { food, material, goods, energy, water, wealth, growth, happiness }
+      let score = managerResourceWeight(manager, 'food', needs) * (net.food || 0)
+                + managerResourceWeight(manager, 'material', needs) * (net.material || 0)
+                + managerResourceWeight(manager, 'goods', needs) * (net.goods || 0)
+                + managerResourceWeight(manager, 'energy', needs) * (net.energy || 0)
+                + managerResourceWeight(manager, 'water', needs) * (net.water || 0)
+                + managerResourceWeight(manager, 'wealth', needs) * (net.wealth || 0)
+                + managerResourceWeight(manager, 'growth', needs) * (net.growth || 0) * 100;
+      // Military manager values a Barracks (unit production) when needs are met.
+      const bt = buildingType(type) || {};
+      if (manager === 'military' && (Number(bt.recruitRate) || 0) > 0) score += 5;
+      return score;
+    }
+    // Run the manager for one colony at the start of the player's turn: assign
+    // idle workers, then auto-build when the queue is low. Returns true if the
+    // manager took any action (so the caller can skip the attention prompt).
+    function runColonyManager(col) {
+      const manager = col && col.manager;
+      if (!manager || manager === 'none') return false;
+      const needs = colonyNeeds(col);
+      const assigned = managerAssignWorkers(col, manager, needs);
+      // Recompute needs after assigning workers (production changed).
+      const built = managerAutoBuild(col, manager, colonyNeeds(col));
+      if (assigned || built) {
+        if (hexMap) hexMap.setBuildings(gameState.buildings);
+      }
+      return true; // a managed colony is handled regardless of whether it acted
+    }
     // ---- AI personality traits -------------------------------------------
     // Each AI player carries an 8-axis personality profile (set from
     // CONFIG.ai.species[name].traits in setupPlayers). Each axis is 1..5 on a
@@ -8854,6 +9065,12 @@
     let workColony = null;
     let workReadOnly = false;
     let _advanceAfterWorkModal = false; // advance the turn when the work modal closes
+    // Turn-start "needs attention" queue: colonies to prompt the player about,
+    // one dialog at a time. The current colony's dialog stays open until the
+    // player dismisses it (Done/Enter/Esc/backdrop); only THEN do we advance to
+    // the next colony. Assigning a worker or building does NOT auto-advance, so
+    // the player can both assign workers and build before moving on.
+    let _attentionQueue = [];
     let _workHexes = []; // [{ x, y, cx, cy, isHome }] screen layout for hit-testing
     const WORK_HEX_SCALE = { x: 1.15470053837925, y: 0.86602540378444 };
 
@@ -8864,12 +9081,40 @@
       workOverlay.hidden = false;
       renderWorkModal();
     }
+    // Open the next queued "needs attention" colony whose prompt is still
+    // relevant (it still has spare worker capacity and an unworked control
+    // cell, or it was a just-established colony). Returns true if one was opened.
+    function openNextAttentionColony() {
+      while (_attentionQueue.length) {
+        const col = _attentionQueue.shift();
+        if (!col || col._disbanded) continue;
+        // Must still be one of the player's active colonies.
+        if (!(col.type === 1 && col.owner === 'human' && !col.inTransit)) continue;
+        // Skip if the player already fully handled it (no spare worker + no
+        // unworked control cell) — unless it is force-shown (a just-established
+        // colony needing its first worker, or a budget-deficit colony that needs
+        // buildings idled).
+        const controlCount = colonyControlCells(col).length;
+        const homeKey = cellKey(col.x, col.y);
+        const hasIdleCap = col.worked.filter((k) => k !== homeKey).length < workCap(col);
+        const hasUnworked = col.worked.length < controlCount;
+        if (!col._attnForce && !(hasIdleCap && hasUnworked)) continue;
+        delete col._attnForce;
+        if (hexMap) hexMap.centerOnCell(col.x, col.y);
+        openWorkModal(col);
+        return true;
+      }
+      return false;
+    }
     function closeWorkModal() {
       workOverlay.hidden = true; workColony = null;
       const wt = document.getElementById("work-tooltip"); if (wt) wt.hidden = true;
       if (_advanceAfterWorkModal) {
         _advanceAfterWorkModal = false;
         advanceTurn(); // hand the round to the AIs after the founding turn
+      } else if (openNextAttentionColony()) {
+        // Moved on to the next colony needing attention; keep the player in the
+        // attention flow rather than ending the turn.
       } else {
         // Assigning workers may have exhausted the human's actions — re-check.
         maybeAutoEndHumanTurn();
@@ -8898,6 +9143,14 @@
         ? `Population ${Math.round(col.population).toLocaleString()} — viewing ${col.ownerName || 'alien'} colony (read-only).`
         : `Population ${Math.round(col.population).toLocaleString()} — ` +
           `worked ${extras}/${cap} extra cells (biodome always worked). Click a cell to toggle.`;
+      // Manager dropdown: reflects col.manager (default "none"); hidden for the
+      // read-only alien colony view.
+      const mgrRow = document.getElementById("work-manager-row");
+      const mgrSel = document.getElementById("work-manager");
+      if (mgrRow && mgrSel) {
+        mgrRow.style.display = workReadOnly ? "none" : "";
+        mgrSel.value = col.manager || "none";
+      }
 
       const cells = colonyControlCells(col);
       const cellSet = new Set(cells.map((c) => cellKey(c.x, c.y)));
@@ -9524,6 +9777,12 @@
     workCanvas.addEventListener("mouseleave", () => { workTooltip.hidden = true; });
 
     document.getElementById("work-close").addEventListener("click", closeWorkModal);
+    // Manager selection: persist on the colony. Takes effect at the start of the
+    // player's next turn (the manager assigns idle workers and queues builds).
+    document.getElementById("work-manager").addEventListener("change", (e) => {
+      if (!workColony || workReadOnly) return;
+      workColony.manager = e.target.value || "none";
+    });
     workOverlay.addEventListener("click", (e) => { if (e.target === workOverlay) closeWorkModal(); });
     // While the colony details dialog is open, Enter or Escape dismisses it.
     // Registered in the capture phase so it takes precedence over the global
@@ -9734,7 +9993,26 @@
     function computeColonyRows() {
       const rows = [];
       for (const b of (gameState.buildings || [])) {
-        if (b.type !== 1 || b.owner !== "human" || b.inTransit) continue;
+        if (b.type !== 1 || b.owner !== "human") continue;
+        // In-transit colonies (still travelling to their destination) get a
+        // lightweight row: name, destination lat/long, and turns remaining. They
+        // have no economy yet, so the stat columns are left blank/zero.
+        if (b.inTransit) {
+          rows.push({
+            col: b, inTransit: true,
+            name: b.name || "Colony",
+            x: b.x, y: b.y,                 // destination cell
+            turnsRemaining: b.turnsRemaining || 0,
+            population: b.pendingColonists || 0, growthRate: 0,
+            buildings: 0, worked: 0, workedControl: 0, canWorkMore: false,
+            energy: 0, energyMax: 0, energyRate: 0,
+            food: 0, foodMax: 0, foodRate: 0,
+            material: 0, materialMax: 0, materialRate: 0,
+            wealth: 0, wealthMax: 0, wealthRate: 0,
+            happiness: 0, happinessMax: 0, happinessRate: 0,
+          });
+          continue;
+        }
         ensureWorked(b);
         const s = colonyStats(b);
         // Buildings in the colony's control area, excluding the biodome itself.
@@ -9747,7 +10025,8 @@
         const cap = workCap(b);
         const canWorkMore = extras < cap && workedCount < controlCount;
         rows.push({
-          col: b,
+          col: b, inTransit: false,
+          x: b.x, y: b.y,                   // colony cell
           name: b.name || "Colony",
           population: s.population,
           growthRate: s.growthRate,
@@ -9801,9 +10080,27 @@
       coloniesBody.innerHTML = "";
       for (const r of rows) {
         const tr = document.createElement("tr");
-        // Name.
+        if (r.inTransit) tr.classList.add("colony-intransit");
+        // Name, with a clickable lat/long sub-line that centers the main map on
+        // the colony's cell (its destination cell when in transit). For an
+        // in-transit colony the name also shows an "in transit" marker.
         const tdName = document.createElement("td");
-        tdName.textContent = r.name;
+        const nameLine = document.createElement("div");
+        nameLine.className = "colony-name";
+        nameLine.textContent = r.name + (r.inTransit
+          ? ` (in transit — ${r.turnsRemaining} turn${r.turnsRemaining === 1 ? "" : "s"})`
+          : "");
+        const latlon = document.createElement("div");
+        latlon.className = "colony-latlon";
+        latlon.textContent = cellLatLonLabel(r.x, r.y);
+        latlon.title = r.inTransit ? "Center the map on the destination" : "Center the map on this colony";
+        latlon.addEventListener("click", (e) => {
+          e.stopPropagation();            // don't trigger the row double-click
+          closeColonies();
+          if (hexMap) hexMap.centerOnCell(r.x, r.y);
+        });
+        tdName.appendChild(nameLine);
+        tdName.appendChild(latlon);
         tr.appendChild(tdName);
         // Population / growth%.
         const tdPop = document.createElement("td");
@@ -9827,11 +10124,13 @@
           td.innerHTML = _resCell(r[res.key], r[res.key + "Max"], r[res.rate], fmt);
           tr.appendChild(td);
         }
-        // Double-click centers the map on the colony and opens its detail dialog.
+        // Double-click centers the map on the colony and, for an established
+        // colony, opens its detail dialog. An in-transit colony has no detail
+        // view yet, so it just centers on the destination cell.
         tr.addEventListener("dblclick", () => {
           closeColonies();
-          if (hexMap) hexMap.centerOnCell(r.col.x, r.col.y);
-          openWorkModal(r.col);
+          if (hexMap) hexMap.centerOnCell(r.x, r.y);
+          if (!r.inTransit) openWorkModal(r.col);
         });
         coloniesBody.appendChild(tr);
       }
@@ -9839,7 +10138,7 @@
 
     function openColonies() {
       if (!gameState || !gameState.buildings) { notify("Start a game to view colonies."); return; }
-      const hasAny = gameState.buildings.some((b) => b.type === 1 && b.owner === "human" && !b.inTransit);
+      const hasAny = gameState.buildings.some((b) => b.type === 1 && b.owner === "human");
       if (!hasAny) { notify("You have no colonies yet."); return; }
       // Keep the last sort column/order (persisted in _colSort across opens).
       renderColonies();

@@ -1428,7 +1428,11 @@ class HexMap {
     if (!this.buildings || !this.buildings.length) return;
     const wrapPx = this.worldSize.x * 0.75 * spacing.x;
     const offsets = this.wrap ? [-wrapPx, 0, wrapPx] : [0];
-    const size = spacing.x * 0.85;           // icon size ~ one cell
+    // Building icon size. The base ~0.85 of a cell is reduced a further 25%
+    // (× 0.75) so buildings are drawn smaller on the map; the cx/cy centering
+    // keeps them centered on the hex. This scales the icon, the under-
+    // construction box, and the fallback marker uniformly.
+    const size = spacing.x * 0.85 * 0.75;    // ~0.64 of a cell (25% smaller)
     const fontPx = Math.max(8, Math.round(spacing.y / 3));
 
     ctx.save();
