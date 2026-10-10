@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- heraldic shield -->
+  <path d="M64 14 L104 28 L104 64 C104 92 86 108 64 116 C42 108 24 92 24 64 L24 28 Z"/>
+  <!-- cross emblem -->
+  <line x1="64" y1="38" x2="64" y2="92"/>
+  <line x1="40" y1="60" x2="88" y2="60"/>
+</svg>

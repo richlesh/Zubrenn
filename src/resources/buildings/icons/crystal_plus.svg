@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- crystal (scaled, shifted up-left) -->
+  <g transform="translate(-10 -12) scale(0.78)">
+    <path d="M40 36 L88 36 L112 64 L64 112 L16 64 Z"/>
+    <path d="M16 64 L112 64"/>
+    <path d="M40 36 L52 64 L64 112"/>
+    <path d="M88 36 L76 64 L64 112"/>
+    <path d="M52 64 L76 64"/>
+  </g>
+  <!-- plus badge, lower-right -->
+  <circle cx="98" cy="98" r="22"/>
+  <line x1="98" y1="86" x2="98" y2="110"/>
+  <line x1="86" y1="98" x2="110" y2="98"/>
+</svg>

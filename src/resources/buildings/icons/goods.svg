@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- isometric shipping crate / packaged goods -->
+  <path d="M64 20 L108 44 L108 92 L64 116 L20 92 L20 44 Z"/>
+  <path d="M20 44 L64 68 L108 44"/>
+  <path d="M64 68 L64 116"/>
+  <!-- strapping band across the top faces -->
+  <path d="M42 32 L86 56"/>
+</svg>

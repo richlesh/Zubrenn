@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- airplane, plan (top-down) view, nose up -->
+  <!-- fuselage -->
+  <path d="M64 14 C70 14 72 24 72 40 L72 70 L72 96 L68 112 L60 112 L56 96 L56 70 L56 40 C56 24 58 14 64 14 Z"/>
+  <!-- main wings -->
+  <path d="M56 52 L16 72 L16 82 L56 72"/>
+  <path d="M72 52 L112 72 L112 82 L72 72"/>
+  <!-- tailplane -->
+  <path d="M56 96 L40 104 L40 110 L56 106"/>
+  <path d="M72 96 L88 104 L88 110 L72 106"/>
+</svg>

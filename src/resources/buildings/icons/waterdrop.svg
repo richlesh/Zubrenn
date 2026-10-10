@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- water droplet -->
+  <path d="M64 16 C64 16 100 60 100 84 A36 36 0 0 1 28 84 C28 60 64 16 64 16 Z"/>
+  <!-- inner shine -->
+  <path d="M50 86 A14 14 0 0 1 64 72"/>
+</svg>

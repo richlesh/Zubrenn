@@ -257,10 +257,18 @@
 
     // -------------------- theme / font size --------------------
     const FONT_SCALES = { small: 1, medium: 1.25, large: 1.5 };
+    // Current body zoom (font-size setting). The lightbox lives inside the
+    // zoomed <body>, so `vh`/`vw` units resolve against the unzoomed viewport
+    // and are then multiplied by the zoom — making a 90vh image overflow (and
+    // crop) at larger font sizes. We size the lightbox image in px, dividing out
+    // the zoom, so it renders at ~90% of the actual window regardless of zoom.
+    let _uiZoom = 1;
     function applySettings(settings) {
       settings = settings || {};
       document.body.classList.toggle("dark", (settings.theme || "dark") === "dark");
-      document.body.style.zoom = String(FONT_SCALES[settings.fontSize || "small"] || 1);
+      _uiZoom = FONT_SCALES[settings.fontSize || "small"] || 1;
+      document.body.style.zoom = String(_uiZoom);
+      sizeLightbox(); // keep the (possibly open) lightbox sized to the new zoom
     }
     function refreshSettings() {
       ipcRenderer.invoke("settings-get").then(applySettings).catch(() => {});
@@ -478,9 +486,19 @@
     }
     function openLightbox(src) {
       if (!lightbox || !lightboxImg) return;
+      sizeLightbox();
       lightboxImg.src = fullResUrl(src);
       lightbox.classList.add("open");
     }
+    // Cap the enlarged image to ~90% of the WINDOW, correcting for the body
+    // zoom (so the full image is visible, never cropped top/bottom).
+    function sizeLightbox() {
+      if (!lightboxImg) return;
+      const z = _uiZoom || 1;
+      lightboxImg.style.maxHeight = Math.floor((window.innerHeight / z) * 0.9) + "px";
+      lightboxImg.style.maxWidth = Math.floor((window.innerWidth / z) * 0.9) + "px";
+    }
+    window.addEventListener("resize", sizeLightbox);
     function closeLightbox() {
       if (!lightbox) return;
       lightbox.classList.remove("open");

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- geodesic dome: half-circle on a baseline, with lat/long ribs -->
+  <path d="M20 94 A44 44 0 0 1 108 94"/>
+  <line x1="14" y1="94" x2="114" y2="94"/>
+  <!-- vertical ribs -->
+  <path d="M64 50 L64 94"/>
+  <path d="M42 55 A44 44 0 0 0 42 94"/>
+  <path d="M86 55 A44 44 0 0 1 86 94"/>
+  <!-- horizontal rib -->
+  <path d="M26 72 Q64 60 102 72"/>
+</svg>

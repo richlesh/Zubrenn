@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- plant (scaled ~0.8, shifted up-left) -->
+  <g transform="translate(-8 -10) scale(0.8)">
+    <path d="M64 108 L64 54"/>
+    <path d="M64 72 C40 72 28 56 28 40 C50 40 64 54 64 72 Z"/>
+    <path d="M64 60 C88 60 100 44 100 28 C78 28 64 42 64 60 Z"/>
+    <line x1="40" y1="108" x2="88" y2="108"/>
+  </g>
+  <!-- plus badge, lower-right -->
+  <circle cx="98" cy="98" r="22"/>
+  <line x1="98" y1="86" x2="98" y2="110"/>
+  <line x1="86" y1="98" x2="110" y2="98"/>
+</svg>

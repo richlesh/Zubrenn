@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- rocket body -->
+  <path d="M64 10 C82 28 86 54 86 76 L42 76 C42 54 46 28 64 10 Z"/>
+  <!-- nose window -->
+  <circle cx="64" cy="46" r="9"/>
+  <!-- fins -->
+  <path d="M42 60 L26 82 L42 76"/>
+  <path d="M86 60 L102 82 L86 76"/>
+  <!-- flame -->
+  <path d="M54 76 L54 90 M64 76 L64 100 M74 76 L74 90"/>
+</svg>

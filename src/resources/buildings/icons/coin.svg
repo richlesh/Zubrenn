@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- coin -->
+  <circle cx="64" cy="64" r="46"/>
+  <circle cx="64" cy="64" r="34"/>
+  <!-- universal currency symbol (¤): small circle with four diagonal rays -->
+  <circle cx="64" cy="64" r="13"/>
+  <line x1="54" y1="54" x2="46" y2="46"/>
+  <line x1="74" y1="54" x2="82" y2="46"/>
+  <line x1="54" y1="74" x2="46" y2="82"/>
+  <line x1="74" y1="74" x2="82" y2="82"/>
+</svg>

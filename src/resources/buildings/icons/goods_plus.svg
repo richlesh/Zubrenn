@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- goods crate (scaled, shifted up-left) -->
+  <g transform="translate(-12 -12) scale(0.76)">
+    <path d="M64 20 L108 44 L108 92 L64 116 L20 92 L20 44 Z"/>
+    <path d="M20 44 L64 68 L108 44"/>
+    <path d="M64 68 L64 116"/>
+    <path d="M42 32 L86 56"/>
+  </g>
+  <!-- plus badge, lower-right -->
+  <circle cx="98" cy="98" r="22"/>
+  <line x1="98" y1="86" x2="98" y2="110"/>
+  <line x1="86" y1="98" x2="110" y2="98"/>
+</svg>

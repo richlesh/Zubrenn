@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- faceted gem/crystal -->
+  <path d="M40 36 L88 36 L112 64 L64 112 L16 64 Z"/>
+  <path d="M16 64 L112 64"/>
+  <path d="M40 36 L52 64 L64 112"/>
+  <path d="M88 36 L76 64 L64 112"/>
+  <path d="M52 64 L76 64"/>
+</svg>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- cargo ship profile: hull -->
+  <path d="M18 76 L110 76 L98 100 L30 100 Z"/>
+  <!-- deckhouse / bridge -->
+  <path d="M44 76 L44 54 L80 54 L80 76"/>
+  <path d="M58 54 L58 40 L72 40 L72 54"/>
+  <!-- waterline -->
+  <path d="M12 110 Q24 102 36 110 T60 110 T84 110 T108 110"/>
+</svg>

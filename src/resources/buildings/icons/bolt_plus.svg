@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- bolt (scaled, shifted up-left) -->
+  <g transform="translate(-10 -10) scale(0.78)">
+    <path d="M72 14 L34 70 L60 70 L54 114 L96 54 L68 54 Z"/>
+  </g>
+  <!-- plus badge, lower-right -->
+  <circle cx="98" cy="98" r="22"/>
+  <line x1="98" y1="86" x2="98" y2="110"/>
+  <line x1="86" y1="98" x2="110" y2="98"/>
+</svg>

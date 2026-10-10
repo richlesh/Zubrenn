@@ -368,6 +368,7 @@ class HexMap {
     this.planningPathColor = opts.planningPathColor || { h: 120, s: 0.667, l: 0.48 };
     this.underConstructionColor = opts.underConstructionColor || { h: 0, s: 0, l: 0.5 };
     this.buildingIcons = {};                  // type -> loaded Image
+    this.symbolIcons = {};                    // type -> loaded "symbol" Image (Area-of-Control view)
     this.aiCount = opts.aiCount || 0;         // number of AI players (for control colors)
     this.controlMode = false;                 // Area-of-Control view toggle
     this.controlRadius = opts.controlRadius || 2; // fallback radius
@@ -821,6 +822,12 @@ class HexMap {
       if (bt && bt.icon) return bt.icon;
       return type === 1 ? 'biodome.png' : null;
     };
+    // The Area-of-Control view uses a simpler `symbol` icon when the config
+    // provides one for the building type.
+    const symbolFor = (type) => {
+      const bt = this._buildingTypeByCode(type);
+      return (bt && bt.symbol) ? bt.symbol : null;
+    };
     // Codes to load: each entry's numeric code (fallback to the key when the
     // config is still numeric-keyed).
     const codesToLoad = this.buildingTypes
@@ -831,20 +838,32 @@ class HexMap {
       : [1];
     for (const type of codesToLoad) {
       const file = iconFor(type);
-      if (!file) continue;
-      const img = new Image();
       const t = type;
-      const ip = new Promise((resolve) => {
-        img.onload = () => {
-          this.buildingIcons[t] = img;
-          if (t === 1) { this.biodomeImg = img; this.biodomeReady = true; }
-          this._draw();
-          resolve();
-        };
-        img.onerror = () => resolve(); // missing icon -> fallback dome/marker
-      });
-      img.src = `${resRoot}/${file}`;
-      promises.push(ip);
+      if (file) {
+        const img = new Image();
+        const ip = new Promise((resolve) => {
+          img.onload = () => {
+            this.buildingIcons[t] = img;
+            if (t === 1) { this.biodomeImg = img; this.biodomeReady = true; }
+            this._draw();
+            resolve();
+          };
+          img.onerror = () => resolve(); // missing icon -> fallback dome/marker
+        });
+        img.src = `${resRoot}/${file}`;
+        promises.push(ip);
+      }
+      // Also load the Area-of-Control `symbol` icon, if configured.
+      const sym = symbolFor(type);
+      if (sym) {
+        const simg = new Image();
+        const sp = new Promise((resolve) => {
+          simg.onload = () => { this.symbolIcons[t] = simg; this._draw(); resolve(); };
+          simg.onerror = () => resolve(); // missing symbol -> fall back to the normal icon
+        });
+        simg.src = `${resRoot}/${sym}`;
+        promises.push(sp);
+      }
     }
 
     // Terrain-bonus icons live in the resources root too. Load one per unique
@@ -1442,7 +1461,11 @@ class HexMap {
       const c = getHexCenter(b.x, b.y, spacing);
       for (const ox of offsets) {
         const cx = c.x + ox, cy = c.y;
-        const icon = this.buildingIcons[b.type];
+        // In the Area-of-Control view, prefer the building's simpler `symbol`
+        // icon when one is loaded; otherwise use its normal icon.
+        const icon = (this.controlMode && this.symbolIcons[b.type])
+          ? this.symbolIcons[b.type]
+          : this.buildingIcons[b.type];
         // Under construction / in transit (not yet operational) -> draw dimmed.
         const underConstruction =
           (b.inTransit === true) ||

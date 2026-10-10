@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- sprout: central stem with two leaves -->
+  <path d="M64 108 L64 54"/>
+  <!-- left leaf -->
+  <path d="M64 72 C40 72 28 56 28 40 C50 40 64 54 64 72 Z"/>
+  <!-- right leaf -->
+  <path d="M64 60 C88 60 100 44 100 28 C78 28 64 42 64 60 Z"/>
+  <!-- ground line -->
+  <line x1="40" y1="108" x2="88" y2="108"/>
+</svg>
