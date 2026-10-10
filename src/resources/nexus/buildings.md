@@ -59,13 +59,25 @@ The Factory is a building that can create 3-D printed goods.  It requires a Sola
 
 The Dock creates a shallow‑sea transportation network, linking colonies that also have Docks so they can share resources across sea tiles. A Dock sits on a
   shallow-sea tile, opens the colony's shallow-sea tiles to being worked, and
-  lets colony-launch paths cross shallow sea (to reach islands and cross straits). It requires a Solar Panel in the colony. Construction costs **1 Material**, **1 Energy** and **1 Wealth**, and takes **2 turns**. Each year it costs **1 Energy** and **1 Wealth** to maintain, provides **1 Food** and **1 Wealth**, and adds **300 Food** and **300 Material** storage.
+  lets colony-launch paths cross shallow sea (to reach islands and cross straits). It requires a Solar Panel in the colony. Construction costs **1 Material**, **1 Energy** and **1 Wealth**, and takes **2 turns**. Each year it costs **1 Energy** and **1 Wealth** to maintain, provides **1 Food** and **1 Wealth**, and adds **300 Food** and **300 Material** storage.
+
+#### Port
+
+<span class="float-right">![port](../buildings/port.png)</span>
+
+The Port is the Dock's big sibling — a full deep‑water harbor that opens travel across **all** sea routes, not just the shallow coastal waters a Dock reaches. Where a Dock lets ships and launch paths cross only shallow sea, a Port's owner can route across the **open ocean** too, linking far‑flung island and coastal colonies that no Dock could reach. It is built as an **upgrade of an existing Dock**: you can only build a Port on a cell that already holds one of your Docks, and doing so **replaces** that Dock in place (it still requires a Solar Panel in the colony). Construction costs **40 Material**, **10 Energy**, **20 Wealth** and **0.5 Water** over **2 turns**, and each year it costs **10 Energy**, **6 Wealth** and **0.2 Water** to run its cranes and berths. In return it produces **10 Food** and **15 Wealth** per year and adds **10 Food** and **100 Goods** storage. For a seafaring empire, upgrading a key coastal Dock to a Port is what turns scattered holdings into one connected maritime network.
 
 #### Air Field
 
 <span class="float-right">![air_field](../buildings/air_field.png)</span>
 
-The Air Field creates an air‑transportation network, linking colonies that also have Air Fields within **16 tiles** so they can share resources. It requires a **Factory** before it can be built. Construction costs **2 Material**, **2 Energy** and **2 Wealth** and takes **2 turns**. Each year it costs **1 Energy** and **1 Wealth** to maintain, provides **2 Wealth** per year, and adds **300 Food** and **300 Material** storage.
+The Air Field creates an air‑transportation network, linking colonies that also have Air Fields within **16 tiles** so they can share resources. It requires a **Factory** before it can be built. Construction costs **2 Material**, **2 Energy** and **2 Wealth** and takes **2 turns**. Each year it costs **1 Energy** and **1 Wealth** to maintain, provides **2 Wealth** per year, and adds **300 Food** and **300 Material** storage.
+
+#### Airport
+
+<span class="float-right">![airport](../buildings/airport.png)</span>
+
+The Airport is the Air Field's big sibling — a full international hub that extends the air‑transport network far beyond a modest airstrip. It links air‑connected colonies out to a **range of 40 cells** (versus the Air Field's shorter reach), so upgrading one key hub can suddenly tie distant colonies into the shared network. It is built as an **upgrade of an existing Air Field**: you can only build an Airport on a cell that already holds one of your Air Fields, and doing so **replaces** that Air Field in place (an Airport still counts as an Air Field for anything that requires one, such as the Spaceport). It still needs a **Solar Panel** and a **Factory** in the colony. Construction costs **120 Material**, **40 Energy**, **30 Goods**, **120 Wealth** and **5 Water** over **3 turns**, and each year it costs **100 Energy**, **20 Goods**, **25 Wealth** and **0.5 Water** to run. In return it provides **25 Wealth** and a **+0.5** happiness bonus, and adds **40 Energy**, **100 Food** and **250 Goods** storage. For a sprawling empire, a well‑placed Airport is what stitches far‑flung colonies into one air network.
 
 #### Barracks
 

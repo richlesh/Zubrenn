@@ -1,7 +1,7 @@
 {
   // When true, after creating a new map show two debug dialogs: a terrain-type
   // breakdown and a terrain-bonus placement count. Set false to disable.
-  "debug": false,
+  "debug": true,
 
   // Food 1 = 1k t, material 1 = 1k t, water 1 = 1 G L, energy 1 = 1 G WHr
   // wealth 1 = 1M credits where 1 credit = $10 USD.
@@ -260,6 +260,8 @@
   //              "intelligence": while active, the building gathers intel on
   //              rival colonies within its `visibility` (Euclidean) range; the
   //              Rankings dialog only ranks rival colonies so covered.
+  //              "mining": means that the unit is a mine that can be built in
+  //              normally uninhabited terrain types like mountain-high and frozen.
   //   climate  : climate band names ("tropical"/"temperate"/"subpolar"/"polar")
   //              the cell must be in. Missing/empty = any climate.
   //   citySize : the colony population must be >= citySize * 1000.
@@ -337,6 +339,27 @@
         "other":    ["land"]
       }
     },
+    // The Port is an UPGRADE of a Dock: `prerequisite.upgrades: "dock"` means it
+    // can only be built on a cell that already holds this owner's Dock, and
+    // placing it REPLACES that Dock. A Port opens travel across ALL sea routes
+    // (deep sea included), not just the shallow sea a Dock enables, via the
+    // `other: ["seaport"]` capability tag.
+    "port": {
+      "code": 20,
+      "name": "Port",
+      "icon": "buildings/128/port.png",
+      "buildCost": { "energy": 20, "material": 40, "wealth": 20, "water": 0.5, "turns": 5 },
+      "costPerYear": { "energy": 20, "goods": 10,"wealth": 15, "water": 0.2 },
+      "bonus": { "food": 10, "wealth": 15 },
+      "storage": { "food": 30, "goods": 300, "material": 300 },
+      "federationStorage": { "food": 50, "goods": 500, "material": 500 },
+      "prerequisite": {
+        "building": ["solar panel"],
+        "terrain":  ["sea"],
+        "other":    ["land", "seaport"],
+        "upgrades": "dock"
+      }
+    },
     "air field": {
       "code": 6,
       "name": "Air Field",
@@ -347,9 +370,32 @@
       "storage": { "energy": 20, "food": 50, "goods": 100 },
       "prerequisite": {
         "building": ["solar panel","factory"],
-        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+        "other": ["airbase"]
       },
-      "range": 32
+      "range": 20
+    },
+    // The Airport is an UPGRADE of an Air Field (prerequisite.upgrades: "air
+    // field"): it can only be built on a cell that already holds this owner's
+    // Air Field, and placing it REPLACES that Air Field. It is bigger and links
+    // air-connected colonies out to a much greater `range` (40 cells). The
+    // `other: ["airbase"]` tag marks it (and the Air Field) as an air facility
+    // for the air-network/connectivity logic.
+    "airport": {
+      "code": 21,
+      "name": "Airport",
+      "icon": "buildings/128/airport.png",
+      "buildCost": { "energy": 60, "material": 120, "goods": 45, "wealth": 200, "water": 8, "turns": 5 },
+      "costPerYear": { "energy": 100, "goods": 20, "wealth": 25, "water": 0.5 },
+      "bonus": { "wealth": 25, "happiness": 0.5 },
+      "storage": { "energy": 60, "food": 100, "goods": 250 },
+      "prerequisite": {
+        "building": ["solar panel","factory"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+        "other": ["airbase"],
+        "upgrades": "air field"
+      },
+      "range": 40
     },
     "barracks": {
       "code": 7,
@@ -374,6 +420,7 @@
       "costPerYear": { "energy": 2, "wealth": 0.5 },
       "bonus": { },
       "storage": { "food": 100 },
+      "federationStorage": { "food": 100 },
       "prerequisite": {
         "building": ["farm"], "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
       }
@@ -386,6 +433,7 @@
       "costPerYear": { "energy": 5, "wealth": 5 },
       "bonus": { },
       "storage": { "goods": 250 },
+      "federationStorage": { "goods": 250 },
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
@@ -397,8 +445,9 @@
       "icon": "buildings/128/bank.png",
       "buildCost": { "energy": 5, "material": 10, "wealth": 20, "water": 0.5, "turns": 1 },
       "costPerYear": { "energy": 5, "wealth": 2 },
-      "bonus": { "wealth": 15, "happiness": 0.25 },
-      "storage": { "wealth": 250 },
+      "bonus": { "wealth": 50, "happiness": 0.25 },
+      "storage": { "wealth": 500 },
+      "federationStorage": { "wealth": 500 },
       "prerequisite": {
         "building": ["solar panel"],
         "network": ["any"],
@@ -414,6 +463,7 @@
       "costPerYear": { "energy": 20, "goods": 1, "wealth": 2 },
       "bonus": { },
       "storage": { "energy": 500 },
+      "federationStorage": { "energy": 500 },
       "prerequisite": {
         "building": ["solar panel","bank"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
@@ -428,6 +478,7 @@
       "costPerYear": { "energy": 30, "material": 4, "goods": 2, "wealth": 2 },
       "bonus":       { "water": "5x" },
       "storage":     { "water": 100 },
+      "federationStorage": { "water":  100 },
       "prerequisite": {
         "building": ["solar panel"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains"],
@@ -443,6 +494,7 @@
       "costPerYear": { "energy": 50, "material": 30, "goods": 4, "wealth": 5 },
       "bonus":       { "water": 10 },
       "storage":     { "water": 100 },
+      "federationStorage": { "water":  100 },
       "prerequisite": {
         "building": ["solar panel"],
         "terrain":  ["sea"],
@@ -486,6 +538,7 @@
       "costPerYear": { "energy": 5, "wealth": 5 },
       "bonus": { },
       "storage": { "material": 250 },
+      "federationStorage": { "material": 250 },
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]

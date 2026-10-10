@@ -2212,6 +2212,23 @@
       }
       return false;
     }
+    // Whether an owner has any operational building with the `seaport`
+    // capability tag (the Port). A seaport opens travel across ALL sea tiles
+    // (deep sea included), not just the shallow sea a Dock enables.
+    function ownerHasSeaport(owner) {
+      for (const b of gameState.buildings) {
+        if (b.owner === owner && isOperational(b) && buildingHasOther(b.type, 'seaport')) return true;
+      }
+      return false;
+    }
+    // Owner's sea-travel capability: 2 = all sea (has a Port/seaport), 1 =
+    // shallow sea only (has a Dock), 0 = no sea travel.
+    function ownerSeaMode(owner) {
+      if (owner == null) return 0;
+      if (ownerHasSeaport(owner)) return 2;
+      if (ownerHasDock(owner)) return 1;
+      return 0;
+    }
     // Whether a cell can be traversed/settled by land movement. Sea is normally
     // impassable; every Frozen (terrain 9) cell is impassable.
     // With `allowShallowSea` (owner has a Dock), shallow-sea tiles (sea adjacent
@@ -2252,9 +2269,15 @@
       }
       return _elevationIsTier9(xx, y); // legacy save fallback
     }
-    function isPassableCell(x, y, allowShallowSea) {
+    // `seaMode`: 0/false = no sea travel, 1/true = shallow sea only (Dock),
+    // 2 = ALL sea including deep (Port/seaport).
+    function isPassableCell(x, y, seaMode) {
       const terr = terrainAt(x, y);
-      if (terr === 1) return !!allowShallowSea && isShallowSea(x, y);
+      if (terr === 1) {
+        const m = (seaMode === true) ? 1 : (Number(seaMode) || 0);
+        if (m >= 2) return true;                       // Port: any sea tile
+        return m >= 1 && isShallowSea(x, y);           // Dock: shallow sea only
+      }
       if (terr < 2 || terr > 11) return false;         // off-map (land is 2-11)
       if (isImpassableFrozen(x, y)) return false;      // tier-9 mountain top
       return true;
@@ -2317,7 +2340,7 @@
       const wrap = !!(map.meta && map.meta.wrap);
       const wxf = (x) => wrap ? ((x % W) + W) % W : x;
       const key = (x, y) => y * W + wxf(x);
-      const allowShallow = owner != null && ownerHasDock(owner);
+      const allowShallow = ownerSeaMode(owner); // 0 none / 1 shallow (Dock) / 2 all sea (Port)
       const startK = key(sx, sy);
       // Never route through the area of control of a foreign colony.
       const foreign = foreignControlCellSet(owner);
@@ -2359,8 +2382,8 @@
       const wrap = !!(map.meta && map.meta.wrap);
       const wxf = (x) => wrap ? ((x % W) + W) % W : x;
       const key = (x, y) => y * W + wxf(x);
-      // A Dock owned by `owner` opens shallow-sea tiles to travel.
-      const allowShallow = owner != null && ownerHasDock(owner);
+      // Owner's sea capability: a Dock opens shallow sea; a Port opens all sea.
+      const allowShallow = ownerSeaMode(owner);
       if (!isPassableCell(tx, ty, allowShallow)) return null;
       // Never route through (or into) the area of control of a foreign colony.
       const foreign = foreignControlCellSet(owner);
@@ -2542,7 +2565,13 @@
           let level = 0;
           if (coloniesAirLinked(a, b)) level = 4;
           else if (_pathExists(a, b, owner, (x, y) => hasMonorail(x, y))) level = 3;
-          else if (colonyHasDock(a) && colonyHasDock(b) && _pathExists(a, b, owner, isWaterRoute)) level = 2;
+          else if (colonyHasDock(a) && colonyHasDock(b) &&
+                   _pathExists(a, b, owner,
+                     // A Port owner routes over ALL sea (deep included); a
+                     // Dock-only owner uses the shallow-sea/river/canal route.
+                     (ownerSeaMode(owner) >= 2)
+                       ? ((x, y) => isWaterRoute(x, y) || terrainAt(x, y) === 1)
+                       : isWaterRoute)) level = 2;
           else if (_pathExists(a, b, owner, (x, y) => hasRoad(x, y))) level = 1;
           else level = 0;
           m[i][j] = m[j][i] = level;
@@ -4564,16 +4593,19 @@
       }
 
       // ---- sea connectivity ----
-      // Two colonies are sea-connected if BOTH have a Dock and a shallow-sea
-      // route links them. Pairwise check (colony counts are small); only test
-      // pairs not already in the same group to save work.
+      // Two colonies are sea-connected if BOTH have a sea link (a Dock, or a
+      // Port) and a sea route links them. A Dock-only owner routes over SHALLOW
+      // sea; an owner with a Port opens ALL sea (deep included). Pairwise check
+      // (colony counts are small); only test pairs not already grouped.
+      const seaMode = ownerSeaMode(owner); // 1 = shallow (Dock), 2 = all sea (Port)
+      const seaRouteCell = (seaMode >= 2) ? ((x, y) => terrainAt(x, y) === 1) : ((x, y) => isShallowSea(x, y));
       const dockCols = [];
       for (let i = 0; i < cols.length; i++) if (colonyHasDock(cols[i])) dockCols.push(i);
       for (let a = 0; a < dockCols.length; a++) {
         for (let b = a + 1; b < dockCols.length; b++) {
           const i = dockCols[a], j = dockCols[b];
         if (find(i) === find(j)) continue; // already connected by some means
-        if (_pathExists(cols[i], cols[j], owner, (x, y) => isShallowSea(x, y))) union(i, j);
+        if (_pathExists(cols[i], cols[j], owner, seaRouteCell)) union(i, j);
       }
     }
 
@@ -5720,15 +5752,24 @@
     }
     // Whether a colony owns an operational Air Field (building type 6) within
     // its control radius. Used for air-transport network links.
-    function colonyHasAirfield(colony) {
+    // An "air facility" is any operational building tagged `airbase` in config
+    // (the Air Field and its Airport upgrade). colonyAirRange returns the GREATEST
+    // link range (buildingTypes[type].range) among the air facilities inside the
+    // colony's control radius, or 0 if it has none.
+    function colonyAirRange(colony) {
       const radius = colonyControlRadius(colony);
+      let best = 0;
       for (const b of gameState.buildings) {
-        if (b.type !== 6 || b.owner !== colony.owner) continue;
-        if (!isOperational(b)) continue;
-        if (hexDistance(colony.x, colony.y, b.x, b.y) <= radius) return true;
+        if (b.owner !== colony.owner || !isOperational(b)) continue;
+        if (!buildingHasOther(b.type, 'airbase')) continue;
+        if (hexDistance(colony.x, colony.y, b.x, b.y) > radius) continue;
+        const bt = buildingType(b.type) || {};
+        const r = (bt.range != null) ? Number(bt.range) : 16;
+        if (r > best) best = r;
       }
-      return false;
+      return best;
     }
+    function colonyHasAirfield(colony) { return colonyAirRange(colony) > 0; }
     // Whether a colony owns an operational Spaceport (building type 14) within
     // its control radius. Used for the UNLIMITED-range space-transport network:
     // any two of a player's Spaceport colonies are linked regardless of distance.
@@ -5741,17 +5782,21 @@
       }
       return false;
     }
-    // Max hex distance between two Air Field colonies for an air link, from
-    // buildingTypes[6].range (falls back to 16).
+    // Max hex distance for an air link, from the (base) Air Field's configured
+    // range (buildingTypes[6].range, falls back to 16). Kept for callers/UI that
+    // want the baseline range; per-colony reach uses colonyAirRange().
     function airFieldRange() {
       const bt = buildingType(6) || {};
       return (bt.range != null) ? bt.range : 16;
     }
-    // Two same-owner colonies are air-linked when they EACH have an Air Field
-    // and are within airFieldRange() of each other.
+    // Two same-owner colonies are air-linked when they EACH have an air facility
+    // and are within reach. The usable link range is the GREATER of the two
+    // colonies' air ranges, so upgrading one end to an Airport (range 40) extends
+    // its links out to that range.
     function coloniesAirLinked(a, b) {
-      return colonyHasAirfield(a) && colonyHasAirfield(b) &&
-        hexDistance(a.x, a.y, b.x, b.y) <= airFieldRange();
+      const ra = colonyAirRange(a), rb = colonyAirRange(b);
+      if (ra <= 0 || rb <= 0) return false;
+      return hexDistance(a.x, a.y, b.x, b.y) <= Math.max(ra, rb);
     }
     // Drop any worked cells that fall outside the colony's current control area
     // (e.g. after the radius shrinks because population dropped). The biodome
@@ -5829,6 +5874,20 @@
 
     // Place a non-colony building (farm/solar/factory).
     function placeBuilding(x, y, owner, type) {
+      // Upgrade buildings (prerequisite.upgrades) REPLACE the owner's existing
+      // building of the upgraded type on this cell. Remove it immediately (the
+      // upgrade pays its own build cost) so the new building takes the cell.
+      const _upgradeCode = buildingUpgradesCode(type);
+      if (_upgradeCode != null) {
+        const prior = ownerBuildingAt(x, y, owner);
+        if (prior && prior.type === _upgradeCode) {
+          gameState.buildings = gameState.buildings.filter((b) => b !== prior);
+          // Keep worked-cell references: the cell stays worked, now by the new
+          // building (same x,y), so no deselect needed. Refresh connectivity in
+          // case the removed building affected sea/other networks.
+          if (typeof invalidateColonyConnectivity === 'function') invalidateColonyConnectivity();
+        }
+      }
       const players = gameState.players || [];
       const species = (owner === 'human')
         ? 'You'
@@ -6749,7 +6808,21 @@
     // tiles within a colony's radius; land buildings go on an empty allowed-
     // terrain cell within the owner's control. Returns { ok, reason }.
     function canPlaceTypeAt(type, x, y, owner) {
-      if (cellHasBuilding(x, y)) return { ok: false, reason: "cell occupied" };
+      // An UPGRADE building (prerequisite.upgrades) may ONLY be placed on a cell
+      // that already holds the owner's building of the upgraded type — it
+      // replaces it. Every other building needs an empty cell.
+      const upgradeCode = buildingUpgradesCode(type);
+      if (upgradeCode != null) {
+        const existing = ownerBuildingAt(x, y, owner);
+        if (!existing || existing.type !== upgradeCode) {
+          return { ok: false, reason: `must be built on a ${improvementName(upgradeCode)}` };
+        }
+        if (existing.removeTurns != null && existing.removeTurns > 0) {
+          return { ok: false, reason: "the building here is being removed" };
+        }
+      } else if (cellHasBuilding(x, y)) {
+        return { ok: false, reason: "cell occupied" };
+      }
       // Placement is driven entirely by the building's `other` tags in
       // config.json — no per-type hard-coding. Supported tags (shared with
       // terrainBonus): "sea" (built ON a shallow-sea tile, e.g. Dock /
@@ -6896,6 +6969,22 @@
     function buildingHasOther(type, tag) {
       const other = btPrereq(type).other;
       return Array.isArray(other) && other.includes(tag);
+    }
+    // The building-type CODE that `type` upgrades (from prerequisite.upgrades,
+    // a lowercase building NAME key like "dock"), or null if it is not an
+    // upgrade. An upgrade building may ONLY be placed on a cell already holding
+    // the owner's building of that type, and placing it REPLACES that building.
+    function buildingUpgradesCode(type) {
+      const up = btPrereq(type).upgrades;
+      if (!up) return null;
+      const e = buildingType(up);
+      return (e && typeof e.code === 'number') ? e.code : null;
+    }
+    // The owner's operational (or under-construction) building standing on cell
+    // (x,y), or null. Used by the upgrades rule to find the building to replace.
+    function ownerBuildingAt(x, y, owner) {
+      return (gameState.buildings || []).find((b) =>
+        b.x === x && b.y === y && b.owner === owner && b.type !== 1) || null;
     }
     // `anywhere`: may be built outside the owner's zone of control, on any
     // explored cell not inside another player's zone.
@@ -7045,7 +7134,15 @@
       const col = buildColonyAt(x, y, owner, type);
       if (!col) return false;
       // Required buildings (NAME keys -> numeric codes) present in the colony.
-      const present = new Set(colonyBuildings(col).map((b) => b.type));
+      // An UPGRADE building also satisfies a requirement for the building it
+      // upgraded (an Airport counts as an Air Field; a Port counts as a Dock),
+      // so upgrading away a prerequisite building doesn't break dependents.
+      const present = new Set();
+      for (const b of colonyBuildings(col)) {
+        present.add(b.type);
+        let up = buildingUpgradesCode(b.type);
+        while (up != null && !present.has(up)) { present.add(up); up = buildingUpgradesCode(up); }
+      }
       const codes = buildings.map((p) => { const e = buildingType(p); return e ? e.code : p; });
       if (!codes.every((t) => present.has(t))) return false;
       if (!networkRequirementMet(col, pre.network)) return false;
