@@ -165,19 +165,33 @@ body.dark #buildings-panel .bldg-none { color: #888; }
 #work-dialog {
   background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
-  max-width: 90vw; max-height: 90vh; overflow: auto;
+  max-width: 90vw; max-height: 90vh;
+  /* Clamp the dialog to (at most) the viewport height; the body (map + stats)
+     becomes the scroll pane while the header, info line, and Done row stay put. */
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden;
 }
 body.dark #work-dialog { background: #2c2c2e; color: #e0e0e0; }
 #work-dialog h2 { font-size: 15px; margin-bottom: 4px; }
 #work-info { font-size: 12px; color: #666; margin-bottom: 10px; }
 body.dark #work-info { color: #aaa; }
-#work-canvas { display: block; background: #cfd6e6; border-radius: 6px; }
+#work-canvas {
+  display: block; background: #cfd6e6; border-radius: 6px;
+  /* Let the canvas scale DOWN on short screens so the dialog never exceeds the
+     viewport. The 480x420 backing store is preserved (click/zoom hit-testing
+     divides by the displayed rect size, so scaling stays accurate). */
+  max-width: 100%; max-height: 62vh; height: auto;
+}
 body.dark #work-canvas { background: #20242e; }
-#work-body { display: flex; gap: 14px; align-items: flex-start; }
+#work-body {
+  display: flex; gap: 14px; align-items: flex-start;
+  /* Scroll pane: takes the remaining dialog height and scrolls when the map +
+     stats are taller than the clamped dialog. */
+  flex: 1 1 auto; min-height: 0; overflow: auto;
+}
 #work-stats {
   width: 240px; flex: 0 0 240px; font-size: 12px;
   background: #ffffff; border: 1px solid #ddd; border-radius: 8px; padding: 10px 12px;
-  align-self: stretch;
+  align-self: flex-start;
 }
 body.dark #work-stats { background: #232327; border-color: #444; }
 #work-stats h3 { font-size: 13px; margin: 0 0 8px; }

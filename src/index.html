@@ -8164,6 +8164,68 @@
       if (manager === 'military' && (Number(bt.recruitRate) || 0) > 0) score += 5;
       return score;
     }
+    // Repurpose step: when the manager WANTS a needed building but every control
+    // cell is already occupied, it may tear down a building whose output is an
+    // unwarranted surplus (scores ~0 for the manager now) and replace it with the
+    // needed one. Removal takes a few turns; the needed building is then queued
+    // automatically next turn (managerAutoBuild) on the freed cell.
+    //
+    // Guards against churn: only removes when (a) the colony has NO empty control
+    // cell to build on, (b) the best replacement at the surplus building's cell
+    // clearly out-scores that building's current usefulness by a margin, (c) the
+    // surplus building is non-essential (not the biodome, not a storage building
+    // the colony is actually relying on), and (d) at most one removal per colony
+    // per turn. Returns true if it removed a building.
+    const REPURPOSE_MARGIN = 50; // replacement must beat the surplus building by this much
+    function managerRepurpose(col, manager, needs) {
+      ensureWorked(col);
+      // Only repurpose when there is NO empty control cell to build on — i.e.,
+      // the colony is cell-constrained, which is exactly when tearing down a
+      // surplus building to make room is warranted.
+      const hasEmptyCell = colonyControlCells(col).some((c) =>
+        cellKey(c.x, c.y) !== cellKey(col.x, col.y) && !cellHasBuilding(c.x, c.y) && !isImpassableFrozen(c.x, c.y));
+      if (hasEmptyCell) return false;
+      // Don't start a removal if one is already in progress here (avoid churn).
+      if (colonyBuildings(col).some((b) => b.type !== 1 && b.removeTurns != null && b.removeTurns > 0)) return false;
+      if (!canAffordRemovalAt(col.x, col.y, col.owner)) return false;
+      const types = buildingTypeCodes().filter((t) => t !== 1);
+      let bestGain = 0, bestVictim = null, bestReplacement = null;
+      for (const b of colonyBuildings(col)) {
+        if (b.type === 1) continue;                           // never the biodome
+        if (b.removeTurns != null && b.removeTurns > 0) continue;
+        if (buildingIsFederation(b.type)) continue;           // not colony-owned
+        // Current usefulness of this building to the manager. A building whose
+        // output is all surplus (no current need) scores ~0 under the near-zero
+        // weighting — that is the "excessive, unwarranted production" case.
+        const victimScore = managerBuildScore(col, b.type, { x: b.x, y: b.y }, manager, needs);
+        // Best DIFFERENT building the manager could put on this cell instead.
+        let repScore = -Infinity, repType = null;
+        for (const t of types) {
+          if (t === b.type) continue;
+          if (!canPlaceTypeAt(t, b.x, b.y, col.owner).ok) continue;
+          if (!hasPrerequisitesAt(t, b.x, b.y, col.owner)) continue;
+          if (!canAffordBuildingAt(t, b.x, b.y, col.owner)) continue;
+          const s = managerBuildScore(col, t, { x: b.x, y: b.y }, manager, needs);
+          if (s > repScore) { repScore = s; repType = t; }
+        }
+        if (repType == null) continue;
+        // Only consider the swap when the victim is NOT currently useful (its
+        // production is unwarranted surplus) and the replacement is strongly
+        // needed. The margin prevents swapping over trivial differences.
+        const gain = repScore - Math.max(0, victimScore);
+        if (victimScore <= 1 && repScore > REPURPOSE_MARGIN && gain > bestGain) {
+          bestGain = gain; bestVictim = b; bestReplacement = repType;
+        }
+      }
+      if (!bestVictim) return false;
+      // Tear it down; next turn its cell is free and managerAutoBuild will put
+      // the needed building there.
+      const ok = removeImprovement(bestVictim.x, bestVictim.y, col.owner);
+      if (ok && col.owner === 'human') {
+        notify(`${col.name || 'A colony'}'s manager is replacing a surplus ${improvementName(bestVictim.type)} with a ${improvementName(bestReplacement)}.`);
+      }
+      return ok;
+    }
     // Run the manager for one colony at the start of the player's turn: assign
     // idle workers, then auto-build when the queue is low. Returns true if the
     // manager took any action (so the caller can skip the attention prompt).
@@ -8173,8 +8235,14 @@
       const needs = colonyNeeds(col);
       const assigned = managerAssignWorkers(col, manager, needs);
       // Recompute needs after assigning workers (production changed).
-      const built = managerAutoBuild(col, manager, colonyNeeds(col));
-      if (assigned || built) {
+      const needs2 = colonyNeeds(col);
+      const built = managerAutoBuild(col, manager, needs2);
+      // If nothing could be built (typically because every control cell is
+      // occupied) consider repurposing: tear down a building whose output is an
+      // unwarranted surplus to make room for a needed one (built next turn once
+      // the removal completes).
+      const repurposed = built ? false : managerRepurpose(col, manager, needs2);
+      if (assigned || built || repurposed) {
         if (hexMap) hexMap.setBuildings(gameState.buildings);
       }
       return true; // a managed colony is handled regardless of whether it acted
@@ -9073,11 +9141,19 @@
     let _attentionQueue = [];
     let _workHexes = []; // [{ x, y, cx, cy, isHome }] screen layout for hit-testing
     const WORK_HEX_SCALE = { x: 1.15470053837925, y: 0.86602540378444 };
+    // Colony-map view transform: zoom (1 = fit-to-canvas, the minimum) and a pan
+    // offset in canvas pixels. Scroll wheel zooms; arrow keys pan. When the whole
+    // grid fits in a dimension the pan is forced to centered for that axis.
+    let _workZoom = 1;
+    let _workPan = { x: 0, y: 0 };
+    const WORK_ZOOM_MIN = 1, WORK_ZOOM_MAX = 6, WORK_ZOOM_STEP = 1.15;
 
     function openWorkModal(building) {
       workColony = building;
       workReadOnly = (building.owner !== 'human'); // aliens are view-only
       ensureWorked(building);
+      // Reset the map view (fit + centered) each time a colony is opened.
+      _workZoom = 1; _workPan = { x: 0, y: 0 };
       workOverlay.hidden = false;
       renderWorkModal();
     }
@@ -9182,8 +9258,10 @@
       const gw = (maxX - minX + 1), gh = (maxY - minY + 1);
       const ctx = workCanvas.getContext("2d");
       const CW = workCanvas.width, CH = workCanvas.height;
-      // cell size so the grid fits with margin
-      const cell = Math.min(CW / (gw * 0.75 + 1) / WORK_HEX_SCALE.x, CH / (gh + 1));
+      // Base cell size so the whole grid fits with margin (zoom 1 = fit). The
+      // view zoom scales it up; scroll wheel changes _workZoom, arrow keys pan.
+      const fitCell = Math.min(CW / (gw * 0.75 + 1) / WORK_HEX_SCALE.x, CH / (gh + 1));
+      const cell = fitCell * _workZoom;
       const spacing = { x: cell * WORK_HEX_SCALE.x, y: cell };
       // hexCenter uses the UNWRAPPED x for horizontal placement, but the REAL
       // cell x for the odd-q vertical offset parity.
@@ -9194,10 +9272,26 @@
           y: (0.5 + ((y - minY) + (((realX % 2) + 2) % 2) / 2)) * spacing.y
         };
       };
-      // center the whole layout in the canvas
+      // Center the whole layout in the canvas, then apply the pan offset. When a
+      // dimension's layout fits inside the canvas, force it centered (pan 0) so
+      // "if it can all be seen, it is centered"; otherwise clamp the pan so the
+      // grid can't be scrolled past its edges.
       const layoutW = (gw * 0.75 + 0.25) * spacing.x;
       const layoutH = (gh + 0.5) * spacing.y;
-      const offX = (CW - layoutW) / 2, offY = (CH - layoutH) / 2;
+      if (layoutW <= CW) {
+        _workPan.x = 0;
+      } else {
+        const maxPanX = (layoutW - CW) / 2;
+        _workPan.x = Math.max(-maxPanX, Math.min(maxPanX, _workPan.x));
+      }
+      if (layoutH <= CH) {
+        _workPan.y = 0;
+      } else {
+        const maxPanY = (layoutH - CH) / 2;
+        _workPan.y = Math.max(-maxPanY, Math.min(maxPanY, _workPan.y));
+      }
+      const offX = (CW - layoutW) / 2 + _workPan.x;
+      const offY = (CH - layoutH) / 2 + _workPan.y;
 
       ctx.clearRect(0, 0, CW, CH);
       ctx.textAlign = "center";
@@ -9692,6 +9786,20 @@
       if (!best) return;
       showContextMenu(e.clientX, e.clientY, { x: best.x, y: best.y }, true);
     });
+    // Scroll wheel zooms the colony map in/out. Zoom 1 = fit-to-canvas (minimum),
+    // so you can never zoom out past the whole grid. Pan scales with zoom so the
+    // centered content stays put; the layout clamp recenters when it all fits.
+    workCanvas.addEventListener("wheel", (e) => {
+      if (workOverlay.hidden) return;
+      e.preventDefault();
+      const prev = _workZoom;
+      const factor = e.deltaY < 0 ? WORK_ZOOM_STEP : 1 / WORK_ZOOM_STEP;
+      _workZoom = Math.max(WORK_ZOOM_MIN, Math.min(WORK_ZOOM_MAX, _workZoom * factor));
+      if (_workZoom === prev) return;
+      const applied = _workZoom / prev;          // actual scale change after clamping
+      _workPan.x *= applied; _workPan.y *= applied;
+      renderWorkModal();
+    }, { passive: false });
 
     // ---- work-dialog hover tooltip: base tile yields + each bonus source ----
     const workTooltip = document.getElementById("work-tooltip");
@@ -9789,6 +9897,20 @@
     // Enter (end-turn) / Escape handlers, which otherwise ignore this modal.
     document.addEventListener("keydown", (e) => {
       if (workOverlay.hidden) return;
+      // Arrow keys pan the colony map (when zoomed in enough that it doesn't all
+      // fit; the layout clamp keeps it centered otherwise). Capture-phase so the
+      // main-map arrow handling doesn't also fire.
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.preventDefault();
+        e.stopPropagation();
+        const step = Math.round(workCanvas.width * 0.12);
+        if (e.key === "ArrowLeft") _workPan.x += step;
+        else if (e.key === "ArrowRight") _workPan.x -= step;
+        else if (e.key === "ArrowUp") _workPan.y += step;
+        else if (e.key === "ArrowDown") _workPan.y -= step;
+        renderWorkModal();
+        return;
+      }
       if (e.key === "Enter" || e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();

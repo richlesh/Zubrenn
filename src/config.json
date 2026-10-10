@@ -1,7 +1,7 @@
 {
   // When true, after creating a new map show two debug dialogs: a terrain-type
   // breakdown and a terrain-bonus placement count. Set false to disable.
-  "debug": true,
+  "debug": false,
 
   // Food 1 = 1k t, material 1 = 1k t, water 1 = 1 G L, energy 1 = 1 G WHr
   // wealth 1 = 1M credits where 1 credit = $10 USD.
