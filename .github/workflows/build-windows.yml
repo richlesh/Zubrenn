@@ -7,11 +7,13 @@ on:
         description: "Release version tag (e.g. 0.3.0)"
         required: true
 
-# Serialize all release workflows for the SAME version so the shared git tag and
-# draft release are created exactly once (no duplicate drafts across the
-# mac/linux/windows dispatches, and no intra-matrix race).
+# Serialize repeat dispatches of THIS workflow for the same version (so a
+# double-click doesn't start two Windows builds). The group is per-workflow +
+# per-version, so the macOS/Linux workflows run independently and are NOT
+# cancelled. Cross-platform coordination onto a single draft release is handled
+# by keying the release to a real git tag (see prepare-release), not here.
 concurrency:
-  group: release-${{ github.event.inputs.tag }}
+  group: ${{ github.workflow }}-${{ github.event.inputs.tag }}
   cancel-in-progress: false
 
 jobs:
