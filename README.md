@@ -179,7 +179,8 @@ without code changes:
       Panel).
     - `network` — a list of transport-connection types the colony must have to
       **another** of your colonies (satisfied by **any one** listed): `"land"`
-      (road or monorail), `"river"` (river/canal), `"sea"`, `"air"`, `"space"`,
+      (road or monorail), `"river"` (river/canal), `"inland"` (either `"land"`
+      or `"river"`), `"sea"`, `"air"`, `"space"`,
       or `"any"` (any connection at all). Omitted/empty means no network needed.
     - `terrain` — terrain **name keys** the building may be placed on (defaults to
       habitable land).

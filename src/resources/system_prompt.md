@@ -124,7 +124,8 @@ when it can be built at a colony. All of its parts must be satisfied:
   **Air Field** needs a Factory; the **Spaceport** needs an Air Field).
 - `network` — the colony must be transport-connected to **another** of your
   colonies by at least **one** of the listed types: `land` (road/monorail),
-  `river` (river/canal), `sea`, `air`, `space`, or `any` (any connection at all).
+  `river` (river/canal), `inland` (either `land` or `river`), `sea`, `air`,
+  `space`, or `any` (any connection at all).
   Omitted/empty means no network is required.
 - `terrain` — terrain the building may sit on.
 - `climate` — climate band(s) (`tropical`/`temperate`/`subpolar`/`polar`) the

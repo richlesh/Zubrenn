@@ -4766,8 +4766,9 @@
     }
     // The SET of transport-network modes by which `col` is connected to at least
     // one OTHER same-owner colony. Modes: 'land' (road/monorail), 'river'
-    // (river/canal), 'sea' (both Docks + shallow route), 'air' (both Air Fields
-    // in range), 'space' (both Spaceports). Used by the per-building
+    // (river/canal), 'sea' (both have a Dock or Port + a sea route; deep sea
+    // only when both have a Port), 'air' (both have an Air Field or Airport;
+    // range is the smaller end's), 'space' (both Spaceports). Used by the per-building
     // `prerequisite.network` requirement. Reuses the same linking primitives as
     // colonyConnectivity; computed on demand (only during build-eligibility
     // checks, so no caching needed).
@@ -4862,13 +4863,22 @@
         }
       }
 
-      // sea: both have a Dock and a shallow-sea route links them.
+      // sea: both colonies have a Dock OR Port, and a sea route links them.
+      // A plain Dock reaches only shallow (land-adjacent) sea; when BOTH
+      // colonies have a Port (seaport), the route may also cross deep sea.
       if (colonyHasDock(col)) {
+        const colSeaport = colonyHasSeaport(col);
         for (const o of others) {
-          if (colonyHasDock(o) && _pathExists(col, o, owner, (x, y) => isShallowSea(x, y))) { modes.add('sea'); break; }
+          if (!colonyHasDock(o)) continue;
+          const deepOk = colSeaport && colonyHasSeaport(o);
+          const seaOk = deepOk
+            ? (x, y) => (terrainAt(x, y) === WATER)
+            : (x, y) => isShallowSea(x, y);
+          if (_pathExists(col, o, owner, seaOk)) { modes.add('sea'); break; }
         }
       }
-      // air: both have an Air Field within range.
+      // air: both have an air facility (Air Field or Airport); mixed pairs link
+      // but are capped at the smaller end's range (Airport<->Airport reaches 40).
       if (colonyHasAirfield(col)) {
         for (const o of others) {
           if (colonyHasAirfield(o) && coloniesAirLinked(col, o)) { modes.add('air'); break; }
@@ -5931,13 +5941,14 @@
       return (bt.range != null) ? bt.range : 16;
     }
     // Two same-owner colonies are air-linked when they EACH have an air facility
-    // and are within reach. The usable link range is the GREATER of the two
-    // colonies' air ranges, so upgrading one end to an Airport (range 40) extends
-    // its links out to that range.
+    // (Air Field or Airport) and lie within reach. Mixed pairs are allowed, but
+    // the usable link range is the SMALLER of the two colonies' best air ranges,
+    // so a link to an Air Field (range 20) is capped at 20 even if the other end
+    // is an Airport (range 40); only Airport<->Airport reaches the full 40.
     function coloniesAirLinked(a, b) {
       const ra = colonyAirRange(a), rb = colonyAirRange(b);
       if (ra <= 0 || rb <= 0) return false;
-      return hexDistance(a.x, a.y, b.x, b.y) <= Math.max(ra, rb);
+      return hexDistance(a.x, a.y, b.x, b.y) <= Math.min(ra, rb);
     }
     // Drop any worked cells that fall outside the colony's current control area
     // (e.g. after the radius shrinks because population dropped). The biodome
@@ -6981,19 +6992,15 @@
       const tags = Array.isArray(otherTags) ? otherTags : [];
       const terr = terrainAt(x, y);
       // The tier-9 mountain tops are ALWAYS impassable and unbuildable — no
-      // building, not even a `mining`-tagged one, may be placed there.
+      // building may be placed there.
       if (isImpassableFrozen(x, y)) {
         return { ok: false, reason: "impassable terrain" };
       }
 
       // Terrain gate: the cell's tile must be in the building's allowed set.
-      // A `mining`-tagged building overrides this for LAND tiles — it may be
-      // placed on any land terrain (below the altitude cap, already enforced
-      // above), including terrains its own list would otherwise exclude. Sea
-      // tiles still require the building's terrain set to allow sea.
-      const mining = tags.includes('mining');
-      const terrIsLand = (terr !== WATER);
-      if (!(mining && terrIsLand) && !terrainAllowedForBuilding(type, terr)) {
+      // A building that should be placeable on any land terrain lists the
+      // `land` terrain group in its prerequisite (e.g. the Mine).
+      if (!terrainAllowedForBuilding(type, terr)) {
         return { ok: false, reason: (terr === WATER) ? "must be built on sea" : "must be land" };
       }
       // When a building sits on the water (its terrain set allows sea), it must
@@ -7235,14 +7242,16 @@
     // in the colony that controls (x,y).
     // Whether a colony satisfies a prerequisite.network list (OR semantics):
     // the colony must be connected to another of the owner's colonies by AT
-    // LEAST ONE listed mode. Modes: "land", "river", "sea", "air", "space", or
-    // "any" (any connection at all). Empty/missing list = no requirement.
+    // LEAST ONE listed mode. Modes: "land", "river", "sea", "air", "space",
+    // "inland" (either "land" OR "river"), or "any" (any connection at all).
+    // Empty/missing list = no requirement.
     function networkRequirementMet(col, networkList) {
       if (!Array.isArray(networkList) || !networkList.length) return true;
       if (!col) return false;
       const modes = colonyNetworkModes(col);
       for (const req of networkList) {
         if (req === 'any') { if (modes.size > 0) return true; }
+        else if (req === 'inland') { if (modes.has('land') || modes.has('river')) return true; }
         else if (modes.has(req)) return true;
       }
       return false;
@@ -7880,8 +7889,8 @@
           if (cellKey(c.x, c.y) === homeKey) continue;
           if (gameState.buildings.some((b) => b.x === c.x && b.y === c.y)) continue;
           // Terrain eligibility is enforced per-type by canPlaceTypeAt (which
-          // honors each building's terrain list and the `mining` override for
-          // otherwise-unbuildable tiles), so no habitable-terrain pre-skip here.
+          // honors each building's terrain list, e.g. the `land` group), so no
+          // habitable-terrain pre-skip here.
           for (const type of types) {
             if (!canPlaceTypeAt(type, c.x, c.y, pi).ok) continue;
             if (hasPrerequisitesAt(type, c.x, c.y, pi) && canAffordBuildingAt(type, c.x, c.y, pi)) return true;

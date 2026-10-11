@@ -1,37 +1,38 @@
 {
   // When true, after creating a new map show two debug dialogs: a terrain-type
   // breakdown and a terrain-bonus placement count. Set false to disable.
-  "debug": true,
+  "debug": false,
 
-  // Food 1 = 1k t, material 1 = 1k t, water 1 = 1 G L, energy 1 = 1 G WHr
-  // wealth 1 = 1M credits where 1 credit = $10 USD.
-  // Cells are 10km across flats.  One cell of land is 86.6 km².
-  // One road/monorail segment is 10 km. One river/canal segment is 5.77 km.
-  // Happiness is a percent 0-100%
-
-  // "terrain" restrictions can be a list of specific terrains:
-  //    "sea", "grassland",  "hills", "forest", "jungle", "desert", "mountain-low",
+  // "terrain" restrictions on placement can be a list of specific terrains:
+  //    "sea", "grassland", "hills", "forest", "jungle", "desert", "mountain-low",
   //    "mountain-high", "frozen", "plains", "wetlands"
-  // They may also contain these groups:
-  //    "flatland", "mountain", "trees", "land"
+  // They may also contain these groups (see terrainGroups below):
+  //    "flatland", "highland", "mountain", "trees", "land"
+  // "land" represents any non-sea terrain that can be built on.  For example a
+  // mine might be built on any land terrain.  "land" always excludes high frozen terrain,
+  // aka mountain peaks, which is programmatically enforced as impassible and unbuildable.
 
-  // "other" restrictions can be a list of
+  // "other" restrictions on placement can be a list of
   //    "river":    River adjacent tile
   //    "sea":      Sea adjacent tile (for shallow sea)
   //    "water":    River or sea/wetland adjacent tile
   //    "land":     Land adjacent (for shoreline)
   //    "pristine": Destroyed by building
   //    "dry"       Not water adjacent
-  //    "mining":   Can build on unbuildable tiles
   //    (elevation bands, signed meters ASL = (elevation - seaLevel) * 10000)
   //    "deep":     Deep water      (depth below -1000 m ASL)
   //    "shallow":  Shallow water   (-1000 m <= depth <= 0 m ASL)
   //    "lowland":  Low land        (0 m <= altitude <= 2000 m ASL)
 
-  // Climate-band dividing lines, as fractions of the polar line
-  // (P = 25 + polar*45 deg). Each fraction ranges 0..0.35 (0%..35%):
+  // "climate" restrictions on placement can be based upon climate bands.
+  //    "topical":   Tropical climate
+  //    "temperate": Temperate climate
+  //    "subpolar":  Subpolar climate
+  //    "polar":     Polar climate (frozen desert)
+  // Climate-band dividing lines, as fractions of the polar line [0.0, 1.0]
+  // P = 25 + polar_line_fraction * 45 deg
   //   tropical/temperate divide  = tropicalFraction * P        (tropics below)
-  //   temperate/subpolar divide = (1 - subpolarFraction) * P  (subpolar is the
+  //   temperate/subpolar divide = (1 - subpolarFraction) * P   (subpolar is the
   //                                 outer subpolarFraction of P, nearest pole)
   //   subpolar/polar divide     = P
   // Used by map generation and the tropical/temperate/subpolar placement tags.
@@ -43,16 +44,18 @@
   "terrainGroups": {
     "land":     ["grassland", "hills", "forest", "jungle", "desert", "mountain-low", "mountain-high", "frozen", "plains"],
     "flatland": ["grassland", "plains", "desert", "wetlands"],
+    "highland": ["hills", "mountain-low"],
     "trees":    ["jungle", "forest", "mountain-low"],
     "mountain": ["mountain-low", "mountain-high"]
   },
 
-  // Per terrain type (keyed by name, each with a numeric `code` = grid id):
-  // display name, tile icon, HSV/HSL color, a `bonus` base Food/Material/Water
-  // yield per 1,000 workers, a `movement` cost array
-  // [unimproved, road, sea/river, monorail, air] (space is 0), and per-tile transport
-  // build costs (roadCostPerTile, monorailCostPerTile, canalCostPerEdge). Codes:
-  // 1 Sea, 2 Grassland, 3 Hills, 4 Forest, 5 Jungle, 6 Desert, 7 Mountain-Low,
+  // Per terrain type (keyed by name, each with a numeric unique id "code"):
+  // display name, tile icon, HSL color,
+  // base Food/Material/Water/etc called "bonus" yield per 1 worker unit / turn,
+  // a 'movement' cost array
+  // [unimproved, road, sea/river, monorail, air] (space is 0),
+  // transport build costs (roadCostPerTile, monorailCostPerTile, canalCostPerEdge).
+  // Codes: 1 Sea, 2 Grassland, 3 Hills, 4 Forest, 5 Jungle, 6 Desert, 7 Mountain-Low,
   // 8 Mountain-High, 9 Frozen, 10 Plains, 11 Wetlands.
   "terrainTypes": {
     "sea": {
@@ -178,30 +181,51 @@
     }
   },
 
-  // Per-UNIT definitions. Each entry has a movement `speed`, an optional
-  // `unitSize` (the per-1,000 divisor for population-style consumption), a
-  // one-time `buildCost` map, and a yearly `costPerYear` map (food/goods/energy/
-  // water/wealth). Only `population` costPerYear is used by the economy today
-  // (per 1,000 colonists); the military entries are scaffolding for a future
-  // combat system. The `speed` key IS used: travel time for a moving unit (a
-  // deploying battalion, or a launched colony's population) is
-  // ceil(shortest-path movement cost / speed) turns. Higher speed = faster.
+  // Game Resource Unit Sizes
+  // Energy 1 unit = 1 G WHr, Food 1 unit = 1k t, Goods 1 unit = 1k t, Material 1 unit = 1k t,
+  // Water 1 unit = 1 G L, Wealth 1 = 1M credits where 1 credit = $10 USD.
+  // Population 1 unit = 1000 people.
+  // Happiness is a percent 0-100%
+  // Cells are 10km across flats.  One cell of land is 86.6 km².
+  // One road/monorail segment is 10 km. One river/canal segment is 5.77 km.
+  // 1 turn = 1 Year
+  // 1 metric ton = 1,000 × 2.20462 lb ≈ 2,204.62 lb
+
+  // Per-UNIT definitions. Each entry has a movement "speed", an optional
+  // "unitSize" (the population required for 1 unit),
+  // a one-time "buildCost" map, and a yearly "costPerYear" map.
+  // The "speed" key determins travel time for a moving unit
+  // travel time = ceil(shortest-path movement cost / speed) turns.
+  // Higher speed = faster.
   "units": {
     // EIA reports U.S. residential electricity use averaged ~4,437 kWh per person per year in 2020
-    // ERS notes “the average American consumes roughly 1,885 lbs of food per year. That is nearly 1 ton of food annually per person”
-    // 1 metric ton = 1,000 × 2.20462 lb ≈ 2,204.62 lb
-    // Material footprint per capita for the United States is on the order of ~ 20–24 t per person per year in the 2010s-2020s.
-    // average American uses 100 kL of water/year. The ~1,000 gal/d per capita figure is the total national withdrawal intensity for all sectors.
-    // US income is roughly $ 80 million per 1,000.  $10 is one credit so ¤8M credit /1000
+    // ERS notes "the average American consumes roughly 1,885 lbs of food per year. That is nearly 1 ton of food annually per person"
+    // US Material Footprint, RMC per capita, 2020-2021: ~ 24–27 t per capita yr-1 of raw material equivalent.
+    //    Fossil energy materials ≈ 13–14 t/cap/yr
+    //    Non-metallic minerals ≈ 4–6 t/cap/yr
+    //    Biomass ≈ 5–6 t/cap/yr
+    //    Metal ores ≈ 1.5–2 t/cap/yr
+    // US Consumer goods footprint is typically quoted as 6–10 t/cap/yr of product weight
+    // Average American uses 100 kL of water/year. Total national withdrawal intensity for all sectors.
+    // US income is roughly $ 80 million per 1,000.  $10 is one credit so ¤8M credit / 1000
 
-    // population costPerYear is per "unitSize" population
+    // 1 population unit = 1 worker = 1000 population
+    // Consumption per year per worker:
+    //    energy: 4.5 kWh * 1000 people / 1 G WHr = 4.5 energy units
+    //    food:   1 t * 1000 people / 1 kt = 1 food unit
+    //    goods:  10 t * 1000 people / 1 kt = 10 goods units
+    //    materials: 14 t * 1000 people / 1 kt = 14 materials units (used to build infrastructure and by factories)
+    //    water:  100 kL * 1000 people / 1 G L = 0.1 water units
+    //    wealth: $80M / $10 / 1M = ¤8 credits units
+    
+    // population costPerYear is per "unitSize/worker" population
     "population": { "unitSize": 1000, "speed": 5,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
-        "costPerYear": { "food": 1, "goods": 10, "energy": 5, "water": 0.2, "wealth": 8 }
+        "costPerYear": { "food": 1, "goods": 10, "energy": 4.5, "water": 0.1, "wealth": 8 }
     },
     "infantry": { "unitSize": 1000, "speed": 8,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
-        "costPerYear": { "food": 1, "goods": 10, "energy": 6, "water": 0.2, "wealth": 10 }
+        "costPerYear": { "food": 1, "goods": 10, "energy": 6, "water": 0.1, "wealth": 10 }
     },
     // Tank batallion 500 service men, 50 tanks
     "tank": { "unitSize": 500, "speed": 2,
@@ -231,19 +255,19 @@
   },
 
   // Buildings keyed by the LOWERCASE name (spaces preserved); each entry carries
-  // a numeric `code` (the stable type id stored on building instances as
+  // a numeric "code" (the stable type id stored on building instances as
   // b.type). Each defines buildCost (+turns), costPerYear upkeep, bonus
   // (per-year production incl. growth/population), storage (summed into the
-  // colony's per-resource caps), optional federationStorage, and `range`
-  // (Air Field link distance). All build-eligibility requirements live under a
-  // single `prerequisite` object:
+  // colony's per-resource caps), optional federationStorage, and "range"
+  // (Air Field link distance, Space link distince is the entire map).
+  // All build-eligibility requirements live under a single "prerequisite" object:
   //   building : list of lowercase building-name keys that must already exist in
   //              the colony (ALL required).
   //   network  : list of connection types the colony must have to ANOTHER of the
-  //              owner's colonies (ANY one satisfies): "land" (road or monorail),
-  //              "river" (river/canal), "sea", "air", "space", or "any" (any
+  //              owner's colonies: "land" (road or monorail), "river" (river/canal),
+  //              "inland" ("land" or "river"), "sea", "air", "space", or "any" (any
   //              connection at all). Missing/empty = no network requirement.
-  //   terrain  : terrain NAME keys the building may be placed on.
+  //   terrain  : terrain NAME keys of terrain types the building may be placed on.
   //   other    : extra per-cell placement tags (same vocabulary as
   //              terrainBonus.other): "sea" (on a shallow-sea tile), "river"
   //              (river/canal-adjacent land), "water"/"dry", elevation bands,
@@ -258,13 +282,11 @@
   //              when the Federation can't afford the full fleet's upkeep in any
   //              resource. An idled federation building stops functioning.
   //              "intelligence": while active, the building gathers intel on
-  //              rival colonies within its `visibility` (Euclidean) range; the
+  //              rival colonies within its "visibility" (Euclidean) range; the
   //              Rankings dialog only ranks rival colonies so covered.
-  //              "mining": means that the unit is a mine that can be built in
-  //              normally uninhabited terrain types like mountain-high and frozen.
   //   climate  : climate band names ("tropical"/"temperate"/"subpolar"/"polar")
   //              the cell must be in. Missing/empty = any climate.
-  //   citySize : the colony population must be >= citySize * 1000.
+  //   citySize : the colony population must be >= city population * poplulation unit size.
   // The Spaceport (code 14) creates an UNLIMITED-range "space" transport network:
   // any two of a player's colonies that both have a Spaceport are connected
   // regardless of distance. A building only contributes production/upkeep/storage
@@ -280,12 +302,12 @@
       "costPerYear": { },
       "bonus": { "energy": 50, "food": 5, "goods": 30, "material": 30, "water": 5, "wealth": 50, "happiness": 0.5, "population": 1 },
       "storage": { "energy": 75, "food": 10, "goods": 250, "material": 250, "water": 5, "wealth": 250, "happiness": 25, "population": 20000 },
+      "federationStorage": { "energy": 200, "food": 20, "goods": 200, "material": 200, "water":  5, "wealth": 200 },
       "prerequisite": {
-        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","frozen","plains","wetlands"]
       },
       "other": [ "intelligence" ],
       "visibility": 16,
-      "federationStorage": { "energy": 200, "food": 20, "goods": 200, "material": 200, "water":  5, "wealth": 200 }
     },
     "farm": {
       "code": 2,
@@ -363,11 +385,11 @@
         "other":    ["land"]
       }
     },
-    // The Port is an UPGRADE of a Dock: `prerequisite.upgrades: "dock"` means it
+    // The Port is an UPGRADE of a Dock: "prerequisite.upgrades: "dock"" means it
     // can only be built on a cell that already holds this owner's Dock, and
     // placing it REPLACES that Dock. A Port opens travel across ALL sea routes
     // (deep sea included), not just the shallow sea a Dock enables, via the
-    // `other: ["seaport"]` capability tag.
+    // "other: ["seaport"]" capability tag.
     "port": {
       "code": 20,
       "name": "Port",
@@ -382,6 +404,7 @@
         "building": ["solar panel"],
         "terrain":  ["sea"],
         "other":    ["land", "seaport"],
+        "network":  ["any"],
         "upgrades": "dock"
       }
     },
@@ -397,15 +420,16 @@
       "prerequisite": {
         "building": ["solar panel","factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
-        "other": ["airbase"]
+        "other":   ["airbase"],
+        "network": ["inland"]
       },
       "range": 20
     },
     // The Airport is an UPGRADE of an Air Field (prerequisite.upgrades: "air
     // field"): it can only be built on a cell that already holds this owner's
     // Air Field, and placing it REPLACES that Air Field. It is bigger and links
-    // air-connected colonies out to a much greater `range` (40 cells). The
-    // `other: ["airbase"]` tag marks it (and the Air Field) as an air facility
+    // air-connected colonies out to a much greater "range" (40 cells). The
+    // "other: ["airbase"]" tag marks it (and the Air Field) as an air facility
     // for the air-network/connectivity logic.
     "airport": {
       "code": 21,
@@ -420,7 +444,8 @@
         "building": ["solar panel","factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
         "other": ["airbase"],
-        "upgrades": "air field"
+        "upgrades": "air field",
+        "network":  ["inland"]
       },
       "range": 40
     },
@@ -451,7 +476,9 @@
       "storage": { "food": 100 },
       "federationStorage": { "food": 100 },
       "prerequisite": {
-        "building": ["farm"], "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+        "building": ["farm"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+        "network":  ["any"]
       }
     },
     "warehouse": {
@@ -466,7 +493,8 @@
       "federationStorage": { "goods": 250 },
       "prerequisite": {
         "building": ["factory"],
-        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+        "network":  ["any"]
       }
     },
     "bank": {
@@ -498,7 +526,8 @@
       "federationStorage": { "energy": 500 },
       "prerequisite": {
         "building": ["solar panel","bank"],
-        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+        "network":  ["any"]
       }
     },
     // Water Treatment Plant
@@ -515,7 +544,8 @@
       "prerequisite": {
         "building": ["solar panel"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains"],
-        "other": ["river"]
+        "other": ["river"],
+        "network":  ["any"]
       }
     },
     // Desalination Plant
@@ -532,7 +562,8 @@
       "prerequisite": {
         "building": ["solar panel"],
         "terrain":  ["sea"],
-        "other":    ["land"]
+        "other":    ["land"],
+        "network":  ["any"]
       }
     },
     "spaceport": {
@@ -547,7 +578,8 @@
       "prerequisite": {
         "building": ["air field"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands"],
-        "climate": ["tropical","temperate"]
+        "climate": ["tropical","temperate"],
+        "network":  ["any"]
       }
     },
     "drone base": {
@@ -562,7 +594,7 @@
       "prerequisite": {
   //      "building": ["air field"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands","mountain-low"],
-        "other": [ "anywhere", "federation", "intelligence" ]
+        "other": [ "anywhere", "federation", "intelligence" ],
       },
       "visibility": 16
     },
@@ -578,7 +610,8 @@
       "federationStorage": { "material": 250 },
       "prerequisite": {
         "building": ["factory"],
-        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+        "network":  ["any"]
       }
     },
     // Mine
@@ -594,7 +627,7 @@
       "prerequisite": {
         "building": ["solar panel"],
         "terrain":  ["land"],
-        "other":    ["mining"]
+        "other":    []
       }
     },
     // housing habitat
@@ -610,7 +643,8 @@
       "prerequisite": {
         "population": 6000,
         "terrain": ["flatland","trees","mountain-low"],
-        "other": []
+        "other": [],
+        "network":  ["any"]
       }
     },
     "aquafarm": {
@@ -644,11 +678,11 @@
   },
 
   // Special resource deposits scattered across the map at generation time. Each
-  // entry defines a `bonus` (per-resource yield added when its cell is worked),
+  // entry defines a "bonus" (per-resource yield added when its cell is worked),
   // the terrain(s)/terrain groups it may appear on, climate band(s), optional
-  // altitude band, optional `other` placement rules (river/sea/water/land/dry/
-  // pristine/elevation bands), and an `abundancy` weight. See `terrainGroups`
-  // for group selectors and the header legend for `terrain`/`other` tokens.
+  // altitude band, optional "other" placement rules (river/sea/water/land/dry/
+  // pristine/elevation bands), and an "abundancy" weight. See "terrainGroups"
+  // for group selectors and the header legend for "terrain"/"other" tokens.
   "terrainBonus": {
     // Food
     "Myco-Tower Grove": {
@@ -1200,7 +1234,7 @@
     "catastrophicFailure": { "rate": 0.001, "minAge": 50 }
   },
 
-  // Monorail network settings (parallel to `road`):
+  // Monorail network settings (parallel to "road"):
   //   color         - built monorail segment line color (HSL)
   //   adjacentBonus - per-resource bonus a worked LAND cell gains when a monorail
   //                   runs through it (stacks with riverAdjacentBonus)
