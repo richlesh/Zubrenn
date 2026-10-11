@@ -373,6 +373,7 @@ class HexMap {
     this.controlMode = false;                 // Area-of-Control view toggle
     this.controlRadius = opts.controlRadius || 2; // fallback radius
     this.zoneOfControlSize = opts.zoneOfControlSize || null; // pop thresholds -> radius
+    this.popUnitSize = (Number(opts.popUnitSize) > 0) ? Number(opts.popUnitSize) : 1000; // citizens per population unit
     this.tooltipEl = opts.tooltip || null;   // floating hover tooltip element
     this.onHover = opts.onHover || null;      // (info) => void; overrides status write
     this.onHoverOut = opts.onHoverOut || null;
@@ -694,12 +695,14 @@ class HexMap {
     return owner;
   }
   // Control radius for a colony of the given population, from config
-  // zoneOfControlSize thresholds (index+1 = radius). Falls back to controlRadius.
+  // zoneOfControlSize thresholds (index+1 = radius). Thresholds are in population
+  // UNITS and converted to citizens via popUnitSize. Falls back to controlRadius.
   _controlRadiusForPop(pop) {
     const th = this.zoneOfControlSize;
     if (!th || !th.length) return this.controlRadius || 2;
+    const us = (Number(this.popUnitSize) > 0) ? Number(this.popUnitSize) : 1000;
     let r = 1;
-    for (let i = 0; i < th.length; i++) if (pop >= th[i]) r = i + 1;
+    for (let i = 0; i < th.length; i++) if (pop >= th[i] * us) r = i + 1;
     return r;
   }
   _controlOwnerAt(x, y) {

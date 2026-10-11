@@ -229,7 +229,7 @@
     "infantry": { "name": "Infantry", "unitSize": 1000, "speed": 8,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 1, "goods": 10, "energy": 6, "water": 0.1, "wealth": 10 }
-    },
+      },
     // Tank batallion 500 service men, 50 tanks
     "tank": { "name": "Armored", "unitSize": 500, "speed": 2,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
@@ -245,8 +245,11 @@
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 2, "goods": 15, "energy": 2, "water": 0.1, "wealth": 2 }
     },
+    // Single cruiser/destroyer 300 service men, 10 ballistic missiles
     // Single submarine 150 service men, 10 ballistic missiles
-    "submarine": { "name": "Escort", "unitSize": 1000, "speed": 2,
+    // Single supply ship 200 service men
+    // Escort group, 3 cruisers/destroyers, 1 submarine and 1 supply ship
+    "submarine": { "name": "Escort", "unitSize": 1250, "speed": 2,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 1, "goods": 10, "energy": 1, "water": 0.1, "wealth": 1 }
     },
@@ -299,7 +302,10 @@
   //                  e.g. { "infantry": 1 } (Barracks) or { "infantry": 3,
   //                  "tank": 1 } (Army Base). Unit types are keys of the
   //                  top-level "units" map. Each slot holds one stationed unit.
-  //   recruitRate  : colonists recruited per turn, PER unit slot, while worked.
+  //   recruitRate  : map of unit-type -> colonists recruited per turn for each
+  //                  of that type's slots while worked, e.g.
+  //                  { "infantry": 400, "tank": 100 }. A type with no entry
+  //                  (or 0) does not recruit at this building.
   // Each slot's unit caps at its unit TYPE's units[type].unitSize (per-type max
   // strength, e.g. infantry 1000, tank 500).
   // Recruitment pulls from the colony's population down to the shared
@@ -311,11 +317,11 @@
       "name": "Biodome",
       "icon": "buildings/128/biodome.png",
       "symbol": "buildings/icons/dome.png",
-      "startPopulation": 1000,
+      "startPopulation": 1,
       "buildCost": { "material": 200, "wealth": 100, "water": 2, "turns": 3 },
       "costPerYear": { },
       "bonus": { "energy": 50, "food": 5, "goods": 30, "material": 30, "water": 5, "wealth": 50, "happiness": 0.5, "population": 1 },
-      "storage": { "energy": 75, "food": 10, "goods": 250, "material": 250, "water": 5, "wealth": 250, "happiness": 25, "population": 20000 },
+      "storage": { "energy": 75, "food": 10, "goods": 250, "material": 250, "water": 5, "wealth": 250, "happiness": 25, "population": 20 },
       "federationStorage": { "energy": 200, "food": 20, "goods": 200, "material": 200, "water":  5, "wealth": 200 },
       "prerequisite": {
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","frozen","plains","wetlands"]
@@ -335,6 +341,22 @@
       "prerequisite": {
         "building": ["biodome","solar panel"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      }
+    },
+    "agridome": {
+      "code": 24,
+      "name": "Agridome",
+      "icon": "buildings/128/agridome.png",
+      "symbol": "buildings/icons/plant.png",
+      "buildCost":   { "energy": 40, "goods": 20, "material": 80, "wealth": 40, "water": 1, "turns": 5 },
+      "costPerYear": { "energy": 10, "goods": 10, "material": 20, "wealth": 20, "water": 20 },
+      "bonus":       { "food": "6x", "wealth": 30 },
+      "storage": { "food": 100 },
+      "prerequisite": {
+        "building": ["biodome","solar farm"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+        "upgrades": ["farm"],
+        "population": 5
       }
     },
     "solar panel": {
@@ -367,7 +389,8 @@
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains"],
-        "upgrades": "solar panel"
+        "upgrades": "solar panel",
+        "population": 3
       }
     },
     "factory": {
@@ -382,6 +405,38 @@
       "prerequisite": {
         "building": ["solar panel"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      }
+    },
+    "megafactory": {
+      "code": 26,
+      "name": "megafactory",
+      "icon": "buildings/128/megafactory.png",
+      "symbol": "buildings/icons/goods.png",
+      "buildCost": { "energy": 300, "material": 150, "wealth": 300, "water": 5, "turns": 6 },
+      "costPerYear": { "energy": 600, "material": 600, "wealth": 30, "water": 2 },
+      "bonus": { "goods": 500, "wealth": 50, "happiness": -0.25 },
+      "storage": { "energy": 50, "goods": 1000, "material": 1200 },
+      "prerequisite": {
+        "building": ["solar farm"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+        "upgrades": [ "factory" ],
+        "population": 10
+      }
+    },
+    "nanofactory": {
+      "code": 27,
+      "name": "nanofactory",
+      "icon": "buildings/128/nanofactory.png",
+      "symbol": "buildings/icons/goods.png",
+      "buildCost": { "energy": 600, "material": 300, "wealth": 600, "water": 10, "turns": 10 },
+      "costPerYear": { "energy": 1000, "material": 1000, "wealth": 100, "water": 5 },
+      "bonus": { "goods": 900, "wealth": 200, "happiness": -0.25 },
+      "storage": { "energy": 1000, "goods": 1800, "material": 2000 },
+      "prerequisite": {
+        "building": ["solar farm", "bank"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+        "upgrades": [ "megafactory" ],
+        "population": 15
       }
     },
     "dock": {
@@ -415,7 +470,7 @@
       "storage": { "food": 30, "goods": 300, "material": 300 },
       "federationStorage": { "food": 50, "goods": 500, "material": 500 },
       "prerequisite": {
-        "building": ["solar panel"],
+        "building": ["solar farm", "factory", "bank"],
         "terrain":  ["sea"],
         "other":    ["land", "seaport"],
         "network":  ["any"],
@@ -432,7 +487,7 @@
       "bonus": { "wealth": 10, "happiness": 0.25 },
       "storage": { "energy": 20, "food": 50, "goods": 100 },
       "prerequisite": {
-        "building": ["solar panel","factory"],
+        "building": ["solar panel", "factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
         "other":   ["airbase"],
         "network": ["inland"]
@@ -455,11 +510,12 @@
       "bonus": { "wealth": 25, "happiness": 0.5 },
       "storage": { "energy": 60, "food": 100, "goods": 250 },
       "prerequisite": {
-        "building": ["solar panel","factory"],
+        "building": ["solar farm", "factory", "bank"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
         "other": ["airbase"],
         "upgrades": "air field",
-        "network":  ["inland"]
+        "network":  ["inland"],
+        "population": 9
       },
       "range": 40
     },
@@ -473,14 +529,15 @@
       "bonus": { },
       "storage": { "food": 5, "goods": 10 },
       "units": { "infantry": 1 },
-      "recruitRate": 200,
+      "recruitRate": { "infantry": 200 },
       "prerequisite": {
-        "building": ["farm","factory"],
-        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+        "building": ["farm", "factory"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+        "population": 3
       }
     },
     "army base": {
-      "code": 22,
+      "code": 23,
       "name": "Army Base",
       "icon": "buildings/128/army_base.png",
       "symbol": "buildings/icons/shield.png",
@@ -489,12 +546,32 @@
       "bonus": { },
       "storage": { "food": 5, "goods": 10 },
       "units": { "infantry": 3, "tank": 1 },
-      "recruitRate": 400,
+      "recruitRate": { "infantry": 400, "tank": 100 },
       "prerequisite": {
-        "building": ["farm","factory"],
+        "building": ["solar farm", "farm", "factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
         "network":  ["any"],
-        "upgrades": "barracks"
+        "upgrades": "barracks",
+        "population": 8
+      }
+    },
+    "joint base": {
+      "code": 25,
+      "name": "Joint Base",
+      "icon": "buildings/128/joint_base.png",
+      "symbol": "buildings/icons/shield.png",
+      "buildCost": { "energy": 60, "material": 60, "wealth": 60, "water": 6, "turns": 8 },
+      "costPerYear": { "energy": 20, "goods": 10, "wealth": 10 },
+      "bonus": { },
+      "storage": { "energy": 40, "food": 20, "goods": 40 },
+      "units": { "infantry": 5, "tank": 3, "fighter": 2 },
+      "recruitRate": { "infantry": 500, "tank": 200, "fighter": 100 },
+      "prerequisite": {
+        "building": ["solar farm", "agridome", "megafactory", "bank"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+        "network":  ["any"],
+        "upgrades": "army base",
+        "population": 12
       }
     },
     "granary": {
@@ -510,7 +587,8 @@
       "prerequisite": {
         "building": ["farm"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
-        "network":  ["any"]
+        "network":  ["any"],
+        "population": 3
       }
     },
     "warehouse": {
@@ -526,7 +604,8 @@
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
-        "network":  ["any"]
+        "network":  ["any"],
+        "population": 3
       }
     },
     "bank": {
@@ -542,7 +621,8 @@
       "prerequisite": {
         "building": ["solar panel"],
         "network": ["any"],
-        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+        "population": 5
       }
     },
     // Compressed-Air Storage
@@ -557,9 +637,10 @@
       "storage": { "energy": 500 },
       "federationStorage": { "energy": 500 },
       "prerequisite": {
-        "building": ["solar panel","bank"],
+        "building": ["solar panel", "bank"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
-        "network":  ["any"]
+        "network":  ["any"],
+        "population": 3
       }
     },
     // Water Treatment Plant
@@ -574,10 +655,11 @@
       "storage":     { "water": 100 },
       "federationStorage": { "water":  100 },
       "prerequisite": {
-        "building": ["solar panel"],
+        "building": ["solar farm", "bank"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains"],
         "other": ["river"],
-        "network":  ["any"]
+        "network":  ["any"],
+        "population": 5
       }
     },
     // Desalination Plant
@@ -592,10 +674,11 @@
       "storage":     { "water": 100 },
       "federationStorage": { "water":  100 },
       "prerequisite": {
-        "building": ["solar panel"],
+        "building": ["solar farm", "bank"],
         "terrain":  ["sea"],
         "other":    ["land"],
-        "network":  ["any"]
+        "network":  ["any"],
+        "population": 5
       }
     },
     "spaceport": {
@@ -608,10 +691,11 @@
       "bonus": { "wealth": 15, "happiness": 0.25 },
       "storage": { "energy": 20, "food": 50, "goods": 100 },
       "prerequisite": {
-        "building": ["air field"],
+        "building": ["air field", "factory", "bank"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands"],
         "climate": ["tropical","temperate"],
-        "network":  ["any"]
+        "network":  ["any"],
+        "population": 8
       }
     },
     "drone base": {
@@ -624,7 +708,6 @@
       "bonus": { },
       "storage": { },
       "prerequisite": {
-  //      "building": ["air field"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands","mountain-low"],
         "other": [ "anywhere", "federation", "intelligence" ]
       },
@@ -641,7 +724,7 @@
       "storage": { "material": 250 },
       "federationStorage": { "material": 250 },
       "prerequisite": {
-        "building": ["factory"],
+        "building": ["mine"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
         "network":  ["any"]
       }
@@ -671,9 +754,9 @@
       "buildCost": { "material": 200, "wealth": 100, "water": 2, "turns": 3 },
       "costPerYear": { "energy": 50, "food": 5, "goods": 30, "material": 30, "water": 3, "wealth": 50 },
       "bonus": { "energy": 0, "food": 0, "goods": 0, "material": 0, "water": 0, "wealth": 50, "happiness": 0.5, "population": 1 },
-      "storage": { "energy": 50, "food": 10, "goods": 250, "water": 6, "wealth": 0, "happiness": 25, "population": 20000 },
+      "storage": { "energy": 50, "food": 10, "goods": 250, "water": 6, "wealth": 0, "happiness": 25, "population": 20 },
       "prerequisite": {
-        "population": 6000,
+        "population": 6,
         "terrain": ["flatland","trees","mountain-low"],
         "other": [],
         "network":  ["any"]
@@ -1329,7 +1412,7 @@
   // 1, +6, +12, +18, +24, +30, +36, +42, ...
   // Total cells in zone of control for radius 0, 1, 2
   // 1, 7, 19, 37, 61, 91, ...
-  "zoneOfControlSize": [0, 7000, 19000, 37000, 61000],
+  "zoneOfControlSize": [0, 7, 19, 37, 61],
 
   // Road bridges spanning a river/canal or a single sea tile (bridges are
   // road-only; monorails never need one):
@@ -1361,7 +1444,7 @@
     "removeCost": { "energy": 2, "food": 1, "turns": 2 },
     "costPerYear": { "energy": 0.5, "material": 1, "water": 0, "wealth": 0.75 },
     "decayRate": 0.001,
-    "minPopulation": 3000,
+    "minPopulation": 3,
     "catastrophicFailure": { "rate": 0.001, "minAge": 50 }
   },
 
@@ -1381,7 +1464,7 @@
     "removeCost": { "energy": 2, "food": 1, "turns": 2 },
     "costPerYear": { "energy": 0.5, "material": 0.5, "water": 0, "wealth": 0.5 },
     "decayRate": 0.001,
-    "minPopulation": 10000,
+    "minPopulation": 10,
     "catastrophicFailure": { "rate": 0.001, "minAge": 50 }
   },
 
@@ -1417,7 +1500,7 @@
     "adjacentBonus": { "energy": 0, "food": 2, "material": 0, "water": 10, "wealth": 4 },
     "removeCost": { "energy": 2, "food": 1, "turns": 2 },
     "costPerYear": { "energy": 0.1, "material": 0.5, "water": 1, "wealth": 0.3 },
-    "minPopulation": 5000,
+    "minPopulation": 5,
     "terrain": ["grassland", "hills", "forest", "jungle", "desert", "plains", "wetlands"],
     "buildRadius": 7,
     "vertexClickPixels": 7.5,
@@ -1434,9 +1517,9 @@
   // Federation treasury); the New Game/Federation UI can override per game.
   "federationTaxRate": 0,
   // Minimum colony population required to launch (found) a new colony.
-  "foundColonyMinPopulation": 3000,
+  "foundColonyMinPopulation": 3,
   // Colonists transferred from the host colony to a newly founded colony.
-  "foundColonyPopulationTransfer": 1000,
+  "foundColonyPopulationTransfer": 1,
   // Hit-test fraction (of cell size) treated as the border region when picking a
   // cell border vs its interior on click.
   "cellClickBorderMargin": 0.28,
@@ -1445,5 +1528,5 @@
   // Color of the previewed overland path when launching a new colony.
   "launchPathColor": { "h": 120, "s": 0.7, "l": 0.45 },
   // A colony's population may not be recruited below this floor by a Barracks.
-  "recruitMinColonyPopulation": 2000
+  "recruitMinColonyPopulation": 2
 }

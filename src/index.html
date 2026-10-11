@@ -2540,6 +2540,36 @@
       const n = e && Number(e.unitSize);
       return Number.isFinite(n) && n > 0 ? n : Infinity;
     }
+    // Citizens per population UNIT (units.population.unitSize, default 1000).
+    // Population-related config thresholds (foundColonyMinPopulation,
+    // recruitMinColonyPopulation, zoneOfControlSize, building
+    // prerequisite.population / citySize, road/monorail/canal minPopulation,
+    // biodome startPopulation, population storage caps) are expressed in
+    // population UNITS; multiply by this to compare against actual citizen counts.
+    function popUnitSize() {
+      const p = (CONFIG && CONFIG.units && CONFIG.units.population) || null;
+      const n = p && Number(p.unitSize);
+      return Number.isFinite(n) && n > 0 ? n : 1000;
+    }
+    // Per-turn recruit rate for a specific unit `unitType` at building `type`.
+    // config `recruitRate` is a map of unit-type -> colonists/turn, e.g.
+    // { "infantry": 400, "tank": 100 }. (A legacy plain-number recruitRate is
+    // treated as the rate for every unit type.) Returns 0 if not configured.
+    function buildingRecruitRate(type, unitType) {
+      const rr = (buildingType(type) || {}).recruitRate;
+      if (rr == null) return 0;
+      if (typeof rr === 'number') return Number(rr) > 0 ? Number(rr) : 0; // legacy scalar
+      if (typeof rr === 'object') { const n = Number(rr[unitType]); return Number.isFinite(n) && n > 0 ? n : 0; }
+      return 0;
+    }
+    // Whether a building recruits any military units (has a positive recruitRate
+    // for at least one unit type). Works for both the map and legacy-scalar forms.
+    function buildingRecruits(type) {
+      const rr = (buildingType(type) || {}).recruitRate;
+      if (typeof rr === 'number') return Number(rr) > 0;
+      if (rr && typeof rr === 'object') return Object.keys(rr).some((k) => Number(rr[k]) > 0);
+      return false;
+    }
     // Travel time in turns for a mover: ceil(shortest-path movement cost / speed),
     // minimum 1 turn.
     function travelTurnsForSpeed(pathCost, speed) {
@@ -3040,7 +3070,7 @@
         for (const u of arrived) {
           if (u.owner === 'human') {
             const destCol = gameState.buildings.find((b) => b.type === 1 && b.x === u.x && b.y === u.y);
-            notify(`${u.name} has arrived at ${(destCol && destCol.name) || cellLatLonLabel(u.x, u.y)}.`);
+            notify(`${unitDisplayName(u)} has arrived at ${(destCol && destCol.name) || cellLatLonLabel(u.x, u.y)}.`);
           }
         }
         if (arrived.length) badgeChanged = true;
@@ -3103,7 +3133,7 @@
       {
         const dead = removeDeadUnits();
         for (const u of dead) {
-          if (u.owner === 'human') notify(`${u.name} was destroyed (strength reached 0).`);
+          if (u.owner === 'human') notify(`${unitDisplayName(u)} was destroyed (strength reached 0).`);
         }
         if (dead.length) badgeChanged = true;
       }
@@ -4004,7 +4034,8 @@
     // slot units via the b.unitIds array (one id per slot, in slot order).
     // Each turn the building recruits colonists from its colony's population
     // into each slot's unit, limited by:
-    //   - the building's configured recruitRate (per turn, PER unit),
+    //   - the building's configured recruitRate for the slot's unit type
+    //     (recruitRate is a unit-type -> per-turn-rate map),
     //   - the slot unit type's units[type].unitSize (max strength, PER unit),
     //   - the colony's population floor recruitMinColonyPopulation (default
     //     2000): recruitment may not drop the colony below this floor (shared
@@ -4029,6 +4060,17 @@
     function findUnitById(id) {
       if (id == null) return null;
       return (gameState.units || []).find((u) => u.id === id) || null;
+    }
+    // Prose display name for a unit: its (possibly user-renamed) ordinal name
+    // followed by its data-driven type label, e.g. "1st Infantry", "2nd Armored".
+    // Used in notifications and dialogs where the type isn't shown separately.
+    // (The Military table keeps Name and Type in distinct columns and does not
+    // use this, to avoid repeating the type.)
+    function unitDisplayName(u) {
+      if (!u) return "Unit";
+      const nm = (u.name != null && String(u.name)) ? String(u.name) : "";
+      const lbl = typeLabel(u.type);
+      return nm ? `${nm} ${lbl}` : lbl;
     }
     // Create a new unit of `type` for `owner`, stationed at colony `col`, and
     // register it. The name is assigned by global creation order. `fullStrength`
@@ -4081,16 +4123,19 @@
     // recruited this turn across all of the building's slots (0 if none).
     function recruitBattalion(col, b) {
       const bt = buildingType(b.type) || {};
-      const rate = Number(bt.recruitRate) || 0;
-      if (rate <= 0) return 0;                       // not a recruiting building
+      if (!buildingRecruits(b.type)) return 0;       // not a recruiting building
       if (!isBuildingWorked(col, b)) return 0;       // idle buildings don't recruit
       const slots = buildingUnitSlots(b.type);
       if (!slots.length) return 0;                   // no unit slots declared
-      const floor = (CONFIG && CONFIG.recruitMinColonyPopulation != null) ? CONFIG.recruitMinColonyPopulation : 2000;
+      // recruitMinColonyPopulation is in population UNITS; convert to citizens.
+      const floor = ((CONFIG && CONFIG.recruitMinColonyPopulation != null) ? CONFIG.recruitMinColonyPopulation : 2) * popUnitSize();
       if (!Array.isArray(b.unitIds)) b.unitIds = [];
       let total = 0;
       for (let i = 0; i < slots.length; i++) {
         const slotType = slots[i];
+        // Per-turn recruit rate for THIS slot's unit type (data-driven map).
+        const rate = buildingRecruitRate(b.type, slotType);
+        if (rate <= 0) continue;                                    // this type doesn't recruit here
         // Each slot's unit caps at its unit type's unitSize (e.g. infantry 1000,
         // tank 500) — the data-driven max strength per unit type.
         const cap = unitMaxStrength(slotType);
@@ -4293,7 +4338,7 @@
       rebasePickerEl.innerHTML = "";
       const header = document.createElement("div");
       header.className = "rebase-head";
-      header.textContent = `Rebase ${unit.name} to…`;
+      header.textContent = `Rebase ${unitDisplayName(unit)} to…`;
       rebasePickerEl.appendChild(header);
       if (!dests.length) {
         const empty = document.createElement("div");
@@ -5171,7 +5216,9 @@
           for (const k of RESOURCE_KEYS) {
             if (k === "happiness") continue; // handled by step 6
             const cap = max[k] || 0;
-            if (k === "population") { if (owned[k] > cap) owned[k] = cap; continue; }
+            // storage.population is a cap in population UNITS; owned.population is
+            // in citizens, so convert the cap before clamping.
+            if (k === "population") { const pcap = cap * popUnitSize(); if (owned[k] > pcap) owned[k] = pcap; continue; }
             if (owned[k] <= cap) { if (owned[k] < 0) owned[k] = 0; continue; }
             let excess = owned[k] - cap;
             owned[k] = cap;
@@ -5848,15 +5895,18 @@
     }
     // Area-of-control cells for a colony (its own control radius, land only).
     // Control radius grows with population per config.zoneOfControlSize: an
-    // array of population thresholds; index+1 is the radius once population
-    // reaches that threshold. e.g. [0,10000,100000,1000000] -> radius 1,2,3,4.
+    // array of population-UNIT thresholds; index+1 is the radius once population
+    // reaches that threshold (thresholds are converted to citizens via
+    // popUnitSize()). e.g. [0,10,100,1000] with unitSize 1000 -> radius 1,2,3,4
+    // at 0 / 10,000 / 100,000 / 1,000,000 citizens.
     function colonyControlRadius(colony) {
       const th = (CONFIG.zoneOfControlSize && CONFIG.zoneOfControlSize.length)
         ? CONFIG.zoneOfControlSize : [0];
       const pop = colony.population || 0;
+      const us = popUnitSize();
       let radius = 1;
       for (let i = 0; i < th.length; i++) {
-        if (pop >= th[i]) radius = i + 1;
+        if (pop >= th[i] * us) radius = i + 1;
       }
       return radius;
     }
@@ -6070,7 +6120,8 @@
         : ((players[owner] && players[owner].name) || 'Alien');
       const bt = buildingType(1);
       const rec = { x, y, type: 1, owner, name, ownerName: species, improvement: improvementName(1),
-                    population: (bt && bt.startPopulation) || 1000,
+                    // startPopulation is in population UNITS; convert to citizens.
+                    population: ((bt && bt.startPopulation != null) ? bt.startPopulation : 1) * popUnitSize(),
                     seq: _nextColonySeq(),
                     worked: [cellKey(x, y)] };
       gameState.buildings.push(rec);
@@ -6278,8 +6329,8 @@
     function launchColony(host, tx, ty, owner, name) {
       const v = foundColonyTargetValid(host, tx, ty);
       if (!v.ok) return null;
-      const minPop = (CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3000;
-      const transfer = (CONFIG.foundColonyPopulationTransfer != null) ? CONFIG.foundColonyPopulationTransfer : 1000;
+      const minPop = ((CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3) * popUnitSize();
+      const transfer = ((CONFIG.foundColonyPopulationTransfer != null) ? CONFIG.foundColonyPopulationTransfer : 1) * popUnitSize();
       if ((host.population || 0) <= minPop) return null;
       if (!canAffordBuildingAt(1, host.x, host.y, owner)) return null;
       // Pay the biodome cost from the host colony's storage, borrowing any
@@ -6547,10 +6598,13 @@
     // config): road 3000 (size 3+), canal 5000 (size 5+), monorail 10000
     // (size 10+). The check is INCLUSIVE (>=), matching the "size N or greater"
     // wording — a colony at exactly the threshold qualifies.
+    // Minimum colony population (in CITIZENS) to build a transport of `kind`.
+    // config *.minPopulation is in population UNITS; convert via popUnitSize().
     function transportMinPopulation(kind) {
-      if (kind === 'road') return (CONFIG.road && CONFIG.road.minPopulation != null) ? CONFIG.road.minPopulation : 3000;
-      if (kind === 'canal') return (CONFIG.canal && CONFIG.canal.minPopulation != null) ? CONFIG.canal.minPopulation : 5000;
-      if (kind === 'monorail') return (CONFIG.monorail && CONFIG.monorail.minPopulation != null) ? CONFIG.monorail.minPopulation : 10000;
+      const us = popUnitSize();
+      if (kind === 'road') return ((CONFIG.road && CONFIG.road.minPopulation != null) ? CONFIG.road.minPopulation : 3) * us;
+      if (kind === 'canal') return ((CONFIG.canal && CONFIG.canal.minPopulation != null) ? CONFIG.canal.minPopulation : 5) * us;
+      if (kind === 'monorail') return ((CONFIG.monorail && CONFIG.monorail.minPopulation != null) ? CONFIG.monorail.minPopulation : 10) * us;
       return 0;
     }
     // Whether a colony is large enough to build the given transport type.
@@ -7318,17 +7372,19 @@
       }
       return false;
     }
-    // Whether the colony population meets a prerequisite.citySize (population
-    // must be >= citySize * 1000). Missing/zero = no requirement.
+    // Whether the colony population meets a prerequisite.citySize (in population
+    // UNITS): population must be >= citySize * popUnitSize(). Missing/zero = no
+    // requirement.
     function citySizeMet(col, citySize) {
       if (!(citySize > 0)) return true;
-      return !!col && (col.population || 0) >= citySize * 1000;
+      return !!col && (col.population || 0) >= citySize * popUnitSize();
     }
     // Whether the colony population meets a prerequisite.population threshold
-    // (an absolute minimum population, e.g. 6000). Missing/zero = no requirement.
+    // (in population UNITS, e.g. 6 = 6,000 citizens): population must be
+    // >= minPopulation * popUnitSize(). Missing/zero = no requirement.
     function populationReqMet(col, minPopulation) {
       if (!(minPopulation > 0)) return true;
-      return !!col && (col.population || 0) >= minPopulation;
+      return !!col && (col.population || 0) >= minPopulation * popUnitSize();
     }
     // Whether ALL build prerequisites for `type` are met at (x,y): required
     // buildings present in the colony, a satisfying network connection (if any
@@ -7377,10 +7433,10 @@
         missing.push(nets.join(" or "));
       }
       if (!citySizeMet(col, pre.citySize)) {
-        missing.push(`population ${(pre.citySize * 1000).toLocaleString()}`);
+        missing.push(`population ${(pre.citySize * popUnitSize()).toLocaleString()}`);
       }
       if (!populationReqMet(col, pre.population)) {
-        missing.push(`population ${Number(pre.population).toLocaleString()}`);
+        missing.push(`population ${(Number(pre.population) * popUnitSize()).toLocaleString()}`);
       }
       if (buildingIsFederation(type) && !federationEstablished(owner)) {
         missing.push("an established Federation (a second colony)");
@@ -7967,7 +8023,7 @@
           }
         }
         // (d) launch a new colony
-        const minPop = (CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3000;
+        const minPop = ((CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3) * popUnitSize();
         if ((col.population || 0) > minPop && canAffordBuildingAt(1, col.x, col.y, pi)) {
           return true;
         }
@@ -8044,7 +8100,7 @@
     // Whether any human colony can launch a new colony now (large enough,
     // affordable, and has at least one valid reachable target).
     function humanCanLaunchColony() {
-      const minPop = (CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3000;
+      const minPop = ((CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3) * popUnitSize();
       const W = gameState.map ? gameState.map.terrain[0].length : 0;
       const wrap = !!(gameState.map && gameState.map.meta && gameState.map.meta.wrap);
       const wxf = (x) => wrap ? ((x % W) + W) % W : x;
@@ -8290,7 +8346,7 @@
         placeBuilding(x, y, pi, type); acted = true;
       }
       // Launch new colonies from existing ones (plan.launch entries).
-      const minPop = (CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3000;
+      const minPop = ((CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3) * popUnitSize();
       for (const l of (plan.launch || [])) {
         if (!l || !Array.isArray(l.from) || !Array.isArray(l.to)) continue;
         const host = colonyAtXY(l.from[0], l.from[1]);
@@ -8425,7 +8481,7 @@
           }
         }
         // (3) Launch a new colony (personality-gated), from a large-enough host.
-        const minPop = (CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3000;
+        const minPop = ((CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3) * popUnitSize();
         const launchPop = minPop * knobs.launchPopFactor;
         if ((col.population || 0) > launchPop && Math.random() >= knobs.launchSkipChance && canAffordBuildingAt(1, col.x, col.y, pi)) {
           const site = aiChooseLaunchSite(col, pi, knobs.launchSearchBonus);
@@ -8709,7 +8765,7 @@
                 + managerResourceWeight(manager, 'growth', needs) * (net.growth || 0) * 100;
       // Military manager values a Barracks (unit production) when needs are met.
       const bt = buildingType(type) || {};
-      if (manager === 'military' && (Number(bt.recruitRate) || 0) > 0) score += 5;
+      if (manager === 'military' && buildingRecruits(type)) score += 5;
       return score;
     }
     // Repurpose step: when the manager WANTS a needed building but every control
@@ -9275,7 +9331,7 @@
             acted = true;
           }
         }
-        const minPop = (CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3000;
+        const minPop = ((CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3) * popUnitSize();
         // Personality: expansionists found colonies readily just past the
         // threshold; settled species demand a large surplus and often skip
         // founding entirely. Reckless species also range farther for a site.
@@ -9446,11 +9502,11 @@
       ctxEstablish.dataset.mode = "";
       if (ownBio) {
         // Launch Colony from this biodome — only when population and resources allow.
-        const minPop = (CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3000;
+        const minPop = ((CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3) * popUnitSize();
         const enough = (ownBio.population || 0) > minPop;
         const canPay = canAffordBuildingAt(1, ownBio.x, ownBio.y, 'human');
         if (enough && canPay) {
-          ctxEstablish.textContent = `Launch Colony (${buildingCostLabel(1)} + ${(CONFIG.foundColonyPopulationTransfer || 1000).toLocaleString()} colonists)`;
+          ctxEstablish.textContent = `Launch Colony (${buildingCostLabel(1)} + ${(((CONFIG.foundColonyPopulationTransfer != null) ? CONFIG.foundColonyPopulationTransfer : 1) * popUnitSize()).toLocaleString()} colonists)`;
           ctxEstablish.classList.remove("disabled");
           ctxEstablish.dataset.mode = "launch";
           ctxEstablish.hidden = false;
@@ -10014,11 +10070,11 @@
         // SLOT: a filled slot reads "1st: 600/1000" (its type is in the Type
         // column; "(deployed)" when away in transit); an empty slot shows the
         // slot's unit type and zero strength, e.g. "Infantry: 0/1000".
-        const _bt = buildingType(b.type) || {};
-        if ((Number(_bt.recruitRate) || 0) > 0) {
+        if (buildingRecruits(b.type)) {
           const _slots = buildingUnitSlots(b.type);
           const _ids = Array.isArray(b.unitIds) ? b.unitIds : [];
-          const _label = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : "Battalion");
+          // Empty-slot label uses the config unit-type name via typeLabel.
+          const _label = (t) => typeLabel(t);
           // Each slot caps at its unit type's unitSize (per-type max strength).
           const _capStrOf = (t) => { const c = unitMaxStrength(t); return Number.isFinite(c) ? `/${nf(c, 0)}` : ""; };
           for (let _i = 0; _i < _slots.length; _i++) {
@@ -11003,8 +11059,14 @@
     function humanUnits() {
       return (gameState.units || []).filter((u) => u.owner === "human");
     }
+    // Display label for a unit type, driven by config units[type].name
+    // (e.g. "infantry" -> "Infantry", "tank" -> "Armored"). Falls back to the
+    // capitalized type key when no config name is set.
     function typeLabel(type) {
-      return type ? type.charAt(0).toUpperCase() + type.slice(1) : "Unit";
+      if (!type) return "Unit";
+      const e = (CONFIG && CONFIG.units && CONFIG.units[type]) || null;
+      if (e && typeof e.name === 'string' && e.name) return e.name;
+      return type.charAt(0).toUpperCase() + type.slice(1);
     }
     // Build a rebase icon button for `unit`. Transferring requires the unit to
     // be at full strength and not already in transit; otherwise it is disabled
@@ -11350,6 +11412,7 @@
         planningPathColor: CONFIG.planningPathColor,
         underConstructionColor: CONFIG.underConstructionColor,
         zoneOfControlSize: CONFIG.zoneOfControlSize || null,
+        popUnitSize: popUnitSize(),
         aiCount: (gameState.players || []).filter((p) => p.kind === 'ai').length,
         resourcePath: "resources/terrain",
         onHover: (info) => updateStatus(info),

@@ -31,6 +31,12 @@ The Solar Farm is the Solar Panel's big sibling — a sprawling array that drink
 
 The Farm is the mainstay food‑production facility for your colony. It can be built only after a Solar Panel is present. Cheap and quick to raise with light upkeep, each Farm is a dependable source of food, adds a little wealth and a small nudge to growth, and expands the colony's food storage. Farms are what let a colony feed a rising population and keep expanding.
 
+<img align="right" width="128" src="src/resources/buildings/128/agridome.png">
+
+#### Agridome
+
+The Agridome is the Farm's industrial successor — a sealed, climate‑controlled growing complex that squeezes far more food from the same ground. It is built as an **upgrade of an existing Farm**, raised in its place, and still counts as a Farm for anything that depends on one. It requires a **Biodome** and a **Solar Farm** in the colony and a colony population of at least 5,000. Its yield *scales with the richness of its cell*, multiplying that tile's food several times over, and it brings a healthy stream of wealth besides. A major build with a heavy, broad upkeep — power, goods, material, wealth, and a large thirst for water — it is how a maturing colony turns a productive farm tile into a breadbasket.
+
 <img align="right" width="128" src="src/resources/buildings/128/aquafarm.png">
 
 #### Aquafarm
@@ -48,6 +54,18 @@ The Mine is the colony's dedicated material producer, carving ore and stone stra
 #### Factory
 
 The Factory turns raw material into manufactured goods. It requires a Solar Panel before it can be constructed. It is a serious build with a heavy, ongoing appetite for material and energy, and its smokestacks weigh a little on both growth and morale — but it is the backbone of an industrial economy, producing goods and wealth and expanding the colony's material and energy storage. Many advanced structures depend on a Factory being present first.
+
+<img align="right" width="128" src="src/resources/buildings/128/megafactory.png">
+
+#### Megafactory
+
+The Megafactory is the Factory scaled up to heavy industry — a vast production complex that pours out manufactured goods on a scale no single Factory can match. It is built as an **upgrade of an existing Factory**, raised in its place, and still counts as a Factory for anything that depends on one. It requires a **Solar Farm** in the colony and a colony population of at least 10,000. It produces a large flow of goods and a good deal of wealth and holds enormous reserves of goods and material — but it is a costly build with a voracious, ongoing appetite for energy and material, and the smoke and sprawl weigh a little on morale. For an industrial powerhouse, upgrading a key Factory to a Megafactory is how a colony's output takes off.
+
+<img align="right" width="128" src="src/resources/buildings/128/nanofactory.png">
+
+#### Nanofactory
+
+The Nanofactory is the pinnacle of manufacturing — molecular‑assembly works that fabricate goods with near‑perfect efficiency. It is built as an **upgrade of an existing Megafactory**, raised in its place, and still counts as a Factory (and Megafactory) for anything that depends on one. It requires a **Solar Farm** and a **Bank** in the colony and a colony population of at least 15,000. It is the single greatest source of goods and wealth a colony can field, with colossal goods, material, and energy storage to match — but it is an extraordinarily expensive, late‑game build with the heaviest upkeep of any structure, demanding immense energy and material to keep its assemblers running, and its scale weighs a little on morale. It is the crowning achievement of an industrial economy.
 
 
 <img align="right" width="128" src="src/resources/buildings/128/dock.png">
@@ -82,6 +100,18 @@ The Airport is the Air Field's big sibling — a full international hub that ext
 
 The Barracks trains military battalions for defense and offense, drawing recruits from the colony's own population. It requires a **Factory** before it can be built. A modest build with light upkeep, it also lifts morale a little. Each Barracks supports and rebuilds a single battalion, so a would‑be military power raises them across its colonies.
  
+<img align="right" width="128" src="src/resources/buildings/128/army_base.png">
+
+#### Army Base
+
+The Army Base is the Barracks writ large — a full garrison that trains and fields several battalions at once. It is built as an **upgrade of an existing Barracks**, raised in its place, and still counts as a Barracks for anything that depends on one. It requires a **Solar Farm**, a **Farm**, and a **Factory** in the colony, a transport link to another of your colonies, and a colony population of at least 8,000. Where a Barracks supports a single infantry battalion, an Army Base fields **three infantry battalions and one armored (tank) battalion**, each recruited from the colony's population and rebuilt here when destroyed. A substantial build with heavier upkeep, it is the backbone of any colony meant to project real military force.
+
+<img align="right" width="128" src="src/resources/buildings/128/joint_base.png">
+
+#### Joint Base
+
+The Joint Base is the Army Base elevated to a combined‑arms command — a sprawling installation that trains ground and air forces side by side. It is built as an **upgrade of an existing Army Base**, raised in its place, and still counts as a Barracks (and Army Base) for anything that depends on one. It is a top‑tier capstone, requiring a **Solar Farm**, an **Agridome**, a **Megafactory**, and a **Bank** in the colony, a transport link to another of your colonies, and a colony population of at least 12,000. It fields the largest garrison in the game — **five infantry battalions, three armored (tank) battalions, and two fighter squadrons** — each recruited from the colony's population and rebuilt here when destroyed. A major build with substantial upkeep, it is the heart of a true military superpower.
+
 <img align="right" width="128" src="src/resources/buildings/128/granary.png">
 
 ### Granary
