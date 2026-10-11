@@ -141,11 +141,19 @@ The Plasma Bubble is the ultimate colony defense — a seething dome of containe
 
 ### Intelligence Gathering
 
+What you know about rival species depends on your **intelligence coverage**. Without a Satellite Network, you gather intel only within sight of your **Biodomes** and **Drone Bases**: you can inspect a rival colony (double‑click it for a read‑only details view) and see a species' cumulative statistics in the **Rankings** screen only while at least one of that species' colonies falls within that range. A species none of whose colonies you can see shows blank rankings.  With a Satellite Network, you can see the entire planet and gather intelligence on any species in the game.
+
 #### Drone Base
 
 <span class="float-right">![drone_base](../buildings/drone_base.png)</span>
 
 The Drone Base is a self‑contained forward reconnaissance outpost that can be placed on almost any explored cell, even far outside a colony's borders, peeling back the fog of war over a wide area and giving real‑time intelligence on neighboring colonies. Powered by its own solar panels and linked wirelessly to the nearest colony, it is funded — in both construction and upkeep — by the Federation rather than any single colony. Deployment relies on route planning: the base travels overland from the nearest colony, so rougher, farther sites take longer to come online, with roads and monorails speeding the journey; it can cross shallow sea only when a Dock is present. It produces nothing and stores nothing — its sole purpose is sight.
+
+#### Satellite Network
+
+<span class="float-right">![satellite_network](../buildings/satellite_network.png)</span>
+
+The Satellite Network lifts the limits of ground‑based reconnaissance entirely — a Federation‑funded orbital array that watches the whole planet at once. It requires a **Nanofactory** and a **Spaceport** in the colony and a population of at least 15,000, and it is an expensive late‑game build with a steady upkeep. While it stands it grants **whole‑map intelligence**: the fog of war is lifted across the entire world, every rival colony can be inspected, and **every** species appears with full statistics in the Rankings. If you lose your last Satellite Network, already‑explored terrain stays charted, but your intelligence on rivals **reverts** to what your Biodomes and Drone Bases can see — distant enemies drop back out of your Rankings and can no longer be inspected. Build more than one for redundancy.
 
 ### How Combat Works
 

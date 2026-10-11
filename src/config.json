@@ -1,7 +1,7 @@
 {
   // When true, after creating a new map show two debug dialogs: a terrain-type
   // breakdown and a terrain-bonus placement count. Set false to disable.
-  "debug": true,
+  "debug": false,
 
   // "terrain" restrictions on placement can be a list of specific terrains:
   //    "sea", "grassland", "hills", "forest", "jungle", "desert", "mountain-low",
@@ -340,9 +340,9 @@
       "storage": { "energy": 75, "food": 10, "goods": 250, "material": 250, "water": 5, "wealth": 250, "happiness": 25, "population": 20 },
       "federationStorage": { "energy": 200, "food": 20, "goods": 200, "material": 200, "water":  5, "wealth": 200 },
       "prerequisite": {
-        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","frozen","plains","wetlands"]
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","frozen","plains","wetlands"],
+        "other": [ "intelligence" ]
       },
-      "other": [ "intelligence" ],
       "visibility": 16
     },
     "farm": {
@@ -425,7 +425,7 @@
     },
     "megafactory": {
       "code": 26,
-      "name": "megafactory",
+      "name": "Megafactory",
       "icon": "buildings/128/megafactory.png",
       "symbol": "buildings/icons/goods.png",
       "buildCost": { "energy": 300, "material": 150, "wealth": 300, "water": 5, "turns": 6 },
@@ -441,7 +441,7 @@
     },
     "nanofactory": {
       "code": 27,
-      "name": "nanofactory",
+      "name": "Nanofactory",
       "icon": "buildings/128/nanofactory.png",
       "symbol": "buildings/icons/goods.png",
       "buildCost": { "energy": 600, "material": 300, "wealth": 600, "water": 10, "turns": 10 },
@@ -590,6 +590,26 @@
         "population": 12
       }
     },
+    "naval shipyard": {
+        "code": 32,
+        "name": "Naval Shipyard",
+        "icon": "buildings/128/naval_shipyard.png",
+        "symbol": "buildings/icons/shield.png",
+        "buildCost": { "energy": 200, "goods": 200, "material": 200, "wealth": 200, "water": 10, "turns": 10 },
+        "costPerYear": { "energy": 100, "goods": 100, "material": 100, "wealth": 100 },
+        "bonus": { },
+        "storage": { "energy": 0, "food": 0, "goods": 0, "material": 0, "water": 0 },
+        "units": { "escort": 2, "carrier": 1 },
+        "recruitRate": { "escort": 150, "carrier": 750 },
+        "prerequisite": {
+          "building": ["solar farm", "agridome", "nanofactory", "bank", "port"],
+          "terrain": ["sea"],
+          "other":  ["land"],
+          "network":  ["any"],
+          "upgrades": "",
+          "population": 15
+        }
+      },
     "granary": {
       "code": 8,
       "name": "Granary",
@@ -728,6 +748,23 @@
         "other": [ "anywhere", "federation", "intelligence" ]
       },
       "visibility": 16
+    },
+    "satellite network": {
+      "code": 33,
+      "name": "Satellite Network",
+      "icon": "buildings/128/satellite_networkd.png",
+      "symbol": "buildings/icons/drone.png",
+      "buildCost": { "energy": 500, "goods": 1000, "wealth": 500, "water": 5, "turns": 10 },
+      "costPerYear": { "energy": 50, "goods": 50, "wealth": 50 },
+      "bonus": { },
+      "storage": { },
+      "prerequisite": {
+        "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands","mountain-low"],
+        "building": ["nanofactory", "spaceport"],
+        "other": [ "federation", "intelligence" ],
+        "population": 15
+      },
+      "visibility": "world"
     },
     "depot": {
       "code": 16,
@@ -1488,9 +1525,12 @@
   // (index+1 = radius). Reaching level 7 (>=7,000 population) grants +1 radius.
   // Each additional radius adds the folowing number of cells to the zone of control:
   // 1, +6, +12, +18, +24, +30, +36, +42, ...
-  // Total cells in zone of control for radius 0, 1, 2
+  // Total cells in zone of control for radius 0, 1, 2, etc.
   // 1, 7, 19, 37, 61, 91, ...
-  "zoneOfControlSize": [0, 7, 19, 37, 61],
+  "zoneOfControlSize": [0, 7, 19, 37, 61, 91, 127],
+
+  // Simultaneous buildings under constrution per colony radius 0, 1, 2, etc.
+  "maxBuildingsUnderConstruction": [1,1,2,3,4,5,6],
 
   // Road bridges spanning a river/canal or a single sea tile (bridges are
   // road-only; monorails never need one):

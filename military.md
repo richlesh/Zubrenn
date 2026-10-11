@@ -117,9 +117,9 @@ Zubrenn, built per colony and remaining in the colony where they originated. A
 colony's defenses stack: all of its defensive systems **plus** any stationed
 units defend it together.
 
-<img align="right" width="128" src="src/resources/buildings/128/missile_battery.png">
-
 #### Missile Battery
+
+<img align="right" width="128" src="src/resources/buildings/128/missile_battery.png">
 
 The Missile Battery is the entry‑level colony defense — racks of guided
 interceptors that pepper an incoming strike force. Cheap and quick to raise with
@@ -127,9 +127,9 @@ light upkeep, it needs only a modest colony population to field. With a small HP
 pool and little mitigation, it blunts a light raid or buys time while heavier
 defenses or a relief force are brought up.
 
-<img align="right" width="128" src="src/resources/buildings/128/laser_battery.png">
-
 #### Laser Battery
+
+<img align="right" width="128" src="src/resources/buildings/128/laser_battery.png">
 
 The Laser Battery trades missiles for directed‑energy weapons — banks of
 high‑powered lasers that burn through attackers at the speed of light. A little
@@ -137,9 +137,9 @@ pricier than the Missile Battery and hungrier for power, and requiring a
 somewhat larger colony, it is tougher and deflects a little more of each hit. It
 is the natural step up for a colony expecting more than a token assault.
 
-<img align="right" width="128" src="src/resources/buildings/128/shield.png">
-
 #### Electro-Magnetic Shield
+
+<img align="right" width="128" src="src/resources/buildings/128/shield.png">
 
 The Electro‑Magnetic Shield throws a crackling energy barrier over the colony,
 soaking up tremendous punishment before it fails. A major build with a heavy,
@@ -147,9 +147,9 @@ continuous power draw and a sizable population requirement, it has a large HP
 pool — making a shielded colony a hard target that an attacker must grind down
 before anything behind it can be touched.
 
-<img align="right" width="128" src="src/resources/buildings/128/plasma_bubble.png">
-
 #### Plasma Bubble
+
+<img align="right" width="128" src="src/resources/buildings/128/plasma_bubble.png">
 
 The Plasma Bubble is the ultimate colony defense — a seething dome of contained
 plasma that all but encases the settlement. It is built as an **upgrade of an
@@ -159,13 +159,21 @@ return it has an enormous HP pool and the best mitigation of any system, enough
 to turn back all but the most overwhelming strike force. For a frontier capital
 or a prized industrial world, the Plasma Bubble is the last word in protection.
 
-<img align="right" width="128" src="src/resources/buildings/128/drone_base.png">
-
 ### Intelligence Gathering
+
+What you know about rival species depends on your **intelligence coverage**. Without a Satellite Network, you gather intel only within sight of your **Biodomes** and **Drone Bases**: you can inspect a rival colony (double‑click it for a read‑only details view) and see a species' cumulative statistics in the **Rankings** screen only while at least one of that species' colonies falls within that range. A species none of whose colonies you can see shows blank rankings.  With a Satellite Network, you can see the entire planet and gather intelligence on any species in the game.
 
 #### Drone Base
 
+<img align="right" width="128" src="src/resources/buildings/128/drone_base.png">
+
 The Drone Base is a self‑contained forward reconnaissance outpost that can be placed on almost any explored cell, even far outside a colony's borders, peeling back the fog of war over a wide area and giving real‑time intelligence on neighboring colonies. Powered by its own solar panels and linked wirelessly to the nearest colony, it is funded — in both construction and upkeep — by the Federation rather than any single colony. Deployment relies on route planning: the base travels overland from the nearest colony, so rougher, farther sites take longer to come online, with roads and monorails speeding the journey; it can cross shallow sea only when a Dock is present. It produces nothing and stores nothing — its sole purpose is sight.
+
+#### Satellite Network
+
+<img align="right" width="128" src="src/resources/buildings/128/satellite_network.png">
+
+The Satellite Network lifts the limits of ground‑based reconnaissance entirely — a Federation‑funded orbital array that watches the whole planet at once. It requires a **Nanofactory** and a **Spaceport** in the colony and a population of at least 15,000, and it is an expensive late‑game build with a steady upkeep. While it stands it grants **whole‑map intelligence**: the fog of war is lifted across the entire world, every rival colony can be inspected, and **every** species appears with full statistics in the Rankings. If you lose your last Satellite Network, already‑explored terrain stays charted, but your intelligence on rivals **reverts** to what your Biodomes and Drone Bases can see — distant enemies drop back out of your Rankings and can no longer be inspected. Build more than one for redundancy.
 
 ### How Combat Works
 

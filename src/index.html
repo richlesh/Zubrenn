@@ -3600,11 +3600,22 @@
       const types = Object.keys(btMap)
         .map((k) => { const e = btMap[k]; return (e && typeof e.code === 'number') ? e.code : parseInt(k, 10); })
         .filter((n) => !isNaN(n)).sort((a, b) => a - b);
-      let html = "";
-      for (const type of types) {
+      // Order rows with Colonies (type 1) first, then every other building type
+      // alphabetically by its display name. Config-driven, so new building types
+      // slot into the alphabetical list automatically.
+      const rows = types.map((type) => {
         const bt = buildingType(type) || {};
         const name = type === 1 ? "Colonies" : (bt.name || ("Type " + type));
-        html += `<div class="bldg-stat">${name}: <span>${count(type).toLocaleString()}</span></div>`;
+        return { type, name };
+      });
+      rows.sort((a, b) => {
+        if (a.type === 1) return -1;        // Colonies always first
+        if (b.type === 1) return 1;
+        return a.name.localeCompare(b.name);
+      });
+      let html = "";
+      for (const r of rows) {
+        html += `<div class="bldg-stat">${r.name}: <span>${count(r.type).toLocaleString()}</span></div>`;
       }
       list.innerHTML = html;
       updateResourcesPanel();
@@ -4234,6 +4245,19 @@
         n++;
       }
       return n;
+    }
+    // The maximum number of buildings that may be under construction at once in a
+    // colony, from config.maxBuildingsUnderConstruction indexed by the colony's
+    // zone-of-control RADIUS (so larger colonies can build more concurrently).
+    // The radius is clamped to the array's bounds; falls back to 2 if the config
+    // array is missing/empty.
+    function colonyMaxUnderConstruction(col) {
+      const arr = CONFIG && CONFIG.maxBuildingsUnderConstruction;
+      if (!Array.isArray(arr) || !arr.length) return 2;
+      const r = Math.max(0, colonyControlRadius(col) | 0);
+      const idx = Math.min(r, arr.length - 1);
+      const v = Number(arr[idx]);
+      return Number.isFinite(v) && v >= 0 ? v : 2;
     }
     // Whether a building's cell is currently worked by its colony. The biodome
     // (home) cell is always worked.
@@ -6114,11 +6138,18 @@
     }
 
     // The sight radius (in cells) a completed building reveals, from its config
-    // `visibility` (0 or missing = reveals nothing).
+    // `visibility`. A numeric value is a radius; the string "world" means the
+    // entire map (returned as Infinity); 0/missing reveals nothing.
     function buildingVisibility(type) {
       const bt = buildingType(type);
       const v = bt && bt.visibility;
+      if (v === 'world') return Infinity;
       return (typeof v === 'number' && v > 0) ? v : 0;
+    }
+    // Whether a building type grants whole-map (world) visibility/intel.
+    function buildingWorldVisibility(type) {
+      const bt = buildingType(type);
+      return bt && bt.visibility === 'world';
     }
     // Reveal fog of war around a completed HUMAN building per its config
     // `visibility` radius. No-op for AI buildings (fog is human-only), when fog
@@ -6128,11 +6159,31 @@
       if (!_visibleSet) return;            // fog inactive (e.g. legacy save)
       const radius = buildingVisibility(b.type);
       if (radius <= 0) return;
-      const added = addVisibleAround(b.x, b.y, radius);
+      let added = 0;
+      if (!Number.isFinite(radius)) {
+        // World visibility: reveal every cell on the map.
+        added = revealEntireMap();
+      } else {
+        added = addVisibleAround(b.x, b.y, radius);
+      }
       if (added > 0) {
         syncVisibleToMeta();
         if (hexMap) hexMap.setVisible(_visibleSet);
       }
+    }
+    // Reveal every cell on the map into the explored (visible) set. Returns the
+    // number of newly revealed cells.
+    function revealEntireMap() {
+      const t = gameState.map && gameState.map.terrain;
+      if (!t || !t.length) return 0;
+      if (!_visibleSet) _visibleSet = new Set();
+      const H = t.length, W = t[0].length;
+      let added = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const k = fogKey(x, y);
+        if (!_visibleSet.has(k)) { _visibleSet.add(k); added++; }
+      }
+      return added;
     }
     // Area-of-control cells for a colony (its own control radius, land only).
     // Control radius grows with population per config.zoneOfControlSize: an
@@ -7397,10 +7448,14 @@
         }
       }
 
-      // At most two buildings may be under construction per colony at once.
+      // Max simultaneous buildings under construction per colony is data-driven
+      // (config.maxBuildingsUnderConstruction indexed by control radius).
       const col = colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
-      if (col && colonyBuildingsUnderConstruction(col) >= 2) {
-        return { ok: false, reason: "2 buildings already under construction" };
+      if (col) {
+        const maxUC = colonyMaxUnderConstruction(col);
+        if (colonyBuildingsUnderConstruction(col) >= maxUC) {
+          return { ok: false, reason: `${maxUC} building${maxUC === 1 ? '' : 's'} already under construction` };
+        }
       }
 
       // Remaining water/latitude requirements from `other`.
@@ -7530,15 +7585,42 @@
     function intelCovers(x, y, owner) {
       for (const b of gameState.buildings) {
         if (b.owner !== owner) continue;
-        if (b.type === 1) continue;
+        // The biodome is included when it is itself an `intelligence` building
+        // (its own visibility radius grants intel around the colony).
         if (!buildingIsIntelligence(b.type)) continue;
         if (!buildingIsActive(b)) continue;
+        // A world-visibility intel building (e.g. Satellite Network) covers the
+        // entire map while active.
+        if (buildingWorldVisibility(b.type)) return true;
         const radius = buildingVisibility(b.type);
-        if (radius <= 0) continue;
+        if (!(radius > 0) || !Number.isFinite(radius)) continue;
         const dx = x - b.x, dy = y - b.y;
         if (dx * dx + dy * dy <= radius * radius) return true;
       }
       return false;
+    }
+    // Whether `owner` currently has an ACTIVE world-visibility intel building
+    // (e.g. a Satellite Network). While true, the owner has whole-map intel; if
+    // all such buildings are lost, intel reverts to the limited-range buildings.
+    function ownerHasWorldIntel(owner) {
+      for (const b of gameState.buildings) {
+        if (b.owner !== owner || b.type === 1) continue;
+        if (!buildingIsIntelligence(b.type) || !buildingIsActive(b)) continue;
+        if (buildingWorldVisibility(b.type)) return true;
+      }
+      return false;
+    }
+    // Whether the HUMAN currently has INTEL on an opposing building/colony `b`.
+    // This is based on LIVE intel coverage, not the persistent explored-terrain
+    // fog: an active intel building (the biodome and drone base both grant
+    // intelligence within their `visibility` radius, and a Satellite Network
+    // grants whole-map "world" intel). Because it reads current buildings, intel
+    // automatically REVERTS to biodome/drone range if a world-intel building is
+    // lost — even though previously explored terrain stays un-fogged.
+    // Used to gate Rankings and the read-only enemy colony details dialog.
+    function humanCanSeeEnemyColony(b) {
+      if (!b) return false;
+      return intelCovers(b.x, b.y, 'human');   // includes world intel + biodome/drone radii
     }
     // The colony that owns/pays for a building at (x,y). Normally the colony
     // whose zone contains the cell; for an `anywhere` building that may sit
@@ -8216,6 +8298,10 @@
             }
             if (acted) _roundHadAction = true;
           }
+          // Military: build defenses/forces and (aggressive species) launch
+          // strikes. Runs for every placed AI, even if it had no economic action.
+          try { if (aiMilitaryStep(pi)) _roundHadAction = true; }
+          catch (e) { console.error("[ai] military step failed:", e); }
         }
       } catch (err) {
         console.error("[ai] aiTakeTurn error for player " + pi + ":", err);
@@ -8614,6 +8700,104 @@
       if (acted && hexMap) hexMap.setBuildings(gameState.buildings);
       return acted;
     }
+    // Code for a building given its lowercase config key, or null if absent.
+    function _bldgCode(key) { const e = (CONFIG && CONFIG.buildingTypes && CONFIG.buildingTypes[key]) || null; return e && typeof e.code === 'number' ? e.code : null; }
+    // AI military step (run once per AI turn after its normal economy turn):
+    //  (1) build ONE eligible military/defense building this turn when affordable
+    //      — aggressive species prefer offensive buildings (Barracks/Army Base),
+    //      others prefer defensive systems — and work its cell so it functions;
+    //  (2) aggressive species with a full-strength unit launch a single strike
+    //      force at the nearest reachable enemy/human colony (reusing the same
+    //      launchStrikeForce + battle resolver the human uses). Returns true if
+    //      it took any military action.
+    function aiMilitaryStep(pi) {
+      const p = gameState.players && gameState.players[pi];
+      if (!p || p.kind !== 'ai' || !p.placed) return false;
+      const aggression = aiTraitsOf(pi).aggression;
+      const aggressive = aggression >= 4;
+      let acted = false;
+      const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi && !b.inTransit);
+
+      // --- (1) Build one military/defense building this turn. ----------------
+      // Preference order by personality: aggressive -> offense first; others ->
+      // defense first. Only codes that exist in config are considered.
+      const offense = ['army base', 'barracks'].map(_bldgCode).filter((c) => c != null);
+      const defense = ['plasma bubble', 'shield', 'laser battery', 'missile battery'].map(_bldgCode).filter((c) => c != null);
+      const buildOrder = aggressive ? offense.concat(defense) : defense.concat(offense);
+      let builtThisTurn = false;
+      for (const col of myColonies) {
+        if (builtThisTurn) break;
+        ensureWorked(col);
+        const homeKey = cellKey(col.x, col.y);
+        const cap = workCap(col);
+        const control = colonyControlCells(col);
+        const empties = control.filter((c) => cellKey(c.x, c.y) !== homeKey
+          && !gameState.buildings.some((b) => b.x === c.x && b.y === c.y));
+        if (!empties.length) continue;
+        for (const type of buildOrder) {
+          // Skip if the colony already has this building (one is enough per turn).
+          const already = gameState.buildings.some((b) => b.type === type && b.owner === pi
+            && hexDistance(col.x, col.y, b.x, b.y) <= colonyControlRadius(col));
+          if (already) continue;
+          let placed = false;
+          for (const spot of empties) {
+            if (!canPlaceTypeAt(type, spot.x, spot.y, pi).ok) continue;
+            if (!hasPrerequisitesAt(type, spot.x, spot.y, pi)) continue;
+            if (!canAffordBuildingAt(type, spot.x, spot.y, pi)) continue;
+            placeBuilding(spot.x, spot.y, pi, type);
+            // Work its cell so it recruits (military) or defends (buildings count
+            // only when worked), if there's spare capacity.
+            if (col.worked.filter((k) => k !== homeKey).length < cap) col.worked.push(cellKey(spot.x, spot.y));
+            placed = true; acted = true; builtThisTurn = true;
+            break;
+          }
+          if (placed) break;
+        }
+      }
+
+      // --- (2) Aggressive species: launch one strike at the nearest enemy. ----
+      if (aggressive) {
+        if (aiLaunchStrike(pi)) acted = true;
+      }
+      return acted;
+    }
+    // For an aggressive AI, find the nearest reachable enemy/human colony that it
+    // has eligible full-strength units to attack, assemble those units, and
+    // launch a strike force (one per turn). Returns true if a strike launched.
+    function aiLaunchStrike(pi) {
+      const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi && !b.inTransit);
+      if (!myColonies.length) return false;
+      // Candidate targets: any colony NOT owned by this AI (other AIs, the human,
+      // or neutral biodomes), sorted by distance to this AI's nearest colony.
+      const targets = gameState.buildings
+        .filter((b) => b.type === 1 && !b.inTransit && b.owner !== pi)
+        .map((t) => {
+          let best = Infinity;
+          for (const c of myColonies) best = Math.min(best, hexDistance(c.x, c.y, t.x, t.y));
+          return { target: t, dist: best };
+        })
+        .sort((a, b) => a.dist - b.dist);
+      for (const { target } of targets) {
+        // Gather this AI's eligible, idle, full-strength units from each colony.
+        const members = [];
+        for (const col of myColonies) {
+          for (const u of colonyStationedUnits(col)) {
+            if (u.strikeForce) continue;                 // already committed
+            if (unitCanJoinStrike(u, col, target)) members.push({ unit: u, colony: col });
+          }
+        }
+        if (!members.length) continue;                   // can't reach/attack this one; try next
+        // Only commit if the force looks capable of beating the target's defense.
+        const atkTotal = members.reduce((s, m) => s + unitEffAttack(m.unit), 0);
+        const defTotal = colonyDefenseStrength(target);
+        if (atkTotal < Math.max(1, defTotal * 0.6)) continue; // too weak; hold back
+        _strikeForceSeq++;
+        const name = `${(gameState.players[pi] && gameState.players[pi].name) || 'AI'} Strike Force ${_strikeForceSeq}`;
+        launchStrikeForce(name, target, members);
+        return true;                                     // one strike per AI turn
+      }
+      return false;
+    }
 
     // ---- Background AI pre-planning -----------------------------------------
     // At the start of the HUMAN's turn we pre-compute each alien AI's plan for
@@ -8965,6 +9149,7 @@
       // Build queue size for this colony (non-colony buildings under construction).
       let underCon = colonyBuildingsUnderConstruction(col);
       if (underCon >= 1) return 0;                           // queue not low
+      const maxUC = colonyMaxUnderConstruction(col);         // per-radius concurrent cap
       const homeKey = cellKey(col.x, col.y);
       const spareWorkers = Math.max(0, workCap(col) - col.worked.filter((k) => k !== homeKey).length);
       let budget = spareWorkers + 1;                         // at most workers+1 builds
@@ -8972,7 +9157,7 @@
       let queued = 0;
       for (;;) {
         if (queued >= budget) break;
-        if (underCon >= 2) break;                            // 2-concurrent cap
+        if (underCon >= maxUC) break;                        // per-radius concurrent cap
         let best = null, bestScore = -Infinity, bestCell = null;
         // Candidate cells: the colony's control cells that are empty land.
         for (const c of colonyControlCells(col)) {
@@ -9926,7 +10111,8 @@
       }
 
       // If nothing is actionable on this cell, don't pop an empty menu.
-      const anyItem = !ctxEstablish.hidden || !ctxRemove.hidden || !ctxRoad.hidden ||
+      const anyItem = !ctxEstablish.hidden || (ctxAttack && !ctxAttack.hidden) ||
+        !ctxRemove.hidden || !ctxRoad.hidden ||
         !ctxMonorail.hidden || !ctxRemoveTransport.hidden || !ctxCanal.hidden ||
         !ctxCanalRemove.hidden || ctxBuildItems.children.length > 0;
       if (!anyItem) { hideContextMenu(); return; }
@@ -10941,14 +11127,28 @@
         _pop: 0,
       }));
       const byOwner = new Map(rows.map((r) => [r.owner, r]));
+      // A rival (non-human) player is "known" to the human — and thus ranked
+      // with CUMULATIVE statistics — when the human can currently see at least
+      // one of that rival's colonies (world intel, an intel building covering
+      // it, or an explored/visible cell). If none of a rival's colonies is
+      // visible, it shows 0s. The human always ranks across all their own.
+      const knownRival = new Map();
+      for (const r of rows) {
+        if (r.me) { knownRival.set(r.owner, true); continue; }
+        let known = false;
+        for (const b of (gameState.buildings || [])) {
+          if (b.owner !== r.owner || b.type !== 1 || b.inTransit) continue;
+          if (humanCanSeeEnemyColony(b)) { known = true; break; }
+        }
+        knownRival.set(r.owner, known);
+      }
       for (const b of (gameState.buildings || [])) {
         const r = byOwner.get(b.owner);
         if (!r) continue;
-        // Intel gating: a rival (non-human) owner's colonies/buildings are only
-        // ranked when the human has an ACTIVE `intelligence` building (e.g. a
-        // Drone Base) covering that cell within its `visibility` range. The
-        // human player always ranks across all of their own holdings.
-        if (!r.me && !intelCovers(b.x, b.y, 'human')) continue;
+        // Per-player intel gating: once ANY of a rival's colonies is visible to
+        // the human, ALL of that rival's holdings are counted (cumulative). A
+        // rival with no visible colony contributes nothing.
+        if (!r.me && !knownRival.get(b.owner)) continue;
         if (b.type === 1) {
           r.colonies += 1;
           r._pop += (b.population || 0);
@@ -11603,7 +11803,14 @@
         u.destX = rally.x; u.destY = rally.y;
         u.turnsRemaining = t;
       }
-      notify(`${name} is assembling at ${rally.name || 'the staging colony'} to attack ${targetCol.name || 'the enemy colony'}.`);
+      // Notify the human only when they're the attacker, or when the target is
+      // their colony (an incoming‑attack warning). AI‑vs‑AI assembly is silent.
+      const sfOwner = members[0] && members[0].unit && members[0].unit.owner;
+      if (sfOwner === 'human') {
+        notify(`${name} is assembling at ${rally.name || 'the staging colony'} to attack ${targetCol.name || 'the enemy colony'}.`);
+      } else if (targetCol.owner === 'human') {
+        notify(`Warning: ${name} is massing to attack your colony ${targetCol.name || ''}.`);
+      }
     }
     // Per-turn strike-force phase machine. Called from the turn pipeline.
     function advanceStrikeForces() {
@@ -11725,6 +11932,10 @@
       const attackerWon = defenders.every((c) => c.hp <= 0) && atkC.some((c) => c.unit && c.unit.strength > 0);
       // Survivors who are still alive settle at the target (if captured) or retreat.
       const survivors = atkC.filter((c) => c.unit && c.unit.strength > 0).map((c) => c.unit);
+      // The attacking player (strike-force owner); 'human' shows dialogs, AIs
+      // resolve silently with a notification.
+      const attackerOwner = members.length ? members[0].owner : (survivors[0] && survivors[0].owner);
+      const humanInvolved = attackerOwner === 'human' || defenderOwner === 'human';
       // Compose a battle report.
       const lines = [];
       lines.push(`<strong>${esc(sf.name)}</strong> attacked <strong>${esc(targetBio.name || 'the enemy colony')}</strong>.`);
@@ -11732,22 +11943,53 @@
       lines.push(`Attacker losses: ${atkLost} unit${atkLost === 1 ? '' : 's'}.`);
       lines.push(`Defender losses: ${defUnitLost} unit${defUnitLost === 1 ? '' : 's'}, ${defBldgLost} defense building${defBldgLost === 1 ? '' : 's'}.`);
       if (attackerWon) {
-        finishWonBattle(targetBio, survivors, sf, lines);
+        finishWonBattle(targetBio, survivors, sf, lines, attackerOwner);
       } else {
         lines.push(`The attack was repelled; surviving units withdraw.`);
         // Retreat survivors to their home base.
         for (const u of survivors) { recallUnit(u); }
-        showChoiceDialog('Battle Report', lines.map((l) => `<div>${l}</div>`).join(''), [{ value: 'ok', label: 'OK' }]);
-        notify(`${sf.name}'s attack on ${targetBio.name || 'the enemy colony'} was repelled.`);
+        if (attackerOwner === 'human') {
+          showChoiceDialog('Battle Report', lines.map((l) => `<div>${l}</div>`).join(''), [{ value: 'ok', label: 'OK' }]);
+        }
+        // Notify the human whenever they're attacker or defender.
+        if (humanInvolved) notify(`${sf.name}'s attack on ${targetBio.name || 'the enemy colony'} was repelled.`);
       }
       refreshAll();
     }
-    // Handle a won battle: prompt Capture vs Raze and apply the outcome. Only
+    // Handle a won battle. The HUMAN attacker is prompted to Capture / Raze /
+    // Leave; an AI attacker auto-resolves (aggressive species raze, others
+    // capture when they have surviving LAND units, else leave neutral). Only
     // remaining LAND units can occupy; if none, the colony goes neutral.
-    function finishWonBattle(targetBio, survivors, sf, lines) {
+    function finishWonBattle(targetBio, survivors, sf, lines, attackerOwner) {
       const cfg = combatCfg();
       const landSurvivors = survivors.filter(isLandUnit);
       const targetName = targetBio.name || 'the enemy colony';
+      const defenderOwner = targetBio.owner;
+      const humanInvolved = attackerOwner === 'human' || defenderOwner === 'human';
+      // Apply a chosen outcome (shared by human + AI paths).
+      const apply = (choice) => {
+        if (choice === 'capture' && landSurvivors.length) {
+          captureColony(targetBio, attackerOwner, cfg);
+          if (humanInvolved) notify(`${playerDisplayName(playerIndexOf(attackerOwner))} captured ${targetName}.`);
+        } else if (choice === 'raze') {
+          razeColony(targetBio, attackerOwner, cfg);
+          if (humanInvolved) notify(`${playerDisplayName(playerIndexOf(attackerOwner))} razed ${targetName}.`);
+          for (const u of survivors) recallUnit(u);
+        } else {
+          targetBio.owner = null; targetBio.ownerName = 'Neutral';
+          for (const u of survivors) recallUnit(u);
+          if (humanInvolved) notify(`${targetName} is left undefended and neutral.`);
+        }
+        refreshAll();
+      };
+      // AI attacker: decide automatically, no dialog.
+      if (attackerOwner !== 'human') {
+        const aggressive = aiTraitsOf(playerIndexOf(attackerOwner)).aggression >= 4;
+        if (!landSurvivors.length) { apply('leave'); return; }
+        apply(aggressive ? 'raze' : 'capture');
+        return;
+      }
+      // Human attacker: prompt.
       showChoiceDialog(
         'Victory — Capture or Raze?',
         lines.map((l) => `<div>${l}</div>`).join('') +
@@ -11759,23 +12001,7 @@
         landSurvivors.length
           ? [{ value: 'capture', label: 'Capture' }, { value: 'raze', label: 'Raze' }, { value: 'leave', label: 'Leave' }]
           : [{ value: 'raze', label: 'Raze' }, { value: 'leave', label: 'Leave' }]
-      ).then((choice) => {
-        if (choice === 'capture' && landSurvivors.length) {
-          captureColony(targetBio, 'human', cfg);
-          notify(`You captured ${targetName}!`);
-        } else if (choice === 'raze') {
-          razeColony(targetBio, 'human', cfg);
-          notify(`You razed ${targetName}.`);
-          // Survivors retreat home after razing.
-          for (const u of survivors) recallUnit(u);
-        } else {
-          // Leave: colony becomes neutral (ownerless) if its defenders were wiped.
-          targetBio.owner = null; targetBio.ownerName = 'Neutral';
-          for (const u of survivors) recallUnit(u);
-          notify(`${targetName} is left undefended and neutral.`);
-        }
-        refreshAll();
-      });
+      ).then((choice) => apply(choice));
     }
     // Capture: flip ownership to `newOwner`, destroy a random 10–30% of the
     // colony's non-biodome buildings; surviving LAND units garrison it.
@@ -12136,7 +12362,15 @@
         resourcePath: "resources/terrain",
         onHover: (info) => updateStatus(info),
         onHoverOut: () => updateStatus(null),
-        onColonyDblClick: (b) => openWorkModal(b),
+        onColonyDblClick: (b) => {
+          // Your own colonies always open. An opposing colony opens a READ-ONLY
+          // details view only when the human can currently see it (world intel,
+          // intel coverage, or explored fog); otherwise it's hidden intel.
+          if (!b) return;
+          if (b.owner === 'human') { openWorkModal(b); return; }
+          if (humanCanSeeEnemyColony(b)) openWorkModal(b);
+          else notify('You have no intelligence on that colony.');
+        },
         cellInfo: (x, y) => cellInfoString(x, y),
         cellBonus: (x, y) => {
           const tb = bonusDefAt(x, y);

@@ -112,6 +112,12 @@ The Army Base is the Barracks writ large — a full garrison that trains and fie
 
 The Joint Base is the Army Base elevated to a combined‑arms command — a sprawling installation that trains ground and air forces side by side. It is built as an **upgrade of an existing Army Base**, raised in its place, and still counts as a Barracks (and Army Base) for anything that depends on one. It is a top‑tier capstone, requiring a **Solar Farm**, an **Agridome**, a **Megafactory**, and a **Bank** in the colony, a transport link to another of your colonies, and a colony population of at least 12,000. It fields the largest garrison in the game — **five infantry battalions, three armored (tank) battalions, and two fighter squadrons** — each recruited from the colony's population and rebuilt here when destroyed. A major build with substantial upkeep, it is the heart of a true military superpower.
 
+<img align="right" width="128" src="src/resources/buildings/128/naval_shipyard.png">
+
+#### Naval Shipyard
+
+The Naval Shipyard is the colony's gateway to the sea — the **only** building that can construct **Escort** groups and **Carrier** battle groups. It is raised on a shallow‑sea tile within a colony that already has a **Port**, and is a demanding late‑game build: it also requires a **Solar Farm**, an **Agridome**, a **Nanofactory**, and a **Bank**, a transport link to another of your colonies, and a colony population of at least 15,000, with a heavy, broad upkeep to keep its slipways running. It builds up to two Escorts and one Carrier, drawn from the colony's population. A shipyard is also each naval unit's **home base**: a damaged ship is **repaired** (rebuilt toward full strength) only when it returns to the shipyard that built it. Escorts and Carriers may be **stationed at any colony with a Port**, but they can only be constructed and repaired at a Naval Shipyard.
+
 <img align="right" width="128" src="src/resources/buildings/128/granary.png">
 
 ### Granary
@@ -159,4 +165,3 @@ The Desalination Plant turns the limitless sea into drinkable water, built on th
 #### Spaceport
 
 The Spaceport opens the **space transport network** — the only link with no limit on distance at all. Any two of your colonies that each raise a Spaceport are connected and share resources no matter how far apart they lie or what terrain divides them. It is a late‑game capstone that requires an **Air Field** first and may be built only in a warm, tropical climate. A major build with a heavy energy appetite to keep its launch systems running, it returns a little wealth and lifts morale — but its true value is tying the most distant colonies directly into the heart of your civilization.
-
