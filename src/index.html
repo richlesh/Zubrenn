@@ -68,6 +68,7 @@
   <!-- Right-click context menu (colony actions). -->
   <div id="context-menu" hidden>
     <div class="ctx-item" id="ctx-establish">Establish Colony</div>
+    <div class="ctx-item" id="ctx-attack" hidden>Launch Attack</div>
     <div id="ctx-build-items"></div>
     <div class="ctx-item" id="ctx-remove" hidden>Remove Improvement</div>
     <div class="ctx-item" id="ctx-road" hidden>Build Road</div>
@@ -301,6 +302,37 @@
         </table>
       </div>
       <div class="work-row"><button id="military-close">Done</button></div>
+    </div>
+  </div>
+  <!-- Form Strike Force: pick units from the player's colonies (by distance to
+       the target) to assemble an attack on an enemy colony. -->
+  <div id="strike-overlay" hidden>
+    <div id="strike-dialog">
+      <h2 id="strike-title">Form Strike Force</h2>
+      <div class="hint" id="strike-hint"></div>
+      <div class="work-row">
+        <label for="strike-name">Name</label>
+        <input id="strike-name" type="text" maxlength="40" />
+      </div>
+      <div id="strike-body"></div>
+      <div class="work-row">
+        <button id="strike-attack">Attack</button>
+        <button id="strike-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+  <!-- Diplomacy: how every other player views the human (opinion -100..100). -->
+  <div id="diplomacy-overlay" hidden>
+    <div id="diplomacy-dialog">
+      <h2>Diplomacy</h2>
+      <div class="hint">How each alien species currently regards you, from -100 (hostile) to +100 (friendly). Razing colonies lowers their opinion of you.</div>
+      <div id="diplomacy-table-wrap">
+        <table id="diplomacy-table">
+          <thead><tr><th>Species</th><th>Opinion of You</th></tr></thead>
+          <tbody id="diplomacy-body"></tbody>
+        </table>
+      </div>
+      <div class="work-row"><button id="diplomacy-close">Done</button></div>
     </div>
   </div>
   <script>
@@ -613,6 +645,7 @@
       players: null,   // [{ id, kind:'human'|'ai', name, placeTurn, placed, modules }]
       turn: 0,         // turn counter (Year = startingYear + turn)
       currentPlayer: 0, // index into players[]
+      opinion: null,   // diplomacy matrix: { "fromIdx->toIdx": value in [-100,100] }, 0 = neutral
       playerName: "Human", // editable human player name (saved)
       // Player (human) accumulated resources and last per-year production rates.
       resources: { material: 0, goods: 0, food: 0, energy: 0, wealth: 0 },
@@ -646,6 +679,7 @@
         players: gameState.players || null,
         turn: gameState.turn || 0,
         currentPlayer: gameState.currentPlayer || 0,
+        opinion: gameState.opinion || null,
         resources: gameState.resources || { material: 0, food: 0, energy: 0, wealth: 0 },
         rates: gameState.rates || { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 },
         playerName: gameState.playerName || "Human",
@@ -927,6 +961,117 @@
       const tag = e && e.station;
       if (!tag) return true;                 // no requirement -> any colony
       return colonyHasCapability(colony, tag);
+    }
+    // --- Combat strength + strike-force eligibility -------------------------
+    // Movement/domain class of a unit type, derived from its station tag:
+    //   land  (no station): infantry, tank    -- can occupy/capture a colony
+    //   air   (airbase/airport): fighter, bomber
+    //   sea   (seaport): submarine, carrier
+    function unitClass(type) {
+      const e = (CONFIG && CONFIG.units && CONFIG.units[type]) || null;
+      const s = e && e.station;
+      if (s === 'seaport') return 'sea';
+      if (s === 'airbase' || s === 'airport') return 'air';
+      return 'land';
+    }
+    function isLandUnit(u) { return u && unitClass(u.type) === 'land'; }
+    // A unit's configured max attack/defense ratings (strength.attack/defense).
+    function unitRatedAttack(type) { const e = (CONFIG && CONFIG.units && CONFIG.units[type]) || {}; return Number((e.strength || {}).attack) || 0; }
+    function unitRatedDefense(type) { const e = (CONFIG && CONFIG.units && CONFIG.units[type]) || {}; return Number((e.strength || {}).defense) || 0; }
+    // Effective combat strength scales the rated value by current manpower:
+    // rated x (currentStrength / fullStrength). A freshly recruited/partial unit
+    // fights proportionally weaker.
+    function unitEffAttack(u) {
+      if (!u) return 0;
+      const full = unitFullStrength(u) || 1;
+      return unitRatedAttack(u.type) * (Math.max(0, Number(u.strength) || 0) / full);
+    }
+    function unitEffDefense(u) {
+      if (!u) return 0;
+      const full = unitFullStrength(u) || 1;
+      return unitRatedDefense(u.type) * (Math.max(0, Number(u.strength) || 0) / full);
+    }
+    // The flat defense a defensive building (e.g. Missile Battery, Shield)
+    // contributes to its colony — its config bonus.defense (0 if none).
+    function buildingDefense(type) {
+      const b = (buildingType(type) || {}).bonus || {};
+      return bonusFlat(b.defense);
+    }
+    // Units currently STATIONED at (not in transit through) a colony's cell,
+    // owned by that colony's owner.
+    function colonyStationedUnits(col) {
+      if (!col) return [];
+      return (gameState.units || []).filter((u) =>
+        u.owner === col.owner && !u.inTransit && u.x === col.x && u.y === col.y);
+    }
+    // Total defense strength of a colony = sum of its worked defense buildings'
+    // bonus.defense (in control radius) + effective defense of stationed units.
+    function colonyDefenseStrength(col) {
+      if (!col) return 0;
+      let total = 0;
+      const radius = colonyControlRadius(col);
+      for (const b of (gameState.buildings || [])) {
+        if (b.owner !== col.owner || b.inTransit) continue;
+        if (hexDistance(col.x, col.y, b.x, b.y) > radius) continue;
+        if (!isBuildingWorked(col, b)) continue;
+        total += buildingDefense(b.type);
+      }
+      for (const u of colonyStationedUnits(col)) total += unitEffDefense(u);
+      return total;
+    }
+    // The nearest sea tile to a colony and its hex distance (scans a bounded
+    // ring). Returns { x, y, dist } or null if no sea within `maxR`.
+    function nearestSeaTile(cx, cy, maxR) {
+      const map = gameState.map; if (!map || !map.terrain) return null;
+      const W = map.terrain[0].length, H = map.terrain.length;
+      const wrap = !!(map.meta && map.meta.wrap);
+      const lim = Math.max(1, maxR | 0);
+      let best = null;
+      for (let dy = -lim; dy <= lim; dy++) {
+        const yy = cy + dy; if (yy < 0 || yy >= H) continue;
+        for (let dx = -lim; dx <= lim; dx++) {
+          let xx = cx + dx; if (wrap) xx = ((xx % W) + W) % W; else if (xx < 0 || xx >= W) continue;
+          if (terrainAt(xx, yy) !== 1) continue;
+          const d = hexDistance(cx, cy, xx, yy);
+          if (d <= lim && (!best || d < best.dist)) best = { x: xx, y: yy, dist: d };
+        }
+      }
+      return best;
+    }
+    // Whether a unit stationed at `stagingCol` may join a strike force attacking
+    // `targetCol`, per the data-driven rules:
+    //   land (infantry/tank): always eligible.
+    //   air (fighter/bomber): target within the unit type's `range` of staging.
+    //   sea submarine/escort: may attack ONLY sea defenders (a target colony that
+    //     has a stationed submarine/escort or carrier to fight); within carrier-
+    //     style sea reach (its own range) of the target's nearest coast.
+    //   sea carrier: target within carrier `range` of its nearest coast, and that
+    //     coast reachable by sea from the staging colony's port.
+    function unitCanJoinStrike(u, stagingCol, targetCol) {
+      if (!u || !stagingCol || !targetCol) return false;
+      if (u.inTransit) return false;
+      if (!unitIsFull(u)) return false;                       // must be at full strength to deploy
+      const cls = unitClass(u.type);
+      const dist = hexDistance(stagingCol.x, stagingCol.y, targetCol.x, targetCol.y);
+      const e = (CONFIG && CONFIG.units && CONFIG.units[u.type]) || {};
+      const range = Number(e.range) || 0;
+      if (cls === 'land') return true;
+      if (cls === 'air') {
+        return range > 0 && dist <= range;                    // target within strike radius of base
+      }
+      // sea units
+      const sea = nearestSeaTile(targetCol.x, targetCol.y, Math.max(1, range));
+      if (!sea) return false;                                 // target not near any coast
+      if (sea.dist > range) return false;                     // beyond the ship's reach from the coast
+      // the staging colony must have a sea route to that coast (its own port).
+      if (!colonyHasSeaport(stagingCol)) return false;
+      const seaOk = (x, y) => (terrainAt(x, y) === 1);
+      if (!_pathExists(stagingCol, { x: sea.x, y: sea.y }, u.owner, seaOk)) return false;
+      if (u.type === 'submarine') {
+        // Escorts/subs can only engage enemy sea forces (sub/escort or carrier).
+        return colonyStationedUnits(targetCol).some((d) => unitClass(d.type) === 'sea');
+      }
+      return true;                                            // carrier may strike the coastal colony
     }
     // A terrain bonus is "pristine" if its config definition lists "pristine" in
     // its `other` array. A pristine bonus yields only while worked and is
@@ -3122,6 +3267,8 @@
         }
         if (arrived.length) badgeChanged = true;
       }
+      // Advance any active strike forces (rally -> target -> battle resolution).
+      advanceStrikeForces();
       // Advance removals: a building being removed disappears after its
       // removeTurns elapse. Then drop the deleted buildings.
       let _removed = false;
@@ -4265,6 +4412,7 @@
       const arrived = [];
       for (const u of (gameState.units || [])) {
         if (!u.inTransit) continue;
+        if (u.strikeForce) continue;              // strike-force legs handled by advanceStrikeForces()
         u.turnsRemaining = (u.turnsRemaining || 0) - 1;
         if (u.turnsRemaining <= 0) {
           u.inTransit = false;
@@ -4282,6 +4430,14 @@
         const c = (gameState.buildings || []).find((b) => b.type === 1 && b.x === x && b.y === y);
         return (c && c.name) || `(${x}, ${y})`;
       };
+      // Units assigned to a strike force show their attack status + SF name.
+      if (u.strikeForce) {
+        const sf = u.strikeForce;
+        const n = u.turnsRemaining || 0;
+        const where = sf.phase === 'rally' ? 'rallying' : 'attacking';
+        const tgt = colonyNameAt(sf.targetX, sf.targetY);
+        return `Attacking ${tgt} — ${sf.name} (${where}, ${n} turn${n === 1 ? '' : 's'})`;
+      }
       if (u.inTransit) {
         const n = u.turnsRemaining || 0;
         return `In transit to ${colonyNameAt(u.destX, u.destY)} (${n} turn${n === 1 ? "" : "s"})`;
@@ -9459,6 +9615,7 @@
     // ---- context menu + name dialog ---------------------------------------
     const ctxMenu = document.getElementById("context-menu");
     const ctxEstablish = document.getElementById("ctx-establish");
+    const ctxAttack = document.getElementById("ctx-attack");
     const ctxBuildItems = document.getElementById("ctx-build-items");
     const ctxRemove = document.getElementById("ctx-remove");
     const ctxRoad = document.getElementById("ctx-road");
@@ -9494,6 +9651,44 @@
       const p = gameState.players && gameState.players[gameState.currentPlayer];
       return p && p.kind === 'human';
     }
+    // --- Diplomacy: opinion matrix ------------------------------------------
+    // gameState.opinion maps "fromIdx->toIdx" to a value in [-100,100] (0 =
+    // neutral), the opinion player `from` holds of player `to`. Missing pairs
+    // read as 0. A player's opinion of itself is not tracked.
+    const OPINION_MIN = -100, OPINION_MAX = 100;
+    function opinionKey(fromIdx, toIdx) { return `${fromIdx}->${toIdx}`; }
+    function ensureOpinion() {
+      if (!gameState.opinion || typeof gameState.opinion !== 'object') gameState.opinion = {};
+      return gameState.opinion;
+    }
+    function getOpinion(fromIdx, toIdx) {
+      if (fromIdx === toIdx) return 0;
+      const v = ensureOpinion()[opinionKey(fromIdx, toIdx)];
+      return Number.isFinite(v) ? v : 0;
+    }
+    function setOpinion(fromIdx, toIdx, value) {
+      if (fromIdx === toIdx) return;
+      const v = Math.max(OPINION_MIN, Math.min(OPINION_MAX, Number(value) || 0));
+      ensureOpinion()[opinionKey(fromIdx, toIdx)] = v;
+    }
+    function adjustOpinion(fromIdx, toIdx, delta) {
+      setOpinion(fromIdx, toIdx, getOpinion(fromIdx, toIdx) + (Number(delta) || 0));
+    }
+    // Adjust how EVERY other player views player `targetIdx` by `delta`.
+    function adjustOpinionOfAll(targetIdx, delta) {
+      const players = gameState.players || [];
+      for (let i = 0; i < players.length; i++) {
+        if (i === targetIdx) continue;
+        adjustOpinion(i, targetIdx, delta);
+      }
+    }
+    // Resolve a player index to a display name ("You" for the human).
+    function playerDisplayName(idx) {
+      const p = (gameState.players || [])[idx];
+      if (!p) return `Player ${idx}`;
+      if (p.kind === 'human') return gameState.playerName || p.name || 'You';
+      return p.name || `Player ${idx}`;
+    }
     function cellHasBuilding(x, y) {
       return gameState.buildings.some((b) => b.x === x && b.y === y);
     }
@@ -9504,6 +9699,9 @@
     function showContextMenu(clientX, clientY, hex, fromColonyView) {
       ctxTarget = hex;
       _ctxFromColonyView = !!fromColonyView;
+      // Attack option is recomputed below; hide by default so canal/other early
+      // returns never leave a stale "Launch Attack" item visible.
+      if (ctxAttack) ctxAttack.hidden = true;
       // The colony view has no vertices/canal edges — never offer canal options.
       if (_ctxFromColonyView) { _ctxVertex = null; _ctxCanalEdge = null; }
       const terr = hex ? terrainAt(hex.x, hex.y) : 0;
@@ -9587,6 +9785,24 @@
           ctxEstablish.hidden = false;
         } else {
           ctxEstablish.hidden = true;
+        }
+      }
+      // Launch Attack: offered on an ENEMY (non-human) colony's biodome during
+      // the human turn, when the human has at least one unit eligible to join a
+      // strike force against it. Opens the Form Strike Force dialog.
+      if (ctxAttack) {
+        const enemyBio = (isHumanTurn() && hex)
+          ? gameState.buildings.find((bb) => bb.x === hex.x && bb.y === hex.y
+              && bb.type === 1 && !bb.inTransit && bb.owner !== 'human')
+          : null;
+        if (enemyBio && anyEligibleStrikeUnit(enemyBio)) {
+          ctxAttack.textContent = `Launch Attack on ${enemyBio.name || 'colony'}`;
+          ctxAttack.classList.remove("disabled");
+          ctxAttack.hidden = false;
+          ctxAttack.onclick = () => { const t = enemyBio; hideContextMenu(); openStrikeForceDialog(t); };
+        } else {
+          ctxAttack.hidden = true;
+          ctxAttack.onclick = null;
         }
       }
 
@@ -11200,6 +11416,413 @@
       });
       input.addEventListener("blur", () => commit(true));
     }
+    // ===================== Attack / Strike Force system =====================
+    // Module-level HTML-escape + number-format helpers (local consts of the same
+    // name elsewhere shadow these within their own functions; these serve the
+    // strike-force/battle/diplomacy code which runs at module scope).
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+    function nf(n, d = 0) {
+      return Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
+    // A monotonic counter for default strike-force names (Strike Force 1, 2, ...).
+    let _strikeForceSeq = 0;
+    // Combat tuning (config.combat with sane fallbacks).
+    function combatCfg() {
+      const c = (CONFIG && CONFIG.combat) || {};
+      return {
+        randomness: Number.isFinite(+c.randomness) ? +c.randomness : 0.3,
+        maxRounds: Number.isFinite(+c.maxRounds) ? +c.maxRounds : 20,
+        captureDestroyMin: Number.isFinite(+c.captureDestroyMin) ? +c.captureDestroyMin : 0.1,
+        captureDestroyMax: Number.isFinite(+c.captureDestroyMax) ? +c.captureDestroyMax : 0.3,
+        razeOpinionPenalty: Number.isFinite(+c.razeOpinionPenalty) ? +c.razeOpinionPenalty : 10,
+      };
+    }
+    // Human colonies (operational biodomes), sorted by hex distance to a target.
+    function humanColoniesByDistance(targetCol) {
+      return deployableColonies('human')
+        .filter((c) => !(c.x === targetCol.x && c.y === targetCol.y))
+        .map((c) => ({ colony: c, dist: hexDistance(c.x, c.y, targetCol.x, targetCol.y) }))
+        .sort((a, b) => (a.dist - b.dist) || String(a.colony.name || '').localeCompare(String(b.colony.name || '')));
+    }
+    // Whether the human has ANY unit eligible to strike `targetCol` from any of
+    // their colonies (controls whether "Launch Attack" is offered).
+    function anyEligibleStrikeUnit(targetCol) {
+      for (const { colony } of humanColoniesByDistance(targetCol)) {
+        for (const u of colonyStationedUnits(colony)) {
+          if (unitCanJoinStrike(u, colony, targetCol)) return true;
+        }
+      }
+      return false;
+    }
+    // A small overlay-based choice dialog returning a Promise of the chosen
+    // button value (or null if dismissed). `buttons` is [{ value, label }].
+    function showChoiceDialog(title, bodyHtml, buttons) {
+      return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'overlay';
+        overlay.style.position = 'fixed'; overlay.style.inset = '0';
+        overlay.style.background = 'rgba(0,0,0,0.5)';
+        overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
+        overlay.style.zIndex = '9999';
+        const dlg = document.createElement('div');
+        dlg.className = 'dialog';
+        dlg.style.background = 'var(--panel-bg, #222)'; dlg.style.color = 'var(--panel-fg, #eee)';
+        dlg.style.padding = '16px 20px'; dlg.style.borderRadius = '8px';
+        dlg.style.maxWidth = '560px'; dlg.style.maxHeight = '80vh'; dlg.style.overflow = 'auto';
+        dlg.style.boxShadow = '0 6px 30px rgba(0,0,0,0.6)';
+        dlg.innerHTML = `<h2 style="margin-top:0">${esc(title)}</h2><div>${bodyHtml}</div>`;
+        const row = document.createElement('div');
+        row.style.marginTop = '14px'; row.style.display = 'flex'; row.style.gap = '8px'; row.style.justifyContent = 'flex-end';
+        const done = (val) => { document.body.removeChild(overlay); resolve(val); };
+        for (const b of buttons) {
+          const btn = document.createElement('button');
+          btn.textContent = b.label;
+          btn.addEventListener('click', () => done(b.value));
+          row.appendChild(btn);
+        }
+        dlg.appendChild(row);
+        overlay.appendChild(dlg);
+        document.body.appendChild(overlay);
+        const first = row.querySelector('button'); if (first) first.focus();
+      });
+    }
+
+    // ---- Form Strike Force dialog -----------------------------------------
+    let _strikeTarget = null;      // the enemy biodome being attacked
+    let _strikeChecks = [];        // [{ unit, colony }] in render order (checkbox index)
+    function openStrikeForceDialog(targetCol) {
+      if (!targetCol) return;
+      _strikeTarget = targetCol;
+      const overlay = document.getElementById('strike-overlay');
+      const title = document.getElementById('strike-title');
+      const hint = document.getElementById('strike-hint');
+      const nameInput = document.getElementById('strike-name');
+      const body = document.getElementById('strike-body');
+      title.textContent = `Form Strike Force — attack ${targetCol.name || 'colony'}`;
+      const defStr = colonyDefenseStrength(targetCol);
+      hint.textContent = `Target defense strength ≈ ${nf(defStr, 1)}. Select units to send; they rally at the nearest participating colony, then strike together.`;
+      nameInput.value = `Strike Force ${_strikeForceSeq + 1}`;
+      body.innerHTML = '';
+      _strikeChecks = [];
+      let idx = 0;
+      for (const { colony, dist } of humanColoniesByDistance(targetCol)) {
+        const eligible = colonyStationedUnits(colony).filter((u) => unitCanJoinStrike(u, colony, targetCol));
+        if (!eligible.length) continue;
+        const section = document.createElement('div');
+        section.style.margin = '8px 0';
+        const h = document.createElement('div');
+        h.innerHTML = `<strong>${esc(colony.name || 'Colony')}</strong> — ${dist} hex away`;
+        section.appendChild(h);
+        for (const u of eligible) {
+          const myIdx = idx++;
+          _strikeChecks.push({ unit: u, colony });
+          const rowEl = document.createElement('label');
+          rowEl.style.display = 'block'; rowEl.style.marginLeft = '12px';
+          const atk = unitEffAttack(u);
+          rowEl.innerHTML = `<input type="checkbox" data-sidx="${myIdx}" style="width:auto"> ${esc(u.name)} ${esc(typeLabel(u.type))} — attack ${nf(atk, 1)}`;
+          section.appendChild(rowEl);
+        }
+        body.appendChild(section);
+      }
+      if (!_strikeChecks.length) {
+        body.innerHTML = '<div class="stat-note">No eligible units can reach this colony.</div>';
+      }
+      overlay.hidden = false;
+      nameInput.focus();
+    }
+    function closeStrikeForceDialog() {
+      const overlay = document.getElementById('strike-overlay');
+      if (overlay) overlay.hidden = true;
+      _strikeTarget = null; _strikeChecks = [];
+    }
+    // Gather the checked units and launch the strike force.
+    function confirmStrikeForce() {
+      if (!_strikeTarget) { closeStrikeForceDialog(); return; }
+      const body = document.getElementById('strike-body');
+      const nameInput = document.getElementById('strike-name');
+      const checked = Array.from(body.querySelectorAll('input[type="checkbox"]:checked'))
+        .map((cb) => _strikeChecks[Number(cb.dataset.sidx)]).filter(Boolean);
+      if (!checked.length) { notify('Select at least one unit for the strike force.'); return; }
+      const name = (nameInput.value || '').trim() || `Strike Force ${_strikeForceSeq + 1}`;
+      _strikeForceSeq++;
+      launchStrikeForce(name, _strikeTarget, checked);
+      closeStrikeForceDialog();
+      renderMilitary();
+      maybeAutoEndHumanTurn();
+    }
+    // Assemble the chosen units into a strike force: rally at the participating
+    // colony CLOSEST to the target, each unit travelling there at its own speed;
+    // once all have rallied the force travels to the target together (the slowest
+    // unit's time). We encode this per-unit with a strikeForce record + the
+    // existing turnsRemaining leg timer; advanceStrikeForces() runs the machine.
+    function launchStrikeForce(name, targetCol, members) {
+      // Rally point: the participating colony nearest the target.
+      let rally = null, rallyDist = Infinity;
+      for (const m of members) {
+        const d = hexDistance(m.colony.x, m.colony.y, targetCol.x, targetCol.y);
+        if (d < rallyDist) { rallyDist = d; rally = m.colony; }
+      }
+      if (!rally) return;
+      const sfId = `sf${Date.now()}-${_strikeForceSeq}`;
+      for (const m of members) {
+        const u = m.unit;
+        u.strikeForce = {
+          id: sfId, name, targetX: targetCol.x, targetY: targetCol.y,
+          rallyX: rally.x, rallyY: rally.y, phase: 'rally',
+        };
+        // Rally leg: travel from the unit's colony to the rally colony (0 if already there).
+        const t = (u.x === rally.x && u.y === rally.y)
+          ? 0
+          : (battalionTravelTurns(u.x, u.y, rally.x, rally.y, u.owner, unitSpeed(u.type)) || 0);
+        u.inTransit = t > 0;
+        u.destX = rally.x; u.destY = rally.y;
+        u.turnsRemaining = t;
+      }
+      notify(`${name} is assembling at ${rally.name || 'the staging colony'} to attack ${targetCol.name || 'the enemy colony'}.`);
+    }
+    // Per-turn strike-force phase machine. Called from the turn pipeline.
+    function advanceStrikeForces() {
+      const units = (gameState.units || []).filter((u) => u.strikeForce);
+      if (!units.length) return;
+      // Group by strike-force id.
+      const groups = new Map();
+      for (const u of units) {
+        if (!groups.has(u.strikeForce.id)) groups.set(u.strikeForce.id, []);
+        groups.get(u.strikeForce.id).push(u);
+      }
+      for (const [, members] of groups) {
+        const sf = members[0].strikeForce;
+        if (sf.phase === 'rally') {
+          // Tick each unit's rally leg; a unit at 0 is parked at the rally point.
+          for (const u of members) {
+            if (u.turnsRemaining > 0) { u.turnsRemaining -= 1; if (u.turnsRemaining <= 0) { u.x = sf.rallyX; u.y = sf.rallyY; u.inTransit = false; } }
+          }
+          const allRallied = members.every((u) => u.x === sf.rallyX && u.y === sf.rallyY && u.turnsRemaining <= 0);
+          if (allRallied) {
+            // Begin the strike leg: the whole force travels rally -> target in the
+            // SLOWEST member's time.
+            let legTurns = 0;
+            for (const u of members) {
+              const t = battalionTravelTurns(sf.rallyX, sf.rallyY, sf.targetX, sf.targetY, u.owner, unitSpeed(u.type));
+              if (t == null) { legTurns = Math.max(legTurns, 1); } else { legTurns = Math.max(legTurns, t); }
+            }
+            if (legTurns <= 0) legTurns = 1;
+            for (const u of members) { u.strikeForce.phase = 'strike'; u.inTransit = true; u.destX = sf.targetX; u.destY = sf.targetY; u.turnsRemaining = legTurns; }
+          }
+        } else if (sf.phase === 'strike') {
+          let arrived = false;
+          for (const u of members) {
+            if (u.turnsRemaining > 0) u.turnsRemaining -= 1;
+            if (u.turnsRemaining <= 0) arrived = true;
+          }
+          if (arrived) {
+            for (const u of members) { u.turnsRemaining = 0; u.x = sf.targetX; u.y = sf.targetY; u.inTransit = false; }
+            resolveStrikeForceBattle(sf, members);
+          }
+        }
+      }
+    }
+    // Resolve a battle: attacking `members` vs the target colony's defenders
+    // (stationed enemy units + defense buildings). Paired strongest-vs-strongest
+    // duels with per-round randomness; combatants reduced to 0 are removed. On a
+    // win the human is prompted to Capture or Raze.
+    function resolveStrikeForceBattle(sf, members) {
+      const cfg = combatCfg();
+      const targetBio = (gameState.buildings || []).find((b) => b.type === 1 && !b.inTransit && b.x === sf.targetX && b.y === sf.targetY);
+      // Attacking combatants: live members.
+      const attackers = members.filter((u) => (Number(u.strength) || 0) > 0);
+      // Clear the strike-force tag now (battle is resolving); survivors settle below.
+      for (const u of members) u.strikeForce = null;
+      if (!targetBio) {
+        // Target colony no longer exists (already destroyed/captured). Units park.
+        notify(`${sf.name} arrived to find no colony to attack.`);
+        return;
+      }
+      const defenderOwner = targetBio.owner;
+      // Build defender list: stationed enemy units (as combatants) + each defense
+      // building as a combatant whose "strength" is its bonus.defense (no attack).
+      const defenderUnits = colonyStationedUnits(targetBio);
+      const radius = colonyControlRadius(targetBio);
+      const defenseBuildings = (gameState.buildings || []).filter((b) =>
+        b.owner === defenderOwner && !b.inTransit && b.type !== 1 &&
+        hexDistance(targetBio.x, targetBio.y, b.x, b.y) <= radius &&
+        isBuildingWorked(targetBio, b) && buildingDefense(b.type) > 0);
+      // Combatants fight on the EFFECTIVE-STRENGTH scale (rated x manpower-
+      // fraction), not raw manpower, so "hp" (effective defense) and the damage
+      // dealt (effective attack) share the same 0..rated scale. Defense is full
+      // each battle (no cross-turn tracking): a defense building's hp = its
+      // bonus.defense and it deals no counter-damage. hp0 records the starting
+      // value so surviving units map their remaining fraction back to manpower.
+      const atkC = attackers.map((u) => { const d = unitEffDefense(u) || 0.0001; return { unit: u, hp: d, hp0: d, atk: unitEffAttack(u), building: false }; });
+      const defUnitC = defenderUnits.map((u) => { const d = unitEffDefense(u) || 0.0001; return { unit: u, hp: d, hp0: d, atk: unitEffAttack(u), building: false }; });
+      const defBldgC = defenseBuildings.map((b) => { const d = buildingDefense(b.type); return { building: b, hp: d, hp0: d, atk: 0 }; });
+      const defenders = defUnitC.concat(defBldgC);
+      const rnd = () => 1 + (Math.random() * 2 - 1) * cfg.randomness; // [1-r, 1+r]
+      const report = [];
+      let round = 0;
+      while (round < cfg.maxRounds && atkC.some((c) => c.hp > 0) && defenders.some((c) => c.hp > 0)) {
+        round++;
+        const A = atkC.filter((c) => c.hp > 0).sort((a, b) => b.atk - a.atk);
+        const D = defenders.filter((c) => c.hp > 0).sort((a, b) => b.hp0 - a.hp0);
+        const n = Math.max(A.length, D.length);
+        for (let i = 0; i < n; i++) {
+          const a = A[i % A.length];           // extra attackers pile onto top defenders
+          const d = D[i % D.length];
+          if (!a || !d || a.hp <= 0 || d.hp <= 0) continue;
+          const dmgToDef = Math.max(0, a.atk * rnd());
+          // Defensive BUILDINGS only absorb damage — they deal none back (per
+          // design: a defense building is purely defensive). Defending UNITS do
+          // counter-attack with their effective attack.
+          const dmgToAtk = d.building ? 0 : Math.max(0, d.atk * rnd());
+          d.hp -= dmgToDef;
+          a.hp -= dmgToAtk;
+        }
+      }
+      // Apply results. Each surviving unit keeps the fraction of manpower equal
+      // to its remaining effective-hp fraction; a unit at hp<=0 is destroyed.
+      let atkLost = 0, defUnitLost = 0, defBldgLost = 0;
+      const applyUnit = (c) => {
+        const frac = c.hp0 > 0 ? Math.max(0, c.hp / c.hp0) : 0;
+        c.unit.strength = (c.hp <= 0) ? 0 : Math.max(0, Math.round((Number(c.unit.strength) || 0) * frac));
+        return c.unit.strength <= 0;
+      };
+      for (const c of atkC) { if (applyUnit(c)) atkLost++; }
+      for (const c of defUnitC) { if (applyUnit(c)) defUnitLost++; }
+      // Remove dead units from the game.
+      removeDeadUnits();
+      // Defense buildings whose pool fell to <= 0 are destroyed/removed.
+      for (const c of defBldgC) {
+        if (c.hp <= 0) { c.building._delete = true; defBldgLost++; }
+      }
+      gameState.buildings = gameState.buildings.filter((b) => !b._delete);
+      const attackerWon = defenders.every((c) => c.hp <= 0) && atkC.some((c) => c.unit && c.unit.strength > 0);
+      // Survivors who are still alive settle at the target (if captured) or retreat.
+      const survivors = atkC.filter((c) => c.unit && c.unit.strength > 0).map((c) => c.unit);
+      // Compose a battle report.
+      const lines = [];
+      lines.push(`<strong>${esc(sf.name)}</strong> attacked <strong>${esc(targetBio.name || 'the enemy colony')}</strong>.`);
+      lines.push(`Rounds fought: ${round}.`);
+      lines.push(`Attacker losses: ${atkLost} unit${atkLost === 1 ? '' : 's'}.`);
+      lines.push(`Defender losses: ${defUnitLost} unit${defUnitLost === 1 ? '' : 's'}, ${defBldgLost} defense building${defBldgLost === 1 ? '' : 's'}.`);
+      if (attackerWon) {
+        finishWonBattle(targetBio, survivors, sf, lines);
+      } else {
+        lines.push(`The attack was repelled; surviving units withdraw.`);
+        // Retreat survivors to their home base.
+        for (const u of survivors) { recallUnit(u); }
+        showChoiceDialog('Battle Report', lines.map((l) => `<div>${l}</div>`).join(''), [{ value: 'ok', label: 'OK' }]);
+        notify(`${sf.name}'s attack on ${targetBio.name || 'the enemy colony'} was repelled.`);
+      }
+      refreshAll();
+    }
+    // Handle a won battle: prompt Capture vs Raze and apply the outcome. Only
+    // remaining LAND units can occupy; if none, the colony goes neutral.
+    function finishWonBattle(targetBio, survivors, sf, lines) {
+      const cfg = combatCfg();
+      const landSurvivors = survivors.filter(isLandUnit);
+      const targetName = targetBio.name || 'the enemy colony';
+      showChoiceDialog(
+        'Victory — Capture or Raze?',
+        lines.map((l) => `<div>${l}</div>`).join('') +
+          `<div style="margin-top:10px">You have defeated the defenders of <strong>${esc(targetName)}</strong>.` +
+          (landSurvivors.length
+            ? ` Capture it (its ownership becomes yours; 10–30% of its non-biodome buildings are destroyed in the fighting) or raze it (every building, including the biodome, is destroyed — other species' opinion of you drops).`
+            : ` You have no surviving land units to occupy it, so it cannot be captured — you may only raze it (razing lowers other species' opinion of you) or leave it neutral.`) +
+          `</div>`,
+        landSurvivors.length
+          ? [{ value: 'capture', label: 'Capture' }, { value: 'raze', label: 'Raze' }, { value: 'leave', label: 'Leave' }]
+          : [{ value: 'raze', label: 'Raze' }, { value: 'leave', label: 'Leave' }]
+      ).then((choice) => {
+        if (choice === 'capture' && landSurvivors.length) {
+          captureColony(targetBio, 'human', cfg);
+          notify(`You captured ${targetName}!`);
+        } else if (choice === 'raze') {
+          razeColony(targetBio, 'human', cfg);
+          notify(`You razed ${targetName}.`);
+          // Survivors retreat home after razing.
+          for (const u of survivors) recallUnit(u);
+        } else {
+          // Leave: colony becomes neutral (ownerless) if its defenders were wiped.
+          targetBio.owner = null; targetBio.ownerName = 'Neutral';
+          for (const u of survivors) recallUnit(u);
+          notify(`${targetName} is left undefended and neutral.`);
+        }
+        refreshAll();
+      });
+    }
+    // Capture: flip ownership to `newOwner`, destroy a random 10–30% of the
+    // colony's non-biodome buildings; surviving LAND units garrison it.
+    function captureColony(targetBio, newOwner, cfg) {
+      const radius = colonyControlRadius(targetBio);
+      const others = (gameState.buildings || []).filter((b) =>
+        b !== targetBio && b.type !== 1 && !b.inTransit &&
+        b.owner === targetBio.owner && hexDistance(targetBio.x, targetBio.y, b.x, b.y) <= radius);
+      const frac = cfg.captureDestroyMin + Math.random() * Math.max(0, cfg.captureDestroyMax - cfg.captureDestroyMin);
+      const destroyCount = Math.round(others.length * frac);
+      // Random selection.
+      const shuffled = others.slice().sort(() => Math.random() - 0.5);
+      for (let i = 0; i < destroyCount && i < shuffled.length; i++) shuffled[i]._delete = true;
+      // Flip ownership of the biodome and all its surviving buildings.
+      const flipped = (gameState.buildings || []).filter((b) =>
+        !b._delete && !b.inTransit && b.owner === targetBio.owner &&
+        (b === targetBio || hexDistance(targetBio.x, targetBio.y, b.x, b.y) <= radius));
+      for (const b of flipped) b.owner = newOwner;
+      targetBio.ownerName = (newOwner === 'human') ? 'You' : (playerDisplayName(playerIndexOf(newOwner)) || 'Owner');
+      gameState.buildings = gameState.buildings.filter((b) => !b._delete);
+    }
+    // Raze: destroy every building of the colony (incl. the biodome). Applies the
+    // opinion penalty: every OTHER player's opinion of the razer drops.
+    function razeColony(targetBio, razerOwner, cfg) {
+      const radius = colonyControlRadius(targetBio);
+      for (const b of (gameState.buildings || [])) {
+        if (b.inTransit) continue;
+        if (b.owner === targetBio.owner && (b === targetBio || hexDistance(targetBio.x, targetBio.y, b.x, b.y) <= radius)) {
+          b._delete = true;
+        }
+      }
+      gameState.buildings = gameState.buildings.filter((b) => !b._delete);
+      const razerIdx = playerIndexOf(razerOwner);
+      if (razerIdx != null) adjustOpinionOfAll(razerIdx, -cfg.razeOpinionPenalty);
+    }
+    // Resolve an owner id ('human' or an AI index) to its players[] index.
+    function playerIndexOf(owner) {
+      if (owner === 'human') return 0;
+      const n = Number(owner);
+      return Number.isFinite(n) ? n : null;
+    }
+    // Repaint map + panels after a battle mutates buildings/units.
+    function refreshAll() {
+      try { if (hexMap && typeof hexMap.draw === 'function') hexMap.draw(); } catch (e) {}
+      try { renderMilitary(); } catch (e) {}
+      try { if (typeof updateResourcesPanel === 'function') updateResourcesPanel(); } catch (e) {}
+    }
+    // ---- Diplomacy screen --------------------------------------------------
+    function renderDiplomacy() {
+      const body = document.getElementById('diplomacy-body');
+      if (!body) return;
+      body.innerHTML = '';
+      const players = gameState.players || [];
+      for (let i = 0; i < players.length; i++) {
+        if (i === 0) continue;                     // skip the human themself
+        const op = getOpinion(i, 0);               // player i's opinion of the human (index 0)
+        const tr = document.createElement('tr');
+        const nameTd = document.createElement('td'); nameTd.textContent = playerDisplayName(i);
+        const opTd = document.createElement('td'); opTd.className = 'num';
+        opTd.textContent = `${op > 0 ? '+' : ''}${nf(op, 0)}`;
+        tr.appendChild(nameTd); tr.appendChild(opTd); body.appendChild(tr);
+      }
+      if (!body.children.length) {
+        const tr = document.createElement('tr'); const td = document.createElement('td');
+        td.colSpan = 2; td.className = 'stat-note'; td.textContent = 'No other species yet.';
+        tr.appendChild(td); body.appendChild(tr);
+      }
+    }
+    function openDiplomacy() { renderDiplomacy(); const o = document.getElementById('diplomacy-overlay'); if (o) o.hidden = false; }
+    function closeDiplomacy() { const o = document.getElementById('diplomacy-overlay'); if (o) o.hidden = true; }
+
     function renderMilitary() {
       const units = humanUnits().slice().sort((a, b) => (a.order || 0) - (b.order || 0));
       militaryBody.innerHTML = "";
@@ -11244,6 +11867,14 @@
     ipcRenderer.on("view-military", openMilitary);
     document.getElementById("military-close").addEventListener("click", closeMilitary);
     militaryOverlay.addEventListener("click", (e) => { if (e.target === militaryOverlay) closeMilitary(); });
+    // Strike Force dialog buttons.
+    document.getElementById("strike-attack").addEventListener("click", confirmStrikeForce);
+    document.getElementById("strike-cancel").addEventListener("click", closeStrikeForceDialog);
+    // Diplomacy screen (View menu + close + backdrop).
+    ipcRenderer.on("view-diplomacy", openDiplomacy);
+    document.getElementById("diplomacy-close").addEventListener("click", closeDiplomacy);
+    const _diploOverlay = document.getElementById("diplomacy-overlay");
+    if (_diploOverlay) _diploOverlay.addEventListener("click", (e) => { if (e.target === _diploOverlay) closeDiplomacy(); });
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && !militaryOverlay.hidden) closeMilitary();
     });
@@ -11372,6 +12003,7 @@
         players: (extra && extra.players) || null,
         turn: (extra && extra.turn) != null ? extra.turn : 0,
         currentPlayer: (extra && extra.currentPlayer) != null ? extra.currentPlayer : 0,
+        opinion: (extra && extra.opinion) || null,
         resources: (extra && extra.resources) || { material: 0, food: 0, energy: 0, wealth: 0 },
         rates: (extra && extra.rates) || { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 },
         playerName: (extra && (extra.playerName || (extra.players && extra.players[0] && extra.players[0].kind === 'human' && extra.players[0].name))) || gameState.playerName || "Human",
@@ -11775,6 +12407,7 @@
             buildings: payload.buildings || [], colonies: payload.colonies || [],
             players: payload.players || null,
             turn: payload.turn || 0, currentPlayer: payload.currentPlayer || 0,
+            opinion: payload.opinion || null,
             resources: payload.resources, rates: payload.rates,
             playerName: payload.playerName,
             transport: payload.transport || null,

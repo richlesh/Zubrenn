@@ -237,22 +237,29 @@
     },
     "infantry": { "name": "Infantry", "unitSize": 1000, "speed": 8,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
-        "costPerYear": { "food": 1, "goods": 10, "energy": 6, "water": 0.1, "wealth": 10 }
+        "costPerYear": { "food": 1, "goods": 10, "energy": 6, "water": 0.1, "wealth": 10 },
+        "strength": { "attack":  1, "defense": 1 }
       },
     // Tank batallion 500 service men, 50 tanks
     "tank": { "name": "Armored", "unitSize": 500, "speed": 2,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
-        "costPerYear": { "food": 2, "goods": 12, "energy": 2, "water": 0.1, "wealth": 2 }
+        "costPerYear": { "food": 2, "goods": 12, "energy": 2, "water": 0.1, "wealth": 2 },
+        "strength": { "attack":  3, "defense": 3 }
     },
     // Fighter squadron 300 service men, 20 aircraft
     "fighter": { "name": "Fighter", "unitSize": 300, "speed": 5, "station": "airbase",
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
-        "costPerYear": { "food": 1, "goods": 20, "energy": 1, "water": 0.1, "wealth": 1 }
+        "costPerYear": { "food": 1, "goods": 20, "energy": 1, "water": 0.1, "wealth": 1 },
+        "strength": { "attack":  3, "defense": 3 },
+        "range": 20
     },
     // Bomber squadron 300 service men, 10 bombers
     "bomber": { "name": "Bomber", "unitSize": 300, "speed": 4, "station": "airport",
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
-        "costPerYear": { "food": 2, "goods": 15, "energy": 2, "water": 0.1, "wealth": 2 }
+        "costPerYear": { "food": 2, "goods": 15, "energy": 2, "water": 0.1, "wealth": 2 },
+        "attack": { "strength":  5 },
+        "strength": { "attack":  5, "defense": 1 },
+        "range": 40
     },
     // Single cruiser/destroyer 300 service men, 10 ballistic missiles
     // Single submarine 150 service men, 10 ballistic missiles
@@ -260,12 +267,15 @@
     // Escort group, 3 cruisers/destroyers, 1 submarine and 1 supply ship
     "submarine": { "name": "Escort", "unitSize": 1250, "speed": 2, "station": "seaport",
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
-        "costPerYear": { "food": 1, "goods": 10, "energy": 1, "water": 0.1, "wealth": 1 }
+        "costPerYear": { "food": 1, "goods": 10, "energy": 1, "water": 0.1, "wealth": 1 },
+        "strength": { "attack":  3, "defense": 7 }
     },
     // Single carrier 6000 service men, 100 aircraft = 5 squadrons
     "carrier": { "name": "Carrier", "unitSize": 6000, "speed": 3, "station": "seaport",
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
-        "costPerYear": { "food": 2, "goods": 15, "energy": 2, "water": 0.1, "wealth": 2 }
+        "costPerYear": { "food": 2, "goods": 15, "energy": 2, "water": 0.1, "wealth": 2 },
+        "strength": { "attack":  10, "defense": 3 },
+        "range": 30
     }
   },
 
@@ -526,7 +536,7 @@
         "network":  ["inland"],
         "population": 9
       },
-      "range": 40
+      "range": 30
     },
     "barracks": {
       "code": 7,
@@ -573,8 +583,8 @@
       "costPerYear": { "energy": 20, "goods": 10, "wealth": 10 },
       "bonus": { },
       "storage": { "energy": 100, "food": 20, "goods": 40 },
-      "units": { "infantry": 5, "tank": 3, "fighter": 2 },
-      "recruitRate": { "infantry": 500, "tank": 200, "fighter": 100 },
+      "units": { "infantry": 5, "tank": 3, "fighter": 3, "bomber": 1 },
+      "recruitRate": { "infantry": 500, "tank": 200, "fighter": 100, "bomber": 50 },
       "prerequisite": {
         "building": ["solar farm", "agridome", "megafactory", "bank"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
@@ -783,6 +793,64 @@
       "prerequisite": {
         "building": ["dock"],
         "terrain": ["sea"]
+      }
+    },
+    "missile battery": {
+      "code": 28,
+      "name": "Missile Battery",
+      "icon": "buildings/128/missile_battery.png",
+      "symbol": "buildings/icons/shield.png",
+      "buildCost":   { "energy": 10, "material": 20, "wealth": 10, "water": 0.25, "turns": 3 },
+      "costPerYear": { "energy": 0.2, "material": 0, "wealth": 5, "water": 0 },
+      "bonus":       { "defense": "5" },
+      "prerequisite": {
+        "building": ["factory"],
+        "terrain": ["land"],
+        "population": 3
+      }
+    },
+    "laser battery": {
+      "code": 29,
+      "name": "Laser Battery",
+      "icon": "buildings/128/laser_battery.png",
+      "symbol": "buildings/icons/shield.png",
+      "buildCost":   { "energy": 10, "material": 20, "wealth": 20, "water": 0.25, "turns": 3 },
+      "costPerYear": { "energy": 0.4, "material": 0, "wealth": 5, "water": 0 },
+      "bonus":       { "defense": "8" },
+      "prerequisite": {
+        "building": ["factory"],
+        "terrain": ["land"],
+        "population": 6,
+        "upgrades": "missile_battery"
+      }
+    },
+    "shield": {
+      "code": 30,
+      "name": "Electro-Magnetic Shield",
+      "icon": "buildings/128/shield.png",
+      "symbol": "buildings/icons/shield.png",
+      "buildCost":   { "energy": 20, "material": 40, "wealth": 30, "water": 0.5, "turns": 5 },
+      "costPerYear": { "energy": 10, "material": 0, "wealth": 10, "water": 0 },
+      "bonus":       { "defense": "20" },
+      "prerequisite": {
+        "building": ["factory"],
+        "terrain": ["land"],
+        "population": 10
+      }
+    },
+    "plasma bubble": {
+      "code": 31,
+      "name": "Plasma Bubble",
+      "icon": "buildings/128/plasma_bubble.png",
+      "symbol": "buildings/icons/plasma_bubble.png",
+      "buildCost":   { "energy": 20, "material": 100, "wealth": 100, "water": 1, "turns": 7 },
+      "costPerYear": { "energy": 50, "material": 0, "wealth": 50, "water": 0 },
+      "bonus":       { "defense": "50" },
+      "prerequisite": {
+        "building": ["factory"],
+        "terrain": ["land"],
+        "upgrades": "shield",
+        "population": 15
       }
     }
   },
@@ -1521,6 +1589,23 @@
   "seaAdjacentBonus": { "energy": 0, "food": 2, "material": 1, "water": 0, "wealth": 2 },
   // Cost + turns to tear down a building (Remove Improvement), paid by its colony.
   "removeImprovementCost": { "energy": 5, "food": 2, "turns": 2 },
+
+  // Combat / strike-force tuning (attack system).
+  //   randomness   - each combatant's effective strength is multiplied by a
+  //                  random factor in [1-randomness, 1+randomness] every round
+  //                  (0 = deterministic, 0.3 = +/-30%).
+  //   maxRounds    - safety cap on battle rounds before the attacker withdraws.
+  //   captureDestroyMin/Max - fraction of a captured colony's NON-biodome
+  //                  buildings destroyed at random on capture (0.1 = 10%).
+  //   razeOpinionPenalty - opinion points (-100..100 scale) every OTHER player
+  //                  loses toward a player who razes a colony.
+  "combat": {
+    "randomness": 0.3,
+    "maxRounds": 20,
+    "captureDestroyMin": 0.1,
+    "captureDestroyMax": 0.3,
+    "razeOpinionPenalty": 10
+  },
 
   // Default Federation tax rate (happiness cost per colony that funds the
   // Federation treasury); the New Game/Federation UI can override per game.
