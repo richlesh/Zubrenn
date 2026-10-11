@@ -902,6 +902,32 @@
       }
       return out;
     }
+    // Whether a colony has an operational building carrying the given `other`
+    // capability tag within its control radius (e.g. 'airbase', 'airport',
+    // 'seaport'). Mirrors colonyHasSeaport's radius scan.
+    function colonyHasCapability(colony, tag) {
+      if (!colony || !tag) return false;
+      const radius = colonyControlRadius(colony);
+      for (const b of (gameState.buildings || [])) {
+        if (b.owner !== colony.owner) continue;
+        if (!isOperational(b)) continue;
+        if (!buildingHasOther(b.type, tag)) continue;
+        if (hexDistance(colony.x, colony.y, b.x, b.y) <= radius) return true;
+      }
+      return false;
+    }
+    // Whether a unit of `unitType` may be stationed/deployed at `colony`, per the
+    // data-driven units[unitType].station capability tag. No station tag means
+    // the unit may be stationed in any colony (infantry, tank). A tagged unit
+    // (fighter -> airbase, bomber -> airport, submarine/carrier -> seaport)
+    // requires the colony to provide that facility.
+    function colonyCanStation(colony, unitType) {
+      if (!colony) return false;
+      const e = (CONFIG && CONFIG.units && CONFIG.units[unitType]) || null;
+      const tag = e && e.station;
+      if (!tag) return true;                 // no requirement -> any colony
+      return colonyHasCapability(colony, tag);
+    }
     // A terrain bonus is "pristine" if its config definition lists "pristine" in
     // its `other` array. A pristine bonus yields only while worked and is
     // destroyed permanently the moment any building is built on its tile.
@@ -2539,6 +2565,27 @@
       const e = uc[type];
       const n = e && Number(e.unitSize);
       return Number.isFinite(n) && n > 0 ? n : Infinity;
+    }
+    // Per-year resource upkeep for a built military unit, from its type's
+    // units[type].costPerYear, scaled proportionally by the unit's current
+    // strength relative to the type's unitSize (a full-strength unit pays one
+    // full costPerYear; a half-filled unit pays half). Returns a per-resource
+    // map over RESOURCE_KEYS (0 for unlisted resources). The home colony pays
+    // this each turn.
+    function unitUpkeep(u) {
+      const out = {}; for (const k of RESOURCE_KEYS) out[k] = 0;
+      if (!u) return out;
+      const e = (CONFIG && CONFIG.units && CONFIG.units[u.type]) || null;
+      if (!e) return out;
+      const size = Number(e.unitSize) > 0 ? Number(e.unitSize) : 1000;
+      const frac = Math.max(0, (Number(u.strength) || 0) / size);
+      if (frac <= 0) return out;
+      const cpy = e.costPerYear || {};
+      for (const k of RESOURCE_KEYS) {
+        const v = Number(cpy[k]);
+        if (Number.isFinite(v) && v) out[k] += v * frac;
+      }
+      return out;
     }
     // Citizens per population UNIT (units.population.unitSize, default 1000).
     // Population-related config thresholds (foundColonyMinPopulation,
@@ -4204,6 +4251,7 @@
       if (unit.inTransit) return null;                // already moving
       if (!unitIsFull(unit)) return null;             // must be at full strength
       if (unit.x === destCol.x && unit.y === destCol.y) return null; // already here
+      if (!colonyCanStation(destCol, unit.type)) return null; // destination lacks the required facility
       const turns = battalionTravelTurns(unit.x, unit.y, destCol.x, destCol.y, unit.owner, unitSpeed(unit.type));
       if (turns == null) return null;                 // unreachable
       unit.inTransit = true;
@@ -4322,6 +4370,7 @@
       const out = [];
       for (const c of deployableColonies(unit.owner)) {
         if (c.x === unit.x && c.y === unit.y) continue;   // skip current colony
+        if (!colonyCanStation(c, unit.type)) continue;    // lacks required facility to station this unit
         const turns = battalionTravelTurns(unit.x, unit.y, c.x, c.y, unit.owner, speed);
         if (turns == null) continue;                       // unreachable
         out.push({ colony: c, turns });
@@ -4664,6 +4713,20 @@
       addBreak('energy', 'Population', -(popUnits * popCostOf('energy', 0)));
       addBreak('water', 'Population', -(popUnits * popCostOf('water', 0.1)));
       addBreak('wealth', 'Population', -(popUnits * popCostOf('wealth', 0)));
+      // Military upkeep: every built unit whose HOME base is this colony costs
+      // its type's costPerYear each year, scaled by strength/unitSize (see
+      // unitUpkeep). The home colony pays regardless of where the unit is
+      // currently stationed; shortfalls borrow from the Federation/connected
+      // colonies via the normal economy borrow step.
+      const homeKeyForUnits = cellKey(col.x, col.y);
+      for (const u of (gameState.units || [])) {
+        if (u.owner !== col.owner) continue;
+        if (cellKey(u.homeX, u.homeY) !== homeKeyForUnits) continue; // homed elsewhere
+        const up = unitUpkeep(u);
+        for (const k of ['food', 'material', 'goods', 'energy', 'water', 'wealth']) {
+          if (up[k]) { needs[k] += up[k]; addBreak(k, 'Military upkeep', -up[k]); }
+        }
+      }
       // Wealth income also includes derived income (10% of surplus food+material).
       const derivedWealth = Math.max(0, production.food - needs.food) * 0.1
         + Math.max(0, production.material) * 0.1

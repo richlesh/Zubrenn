@@ -193,6 +193,15 @@
 
   // Per-UNIT definitions. Each entry has a movement "speed", an optional
   // "unitSize", a one-time "buildCost" map, and a yearly "costPerYear" map.
+  // For a built military unit, "costPerYear" is upkeep paid each turn by the
+  // unit's HOME colony, scaled by the unit's current strength / unitSize (a
+  // full-strength unit pays one full costPerYear); shortfalls borrow from the
+  // Federation and connected colonies like any other colony need.
+  // Optional "station": a facility CAPABILITY tag a colony must provide (via a
+  // building's `other` tag within the colony's control radius) for the unit to
+  // be stationed/deployed there — "airbase" (Air Field or Airport), "airport"
+  // (Airport only), "seaport" (Port). Omitted = may be stationed in any colony
+  // (infantry, tank).
   // "unitSize" is the population per unit: for "population" it is the divisor for
   // per-worker consumption; for a military unit type it is that unit's MAXIMUM
   // strength (the cap a recruiting building fills a slot of this type up to,
@@ -236,12 +245,12 @@
         "costPerYear": { "food": 2, "goods": 12, "energy": 2, "water": 0.1, "wealth": 2 }
     },
     // Fighter squadron 300 service men, 20 aircraft
-    "fighter": { "name": "Fighter", "unitSize": 300, "speed": 5,
+    "fighter": { "name": "Fighter", "unitSize": 300, "speed": 5, "station": "airbase",
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 1, "goods": 20, "energy": 1, "water": 0.1, "wealth": 1 }
     },
     // Bomber squadron 300 service men, 10 bombers
-    "bomber": { "name": "Bomber", "unitSize": 300, "speed": 4,
+    "bomber": { "name": "Bomber", "unitSize": 300, "speed": 4, "station": "airport",
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 2, "goods": 15, "energy": 2, "water": 0.1, "wealth": 2 }
     },
@@ -249,12 +258,12 @@
     // Single submarine 150 service men, 10 ballistic missiles
     // Single supply ship 200 service men
     // Escort group, 3 cruisers/destroyers, 1 submarine and 1 supply ship
-    "submarine": { "name": "Escort", "unitSize": 1250, "speed": 2,
+    "submarine": { "name": "Escort", "unitSize": 1250, "speed": 2, "station": "seaport",
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 1, "goods": 10, "energy": 1, "water": 0.1, "wealth": 1 }
     },
     // Single carrier 6000 service men, 100 aircraft = 5 squadrons
-    "carrier": { "name": "Carrier", "unitSize": 6000, "speed": 3,
+    "carrier": { "name": "Carrier", "unitSize": 6000, "speed": 3, "station": "seaport",
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 2, "goods": 15, "energy": 2, "water": 0.1, "wealth": 2 }
     }
@@ -512,7 +521,7 @@
       "prerequisite": {
         "building": ["solar farm", "factory", "bank"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
-        "other": ["airbase"],
+        "other": ["airbase", "airport"],
         "upgrades": "air field",
         "network":  ["inland"],
         "population": 9
@@ -563,7 +572,7 @@
       "buildCost": { "energy": 60, "material": 60, "wealth": 60, "water": 6, "turns": 8 },
       "costPerYear": { "energy": 20, "goods": 10, "wealth": 10 },
       "bonus": { },
-      "storage": { "energy": 40, "food": 20, "goods": 40 },
+      "storage": { "energy": 100, "food": 20, "goods": 40 },
       "units": { "infantry": 5, "tank": 3, "fighter": 2 },
       "recruitRate": { "infantry": 500, "tank": 200, "fighter": 100 },
       "prerequisite": {
