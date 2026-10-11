@@ -4535,6 +4535,19 @@
         addBreak('water', 'Buildings', bo.water - up.water);
         addBreak('wealth', 'Buildings', bo.wealth - up.wealth);
       }
+      // Unworked resource deposits in the colony's zone of control: some deposits
+      // (e.g. Seals, Whales, Old Growth Forest, Coral Reefs) grant their
+      // `unworkedBonus` ONLY while their cell is in the zone but NOT worked —
+      // the wildlife/old growth is left undisturbed. Working such a cell applies
+      // the normal `bonus` instead (handled in the worked loop above). Currently
+      // only the happiness component of `unworkedBonus` is meaningful.
+      for (const c of colonyControlCells(col)) {
+        if (workedSet.has(cellKey(c.x, c.y))) continue; // worked -> normal bonus applies, not this
+        const ub = bonusDefAt(c.x, c.y);
+        if (ub && ub.unworkedBonus && ub.unworkedBonus.happiness) {
+          terrainHappiness += ub.unworkedBonus.happiness;
+        }
+      }
       // Population consumes resources each year: units.population.costPerYear gives the
       // per-1,000-colonist cost for food/material/energy/water/wealth. Multiply
       // by the colony's population units and subtract as yearly needs. (Food and

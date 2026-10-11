@@ -71,6 +71,30 @@ The massive, bison-sized beetle *Bugalo zubrennensis* migrates in slow herds acr
 
 The Thousandseed Basin forms in the wetlands, where seasonal floods trigger extraordinary blooms of fast-growing, seed-bearing organisms. When the waters recede, colonists gather the countless seeds in a brief, bountiful harvest. A worked basin is a generous source of food, turning the marshes into one of the planet's richest larders.
 
+#### Fishery
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/fishery.png">
+
+A Fishery marks the rich shoaling grounds where Zubrenn's native sea-life gathers thick enough to net, found in any stretch of sea. Reliable and easy to work from the shore, these waters feed coastal colonies through every season. A worked fishery is a solid source of food, the dependable catch that sustains a seafaring people.
+
+#### Thaelrunners
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/thaelrunners.png">
+
+Thaelrunners are blubber-rich, seal-like pinnipeds that haul out in great rookeries across the frozen coasts, their sleek bodies built for the ice and the cold water beneath it. A colony may harvest them for a generous yield of food — but the slaughter troubles the settlers, who grow uneasy at the thinning of the herds. Left in peace, the gathered Thaelrunners are instead a beloved sight that lifts morale. Worked, they are a solid source of food at a small cost to happiness; unworked, they quietly cheer the colony.
+
+#### Vorndeeps
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/vorndeeps.png">
+
+Vorndeeps are the vast, migratory leviathans of Zubrenn's open ocean, sounding through the deep waters far from any shore. Hunting them yields a bounty of food, yet their loss weighs heavily on colonists who revere the giants. A colony that leaves the Vorndeeps unmolested finds its spirits lifted by their passage instead. Worked, they are a solid source of food at a small cost to happiness; unworked, their presence gladdens the people. (Reaching them requires a colony able to work the deep sea.)
+
+#### Fingerfruit
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/fingerfruit.png">
+
+Fingerfruit grow in heavy clusters of sweet, finger-shaped pods high in the jungle canopy, ripening year-round in the tropical warmth. Easy to gather and prized at every table, they feed colonists and brighten their days. A worked grove is a solid source of food and lifts morale besides, a cheerful staple of jungle colonies.
+
 ### Material
 
 #### Ferric Strata Veins
@@ -126,6 +150,26 @@ Gravalloy Veins thread through the low and high mountains, carrying an unusually
 <img align="right" width="128" src="src/resources/terrain_bonus/128/titanlace_deposit.png">
 
 Titanlace Deposits form only in the high mountains, where rare mineral lattices can be processed into an exceptionally strong structural mesh. Reaching them means braving the planet's most forbidding peaks. A worked deposit is a rich source of material, rewarding high-altitude mining with some of the finest building stock on Zubrenn.
+
+### Water
+
+#### Natural Spring
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/natural_spring.png">
+
+A Natural Spring wells up through fractured rock on dry grassland, hills, plains, forest, and low mountains, far from any river or coast. For inland colonies with no waterway to draw on, such a spring is a quiet lifeline. A worked spring is a steady source of fresh water, keeping dry-country settlements alive.
+
+#### Glacial Meltwater
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/glacial_meltwater.png">
+
+Glacial Meltwater runs clear and cold off the frozen ice sheets, pooling in dry hollows where the seasonal thaw gathers. In the barren polar wastes it is one of the few dependable sources of clean water. A worked meltwater field is a steady source of fresh water, sustaining colonies that brave the ice.
+
+#### Oasis
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/oasis.png">
+
+An Oasis is a spring-fed pool ringed with greenery, an unexpected reservoir hidden among the dry dunes of the desert. Where water is the scarcest of all resources, an oasis transforms a hostile waste into habitable ground. A worked oasis is a generous source of fresh water, the beating heart of any desert colony.
 
 ### Energy
 
@@ -191,6 +235,24 @@ Starveil Filaments are fine biological fibers gathered from forest and jungle or
 
 Crownfire Geodes are extraordinarily rare crystals hidden in the low and high mountains, their luminous interiors flickering like miniature stellar flares. To open one is to glimpse a captured star. A worked geode is a rich source of wealth that also lifts morale, a treasure that enriches and delights in equal measure.
 
+#### Diamonds
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/diamonds.png">
+
+Diamonds rise in deep kimberlite pipes threading the low and high mountains, yielding gem-grade stones coveted for both heavy industry and dazzling adornment. Hard-won from the rock, they repay the effort many times over. A worked pipe is a rich source of wealth, yields a little material besides, and lifts morale with its glittering fortune.
+
+#### Gemstones
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/gemstones.png">
+
+Gemstones form in colorful crystal pockets throughout the highlands — the hills and low mountains — where mineral-rich seams catch the light. Cut and polished, they trade briskly as luxury stones across the colonies. A worked pocket is a rich source of wealth that also lifts morale, adorning a colony's people as readily as its treasury.
+
+#### Pearls
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/pearls.png">
+
+Pearls grow in beds of pearl-bearing shellfish nestled in the warm coastal shallows, each a lustrous prize drawn from the seabed. Gathered by divers and traded as a coveted luxury, they bring both profit and prestige. A worked bed is a good source of wealth that also lifts morale, the jewel of any seaside colony.
+
 ### Happiness
 
 #### Aurelian Sky Mirrors
@@ -228,3 +290,15 @@ Dreamblossom Fields spread across the plains of the mid-latitudes, their vast bl
 <img align="right" width="128" src="src/resources/terrain_bonus/128/dancing_veil_falls.png">
 
 Dancing Veil Falls tumble from the low and high mountains where rivers plunge in the cooler latitudes, their charged mist forming drifting curtains of colored light. Breathtaking and serene, they must be kept pristine to preserve their shifting glow. A worked falls greatly lifts morale, a natural spectacle that renews the colony's spirit.
+
+#### Coral Reefs
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/coral_reefs.png">
+
+Coral Reefs blaze with living color in the warm coastal shallows, teeming with sea-life and beloved by colonists who prize their beauty. Harvesting the waters brings food and a tidy profit, but the dredging bleaches and breaks the reefs, and morale suffers for the loss. Left undisturbed, the reefs instead gladden the colony. Worked, they yield food and wealth at a cost to happiness; unworked, their splendor lifts the spirit.
+
+#### Rookery
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/rookery.png">
+
+A Rookery is a teeming cliffside colony of native seabirds along the frozen coasts, where countless nesting pairs wheel and cry through the pale polar light. Their seasonal spectacle is a rare joy in the bleak ice, drawing colonists to watch the great gatherings. A worked rookery lifts the colony's morale, a welcome warmth of life amid the cold.

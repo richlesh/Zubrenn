@@ -307,7 +307,7 @@
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","frozen","plains","wetlands"]
       },
       "other": [ "intelligence" ],
-      "visibility": 16,
+      "visibility": 16
     },
     "farm": {
       "code": 2,
@@ -594,7 +594,7 @@
       "prerequisite": {
   //      "building": ["air field"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands","mountain-low"],
-        "other": [ "anywhere", "federation", "intelligence" ],
+        "other": [ "anywhere", "federation", "intelligence" ]
       },
       "visibility": 16
     },
@@ -622,7 +622,7 @@
       "symbol": "buildings/icons/crystal.png",
       "buildCost":   { "energy": 5, "material": 5, "wealth": 10, "water": 0.5, "turns": 3 },
       "costPerYear": { "energy": 50, "material": 0, "goods": 5, "wealth": 5 },
-      "bonus":       { "material": "12x" },
+      "bonus":       { "material": "12x", "wealth": "5x" },
       "storage":     { "material": 500 },
       "prerequisite": {
         "building": ["solar panel"],
@@ -681,7 +681,11 @@
   // entry defines a "bonus" (per-resource yield added when its cell is worked),
   // the terrain(s)/terrain groups it may appear on, climate band(s), optional
   // altitude band, optional "other" placement rules (river/sea/water/land/dry/
-  // pristine/elevation bands), and an "abundancy" weight. See "terrainGroups"
+  // pristine/elevation bands), and an "abundancy" weight. A deposit may also
+  // define an optional "unworkedBonus" that applies instead of "bonus" while
+  // its cell is inside a colony's zone of control but NOT worked (e.g. wildlife
+  // left undisturbed grants happiness; working the cell applies "bonus"). Only
+  // the happiness component of "unworkedBonus" is currently used. See "terrainGroups"
   // for group selectors and the header legend for "terrain"/"other" tokens.
   "terrainBonus": {
     // Food
@@ -691,7 +695,6 @@
       "terrain": ["grassland","hills","frozen"],
       "climate": ["subpolar"],
       "altitude": { "min": 0, "max": 2000 },
-      // river sea water polar land pristine dry
       "other": [ "water"],
       "abundancy": 5,
       "desc": "Towering, fractal fungi farmable in the twilight band. Spores are harvested for protein and starch."
@@ -718,7 +721,6 @@
       "icon": "terrain_bonus/128/glacial_bloom.png",
       "bonus": { "food": "5-10" },
       "terrain": ["frozen"],
-      "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
       "abundancy": 0.5,
       "desc": "Seasonal thaw releases edible cryo-lichens that glow at night."
@@ -727,7 +729,6 @@
       "icon": "terrain_bonus/128/chemosyntheic_vent.png",
       "bonus": { "energy": 5, "food": "5-10" },
       "terrain": ["mountain"],
-      "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
       "abundancy": 1,
       "desc": "Tube-worm analogs around geothermal seeps. Self-sustaining source of protein."
@@ -736,7 +737,7 @@
       "icon": "terrain_bonus/128/veyra_pods.png",
       "bonus": { "food": "15-30" },
       "terrain": ["grassland","hills", "plains"],
-      "climate": ["tropical", "temperate", "subpolar", "polar"],
+      "climate": ["tropical", "temperate", "subpolar"],
       "other": [ ],
       "abundancy": 2,
       "desc": "Hardy native plants with clusters of edible, protein-rich pods."
@@ -745,7 +746,6 @@
       "icon": "terrain_bonus/128/cloudkelp_beds.png",
       "bonus": { "food": "10-25" },
       "terrain": ["sea"],
-      "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ "land" ],
       "abundancy": 3,
       "desc": "Buoyant fronds form dense floating canopies above nutritious underwater bulbs."
@@ -783,7 +783,6 @@
       "icon": "terrain_bonus/128/ferric_strata.png",
       "bonus": { "material": "25-50" },
       "terrain": ["hills","mountain-low","mountain-high"],
-      "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
       "abundancy": 1,
       "desc": "Banded iron-silicate seams exposed by stellar winds. Common in basalt shelves."
@@ -792,7 +791,6 @@
       "icon": "terrain_bonus/128/kinetite_crystals.png",
       "bonus": { "material": "25-50", "wealth": "5-10" },
       "terrain": ["hills","mountain-low"],
-      "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
       "abundancy": 0.5,
       "desc": "Piezoelectric crystals grown in vibration fields. Great for electronics and construction."
@@ -801,7 +799,6 @@
       "icon": "terrain_bonus/128/fossilized_chitin.png",
       "bonus": { "material": "10-30", "wealth": "5-10" },
       "terrain": ["sea"],
-      "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ "land" ],
       "abundancy": 1,
       "desc": "Remains of ancient megafauna, now mined for carbon composites."
@@ -819,7 +816,6 @@
       "icon": "terrain_bonus/128/starfall_alloy.png",
       "bonus": { "material": "10-30", "wealth": "5-10" },
       "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","mountain-high"],
-      "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
       "abundancy": 0.25,
       "desc": "Meteoric impact sites rich in rare earths and nickel-iron."
@@ -828,7 +824,6 @@
       "icon": "terrain_bonus/128/threadstone_seam.png",
       "bonus": { "material": "50-75" },
       "terrain": ["grassland","mountain-low","plains"],
-      "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
       "abundancy": 2,
       "desc": "Naturally fibrous rock that separates into useful construction strands."
@@ -846,7 +841,6 @@
       "icon": "terrain_bonus/128/gravalloy_vein.png",
       "bonus": { "material": "50-75", "wealth": "5-10" },
       "terrain": ["mountain-low","mountain-high"],
-      "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
       "abundancy": 2,
       "desc": "An unusually dense metallic ore prized for heavy machinery and orbital infrastructure."
@@ -855,7 +849,6 @@
       "icon": "terrain_bonus/128/titanlace_deposit.png",
       "bonus": { "material": "30-50", "wealth": "10-20" },
       "terrain": ["mountain-high"],
-      "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
       "abundancy": 2,
       "desc": "Rare mineral lattices that can be processed into exceptionally strong structural mesh."
@@ -866,7 +859,6 @@
       "icon": "terrain_bonus/128/tidal_dynamo.png",
       "bonus": { "energy": "250-750" },
       "terrain": ["sea"],
-      "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ "land" ],
       "abundancy": 0.25,
       "desc": "Tidal water flow between twin-star orbits powers generators."
@@ -875,7 +867,6 @@
       "icon": "terrain_bonus/128/geothermal_plume.png",
       "bonus": { "energy": "250-750" },
       "terrain": ["mountain-low","mountain-high"],
-      "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ "mountain" ],
       "abundancy": 1,
       "desc": "Deep heat vents under crustal plates. Reliable, but needs cooling infrastructure."
@@ -884,7 +875,6 @@
       "icon": "terrain_bonus/128/sunshard_flats.png",
       "bonus": { "energy": "100-300" },
       "terrain": ["desert"],
-      "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
       "abundancy": 2,
       "desc": "Naturally photovoltaic crystals convert starlight into harvestable current."
@@ -950,7 +940,6 @@
       "icon": "terrain_bonus/128/crownfire_geodes.png",
       "bonus": { "wealth": "25-50", "happiness": 0.25 },
       "terrain": ["mountain-low","mountain-high"],
-      "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ ],
       "abundancy": 1,
       "desc": "Extremely rare crystals whose luminous interiors resemble miniature stellar flares."
@@ -961,7 +950,6 @@
       "icon": "terrain_bonus/128/sky_mirror.png",
       "bonus": { "wealth": "10-30", "happiness": 0.25 },
       "terrain": ["grassland","hills","forest","jungle","desert"],
-      "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ "pristine" ],
       "abundancy": 0.1,
       "desc": "Shimmering mineral pools that reflect the binary sunset. Must stay pristine."
@@ -979,7 +967,6 @@
       "icon": "terrain_bonus/128/echo_monolith.png",
       "bonus": { "wealth": "50-100", "happiness": 0.25 },
       "terrain": ["grassland"],
-      "climate": ["tropical", "temperate", "subpolar", "polar"],
       "other": [ "pristine", "dry" ],
       "abundancy": 0.1,
       "desc": "Ancient monoliths left by an alien race, culturally significant. Must stay pristine."
@@ -1010,6 +997,118 @@
       "other": [ "river","pristine" ],
       "abundancy": 1,
       "desc": "Charged mist forms drifting curtains of colored light around immense waterfalls."
+    },
+
+    // Water
+    "Natural Spring": {
+      "icon": "terrain_bonus/128/natural_spring.png",
+      "bonus": { "water": 1 },
+      "terrain": ["grassland","hills","plains","forest","mountain-low"],
+      "other": [ "dry" ],
+      "abundancy": 3,
+      "desc": "Groundwater wells up through fractured rock, a dependable source of fresh water far from any river."
+    },
+    "Glacial Meltwater": {
+      "icon": "terrain_bonus/128/glacial_meltwater.png",
+      "bonus": { "water": 1 },
+      "terrain": ["frozen"],
+      "other": [ "dry" ],
+      "abundancy": 3,
+      "desc": "Seasonal thaw channels run clear and cold off the ice sheets, feeding meltwater pools."
+    },
+    "Oasis": {
+      "icon": "terrain_bonus/128/oasis.png",
+      "bonus": { "water": 2, "happiness": 0.25, "wealth": 4 },
+      "terrain": ["desert"],
+      "other": [ "dry" ],
+      "abundancy": 2,
+      "desc": "A spring-fed pool ringed by greenery, an unexpected reservoir in the arid wastes."
+    },
+
+    // Food (sea)
+    "Fishery": {
+      "icon": "terrain_bonus/128/fishery.png",
+      "bonus": { "food": 2, "wealth": 4 },
+      "terrain": ["sea"],
+      "abundancy": 3,
+      "desc": "Rich shoaling grounds where native sea-life gathers in harvestable abundance."
+    },
+
+    // Material / Wealth
+    "Diamonds": {
+      "icon": "terrain_bonus/128/diamonds.png",
+      "bonus": { "material": 2, "wealth": 4, "happiness": 0.25 },
+      "terrain": ["mountain-low","mountain-high"],
+      "abundancy": 1,
+      "desc": "Deep kimberlite pipes yield gem-grade diamonds, prized for both industry and adornment."
+    },
+    "Gemstones": {
+      "icon": "terrain_bonus/128/gemstones.png",
+      "bonus": { "wealth": 4, "happiness": 0.25 },
+      "terrain": ["highland"],
+      "abundancy": 2,
+      "desc": "Pockets of colorful crystals in the uplands, cut and traded as luxury stones."
+    },
+    "Fingerfruit": {
+      "icon": "terrain_bonus/128/fingerfruit.png",
+      "bonus": { "food": 2, "happiness": 0.25 },
+      "terrain": ["jungle"],
+      "abundancy": 3,
+      "desc": "Clusters of sweet, finger-shaped fruit that ripen year-round in the jungle canopy."
+    },
+    "Pearls": {
+      "icon": "terrain_bonus/128/pearls.png",
+      "bonus": { "wealth": 2, "happiness": 0.25 },
+      "terrain": ["sea"],
+      "other": [ "shallow" ],
+      "abundancy": 2,
+      "desc": "Beds of pearl-bearing shellfish in the warm shallows, a coveted luxury harvest."
+    },
+
+    // Conditional (worked vs. left wild). `bonus` applies when the cell is
+    // WORKED; `unworkedBonus` applies instead while the cell is inside a
+    // colony's zone of control but NOT worked (the wildlife/old growth is left
+    // undisturbed). Only the happiness component of `unworkedBonus` is used.
+    "Seals": {
+      "icon": "terrain_bonus/128/seals.png",
+      "bonus": { "food": 2, "happiness": -0.25 },
+      "unworkedBonus": { "happiness": 0.25 },
+      "terrain": ["frozen"],
+      "abundancy": 2,
+      "desc": "Rookeries of blubber-rich pinnipeds haul out on the ice. Harvest them for food, or leave the colonies in peace."
+    },
+    "Whales": {
+      "icon": "terrain_bonus/128/whales.png",
+      "bonus": { "food": 2, "happiness": -0.25 },
+      "unworkedBonus": { "happiness": 0.25 },
+      "terrain": ["sea"],
+      "other": [ "deep" ],
+      "abundancy": 1,
+      "desc": "Vast migratory leviathans of the open ocean. A rich food harvest, but their loss weighs on the colonists."
+    },
+    "Old Growth Forest": {
+      "icon": "terrain_bonus/128/old_growth_forest.png",
+      "bonus": { "material": 2, "happiness": -0.25 },
+      "unworkedBonus": { "happiness": 0.25 },
+      "terrain": ["forest","mountain-low"],
+      "abundancy": 2,
+      "desc": "Ancient, towering stands untouched for millennia. Fell them for timber, or preserve them as a cherished wild."
+    },
+    "Coral Reefs": {
+      "icon": "terrain_bonus/128/coral_reefs.png",
+      "bonus": { "food": 2,"wealth": 4, "happiness": -0.25 },
+      "unworkedBonus": { "happiness": 0.25 },
+      "terrain": ["sea"],
+      "other": [ "shallow" ],
+      "abundancy": 2,
+      "desc": "Living reefs teeming with color in the shallows. Beloved while pristine; working the waters bleaches them."
+    },
+    "Rookery": {
+      "icon": "terrain_bonus/128/rookery.png",
+      "bonus": { "happiness": 0.25 },
+      "terrain": ["frozen"],
+      "abundancy": 2,
+      "desc": "Teeming cliffside colonies of native seabirds whose seasonal spectacle lifts the spirits of nearby settlers."
     }
   },
   // ---- Overlay colors (HSL: h 0-360, s/l 0-1). Consumed by draw_map.cjs when
