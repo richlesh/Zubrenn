@@ -953,7 +953,7 @@
     // Whether a unit of `unitType` may be stationed/deployed at `colony`, per the
     // data-driven units[unitType].station capability tag. No station tag means
     // the unit may be stationed in any colony (infantry, tank). A tagged unit
-    // (fighter -> airbase, bomber -> airport, submarine/carrier -> seaport)
+    // (fighter -> airbase, bomber -> airport, escort/carrier -> seaport)
     // requires the colony to provide that facility.
     function colonyCanStation(colony, unitType) {
       if (!colony) return false;
@@ -966,7 +966,7 @@
     // Movement/domain class of a unit type, derived from its station tag:
     //   land  (no station): infantry, tank    -- can occupy/capture a colony
     //   air   (airbase/airport): fighter, bomber
-    //   sea   (seaport): submarine, carrier
+    //   sea   (seaport): escort, carrier
     function unitClass(type) {
       const e = (CONFIG && CONFIG.units && CONFIG.units[type]) || null;
       const s = e && e.station;
@@ -990,6 +990,28 @@
       if (!u) return 0;
       const full = unitFullStrength(u) || 1;
       return unitRatedDefense(u.type) * (Math.max(0, Number(u.strength) || 0) / full);
+    }
+    // A unit's rated HP (health pool) from units[type].strength.hp. Defaults to
+    // a small pool when unspecified so legacy types still fight.
+    function unitRatedHp(type) {
+      const e = (CONFIG && CONFIG.units && CONFIG.units[type]) || {};
+      const h = Number((e.strength || {}).hp);
+      return Number.isFinite(h) && h > 0 ? h : 1;
+    }
+    // Effective HP = rated hp x manpower-fraction (a half-manned unit has half
+    // its hp pool). Used as the health pool in battle.
+    function unitEffHp(u) {
+      if (!u) return 0;
+      const full = unitFullStrength(u) || 1;
+      return unitRatedHp(u.type) * (Math.max(0, Number(u.strength) || 0) / full);
+    }
+    // A defensive building's HP (health pool) from its top-level config `hp`.
+    // Falls back to its bonus.defense if `hp` is unset (legacy).
+    function buildingHp(type) {
+      const bt = buildingType(type) || {};
+      const h = Number(bt.hp);
+      if (Number.isFinite(h) && h > 0) return h;
+      return bonusFlat((bt.bonus || {}).defense);
     }
     // The flat defense a defensive building (e.g. Missile Battery, Shield)
     // contributes to its colony — its config bonus.defense (0 if none).
@@ -1042,8 +1064,8 @@
     // `targetCol`, per the data-driven rules:
     //   land (infantry/tank): always eligible.
     //   air (fighter/bomber): target within the unit type's `range` of staging.
-    //   sea submarine/escort: may attack ONLY sea defenders (a target colony that
-    //     has a stationed submarine/escort or carrier to fight); within carrier-
+    //   sea escort: may attack ONLY sea defenders (a target colony that
+    //     has a stationed escort or carrier to fight); within carrier-
     //     style sea reach (its own range) of the target's nearest coast.
     //   sea carrier: target within carrier `range` of its nearest coast, and that
     //     coast reachable by sea from the staging colony's port.
@@ -1067,8 +1089,8 @@
       if (!colonyHasSeaport(stagingCol)) return false;
       const seaOk = (x, y) => (terrainAt(x, y) === 1);
       if (!_pathExists(stagingCol, { x: sea.x, y: sea.y }, u.owner, seaOk)) return false;
-      if (u.type === 'submarine') {
-        // Escorts/subs can only engage enemy sea forces (sub/escort or carrier).
+      if (u.type === 'escort') {
+        // Escorts can only engage enemy sea forces (escort or carrier).
         return colonyStationedUnits(targetCol).some((d) => unitClass(d.type) === 'sea');
       }
       return true;                                            // carrier may strike the coastal colony
@@ -11650,15 +11672,17 @@
         b.owner === defenderOwner && !b.inTransit && b.type !== 1 &&
         hexDistance(targetBio.x, targetBio.y, b.x, b.y) <= radius &&
         isBuildingWorked(targetBio, b) && buildingDefense(b.type) > 0);
-      // Combatants fight on the EFFECTIVE-STRENGTH scale (rated x manpower-
-      // fraction), not raw manpower, so "hp" (effective defense) and the damage
-      // dealt (effective attack) share the same 0..rated scale. Defense is full
-      // each battle (no cross-turn tracking): a defense building's hp = its
-      // bonus.defense and it deals no counter-damage. hp0 records the starting
-      // value so surviving units map their remaining fraction back to manpower.
-      const atkC = attackers.map((u) => { const d = unitEffDefense(u) || 0.0001; return { unit: u, hp: d, hp0: d, atk: unitEffAttack(u), building: false }; });
-      const defUnitC = defenderUnits.map((u) => { const d = unitEffDefense(u) || 0.0001; return { unit: u, hp: d, hp0: d, atk: unitEffAttack(u), building: false }; });
-      const defBldgC = defenseBuildings.map((b) => { const d = buildingDefense(b.type); return { building: b, hp: d, hp0: d, atk: 0 }; });
+      // Combatants have HP (health pool), ATK (damage dealt), and DEF (damage
+      // mitigation). Per hit, damage = max(0, attacker.atk x random - defender.def),
+      // subtracted from the defender's HP; a combatant is destroyed at HP <= 0.
+      // UNIT hp/atk/def all scale by manpower fraction (effective values); a
+      // DEFENSE building's hp = its config `hp`, def = bonus.defense, and it deals
+      // no damage back. hp0 records the starting pool so surviving units map their
+      // remaining HP fraction back to manpower. HP/def are full each battle (no
+      // cross-turn tracking).
+      const atkC = attackers.map((u) => { const h = unitEffHp(u) || 0.0001; return { unit: u, hp: h, hp0: h, atk: unitEffAttack(u), def: unitEffDefense(u), building: false }; });
+      const defUnitC = defenderUnits.map((u) => { const h = unitEffHp(u) || 0.0001; return { unit: u, hp: h, hp0: h, atk: unitEffAttack(u), def: unitEffDefense(u), building: false }; });
+      const defBldgC = defenseBuildings.map((b) => { const h = buildingHp(b.type) || 0.0001; return { building: b, hp: h, hp0: h, atk: 0, def: buildingDefense(b.type) }; });
       const defenders = defUnitC.concat(defBldgC);
       const rnd = () => 1 + (Math.random() * 2 - 1) * cfg.randomness; // [1-r, 1+r]
       const report = [];
@@ -11672,11 +11696,11 @@
           const a = A[i % A.length];           // extra attackers pile onto top defenders
           const d = D[i % D.length];
           if (!a || !d || a.hp <= 0 || d.hp <= 0) continue;
-          const dmgToDef = Math.max(0, a.atk * rnd());
-          // Defensive BUILDINGS only absorb damage — they deal none back (per
-          // design: a defense building is purely defensive). Defending UNITS do
-          // counter-attack with their effective attack.
-          const dmgToAtk = d.building ? 0 : Math.max(0, d.atk * rnd());
+          // Damage mitigated by the defender's DEFENSE: a hit must beat the armor
+          // to wound. Attacker -> defender always applies; the defender strikes
+          // back only if it is a UNIT (defensive buildings deal no damage).
+          const dmgToDef = Math.max(0, a.atk * rnd() - d.def);
+          const dmgToAtk = d.building ? 0 : Math.max(0, d.atk * rnd() - a.def);
           d.hp -= dmgToDef;
           a.hp -= dmgToAtk;
         }

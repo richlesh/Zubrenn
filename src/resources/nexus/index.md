@@ -21,7 +21,7 @@ to the right.
 - [Terrain](terrain.md) — the eleven terrain types and what they yield
 - [Terrain Bonus](terrain_bonus.md) — special resource deposits across the land
 - [Buildings](buildings.md) — every structure, its costs, upkeep, and output
+- [Military](military.md) — units, upkeep, colony defenses, and how combat works
 - [Transportation](transportation.md) — roads, rivers, sea, monorail, air, space
 - [Federation](federation.md) — the capital, treasury, taxes, and shared upkeep
 - [Alien Species](aliens.md) — the peoples who contest the continent
-

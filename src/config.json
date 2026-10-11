@@ -238,43 +238,40 @@
     "infantry": { "name": "Infantry", "unitSize": 1000, "speed": 8,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 1, "goods": 10, "energy": 6, "water": 0.1, "wealth": 10 },
-        "strength": { "attack":  1, "defense": 1 }
+        "strength": { "attack":  1, "defense": 1, "hp": 5 }
       },
     // Tank batallion 500 service men, 50 tanks
-    "tank": { "name": "Armored", "unitSize": 500, "speed": 2,
+    "tank": { "name": "Armored", "unitSize": 500, "speed": 4,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 2, "goods": 12, "energy": 2, "water": 0.1, "wealth": 2 },
-        "strength": { "attack":  3, "defense": 3 }
+        "strength": { "attack":  3, "defense": 3, "hp": 15 }
     },
     // Fighter squadron 300 service men, 20 aircraft
-    "fighter": { "name": "Fighter", "unitSize": 300, "speed": 5, "station": "airbase",
+    "fighter": { "name": "Fighter", "unitSize": 300, "speed": 16, "station": "airbase",
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 1, "goods": 20, "energy": 1, "water": 0.1, "wealth": 1 },
-        "strength": { "attack":  3, "defense": 3 },
+        "strength": { "attack":  3, "defense": 3, "hp": 6 },
         "range": 20
     },
     // Bomber squadron 300 service men, 10 bombers
-    "bomber": { "name": "Bomber", "unitSize": 300, "speed": 4, "station": "airport",
+    "bomber": { "name": "Bomber", "unitSize": 300, "speed": 12, "station": "airport",
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 2, "goods": 15, "energy": 2, "water": 0.1, "wealth": 2 },
-        "attack": { "strength":  5 },
-        "strength": { "attack":  5, "defense": 1 },
+        "strength": { "attack":  5, "defense": 1, "hp": 4 },
         "range": 40
     },
     // Single cruiser/destroyer 300 service men, 10 ballistic missiles
-    // Single submarine 150 service men, 10 ballistic missiles
-    // Single supply ship 200 service men
-    // Escort group, 3 cruisers/destroyers, 1 submarine and 1 supply ship
-    "submarine": { "name": "Escort", "unitSize": 1250, "speed": 2, "station": "seaport",
+    // Escort group: cruisers/destroyers, a submarine, and a supply ship.
+    "escort": { "name": "Escort", "unitSize": 1250, "speed": 4, "station": "seaport",
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 1, "goods": 10, "energy": 1, "water": 0.1, "wealth": 1 },
-        "strength": { "attack":  3, "defense": 7 }
+        "strength": { "attack":  4, "defense": 7, "hp": 20 }
     },
     // Single carrier 6000 service men, 100 aircraft = 5 squadrons
-    "carrier": { "name": "Carrier", "unitSize": 6000, "speed": 3, "station": "seaport",
+    "carrier": { "name": "Carrier", "unitSize": 6000, "speed": 6, "station": "seaport",
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 2, "goods": 15, "energy": 2, "water": 0.1, "wealth": 2 },
-        "strength": { "attack":  10, "defense": 3 },
+        "strength": { "attack":  12, "defense": 5, "hp": 25 },
         "range": 30
     }
   },
@@ -802,7 +799,8 @@
       "symbol": "buildings/icons/shield.png",
       "buildCost":   { "energy": 10, "material": 20, "wealth": 10, "water": 0.25, "turns": 3 },
       "costPerYear": { "energy": 0.2, "material": 0, "wealth": 5, "water": 0 },
-      "bonus":       { "defense": "5" },
+      "bonus":       { "defense": "0" },
+      "hp": 10,
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["land"],
@@ -816,12 +814,13 @@
       "symbol": "buildings/icons/shield.png",
       "buildCost":   { "energy": 10, "material": 20, "wealth": 20, "water": 0.25, "turns": 3 },
       "costPerYear": { "energy": 0.4, "material": 0, "wealth": 5, "water": 0 },
-      "bonus":       { "defense": "8" },
+      "bonus":       { "defense": "1" },
+      "hp": 18,
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["land"],
         "population": 6,
-        "upgrades": "missile_battery"
+        "upgrades": "missile battery"
       }
     },
     "shield": {
@@ -831,7 +830,8 @@
       "symbol": "buildings/icons/shield.png",
       "buildCost":   { "energy": 20, "material": 40, "wealth": 30, "water": 0.5, "turns": 5 },
       "costPerYear": { "energy": 10, "material": 0, "wealth": 10, "water": 0 },
-      "bonus":       { "defense": "20" },
+      "bonus":       { "defense": "1" },
+      "hp": 35,
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["land"],
@@ -845,7 +845,8 @@
       "symbol": "buildings/icons/plasma_bubble.png",
       "buildCost":   { "energy": 20, "material": 100, "wealth": 100, "water": 1, "turns": 7 },
       "costPerYear": { "energy": 50, "material": 0, "wealth": 50, "water": 0 },
-      "bonus":       { "defense": "50" },
+      "bonus":       { "defense": "2" },
+      "hp": 80,
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["land"],
@@ -1591,6 +1592,13 @@
   "removeImprovementCost": { "energy": 5, "food": 2, "turns": 2 },
 
   // Combat / strike-force tuning (attack system).
+  //   Each combatant has HP (a health pool), ATTACK (damage dealt), and DEFENSE
+  //   (damage mitigation). Damage per hit = max(0, attacker.attack x random -
+  //   defender.defense); a combatant is destroyed when its HP reaches 0. For a
+  //   UNIT, attack/defense/hp are units[type].strength.{attack,defense,hp},
+  //   scaled by its manpower fraction (current/unitSize). For a DEFENSE building,
+  //   hp is buildingTypes[x].hp and its mitigation is bonus.defense (buildings
+  //   deal no damage back). HP/defense reset to full each turn.
   //   randomness   - each combatant's effective strength is multiplied by a
   //                  random factor in [1-randomness, 1+randomness] every round
   //                  (0 = deterministic, 0.3 = +/-30%).

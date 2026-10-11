@@ -174,31 +174,3 @@ The Spaceport opens the **space transport network** — the only link with no li
 <span class="float-right">![drone_base](../buildings/drone_base.png)</span>
 
 The Drone Base is a self‑contained forward reconnaissance outpost that can be placed on almost any explored cell, even far outside a colony's borders, peeling back the fog of war over a wide area and giving real‑time intelligence on neighboring colonies. Powered by its own solar panels and linked wirelessly to the nearest colony, it is funded — in both construction and upkeep — by the Federation rather than any single colony. Deployment relies on route planning: the base travels overland from the nearest colony, so rougher, farther sites take longer to come online, with roads and monorails speeding the journey; it can cross shallow sea only when a Dock is present. It produces nothing and stores nothing — its sole purpose is sight.
-
-### Defensive Systems
-
-Defensive systems protect a colony from enemy strike forces. Each adds its **defense strength** to the colony's total (all of a colony's defenses and stationed units sum together), and that strength is **purely defensive** — it absorbs an attacker's blows but deals no damage back. When a defensive system's strength is beaten down to zero in battle it is destroyed and removed; it is restored to full strength each turn, so a colony that survives an assault stands ready again next year. All require a **Factory** first and may be built on any land within a colony's control.
-
-#### Missile Battery
-
-<span class="float-right">![missile_battery](../buildings/missile_battery.png)</span>
-
-The Missile Battery is the entry‑level colony defense — racks of guided interceptors that pepper an incoming strike force. Cheap and quick to raise with light upkeep, it needs only a modest colony population to field. It contributes a small amount of defense strength, enough to blunt a light raid or to buy time while heavier defenses or a relief force are brought up.
-
-#### Laser Battery
-
-<span class="float-right">![laser_battery](../buildings/laser_battery.png)</span>
-
-The Laser Battery trades missiles for directed‑energy weapons — banks of high‑powered lasers that burn through attackers at the speed of light. A little pricier than the Missile Battery and hungrier for power, and requiring a somewhat larger colony, it returns noticeably more defense strength. It is the natural step up for a colony expecting more than a token assault.
-
-#### Electro-Magnetic Shield
-
-<span class="float-right">![shield](../buildings/shield.png)</span>
-
-The Electro‑Magnetic Shield throws a crackling energy barrier over the colony, soaking up tremendous punishment before it fails. A major build with a heavy, continuous power draw and a sizable population requirement, it contributes a large block of defense strength — far more than the gun batteries — making a shielded colony a hard target that an attacker must grind down before anything behind it can be touched.
-
-#### Plasma Bubble
-
-<span class="float-right">![plasma_bubble](../buildings/plasma_bubble.png)</span>
-
-The Plasma Bubble is the ultimate colony defense — a seething dome of contained plasma that all but encases the settlement. It is built as an **upgrade of an existing Electro‑Magnetic Shield**, raised in its place, and demands a large, mature colony and a steep, ongoing investment of power and wealth to sustain. In return it contributes an enormous block of defense strength, enough to turn back all but the most overwhelming strike force. For a frontier capital or a prized industrial world, the Plasma Bubble is the last word in protection.

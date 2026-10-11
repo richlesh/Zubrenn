@@ -174,5 +174,5 @@ scaffolding for a future combat system and are not yet read by the code.
 | Tank       | —    | 2   | 2   | 2   | 2   | 0.1 |
 | Fighter    | —    | 1   | 1   | 1   | 1   | 0.1 |
 | Bomber     | —    | 2   | 2   | 2   | 2   | 0.1 |
-| Submarine  | —    | 1   | 1   | 1   | 1   | 0.1 |
+| Escort     | —    | 1   | 1   | 1   | 1   | 0.1 |
 | Carrier    | —    | 2   | 2   | 2   | 2   | 0.1 |
