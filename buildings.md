@@ -160,36 +160,3 @@ The Desalination Plant turns the limitless sea into drinkable water, built on th
 
 The Spaceport opens the **space transport network** — the only link with no limit on distance at all. Any two of your colonies that each raise a Spaceport are connected and share resources no matter how far apart they lie or what terrain divides them. It is a late‑game capstone that requires an **Air Field** first and may be built only in a warm, tropical climate. A major build with a heavy energy appetite to keep its launch systems running, it returns a little wealth and lifts morale — but its true value is tying the most distant colonies directly into the heart of your civilization.
 
-<img align="right" width="128" src="src/resources/buildings/128/drone_base.png">
-
-#### Drone Base
-
-The Drone Base is a self‑contained forward reconnaissance outpost that can be placed on almost any explored cell, even far outside a colony's borders, peeling back the fog of war over a wide area and giving real‑time intelligence on neighboring colonies. Powered by its own solar panels and linked wirelessly to the nearest colony, it is funded — in both construction and upkeep — by the Federation rather than any single colony. Deployment relies on route planning: the base travels overland from the nearest colony, so rougher, farther sites take longer to come online, with roads and monorails speeding the journey; it can cross shallow sea only when a Dock is present. It produces nothing and stores nothing — its sole purpose is sight.
-
-### Defensive Systems
-
-Defensive systems protect a colony from enemy strike forces. Each adds its **defense strength** to the colony's total (all of a colony's defenses and stationed units sum together), and that strength is **purely defensive** — it absorbs an attacker's blows but deals no damage back. When a defensive system's strength is beaten down to zero in battle it is destroyed and removed; it is restored to full strength each turn, so a colony that survives an assault stands ready again next year. All require a **Factory** first and may be built on any land within a colony's control.
-
-<img align="right" width="128" src="src/resources/buildings/128/missile_battery.png">
-
-#### Missile Battery
-
-The Missile Battery is the entry‑level colony defense — racks of guided interceptors that pepper an incoming strike force. Cheap and quick to raise with light upkeep, it needs only a modest colony population to field. It contributes a small amount of defense strength, enough to blunt a light raid or to buy time while heavier defenses or a relief force are brought up.
-
-<img align="right" width="128" src="src/resources/buildings/128/laser_battery.png">
-
-#### Laser Battery
-
-The Laser Battery trades missiles for directed‑energy weapons — banks of high‑powered lasers that burn through attackers at the speed of light. A little pricier than the Missile Battery and hungrier for power, and requiring a somewhat larger colony, it returns noticeably more defense strength. It is the natural step up for a colony expecting more than a token assault.
-
-<img align="right" width="128" src="src/resources/buildings/128/shield.png">
-
-#### Electro-Magnetic Shield
-
-The Electro‑Magnetic Shield throws a crackling energy barrier over the colony, soaking up tremendous punishment before it fails. A major build with a heavy, continuous power draw and a sizable population requirement, it contributes a large block of defense strength — far more than the gun batteries — making a shielded colony a hard target that an attacker must grind down before anything behind it can be touched.
-
-<img align="right" width="128" src="src/resources/buildings/128/plasma_bubble.png">
-
-#### Plasma Bubble
-
-The Plasma Bubble is the ultimate colony defense — a seething dome of contained plasma that all but encases the settlement. It is built as an **upgrade of an existing Electro‑Magnetic Shield**, raised in its place, and demands a large, mature colony and a steep, ongoing investment of power and wealth to sustain. In return it contributes an enormous block of defense strength, enough to turn back all but the most overwhelming strike force. For a frontier capital or a prized industrial world, the Plasma Bubble is the last word in protection.

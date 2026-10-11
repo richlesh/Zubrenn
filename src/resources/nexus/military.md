@@ -139,6 +139,14 @@ The Electro‑Magnetic Shield throws a crackling energy barrier over the colony,
 
 The Plasma Bubble is the ultimate colony defense — a seething dome of contained plasma that all but encases the settlement. It is built as an **upgrade of an existing Electro‑Magnetic Shield**, raised in its place, and demands a large, mature colony and a steep, ongoing investment of power and wealth to sustain. In return it contributes an enormous block of defense strength, enough to turn back all but the most overwhelming strike force. For a frontier capital or a prized industrial world, the Plasma Bubble is the last word in protection.
 
+### Intelligence Gathering
+
+#### Drone Base
+
+<span class="float-right">![drone_base](../buildings/drone_base.png)</span>
+
+The Drone Base is a self‑contained forward reconnaissance outpost that can be placed on almost any explored cell, even far outside a colony's borders, peeling back the fog of war over a wide area and giving real‑time intelligence on neighboring colonies. Powered by its own solar panels and linked wirelessly to the nearest colony, it is funded — in both construction and upkeep — by the Federation rather than any single colony. Deployment relies on route planning: the base travels overland from the nearest colony, so rougher, farther sites take longer to come online, with roads and monorails speeding the journey; it can cross shallow sea only when a Dock is present. It produces nothing and stores nothing — its sole purpose is sight.
+
 ### How Combat Works
 
 Combat happens when you launch a **strike force** against an enemy colony.

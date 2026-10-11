@@ -168,9 +168,3 @@ The Desalination Plant turns the limitless sea into drinkable water, built on th
 <span class="float-right">![spaceport](../buildings/spaceport.png)</span>
 
 The Spaceport opens the **space transport network** — the only link with no limit on distance at all. Any two of your colonies that each raise a Spaceport are connected and share resources no matter how far apart they lie or what terrain divides them. It is a late‑game capstone that requires an **Air Field** first and may be built only in a warm, tropical climate. A major build with a heavy energy appetite to keep its launch systems running, it returns a little wealth and lifts morale — but its true value is tying the most distant colonies directly into the heart of your civilization.
-
-#### Drone Base
-
-<span class="float-right">![drone_base](../buildings/drone_base.png)</span>
-
-The Drone Base is a self‑contained forward reconnaissance outpost that can be placed on almost any explored cell, even far outside a colony's borders, peeling back the fog of war over a wide area and giving real‑time intelligence on neighboring colonies. Powered by its own solar panels and linked wirelessly to the nearest colony, it is funded — in both construction and upkeep — by the Federation rather than any single colony. Deployment relies on route planning: the base travels overland from the nearest colony, so rougher, farther sites take longer to come online, with roads and monorails speeding the journey; it can cross shallow sea only when a Dock is present. It produces nothing and stores nothing — its sole purpose is sight.

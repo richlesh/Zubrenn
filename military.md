@@ -159,6 +159,14 @@ return it has an enormous HP pool and the best mitigation of any system, enough
 to turn back all but the most overwhelming strike force. For a frontier capital
 or a prized industrial world, the Plasma Bubble is the last word in protection.
 
+<img align="right" width="128" src="src/resources/buildings/128/drone_base.png">
+
+### Intelligence Gathering
+
+#### Drone Base
+
+The Drone Base is a self‑contained forward reconnaissance outpost that can be placed on almost any explored cell, even far outside a colony's borders, peeling back the fog of war over a wide area and giving real‑time intelligence on neighboring colonies. Powered by its own solar panels and linked wirelessly to the nearest colony, it is funded — in both construction and upkeep — by the Federation rather than any single colony. Deployment relies on route planning: the base travels overland from the nearest colony, so rougher, farther sites take longer to come online, with roads and monorails speeding the journey; it can cross shallow sea only when a Dock is present. It produces nothing and stores nothing — its sole purpose is sight.
+
 ### How Combat Works
 
 Combat happens when you launch a **strike force** against an enemy colony.
