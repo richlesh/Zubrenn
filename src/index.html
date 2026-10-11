@@ -2530,6 +2530,16 @@
       const s = e && Number(e.speed);
       return Number.isFinite(s) && s > 0 ? s : 1;
     }
+    // Maximum strength of a unit of `type` — the per-type cap a recruiting
+    // building fills a slot's unit up to. Read from config units[type].unitSize
+    // (e.g. infantry 1000, tank 500). Returns Infinity (uncapped) if the type or
+    // its unitSize is missing/invalid.
+    function unitMaxStrength(type) {
+      const uc = (CONFIG && CONFIG.units) || {};
+      const e = uc[type];
+      const n = e && Number(e.unitSize);
+      return Number.isFinite(n) && n > 0 ? n : Infinity;
+    }
     // Travel time in turns for a mover: ceil(shortest-path movement cost / speed),
     // minimum 1 turn.
     function travelTurnsForSpeed(pathCost, speed) {
@@ -3078,7 +3088,7 @@
 
       // Infantry recruitment: after the economy has settled each colony's
       // population for the turn, every worked Barracks pulls up to its
-      // configured recruitRate colonists (capped at battalionCap) out of its
+      // configured recruitRate colonists (capped at each unit type's unitSize) out of its
       // colony's population and into a battalion stationed at the barracks.
       // Skips in-transit colonies and any the pipeline just disbanded.
       for (const col of colonies) {
@@ -3985,17 +3995,22 @@
       return col.worked && col.worked.includes(cellKey(b.x, b.y));
     }
 
-    // --- Infantry recruitment --------------------------------------------------
-    // Each worked Barracks supports exactly ONE battalion unit stationed at it.
-    // The unit is a named military unit tracked in gameState.units; the barracks
-    // links to it via b.unitId. Each turn the barracks recruits colonists from
-    // its colony's population into that unit, limited by:
-    //   - the building's configured recruitRate (per turn),
-    //   - the building's battalionCap (max unit strength),
+    // --- Military recruitment --------------------------------------------------
+    // A recruiting building (Barracks, Army Base, ...) fields a data-driven set
+    // of unit SLOTS declared by its config `units` map, e.g. the Barracks has
+    // { "infantry": 1 } (one infantry) and the Army Base { "infantry": 3,
+    // "tank": 1 } (three infantry + one tank). Each slot holds exactly one
+    // named military unit tracked in gameState.units; the building links to its
+    // slot units via the b.unitIds array (one id per slot, in slot order).
+    // Each turn the building recruits colonists from its colony's population
+    // into each slot's unit, limited by:
+    //   - the building's configured recruitRate (per turn, PER unit),
+    //   - the slot unit type's units[type].unitSize (max strength, PER unit),
     //   - the colony's population floor recruitMinColonyPopulation (default
-    //     2000): recruitment may not drop the colony below this floor.
-    // Recruitment only happens while the unit is HOME (stationed at the
-    // barracks' colony, not in transit).
+    //     2000): recruitment may not drop the colony below this floor (shared
+    //     across all of the colony's slots).
+    // A slot only recruits while its unit is HOME (stationed at the building's
+    // colony, not in transit).
 
     // The ordinal suffix for a 1-based number: 1 -> "st", 2 -> "nd", 3 -> "rd".
     function ordinalSuffix(n) {
@@ -4017,7 +4032,7 @@
     }
     // Create a new unit of `type` for `owner`, stationed at colony `col`, and
     // register it. The name is assigned by global creation order. `fullStrength`
-    // is the unit's maximum strength (its home barracks' battalionCap); `col` is
+    // is the unit's maximum strength (its unit type's units[type].unitSize); `col` is
     // recorded as the unit's HOME base (origin), where it rebuilds.
     function createUnit(type, owner, col, fullStrength) {
       if (!gameState.units) gameState.units = [];
@@ -4041,44 +4056,76 @@
       return u;
     }
 
-    // Recruit into a single Barracks `b` within colony `col`. Returns colonists
-    // recruited this turn (0 if none).
+    // Expand a building type's `units` map into an ordered list of per-slot unit
+    // TYPES. Each key is a unit-type name and its value is the count of slots of
+    // that type the building fields: e.g. { "infantry": 3, "tank": 1 } -> three
+    // "infantry" slots then one "tank" slot. Only types that exist in CONFIG.units
+    // (and a positive count) are included. Returns [] for non-military buildings.
+    function buildingUnitSlots(type) {
+      const bt = buildingType(type) || {};
+      const map = bt.units;
+      if (!map || typeof map !== 'object') return [];
+      const slots = [];
+      for (const t of Object.keys(map)) {
+        const n = Math.max(0, Math.floor(Number(map[t]) || 0));
+        if (n <= 0) continue;
+        if (!(CONFIG && CONFIG.units && CONFIG.units[t])) continue; // unknown unit type
+        for (let i = 0; i < n; i++) slots.push(t);
+      }
+      return slots;
+    }
+
+    // Recruit into every slot of a recruiting building `b` within colony `col`.
+    // Each declared slot (from the building's `units` map) holds one unit of the
+    // slot's type; b.unitIds[slotIndex] links to that unit. Returns colonists
+    // recruited this turn across all of the building's slots (0 if none).
     function recruitBattalion(col, b) {
       const bt = buildingType(b.type) || {};
       const rate = Number(bt.recruitRate) || 0;
       if (rate <= 0) return 0;                       // not a recruiting building
-      if (!isBuildingWorked(col, b)) return 0;       // idle barracks don't recruit
-      // Resolve (or lazily create) this barracks' single stationed unit.
-      let unit = findUnitById(b.unitId);
-      if (unit && unit.owner !== col.owner) unit = null; // stale link
-      if (unit && unit.inTransit) return 0;          // deployed units don't recruit
-      // A unit that has moved to a DIFFERENT colony no longer belongs to this
-      // barracks; recruiting resumes only if it is back at this colony's cell.
-      if (unit && (unit.x !== col.x || unit.y !== col.y)) return 0;
-      const cap = Number.isFinite(Number(bt.battalionCap)) ? Number(bt.battalionCap) : Infinity;
-      const current = unit ? (Number(unit.strength) || 0) : 0;
-      const room = cap - current;
-      if (room <= 0) return 0;                       // unit already at cap
-      const owned = ensureOwned(col);
-      const pop = Math.max(0, Math.floor(owned.population || 0));
+      if (!isBuildingWorked(col, b)) return 0;       // idle buildings don't recruit
+      const slots = buildingUnitSlots(b.type);
+      if (!slots.length) return 0;                   // no unit slots declared
       const floor = (CONFIG && CONFIG.recruitMinColonyPopulation != null) ? CONFIG.recruitMinColonyPopulation : 2000;
-      const available = Math.max(0, pop - floor);    // may not recruit below the floor
-      const take = Math.min(rate, room, available);
-      if (take <= 0) return 0;
-      // Create the unit on first successful recruit so empty barracks don't
-      // clutter the roster. Its full strength is this barracks' battalion cap.
-      if (!unit) { unit = createUnit("infantry", col.owner, col, cap); b.unitId = unit.id; }
-      // Keep fullStrength in sync with the barracks cap (config may change).
-      if (Number.isFinite(cap)) unit.fullStrength = cap;
-      owned.population -= take;                       // deduct from the colony
-      col.population = owned.population;              // keep legacy mirror in sync
-      unit.strength = current + take;                // add to the stationed unit
-      // Keep the home unit's location pinned to its colony.
-      if (!unit.inTransit) { unit.x = col.x; unit.y = col.y; }
-      return take;
+      if (!Array.isArray(b.unitIds)) b.unitIds = [];
+      let total = 0;
+      for (let i = 0; i < slots.length; i++) {
+        const slotType = slots[i];
+        // Each slot's unit caps at its unit type's unitSize (e.g. infantry 1000,
+        // tank 500) — the data-driven max strength per unit type.
+        const cap = unitMaxStrength(slotType);
+        // Resolve (or lazily create) this slot's stationed unit.
+        let unit = findUnitById(b.unitIds[i]);
+        if (unit && unit.owner !== col.owner) unit = null;          // stale link
+        if (unit && unit.type !== slotType) unit = null;            // slot retyped (config change)
+        if (!unit) b.unitIds[i] = null;
+        if (unit && unit.inTransit) continue;                       // deployed units don't recruit
+        // A unit that has moved to a DIFFERENT colony no longer belongs to this
+        // slot; recruiting resumes only if it is back at this colony's cell.
+        if (unit && (unit.x !== col.x || unit.y !== col.y)) continue;
+        const current = unit ? (Number(unit.strength) || 0) : 0;
+        const room = cap - current;
+        if (room <= 0) continue;                                    // slot unit already at cap
+        const owned = ensureOwned(col);
+        const pop = Math.max(0, Math.floor(owned.population || 0));
+        const available = Math.max(0, pop - floor);                 // shared colony floor
+        const take = Math.min(rate, room, available);
+        if (take <= 0) break;                                       // no colonists left to give any slot
+        // Create the unit on first successful recruit so empty slots don't
+        // clutter the roster. Its full strength is its unit type's unitSize.
+        if (!unit) { unit = createUnit(slotType, col.owner, col, cap); b.unitIds[i] = unit.id; }
+        // Keep fullStrength in sync with the unit type's unitSize (config may change).
+        if (Number.isFinite(cap)) unit.fullStrength = cap;
+        owned.population -= take;                                    // deduct from the colony
+        col.population = owned.population;                           // keep legacy mirror in sync
+        unit.strength = current + take;                             // add to the slot unit
+        if (!unit.inTransit) { unit.x = col.x; unit.y = col.y; }    // pin home unit to its colony
+        total += take;
+      }
+      return total;
     }
 
-    // Run recruitment for every worked Barracks in a colony. Returns total.
+    // Run recruitment for every worked recruiting building in a colony. Returns total.
     function recruitColonyBattalions(col) {
       let total = 0;
       for (const b of colonyBuildings(col)) {
@@ -4150,12 +4197,11 @@
     }
 
     // --- Unit strength / home / recall / destruction --------------------------
-    // A unit's maximum strength (its home barracks' battalion cap). Falls back to
-    // the config battalionCap for a barracks if the unit predates fullStrength.
+    // A unit's maximum strength (its unit type's unitSize). Falls back to the
+    // config units[type].unitSize when the unit predates the stored fullStrength.
     function unitFullStrength(u) {
       if (u && Number(u.fullStrength) > 0) return Number(u.fullStrength);
-      const bt = buildingType("barracks") || buildingType(7) || {};
-      const cap = Number(bt.battalionCap);
+      const cap = u ? unitMaxStrength(u.type) : Infinity;
       return Number.isFinite(cap) && cap > 0 ? cap : 0;
     }
     // Whether a unit is at full strength (ready to transfer or attack). A unit
@@ -4195,7 +4241,10 @@
       if (!u) return;
       gameState.units = (gameState.units || []).filter((x) => x.id !== u.id);
       for (const b of (gameState.buildings || [])) {
-        if (b.unitId === u.id) b.unitId = null;
+        if (Array.isArray(b.unitIds)) {
+          for (let i = 0; i < b.unitIds.length; i++) if (b.unitIds[i] === u.id) b.unitIds[i] = null;
+        }
+        if (b.unitId === u.id) b.unitId = null; // legacy single-unit link
       }
     }
     // Drop any units whose strength has fallen to 0 (destroyed). Returns the
@@ -9961,18 +10010,26 @@
         if (bo.wealth) parts.push(`${ab("wealth", "¤")}:${sign(bo.wealth)}${nf(bo.wealth, 0)}`);
         if (bo.growth) parts.push(`${ab("population", "P")}:${sign(bo.growth * 100)}${nf(bo.growth * 100, 2)}%`);
         if (bo.happiness) parts.push(`${ab("happiness", "H")}:${sign(bo.happiness)}${nf(bo.happiness, 0)}`);
-        // Recruiting buildings (Barracks) show their stationed unit's name and
-        // strength/cap, e.g. "1st Infantry: 600/1000" (or "(deployed)" when the
-        // unit is away in transit).
+        // Recruiting buildings (Barracks, Army Base) show each declared unit
+        // SLOT: a filled slot reads "1st: 600/1000" (its type is in the Type
+        // column; "(deployed)" when away in transit); an empty slot shows the
+        // slot's unit type and zero strength, e.g. "Infantry: 0/1000".
         const _bt = buildingType(b.type) || {};
         if ((Number(_bt.recruitRate) || 0) > 0) {
-          const _cap = Number.isFinite(Number(_bt.battalionCap)) ? Number(_bt.battalionCap) : null;
-          const _unit = findUnitById(b.unitId);
-          if (_unit) {
-            const _str = `${nf(Number(_unit.strength) || 0, 0)}${_cap != null ? `/${nf(_cap, 0)}` : ""}`;
-            parts.push(`${_unit.name}: ${_str}${_unit.inTransit ? " (deployed)" : ""}`);
-          } else {
-            parts.push(`Battalion: 0${_cap != null ? `/${nf(_cap, 0)}` : ""}`);
+          const _slots = buildingUnitSlots(b.type);
+          const _ids = Array.isArray(b.unitIds) ? b.unitIds : [];
+          const _label = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : "Battalion");
+          // Each slot caps at its unit type's unitSize (per-type max strength).
+          const _capStrOf = (t) => { const c = unitMaxStrength(t); return Number.isFinite(c) ? `/${nf(c, 0)}` : ""; };
+          for (let _i = 0; _i < _slots.length; _i++) {
+            const _capStr = _capStrOf(_slots[_i]);
+            const _unit = findUnitById(_ids[_i]);
+            if (_unit) {
+              const _str = `${nf(Number(_unit.strength) || 0, 0)}${_capStr}`;
+              parts.push(`${_unit.name}: ${_str}${_unit.inTransit ? " (deployed)" : ""}`);
+            } else {
+              parts.push(`${_label(_slots[_i])}: 0${_capStr}`);
+            }
           }
         }
         const worked = isBuildingWorked(col, b);
@@ -11199,6 +11256,14 @@
       };
       if (gameState.players && gameState.players[0] && gameState.players[0].kind === 'human') {
         gameState.players[0].name = gameState.playerName;
+      }
+      // Migrate legacy single-unit barracks links (b.unitId) to the slot-based
+      // b.unitIds array used by the data-driven `units` recruitment model.
+      for (const b of (gameState.buildings || [])) {
+        if (!Array.isArray(b.unitIds)) {
+          b.unitIds = (b.unitId != null) ? [b.unitId] : [];
+        }
+        if ('unitId' in b) delete b.unitId;
       }
       // Assign/repair stable colony founding sequences (for capital + ordering).
       ensureColonySeqs();

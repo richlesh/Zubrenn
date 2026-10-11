@@ -1,7 +1,7 @@
 {
   // When true, after creating a new map show two debug dialogs: a terrain-type
   // breakdown and a terrain-bonus placement count. Set false to disable.
-  "debug": false,
+  "debug": true,
 
   // "terrain" restrictions on placement can be a list of specific terrains:
   //    "sea", "grassland", "hills", "forest", "jungle", "desert", "mountain-low",
@@ -192,8 +192,11 @@
   // 1 metric ton = 1,000 × 2.20462 lb ≈ 2,204.62 lb
 
   // Per-UNIT definitions. Each entry has a movement "speed", an optional
-  // "unitSize" (the population required for 1 unit),
-  // a one-time "buildCost" map, and a yearly "costPerYear" map.
+  // "unitSize", a one-time "buildCost" map, and a yearly "costPerYear" map.
+  // "unitSize" is the population per unit: for "population" it is the divisor for
+  // per-worker consumption; for a military unit type it is that unit's MAXIMUM
+  // strength (the cap a recruiting building fills a slot of this type up to,
+  // e.g. infantry 1000, tank 500).
   // The "speed" key determins travel time for a moving unit
   // travel time = ceil(shortest-path movement cost / speed) turns.
   // Higher speed = faster.
@@ -219,36 +222,36 @@
     //    wealth: $80M / $10 / 1M = ¤8 credits units
     
     // population costPerYear is per "unitSize/worker" population
-    "population": { "unitSize": 1000, "speed": 5,
+    "population": { "name": "Population", "unitSize": 1000, "speed": 5,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 1, "goods": 10, "energy": 4.5, "water": 0.1, "wealth": 8 }
     },
-    "infantry": { "unitSize": 1000, "speed": 8,
+    "infantry": { "name": "Infantry", "unitSize": 1000, "speed": 8,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 1, "goods": 10, "energy": 6, "water": 0.1, "wealth": 10 }
     },
     // Tank batallion 500 service men, 50 tanks
-    "tank": { "unitSize": 500, "speed": 2,
+    "tank": { "name": "Armored", "unitSize": 500, "speed": 2,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 2, "goods": 12, "energy": 2, "water": 0.1, "wealth": 2 }
     },
     // Fighter squadron 300 service men, 20 aircraft
-    "fighter": { "unitSize": 300, "speed": 5,
+    "fighter": { "name": "Fighter", "unitSize": 300, "speed": 5,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 1, "goods": 20, "energy": 1, "water": 0.1, "wealth": 1 }
     },
     // Bomber squadron 300 service men, 10 bombers
-    "bomber": { "unitSize": 300, "speed": 4,
+    "bomber": { "name": "Bomber", "unitSize": 300, "speed": 4,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 2, "goods": 15, "energy": 2, "water": 0.1, "wealth": 2 }
     },
     // Single submarine 150 service men, 10 ballistic missiles
-    "submarine": { "unitSize": 150, "speed": 2,
+    "submarine": { "name": "Escort", "unitSize": 1000, "speed": 2,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 1, "goods": 10, "energy": 1, "water": 0.1, "wealth": 1 }
     },
     // Single carrier 6000 service men, 100 aircraft = 5 squadrons
-    "carrier": { "unitSize": 6000, "speed": 3,
+    "carrier": { "name": "Carrier", "unitSize": 6000, "speed": 3,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 2, "goods": 15, "energy": 2, "water": 0.1, "wealth": 2 }
     }
@@ -291,6 +294,17 @@
   // any two of a player's colonies that both have a Spaceport are connected
   // regardless of distance. A building only contributes production/upkeep/storage
   // while its cell is worked.
+  // Military buildings (e.g. Barracks, Army Base) field units via two keys:
+  //   units        : map of unit-type -> count of unit SLOTS the building fields,
+  //                  e.g. { "infantry": 1 } (Barracks) or { "infantry": 3,
+  //                  "tank": 1 } (Army Base). Unit types are keys of the
+  //                  top-level "units" map. Each slot holds one stationed unit.
+  //   recruitRate  : colonists recruited per turn, PER unit slot, while worked.
+  // Each slot's unit caps at its unit TYPE's units[type].unitSize (per-type max
+  // strength, e.g. infantry 1000, tank 500).
+  // Recruitment pulls from the colony's population down to the shared
+  // recruitMinColonyPopulation floor and only tops up a slot whose unit is home
+  // (not in transit).
   "buildingTypes": {
     "biodome": {
       "code": 1,
@@ -330,11 +344,11 @@
       "symbol": "buildings/icons/bolt.png",
       "buildCost": { "energy": 50, "material": 20, "wealth": 28, "water": 0.25, "turns": 1 },
       "costPerYear": { "wealth": 1 },
-      "bonus": { "energy": 100 },
-      "storage": { "energy": 100 },
+      "bonus": { "energy": 200 },
+      "storage": { "energy": 200 },
       "prerequisite": {
         "building": ["biodome"],
-        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands","frozen"]
       }
     },
     // The Solar Farm is an UPGRADE of a Solar Panel (prerequisite.upgrades:
@@ -361,7 +375,7 @@
       "name": "Factory",
       "icon": "buildings/128/factory.png",
       "symbol": "buildings/icons/goods.png",
-      "buildCost": { "energy": 250, "material": 75, "wealth": 150, "water": 3, "turns": 3 },
+      "buildCost": { "energy": 200, "material": 75, "wealth": 150, "water": 3, "turns": 3 },
       "costPerYear": { "energy": 300, "material": 250, "wealth": 15, "water": 1 },
       "bonus": { "goods": 200, "wealth": 25, "happiness": -0.25 },
       "storage": { "energy": 25, "goods": 500, "material": 500 },
@@ -454,15 +468,33 @@
       "name": "Barracks",
       "icon": "buildings/128/barracks.png",
       "symbol": "buildings/icons/shield.png",
-      "buildCost": { "energy": 5, "material": 10, "wealth": 10, "water": 1, "turns": 2 },
+      "buildCost": { "energy": 10, "material": 10, "wealth": 10, "water": 1, "turns": 2 },
       "costPerYear": { "energy": 10, "goods": 5, "wealth": 5 },
       "bonus": { },
       "storage": { "food": 5, "goods": 10 },
+      "units": { "infantry": 1 },
       "recruitRate": 200,
-      "battalionCap": 1000,
       "prerequisite": {
-        "building": ["farm","solar panel","factory"],
+        "building": ["farm","factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
+      }
+    },
+    "army base": {
+      "code": 22,
+      "name": "Army Base",
+      "icon": "buildings/128/army_base.png",
+      "symbol": "buildings/icons/shield.png",
+      "buildCost": { "energy": 30, "material": 30, "wealth": 30, "water": 3, "turns": 5 },
+      "costPerYear": { "energy": 20, "goods": 10, "wealth": 10 },
+      "bonus": { },
+      "storage": { "food": 5, "goods": 10 },
+      "units": { "infantry": 3, "tank": 1 },
+      "recruitRate": 400,
+      "prerequisite": {
+        "building": ["farm","factory"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+        "network":  ["any"],
+        "upgrades": "barracks"
       }
     },
     "granary": {
