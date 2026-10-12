@@ -65,6 +65,14 @@ Morrowback Herds roam the open grasslands and plains, great bovine-like grazers 
 
 The massive, bison-sized beetle *Bugalo zubrennensis* migrates in slow herds across the twilight steppes of the grasslands, hills, and plains. The meat is perfection: buttery, marbled, and objectively tastes like Kobe beef. The problem is the color. The green iridescent carapace pigment bleeds through the muscle, leaving the meat a vivid, unappetizing chartreuse no matter how it is cooked. Colonists will eat it, but chefs hate it. A worked range is a generous source of food and brings a little wealth and cheer besides.
 
+<img align="right" width="128" src="src/resources/terrain_bonus/128/cragwing_flock.png">
+
+#### Cragwing Flock
+
+Cragwing flocks roost on sheer, sun-baked crags — the rocky cliffs of the high mountains and the broken bluffs of the highland hills. These lizards show a vivid colour gradient with altitude: the high-mountain variety is a deep, rusty **red**, while the lowland-hill variant is a brighter **orange**, and locals read a crag's elevation from the hue of its flock. They bask for hours in direct sunlight and will not tolerate forest or shade, so you will never find them beneath the canopy. Thrive in any climate but the polar ice.
+
+Despite the name and their broad, membranous "wings," cragwings cannot truly fly. They are explosive **jumpers**: a startled lizard launches itself nearly three metres straight up, snaps its wings taut, and glides to the next ledge to escape a predator. The trick is costly — their small bodies tire almost instantly, so after one or two good leaps the animal goes stiff and **catatonic**, splayed and helpless on the rock. A persistent hunter simply follows, waits out the second jump, and collects the exhausted quarry by hand. Mind the mouth: a cragwing's teeth are razor-sharp and it will bite to the bone before it tires. The pale meat is the prize — tender, mild, and tasting, unmistakably, of chicken. A worked crag is a dependable, fairly abundant source of food across Zubrenn.
+
 #### Thousandseed Basin
 
 <img align="right" width="128" src="src/resources/terrain_bonus/128/thousandseed_basin.png">
