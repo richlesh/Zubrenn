@@ -22,7 +22,7 @@ their gift.
 
 #### Myco-Tower Grove
 
-<span class="float-right">![myco-tower_grove](../terrain_bonus/myco-tower.png)</span>
+<span class="float-right">![myco-tower_grove](../terrain_bonus/myco-tower_grove.png)</span>
 
 The Myco-Tower Grove rises in the twilight band near the poles, where towering fractal fungi flourish in the long, dim seasons on grassland, hills, and even the edges of the ice, always within reach of water. Their branching, cathedral-like forms are farmed in the half-light, and their spores are threshed and refined into protein and starch. A worked grove is a solid source of food, making the cold frontier far more survivable than it first appears.
 
