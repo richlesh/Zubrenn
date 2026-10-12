@@ -9,6 +9,26 @@ it adds to what that cell provides: extra food, material, energy, wealth, or a
 lift to morale. A few are pristine wonders that must be kept undisturbed to keep
 their gift.
 
+### Strategic Resources
+
+Beyond their raw yields, certain deposits provide a **strategic resource** —
+a special material type (such as *iron*, *stone*, *crystal*, *titanium*, or
+*aluminum*) needed to build the most advanced units, buildings, and transport.
+A strategic resource counts as **available to your whole Federation** as long as
+**any one** colony is *working* a cell that provides it; it does not have to be
+in the colony doing the building. Several different deposits can provide the same
+strategic type (any one of them satisfies the requirement), and a thing that
+needs more than one type needs a worked source of **each**. The table below lists
+what each strategic resource unlocks and which deposits provide it:
+
+| Strategic resource | Provided by | Required for |
+| --- | --- | --- |
+| **Stone** | Fossilized Chitin Reefs, Threadstone Seam | Roads, Monorails |
+| **Iron** | Ferric Strata Veins, Starfall Alloy Crater, Gravalloy Veins, Ironcap Mushrooms | Armored (tank) battalions, Escorts, Carriers |
+| **Crystal** | Kinetite Crystals, Sunshard Flats, Quakecrystal Lodes, Celestite Spires | Monorails; Laser Battery, Electro-Magnetic Shield, Plasma Bubble; Fighters, Bombers, Escorts, Carriers; Spaceport, Satellite Network |
+| **Titanium** | Titanlace Deposit | Fighters, Bombers, Carriers; Spaceport, Satellite Network |
+| **Aluminum** | Bauxite Seam | Monorails, Air Field, Airport, Missile Battery; Spaceport, Satellite Network; Nanofactory |
+
 ### Food
 
 #### Myco-Tower Grove
@@ -103,6 +123,24 @@ Vorndeeps are the vast, migratory leviathans of Zubrenn's open ocean, sounding t
 
 Fingerfruit grow in heavy clusters of sweet, finger-shaped pods high in the jungle canopy, ripening year-round in the tropical warmth. Easy to gather and prized at every table, they feed colonists and brighten their days. A worked grove is a solid source of food and lifts morale besides, a cheerful staple of jungle colonies.
 
+#### Thundergrass Prairie
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/thundergrass_prairie.png">
+
+Thundergrass Prairie rolls across the open grasslands and plains of the temperate and subpolar belts, a grain-analog named for the rushing sound its tall stalks make under the wind. Its defining trait is speed: cut or grazed, the prairie regrows within days, so a single field can be harvested again and again through the long growing season. Hardy and self-seeding, it needs no tending beyond the reaping. A worked prairie is a generous source of food, the breadbasket of any colony that claims the open steppe.
+
+#### Sunpetal Orchards
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/sunpetal_orchards.png">
+
+Sunpetal Orchards grow across warm grasslands and plains, where groves of nectar-fruit trees track the sky and open their broad blossoms at each of Zubrenn's two sunrises. The twin bloom yields a double harvest of sweet, fragrant fruit, and the orchards' flowering has become the centerpiece of local celebration — colonies time their harvest festivals to the petals' opening. A worked orchard is a solid source of food and lifts morale besides, feeding the colony's tables and its spirit alike.
+
+#### Mistvine Terraces
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/mistvine_terraces.png">
+
+Mistvine Terraces cling to the river-cut slopes of hills and low mountains in the warmer latitudes, where generations of cultivation have carved the land into stepped ledges of climbing vine. The vines are water-wise marvels: their leaves condense the valley fog into runnels that trickle down the terraces, watering the crops below and filling the colony's cisterns with the overflow. A worked terrace is a solid source of food and a steady supplement of fresh water, letting slope-side colonies thrive where flat ground is scarce.
+
 ### Material
 
 #### Ferric Strata Veins
@@ -159,6 +197,36 @@ Gravalloy Veins thread through the low and high mountains, carrying an unusually
 
 Titanlace Deposits form only in the high mountains, where rare mineral lattices can be processed into an exceptionally strong structural mesh. Reaching them means braving the planet's most forbidding peaks. A worked deposit is a rich source of material, rewarding high-altitude mining with some of the finest building stock on Zubrenn.
 
+<img align="right" width="128" src="src/resources/terrain_bonus/128/bauxite_seam.png">
+
+#### Bauxite Seam
+
+Bauxite Seams are broad beds of aluminium-rich ore exposed across the hills and the low and high mountains — aluminum is the most abundant metal in Zubrenn's crust, just as on Earth, so the seams are common. Smelted into light, corrosion-resistant metal, their output is the backbone of aircraft, launch vehicles, and orbital works. A worked seam is a rich source of material and, crucially, the Federation's supply of **aluminum** — the strategic resource that unlocks Air Fields, Airports, Missile Batteries, and (with titanium and crystal) the Spaceport and Satellite Network.
+
+#### Ironcap Mushrooms
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/ironcap_mushrooms.png">
+
+Ironcap Mushrooms sprout in the shaded loam of forests and jungles across the tropical and temperate zones, where their roots draw dissolved metals up out of the soil. Over a season the fungi concentrate that metal into dense, dull-grey caps so hard they ring when struck — and so rich that colonists smelt them exactly as they would raw ore. Easy to gather and quick to regrow, an ironcap stand is a convenient alternative to deep mining. A worked patch is a good source of material, letting woodland colonies forge without ever opening a quarry.
+
+#### Saltglass Pans
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/saltglass_pans.png">
+
+Saltglass Pans spread across the baked floors of the deep desert, vast evaporite flats left behind by ancient seas. Beneath the crust lie layered industrial minerals, and within it grow sheets of naturally fused translucent salt — "saltglass" — prized by traders for ornament and precision optics. Harvesting is simple: the sun does the refining, and crews need only cut and haul. A worked pan is a good source of material with a little wealth besides, turning the emptiest wastes into a working quarry and a trade good at once.
+
+#### Quakecrystal Lodes
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/quakecrystal_lodes.png">
+
+Quakecrystal Lodes form deep in the low and high mountains along fault lines, where crystals slowly absorb the strain of shifting rock and lock it away as stored charge. Rare and dangerous to extract — a mishandled crystal can discharge violently — the lodes repay the risk twice over: the mineral itself refines into a superb structural mesh, and the energy bled from it feeds the colony's grid. A worked lode is a rich source of material and a strong source of energy, a demanding prize for a well-prepared mountain colony.
+
+#### Celestite Spires
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/celestite_spires.png">
+
+Celestite Spires rise only from the highest mountain peaks, towering pillars of pale superconductive crystal that gather the charge of passing storms and glow faintly in the thin air. They are among the rarest finds on Zubrenn, reachable only by colonies willing to work the planet's most forbidding heights. Each spire yields three gifts at once: ultra-premium alloy milled from the crystal, raw power channelled from the storms it catches, and a handsome return on the exotic surplus. A worked spire is a strong source of material, energy, and wealth together, a crowning reward for high-altitude mastery.
+
 ### Water
 
 #### Natural Spring
@@ -178,6 +246,18 @@ Glacial Meltwater runs clear and cold off the frozen ice sheets, pooling in dry 
 <img align="right" width="128" src="src/resources/terrain_bonus/128/oasis.png">
 
 An Oasis is a spring-fed pool ringed with greenery, an unexpected reservoir hidden among the dry dunes of the desert. Where water is the scarcest of all resources, an oasis transforms a hostile waste into habitable ground. A worked oasis is a generous source of fresh water, the beating heart of any desert colony.
+
+#### Stormroot Taproots
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/stormroot_taproots.png">
+
+Stormroot Taproots anchor the drier reaches of tropical jungle and wetland, native plants whose immense roots drive far down to tap aquifers no well could reach. During the storm season they pump far more water than the plant can use, and the surplus wells up around their crowns into clear, drinkable pools. For colonies on ground that looks lush but drinks poorly, the stormroots are a hidden reservoir. A worked stand is a steady source of fresh water, drawing the deep aquifer up to the surface where colonists can use it.
+
+#### Verdant Hot Springs
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/verdant_hot_springs.png">
+
+Verdant Hot Springs bubble up among the hills and low mountains, mineral-warmed pools fringed with lush, steam-fed greenery that stays bright even in the cold months. The water is both a dependable supply and a cherished retreat: colonists bathe, gather, and rest at the springs, and the sites become beloved landmarks. Their charm depends on being left pristine — foul the surroundings and the greenery withers. A worked, undisturbed spring is a steady source of fresh water and lifts morale besides, a rare pairing of utility and delight.
 
 ### Energy
 
@@ -210,6 +290,24 @@ Pyrogel Pools lie beneath sealed surface crusts in the warmer wetlands, where na
 <img align="right" width="128" src="src/resources/terrain_bonus/128/aurora_spires.png">
 
 Aurora Spires are conductive mineral towers rising from the frozen polar zones, where they channel powerful atmospheric currents down into fixed collection sites. Born of the same forces that paint the polar skies, they shine with captured charge. A worked spire is a strong source of energy, lighting the colonies that dare to settle the ice.
+
+#### Driftglass Dunes
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/driftglass_dunes.png">
+
+Driftglass Dunes ripple across the open desert, their sands fused by ages of wind and heat into drifting lenses of natural glass. Each curved lens acts as a crude but effective collector, focusing the light of the twin suns onto the dark substrate beneath and driving a steady thermal current that can be tapped at the surface. The dunes shift slowly with the wind, but the effect endures wherever the glass gathers. A worked field is a strong source of energy, turning the desert's merciless glare into usable power.
+
+#### Permafrost Methane Seeps
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/permafrost_methane_seeps.png">
+
+Permafrost Methane Seeps vent from the thawing ground of the subpolar and polar frozen zones, where ancient organic matter locked in the ice releases pockets of gas as the frost retreats. Capped and burned clean, the escaping methane makes a steady, portable fuel — a rare source of warmth and power where little else grows or flows. Careful capture also keeps the gas from venting wastefully into the sky. A worked seep is a strong source of energy, a dependable hearth for colonies that brave the ice.
+
+#### Prismbloom Caldera
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/prismbloom_caldera.png">
+
+A Prismbloom Caldera fills the crater of a dormant mountain volcano in the warmer latitudes, a mineral-warmed lake ringed by bands of radiant, color-shifting flora that thrive on the rising heat. The caldera is a wonder on three counts: its geothermal warmth drives generators, its sheltered shores grow lush with edible blooms, and its shimmering beauty draws pilgrims from across the continent. Such a place must be kept pristine, or the blooms fade and the pilgrims cease to come. A worked, undisturbed caldera is a strong source of energy, a modest source of food, and a lasting lift to morale.
 
 ### Wealth
 
@@ -261,6 +359,12 @@ Gemstones form in colorful crystal pockets throughout the highlands — the hill
 
 Pearls grow in beds of pearl-bearing shellfish nestled in the warm coastal shallows, each a lustrous prize drawn from the seabed. Gathered by divers and traded as a coveted luxury, they bring both profit and prestige. A worked bed is a good source of wealth that also lifts morale, the jewel of any seaside colony.
 
+#### Lumen Coral Shallows
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/lumen_coral_shallows.png">
+
+Lumen Coral Shallows glow in the warm, sheltered seas near shore, where colonies of bioluminescent reef organisms pulse with a steady living light. That glow is more than beauty: the corals' tissues carry a constant electrical charge that can be tapped by submerged collectors, and their shed filaments are spun into a shimmering, highly prized "light-silk" traded across the colonies. Unlike the fragile reefs, these hardy corals endure careful working. A worked shallows is a strong source of energy and a good source of wealth, a glowing dividend from the coastal shelf.
+
 ### Happiness
 
 #### Aurelian Sky Mirrors
@@ -274,12 +378,6 @@ Aurelian Sky Mirrors are shimmering mineral pools scattered rarely across grassl
 <img align="right" width="128" src="src/resources/terrain_bonus/128/chorus_gardens.png">
 
 Chorus Gardens are tracts of sonic-reactive jungle flora engineered to hum in harmony with the frequencies of colonist life. Walking among them is to be serenaded by the land itself, so long as the groves remain pristine. A worked garden lifts morale, filling nearby settlements with living music.
-
-#### Echo Monolith
-
-<img align="right" width="128" src="src/resources/terrain_bonus/128/echo_monolith.png">
-
-An Echo Monolith is an ancient standing stone left on the dry grasslands by a vanished alien race, resonant with cultural and historical significance. Exceptionally rare and sacred, it must be preserved pristine to retain its meaning. A worked, protected monolith greatly lifts morale and brings wealth besides, drawing pilgrims and prosperity alike.
 
 #### Jaba Grove
 
@@ -310,3 +408,58 @@ Coral Reefs blaze with living color in the warm coastal shallows, teeming with s
 <img align="right" width="128" src="src/resources/terrain_bonus/128/rookery.png">
 
 A Rookery is a teeming cliffside colony of native seabirds along the frozen coasts, where countless nesting pairs wheel and cry through the pale polar light. Their seasonal spectacle is a rare joy in the bleak ice, drawing colonists to watch the great gatherings. A worked rookery lifts the colony's morale, a welcome warmth of life amid the cold.
+
+#### Veilsong Lagoon
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/veilsong_lagoon.png">
+
+A Veilsong Lagoon lies in the warm tropical shallows behind a sheltering reef, its still waters home to beds of "singing" shellfish whose shells resonate with the tide in a low, haunting chorus. The lagoon gives three gifts at once: a rich harvest of the shellfish themselves, lustrous pearls prized by traders, and a serene beauty that colonists travel far to hear. Such a place is fragile, and only an undisturbed lagoon keeps its song. A worked, pristine lagoon is a strong source of food, a good source of wealth, and a lasting lift to morale.
+
+#### Sunken Archive
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/sunken_archive.png">
+
+A Sunken Archive rests in the clear coastal shallows of the warmer seas, the drowned data-library of a people long vanished from Zubrenn. Divers descend to recover crystalline records and relics from the silt, each a priceless window into a lost age — and a fortune on the open market. The site is as revered as it is lucrative, a place of pilgrimage for scholars and the curious, and it must be kept pristine to preserve what remains. A worked, undisturbed archive is a rich source of wealth and lifts morale besides, enriching both the treasury and the colony's sense of wonder.
+
+### Archaeological
+
+Scattered relics of civilizations that walked Zubrenn long before the colonists
+arrived. Each is at once a windfall and a wonder — a trove to be sold and
+studied, and a landmark that stirs the pride and curiosity of those who settle
+nearby. Most must be kept pristine to retain their meaning and their draw.
+
+#### Echo Monolith
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/echo_monolith.png">
+
+An Echo Monolith is an ancient standing stone left on the dry grasslands by a vanished alien race, resonant with cultural and historical significance. Exceptionally rare and sacred, it must be preserved pristine to retain its meaning. A worked, protected monolith greatly lifts morale and brings wealth besides, drawing pilgrims and prosperity alike.
+
+#### Precursor Vault
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/precursor_vault.png">
+
+A Precursor Vault is a sealed chamber buried beneath grassland, hills, desert, or open plains, built by an elder civilization and untouched for untold ages. Breaching one is the find of a lifetime: within lie artifacts of impossible craft that command staggering prices from collectors across the stars, and whose discovery fills the colonists with awe at the age of the world they inhabit. The vault's power lies in its mystery, and it must be preserved pristine. A worked, undisturbed vault is an exceptional source of wealth and greatly lifts morale, the crown jewel of any colony fortunate enough to unearth one.
+
+#### Ruined Sky-Temple
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/ruined_sky_temple.png">
+
+A Ruined Sky-Temple clings to the heights of the low and high mountains, the weathered terraces and toppled columns of a lost mountaintop faith that once worshipped the twin suns. Though the roof is long gone, the site retains a profound stillness, and colonists make the hard climb to it as pilgrims, leaving offerings among the stones and carrying trade in relics back down. Kept pristine, the temple endures as a place of reverence. A worked, undisturbed temple is a rich source of wealth and lifts morale, binding a colony to the mountain's ancient past.
+
+#### Buried Starship Hull
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/buried_starship_hull.png">
+
+A Buried Starship Hull lies half-sunk in desert sand, polar ice, or windswept plain — the wreck of a vast vessel that fell from the sky in some forgotten age. Salvage crews strip its skin of exotic alloys found nowhere else, pry loose relics that fetch high prices, and the sheer legend of the thing becomes a point of pride for the colony that claims it. It gives on three fronts at once, and needs no preservation to do so. A worked hull is a good source of material and wealth together and lifts morale besides, a windfall dug straight from the ground.
+
+#### Glyphstone Circle
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/glyphstone_circle.png">
+
+A Glyphstone Circle stands in an untouched glade of grassland, forest, or jungle, a ring of carved standing stones whose spiraling glyphs no colonist has fully deciphered. The circles draw gatherings and quiet rites, and their worn carvings trade modestly among scholars and collectors. Their meaning — and their draw — survives only while the glade is left pristine. A worked, undisturbed circle is a good source of wealth and lifts morale, a small but cherished link to those who came before.
+
+#### Ancestral Catacombs
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/ancestral_catacombs.png">
+
+Ancestral Catacombs honeycomb the dry rock of hills and low mountains, carved burial halls where an earlier people laid their dead with lavish grave-goods. The relics interred within fund a colony handsomely once recovered, and the solemn, enduring halls anchor the settlement's sense of heritage and continuity. Dry and deep, they keep without need of preservation. A worked catacomb is a rich source of wealth and lifts morale, repaying the colony with both fortune and a sense of belonging.

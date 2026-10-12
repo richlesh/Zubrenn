@@ -4502,6 +4502,12 @@
         // Per-turn recruit rate for THIS slot's unit type (data-driven map).
         const rate = buildingRecruitRate(b.type, slotType);
         if (rate <= 0) continue;                                    // this type doesn't recruit here
+        // Strategic-resource gate: a unit type may require one or more
+        // prerequisite.bonusType resources (e.g. tank -> "iron"). Every required
+        // bonusType must be available from a worked terrain-bonus cell in the
+        // owner's colonies, or the slot cannot recruit.
+        const _uPre = (CONFIG && CONFIG.units && CONFIG.units[slotType] && CONFIG.units[slotType].prerequisite) || null;
+        if (_uPre && !bonusTypesMet(_uPre.bonusType, col.owner)) continue;
         // Each slot's unit caps at its unit type's unitSize (e.g. infantry 1000,
         // tank 500) — the data-driven max strength per unit type.
         const cap = unitMaxStrength(slotType);
@@ -7081,17 +7087,33 @@
     // (size 10+). The check is INCLUSIVE (>=), matching the "size N or greater"
     // wording — a colony at exactly the threshold qualifies.
     // Minimum colony population (in CITIZENS) to build a transport of `kind`.
-    // config *.minPopulation is in population UNITS; convert via popUnitSize().
+    // Taken from config[kind].prerequisite.population (population UNITS), with a
+    // fallback to a legacy top-level minPopulation for older configs. Converted
+    // to citizens via popUnitSize().
     function transportMinPopulation(kind) {
       const us = popUnitSize();
-      if (kind === 'road') return ((CONFIG.road && CONFIG.road.minPopulation != null) ? CONFIG.road.minPopulation : 3) * us;
-      if (kind === 'canal') return ((CONFIG.canal && CONFIG.canal.minPopulation != null) ? CONFIG.canal.minPopulation : 5) * us;
-      if (kind === 'monorail') return ((CONFIG.monorail && CONFIG.monorail.minPopulation != null) ? CONFIG.monorail.minPopulation : 10) * us;
-      return 0;
+      const cfg = (CONFIG && CONFIG[kind]) || {};
+      const dflt = (kind === 'road') ? 3 : (kind === 'canal') ? 5 : (kind === 'monorail') ? 10 : 0;
+      const pre = (cfg.prerequisite && typeof cfg.prerequisite === 'object') ? cfg.prerequisite : null;
+      const v = (pre && pre.population != null) ? pre.population
+        : (cfg.minPopulation != null ? cfg.minPopulation : dflt);
+      return (Number(v) || 0) * us;
+    }
+    // The strategic bonusType requirement for a transport kind (road/monorail/
+    // canal), from config[kind].prerequisite.bonusType (a string or array).
+    function transportBonusTypeReq(kind) {
+      const cfg = (CONFIG && CONFIG[kind]) || {};
+      const pre = (cfg.prerequisite && typeof cfg.prerequisite === 'object') ? cfg.prerequisite : null;
+      return pre ? pre.bonusType : null;
     }
     // Whether a colony is large enough to build the given transport type.
     function colonyCanBuildTransport(col, kind) {
-      return !!col && (col.population || 0) >= transportMinPopulation(kind);
+      if (!col) return false;
+      if ((col.population || 0) < transportMinPopulation(kind)) return false;
+      // Strategic resources: the owner must have the transport's required
+      // bonusType(s) from a worked terrain-bonus cell (e.g. road needs "stone").
+      if (!bonusTypesMet(transportBonusTypeReq(kind), col.owner)) return false;
+      return true;
     }
     function beginTransport(kind, x, y) {
       // Source colony = the human colony controlling (or nearest to) the cell,
@@ -7100,10 +7122,16 @@
       let col = colonyControlling(x, y, 'human') || colonyControllingByRadius(x, y, 'human');
       if (!col) col = nearestColonyOnTransport(x, y, 'human');
       if (!col) { notify("Build from within a colony's zone of control, or from a connected road/monorail tile."); return; }
-      // Population gate: road needs size 3+ (>3000), monorail size 10+ (>10000).
+      // Population gate (e.g. road size 3+, monorail size 10+) plus a strategic
+      // bonusType gate (e.g. road needs "stone").
       if (!colonyCanBuildTransport(col, kind)) {
-        const need = transportMinPopulation(kind);
-        notify(`${col.name || 'This colony'} needs at least ${need.toLocaleString()} population to build a ${kind}.`);
+        const missRes = missingBonusTypes(transportBonusTypeReq(kind), col.owner);
+        if (missRes.length) {
+          notify(`Building a ${kind} requires a worked source of ${missRes.join(" and ")}.`);
+        } else {
+          const need = transportMinPopulation(kind);
+          notify(`${col.name || 'This colony'} needs at least ${need.toLocaleString()} population to build a ${kind}.`);
+        }
         return;
       }
       // One road/monorail construction at a time per colony: block a new plan
@@ -7955,6 +7983,9 @@
       if (!networkRequirementMet(col, pre.network)) return false;
       if (!citySizeMet(col, pre.citySize)) return false;
       if (!populationReqMet(col, pre.population)) return false;
+      // Strategic resources: every prerequisite.bonusType must be available from
+      // a worked terrain-bonus cell somewhere in the owner's colonies.
+      if (!bonusTypesMet(pre.bonusType, owner)) return false;
       return true;
     }
     // Human-readable list of unmet prerequisites (for the build-menu label):
@@ -7979,6 +8010,9 @@
       }
       if (buildingIsFederation(type) && !federationEstablished(owner)) {
         missing.push("an established Federation (a second colony)");
+      }
+      for (const t of missingBonusTypes(pre.bonusType, owner)) {
+        missing.push(`a worked source of ${t}`);
       }
       return missing;
     }
@@ -8131,6 +8165,43 @@
     // Operational (not in-transit) colonies owned by a player id/'human'.
     function playerColonies(owner) {
       return (gameState.buildings || []).filter((b) => b.type === 1 && b.owner === owner && !b.inTransit);
+    }
+    // The SET of strategic resource `bonusType`s the owner currently has access
+    // to: the terrain-bonus `bonusType` of any WORKED cell (biodome home cell or
+    // a worked cell) across all of the owner's colonies. Buildings/units may
+    // require one or more of these via prerequisite.bonusType (ALL must be met).
+    // Example: a Mine on `Ferric Strata Veins` (bonusType "iron"), when worked,
+    // grants access to "iron".
+    function playerAvailableBonusTypes(owner) {
+      const out = new Set();
+      for (const col of playerColonies(owner)) {
+        const homeKey = cellKey(col.x, col.y);
+        const worked = new Set([homeKey, ...((col.worked) || [])]);
+        for (const k of worked) {
+          const [wx, wy] = k.split(",").map(Number);
+          const tb = bonusDefAt(wx, wy);
+          const bt = tb && tb.bonusType;
+          if (!bt) continue;
+          if (Array.isArray(bt)) { for (const t of bt) if (t) out.add(t); }
+          else out.add(bt);
+        }
+      }
+      return out;
+    }
+    // True if EVERY bonusType in `req` (a string or array) is available to the
+    // owner from a worked terrain-bonus cell. Empty/missing requirement is met.
+    function bonusTypesMet(req, owner) {
+      const list = Array.isArray(req) ? req : (req ? [req] : []);
+      if (!list.length) return true;
+      const have = playerAvailableBonusTypes(owner);
+      return list.every((t) => have.has(t));
+    }
+    // The subset of a bonusType requirement the owner is MISSING (for UI labels).
+    function missingBonusTypes(req, owner) {
+      const list = Array.isArray(req) ? req : (req ? [req] : []);
+      if (!list.length) return [];
+      const have = playerAvailableBonusTypes(owner);
+      return list.filter((t) => !have.has(t));
     }
     // Tax a rate collects from a player's colonies: per colony, ceil(pop/1000)
     // (per-1000 "and part thereof") times the rate, summed.

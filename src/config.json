@@ -238,41 +238,64 @@
     "infantry": { "name": "Infantry", "unitSize": 1000, "speed": 8,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 1, "goods": 10, "energy": 6, "water": 0.1, "wealth": 10 },
-        "strength": { "attack":  1, "defense": 1, "hp": 5 }
+        "strength": { "attack":  1, "defense": 1, "hp": 5 },
+        "prerequisite": {
+          "population": 3
+        }
       },
     // Tank batallion 500 service men, 50 tanks
     "tank": { "name": "Armored", "unitSize": 500, "speed": 4,
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 2, "goods": 12, "energy": 2, "water": 0.1, "wealth": 2 },
-        "strength": { "attack":  3, "defense": 3, "hp": 15 }
+        "strength": { "attack":  3, "defense": 3, "hp": 15 },
+        "prerequisite": {
+          "population": 8,
+          "bonusType": [ "iron" ]
+        }
     },
     // Fighter squadron 300 service men, 20 aircraft
     "fighter": { "name": "Fighter", "unitSize": 300, "speed": 16, "station": "airbase",
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 1, "goods": 20, "energy": 1, "water": 0.1, "wealth": 1 },
         "strength": { "attack":  3, "defense": 3, "hp": 6 },
-        "range": 20
+        "range": 20,
+        "prerequisite": {
+          "population": 12,
+          "bonusType": [ "titanium", "crystal" ]
+        }
     },
     // Bomber squadron 300 service men, 10 bombers
     "bomber": { "name": "Bomber", "unitSize": 300, "speed": 12, "station": "airport",
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 2, "goods": 15, "energy": 2, "water": 0.1, "wealth": 2 },
         "strength": { "attack":  5, "defense": 1, "hp": 4 },
-        "range": 40
+        "range": 40,
+        "prerequisite": {
+          "population": 12,
+          "bonusType": [ "titanium", "crystal" ]
+        }
     },
     // Single cruiser/destroyer 300 service men, 10 ballistic missiles
     // Escort group: cruisers/destroyers, a submarine, and a supply ship.
     "escort": { "name": "Escort", "unitSize": 1250, "speed": 4, "station": "seaport",
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 1, "goods": 10, "energy": 1, "water": 0.1, "wealth": 1 },
-        "strength": { "attack":  4, "defense": 7, "hp": 20 }
+        "strength": { "attack":  4, "defense": 7, "hp": 20 },
+        "prerequisite": {
+          "population": 15,
+          "bonusType": [ "iron", "crystal" ]
+        }
     },
     // Single carrier 6000 service men, 100 aircraft = 5 squadrons
     "carrier": { "name": "Carrier", "unitSize": 6000, "speed": 6, "station": "seaport",
         "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
         "costPerYear": { "food": 2, "goods": 15, "energy": 2, "water": 0.1, "wealth": 2 },
         "strength": { "attack":  12, "defense": 5, "hp": 25 },
-        "range": 30
+        "range": 30,
+        "prerequisite": {
+          "population": 15,
+          "bonusType": [ "iron", "titanium", "crystal" ]
+        }
     }
   },
 
@@ -452,7 +475,8 @@
         "building": ["solar farm", "bank"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
         "upgrades": "megafactory",
-        "population": 15
+        "population": 15,
+        "bonusType": ["crystal"]
       }
     },
     "dock": {
@@ -506,7 +530,8 @@
         "building": ["solar panel", "factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
         "other":   ["airbase"],
-        "network": ["inland"]
+        "network": ["inland"],
+        "bonusType": ["aluminum"]
       },
       "range": 20
     },
@@ -531,7 +556,8 @@
         "other": ["airbase", "airport"],
         "upgrades": "air field",
         "network":  ["inland"],
-        "population": 9
+        "population": 9,
+        "bonusType": ["aluminum"]
       },
       "range": 30
     },
@@ -768,7 +794,8 @@
         "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands"],
         "climate": ["tropical","temperate"],
         "network":  ["any"],
-        "population": 8
+        "population": 8,
+        "bonusType": ["aluminum", "titanium", "crystal"]
       }
     },
     "drone base": {
@@ -799,7 +826,8 @@
         "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands","mountain-low"],
         "building": ["nanofactory", "spaceport"],
         "other": [ "federation", "intelligence" ],
-        "population": 15
+        "population": 15,
+        "bonusType": ["aluminum", "titanium", "crystal"]
       },
       "visibility": "world"
     },
@@ -897,7 +925,8 @@
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["land"],
-        "population": 3
+        "population": 3,
+        "bonusType": ["aluminum"]
       }
     },
     "laser battery": {
@@ -913,7 +942,8 @@
         "building": ["factory"],
         "terrain": ["land"],
         "population": 6,
-        "upgrades": "missile battery"
+        "upgrades": "missile battery",
+        "bonusType": ["crystal"]
       }
     },
     "shield": {
@@ -928,7 +958,8 @@
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["land"],
-        "population": 10
+        "population": 10,
+        "bonusType": ["crystal"]
       }
     },
     "plasma bubble": {
@@ -944,7 +975,8 @@
         "building": ["factory"],
         "terrain": ["land"],
         "upgrades": "shield",
-        "population": 15
+        "population": 15,
+        "bonusType": ["crystal"]
       }
     }
   },
@@ -1081,6 +1113,7 @@
       "terrain": ["hills","mountain-low","mountain-high"],
       "other": [ ],
       "abundancy": 1,
+      "bonusType": "iron",
       "desc": "Banded iron-silicate seams exposed by stellar winds. Common in basalt shelves."
     },
     "Kinetite Crystals": {
@@ -1089,6 +1122,7 @@
       "terrain": ["hills","mountain-low"],
       "other": [ ],
       "abundancy": 0.5,
+      "bonusType": "crystal",
       "desc": "Piezoelectric crystals grown in vibration fields. Great for electronics and construction."
     },
     "Fossilized Chitin Reefs": {
@@ -1097,6 +1131,7 @@
       "terrain": ["sea"],
       "other": [ "land" ],
       "abundancy": 1,
+      "bonusType": "stone",
       "desc": "Remains of ancient megafauna, now mined for carbon composites."
     },
     "Aero-Silk Nests": {
@@ -1114,6 +1149,7 @@
       "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","mountain-high"],
       "other": [ ],
       "abundancy": 0.25,
+      "bonusType": "iron",
       "desc": "Meteoric impact sites rich in rare earths and nickel-iron."
     },
     "Threadstone Seam": {
@@ -1121,8 +1157,18 @@
       "bonus": { "material": "50-75" },
       "terrain": ["grassland","mountain-low","plains"],
       "other": [ ],
-      "abundancy": 2,
+      "abundancy": 4,
+      "bonusType": "stone",
       "desc": "Naturally fibrous rock that separates into useful construction strands."
+    },
+    "Bauxite Seam": {
+      "icon": "terrain_bonus/128/bauxite_seam.png",
+      "bonus": { "material": "50-75" },
+      "terrain": ["hills","mountain-low","mountain-high"],
+      "other": [ ],
+      "abundancy": 6,
+      "bonusType": "aluminum",
+      "desc": "Rich seams of Bauxite ore from which Aluminum is extracted. Aluminum is the most abundant metal in Zubrenn's crust just like Earth."
     },
     "Hexabark Grove": {
       "icon": "terrain_bonus/128/hexabark_grove.png",
@@ -1139,14 +1185,16 @@
       "terrain": ["mountain-low","mountain-high"],
       "other": [ ],
       "abundancy": 2,
+      "bonusType": "iron",
       "desc": "An unusually dense metallic ore prized for heavy machinery and orbital infrastructure."
     },
     "Titanlace Deposit": {
       "icon": "terrain_bonus/128/titanlace_deposit.png",
       "bonus": { "material": "30-50", "wealth": "10-20" },
-      "terrain": ["mountain-high"],
+      "terrain": ["mountain-low","mountain-high"],
       "other": [ ],
-      "abundancy": 2,
+      "abundancy": 3,
+      "bonusType": "titanium",
       "desc": "Rare mineral lattices that can be processed into exceptionally strong structural mesh."
     },
 
@@ -1173,6 +1221,7 @@
       "terrain": ["desert"],
       "other": [ ],
       "abundancy": 2,
+      "bonusType": "crystal",
       "desc": "Naturally photovoltaic crystals convert starlight into harvestable current."
     },
     "Pyrogel Pool": {
@@ -1405,6 +1454,187 @@
       "terrain": ["frozen"],
       "abundancy": 2,
       "desc": "Teeming cliffside colonies of native seabirds whose seasonal spectacle lifts the spirits of nearby settlers."
+    },
+
+    // --- New single-resource deposits ---
+    "Stormroot Taproots": {
+      "icon": "terrain_bonus/128/stormroot_taproots.png",
+      "bonus": { "water": 1 },
+      "terrain": ["jungle","wetlands"],
+      "climate": ["tropical"],
+      "other": [ "dry" ],
+      "abundancy": 4,
+      "desc": "Deep-reaching native taproots that pump groundwater to the surface, leaving drinkable pools around their crowns."
+    },
+    "Driftglass Dunes": {
+      "icon": "terrain_bonus/128/driftglass_dunes.png",
+      "bonus": { "energy": "100-300" },
+      "terrain": ["desert"],
+      "other": [ ],
+      "abundancy": 2,
+      "desc": "Wind-polished silica lenses that focus starlight into a harvestable thermal current."
+    },
+    "Ironcap Mushrooms": {
+      "icon": "terrain_bonus/128/ironcap_mushrooms.png",
+      "bonus": { "material": "25-50" },
+      "terrain": ["forest","jungle"],
+      "climate": ["tropical", "temperate"],
+      "other": [ ],
+      "abundancy": 3,
+      "bonusType": "iron",
+      "desc": "Fungi that sequester metal from the soil into dense, mineral-rich caps that are smelted like ore."
+    },
+    "Thundergrass Prairie": {
+      "icon": "terrain_bonus/128/thundergrass_prairie.png",
+      "bonus": { "food": "20-40" },
+      "terrain": ["grassland","plains"],
+      "climate": ["temperate", "subpolar"],
+      "other": [ ],
+      "abundancy": 3,
+      "desc": "A fast-growing grain-analog that regrows within days of harvest, blanketing the open steppe."
+    },
+    "Permafrost Methane Seeps": {
+      "icon": "terrain_bonus/128/permafrost_methane_seeps.png",
+      "bonus": { "energy": "100-300" },
+      "terrain": ["frozen"],
+      "climate": ["subpolar", "polar"],
+      "other": [ ],
+      "abundancy": 2,
+      "desc": "Trapped gas vents from thawing ground, tapped and burned clean as a steady polar fuel."
+    },
+
+    // --- New dual-resource deposits ---
+    "Sunpetal Orchards": {
+      "icon": "terrain_bonus/128/sunpetal_orchards.png",
+      "bonus": { "food": "10-20", "happiness": 0.25 },
+      "terrain": ["grassland","plains"],
+      "climate": ["tropical", "temperate"],
+      "other": [ ],
+      "abundancy": 2,
+      "desc": "Groves of nectar-fruit whose blossoms open at both sunrises; the harvest festivals follow the bloom."
+    },
+    "Lumen Coral Shallows": {
+      "icon": "terrain_bonus/128/lumen_coral_shallows.png",
+      "bonus": { "energy": "100-300", "wealth": "10-30" },
+      "terrain": ["sea"],
+      "climate": ["tropical", "temperate"],
+      "other": [ "shallow" ],
+      "abundancy": 1,
+      "desc": "Bioluminescent reef organisms generate a steady electrical charge and a farmable, prized light-silk."
+    },
+    "Saltglass Pans": {
+      "icon": "terrain_bonus/128/saltglass_pans.png",
+      "bonus": { "material": "25-50", "wealth": "5-10" },
+      "terrain": ["desert"],
+      "other": [ ],
+      "abundancy": 1,
+      "desc": "Evaporite flats yielding industrial minerals and prized translucent trade-salts."
+    },
+    "Mistvine Terraces": {
+      "icon": "terrain_bonus/128/mistvine_terraces.png",
+      "bonus": { "food": "10-20", "water": 0.5 },
+      "terrain": ["hills","mountain-low"],
+      "climate": ["tropical", "temperate"],
+      "other": [ "river" ],
+      "abundancy": 2,
+      "desc": "Terraced vines that condense fog into runnels, feeding both the crops and the colony's cisterns."
+    },
+    "Verdant Hot Springs": {
+      "icon": "terrain_bonus/128/verdant_hot_springs.png",
+      "bonus": { "water": 1, "happiness": 0.25 },
+      "terrain": ["hills","mountain-low"],
+      "other": [ "pristine" ],
+      "abundancy": 1,
+      "desc": "Mineral pools warmed from below that colonists treasure for rest and recreation. Must stay pristine."
+    },
+    "Quakecrystal Lodes": {
+      "icon": "terrain_bonus/128/quakecrystal_lodes.png",
+      "bonus": { "material": "50-75", "energy": "100-300" },
+      "terrain": ["mountain-low","mountain-high"],
+      "other": [ ],
+      "abundancy": 0.5,
+      "bonusType": "crystal",
+      "desc": "Crystals that store seismic strain, mined for both structural mesh and the power of their discharge."
+    },
+
+    // --- New triple-resource deposits ---
+    "Prismbloom Caldera": {
+      "icon": "terrain_bonus/128/prismbloom_caldera.png",
+      "bonus": { "energy": "100-300", "food": "5-10", "happiness": 0.25 },
+      "terrain": ["mountain-low","mountain-high"],
+      "climate": ["tropical", "temperate"],
+      "other": [ "pristine" ],
+      "abundancy": 0.25,
+      "desc": "A dormant caldera lake ringed by radiant flora; its warmth yields power and crops while the view draws pilgrims. Must stay pristine."
+    },
+    "Veilsong Lagoon": {
+      "icon": "terrain_bonus/128/veilsong_lagoon.png",
+      "bonus": { "food": "10-25", "wealth": "10-30", "happiness": 0.25 },
+      "terrain": ["sea"],
+      "climate": ["tropical"],
+      "other": [ "shallow", "pristine" ],
+      "abundancy": 0.25,
+      "desc": "A sheltered lagoon of singing shellfish — a food harvest, a pearl trade, and a cultural wonder all at once. Must stay pristine."
+    },
+    "Celestite Spires": {
+      "icon": "terrain_bonus/128/celestite_spires.png",
+      "bonus": { "material": "30-50", "energy": "100-300", "wealth": "10-20" },
+      "terrain": ["mountain-high"],
+      "other": [ ],
+      "abundancy": 0.1,
+      "bonusType": "crystal",
+      "desc": "Towering superconductive crystal pillars that channel storm charge and refine into ultra-premium alloy."
+    },
+
+    // --- Archaeological deposits (wealth + happiness) ---
+    "Precursor Vault": {
+      "icon": "terrain_bonus/128/precursor_vault.png",
+      "bonus": { "wealth": "50-100", "happiness": 0.25 },
+      "terrain": ["grassland","hills","desert","plains"],
+      "other": [ "pristine" ],
+      "abundancy": 0.1,
+      "desc": "A sealed chamber of an elder civilization; its recovered artifacts command staggering prices and awe the colonists. Must stay pristine."
+    },
+    "Ruined Sky-Temple": {
+      "icon": "terrain_bonus/128/ruined_sky_temple.png",
+      "bonus": { "wealth": "25-50", "happiness": 0.25 },
+      "terrain": ["mountain-low","mountain-high"],
+      "other": [ "pristine" ],
+      "abundancy": 0.25,
+      "desc": "Weathered terraces of a lost mountaintop faith, revered as a pilgrimage site. Must stay pristine."
+    },
+    "Buried Starship Hull": {
+      "icon": "terrain_bonus/128/buried_starship_hull.png",
+      "bonus": { "material": "25-50", "wealth": "25-50", "happiness": 0.25 },
+      "terrain": ["desert","frozen","plains"],
+      "other": [ ],
+      "abundancy": 0.1,
+      "desc": "The salvage of an ancient crashed vessel: exotic alloys to strip, relics to sell, and a legend to tell."
+    },
+    "Glyphstone Circle": {
+      "icon": "terrain_bonus/128/glyphstone_circle.png",
+      "bonus": { "wealth": "10-30", "happiness": 0.25 },
+      "terrain": ["grassland","forest","jungle"],
+      "other": [ "pristine" ],
+      "abundancy": 0.5,
+      "desc": "Carved standing stones in an untouched glade, a focus of cultural rites. Must stay pristine."
+    },
+    "Sunken Archive": {
+      "icon": "terrain_bonus/128/sunken_archive.png",
+      "bonus": { "wealth": "40-80", "happiness": 0.25 },
+      "terrain": ["sea"],
+      "climate": ["tropical", "temperate"],
+      "other": [ "shallow", "pristine" ],
+      "abundancy": 0.25,
+      "desc": "A drowned data-library of a vanished people; divers recover priceless records from the silt. Must stay pristine."
+    },
+    "Ancestral Catacombs": {
+      "icon": "terrain_bonus/128/ancestral_catacombs.png",
+      "bonus": { "wealth": "25-50", "happiness": 0.25 },
+      "terrain": ["hills","mountain-low"],
+      "other": [ "dry" ],
+      "abundancy": 0.5,
+      "desc": "Carved burial halls whose grave-goods fund the colony and anchor its heritage."
     }
   },
   // ---- Overlay colors (HSL: h 0-360, s/l 0-1). Consumed by draw_map.cjs when
@@ -1628,7 +1858,10 @@
     "removeCost": { "energy": 2, "food": 1, "turns": 2 },
     "costPerYear": { "energy": 0.5, "material": 1, "wealth": 0.75 },
     "decayRate": 0.001,
-    "minPopulation": 3,
+    "prerequisite": {
+      "population": 3,
+      "bonusType": ["stone"]
+    },
     "catastrophicFailure": { "rate": 0.001, "minAge": 50 }
   },
 
@@ -1648,7 +1881,10 @@
     "removeCost": { "energy": 2, "food": 1, "turns": 2 },
     "costPerYear": { "energy": 0.5, "material": 0.5, "wealth": 0.5 },
     "decayRate": 0.001,
-    "minPopulation": 10,
+    "prerequisite": {
+      "population": 10,
+      "bonusType": ["stone", "crystal", "aluminum"]
+    },
     "catastrophicFailure": { "rate": 0.001, "minAge": 50 }
   },
 
@@ -1684,7 +1920,9 @@
     "adjacentBonus": { "food": 2, "water": 10, "wealth": 4 },
     "removeCost": { "energy": 2, "food": 1, "turns": 2 },
     "costPerYear": { "energy": 0.1, "material": 0.5, "water": 1, "wealth": 0.3 },
-    "minPopulation": 5,
+    "prerequisite": {
+      "population": 5
+    },
     "terrain": ["grassland", "hills", "forest", "jungle", "desert", "plains", "wetlands"],
     "buildRadius": 7,
     "vertexClickPixels": 7.5,
