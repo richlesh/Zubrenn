@@ -33,7 +33,7 @@ ride a sea, air, or space link:
   shipping, shallow or deep), but **not** by air or space — there are no water
   pipelines in the sky or in orbit.
 - **Wealth** moves overland and by **air** or **space** (finance travels by
-  wire, aircraft, and satellite), but **not** across a bare **sea** route.
+  fiber optic, wireless and satellite communication networks), but **not** across a bare **sea** route.
 - **Energy** follows the ground by power line (overland), and can **also** be
   beamed between two colonies that each have a **Spaceport**, via microwave
   power satellites in orbit (**space**). It cannot be shared across **sea** or
