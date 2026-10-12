@@ -5573,10 +5573,10 @@
           const MAINT = ["energy", "food", "material", "goods", "water", "wealth"];
           const upkeepOf = (b) => {
             const u = bldgUpkeep(b.type) || {};
-            return { energy: u.energy || 0, food: u.food || 0, material: u.material || 0, water: u.water || 0, wealth: u.wealth || 0 };
+            return { energy: u.energy || 0, food: u.food || 0, material: u.material || 0, goods: u.goods || 0, water: u.water || 0, wealth: u.wealth || 0 };
           };
           const totalNeed = () => {
-            const t = { energy: 0, food: 0, material: 0, water: 0, wealth: 0 };
+            const t = { energy: 0, food: 0, material: 0, goods: 0, water: 0, wealth: 0 };
             for (const b of fedBuildings) { if (b._fedIdle) continue; const u = upkeepOf(b); for (const k of MAINT) t[k] += u[k]; }
             return t;
           };
@@ -10699,6 +10699,51 @@
     }
 
     // Right-side statistics panel for the colony dialog.
+    // Full net-rate breakdown dialog for one resource in the colony work view.
+    // Lists every signed contribution (terrain, resource deposits, buildings
+    // = production − upkeep, road/monorail, population per-capita, military
+    // upkeep, trade income, etc.) from colonyBudget's per-resource breakdown,
+    // which sum to the net rate shown in the Resources panel.
+    function showRateBreakdownDialog(col, resKey) {
+      if (!col || !resKey) return;
+      const s = colonyStats(col);
+      const RT = (CONFIG && CONFIG.resourceTypes) || {};
+      const name = (RT[resKey] && RT[resKey].name) || resKey;
+      const units = (resKey === 'happiness' && RT[resKey] && RT[resKey].units) ? RT[resKey].units : '';
+      const parts = (s.rateBreakdown && s.rateBreakdown[resKey]) || {};
+      const net = (s.delta && typeof s.delta[resKey] === 'number') ? s.delta[resKey] : 0;
+      const esc = (t) => String(t).replace(/[&<>"]/g, (c) => (
+        { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+      const fmt = (n) => `${n > 0 ? '+' : (n < 0 ? '\u2212' : '')}${Math.abs(Number(n)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${units}`;
+      const entries = Object.entries(parts).filter(([, v]) => Math.abs(v) > 1e-9);
+      // Group into production (positive) and costs (negative) for readability,
+      // preserving insertion order within each group.
+      const pos = entries.filter(([, v]) => v > 0);
+      const neg = entries.filter(([, v]) => v < 0);
+      const rowHtml = (label, v) =>
+        `<tr><td style="padding:3px 10px 3px 0;">${esc(label)}</td>` +
+        `<td style="padding:3px 0;text-align:right;color:${v >= 0 ? '#1a9e1a' : '#d23b3b'};">${fmt(v)}</td></tr>`;
+      let body = `<div style="font-size:13px;min-width:260px;">`;
+      if (!entries.length) {
+        body += `<div style="color:#888;margin:4px 0;">No contributions to this rate.</div>`;
+      } else {
+        body += `<table style="border-collapse:collapse;width:100%;">`;
+        if (pos.length) {
+          body += `<tr><td colspan="2" style="padding-top:4px;font-weight:600;">Production</td></tr>`;
+          for (const [k, v] of pos) body += rowHtml(k, v);
+        }
+        if (neg.length) {
+          body += `<tr><td colspan="2" style="padding-top:8px;font-weight:600;">Costs</td></tr>`;
+          for (const [k, v] of neg) body += rowHtml(k, v);
+        }
+        body += `<tr><td colspan="2"><hr style="border:none;border-top:1px solid #bbb;margin:6px 0;"></td></tr>`;
+        body += `<tr><td style="padding:3px 10px 3px 0;font-weight:700;">Net rate /yr</td>` +
+          `<td style="padding:3px 0;text-align:right;font-weight:700;color:${net >= 0 ? '#1a9e1a' : '#d23b3b'};">${fmt(net)}</td></tr>`;
+        body += `</table>`;
+      }
+      body += `</div>`;
+      showChoiceDialog(`${name} — net rate breakdown`, body, [{ label: 'Close', value: 'ok' }]);
+    }
     function renderWorkStats(col) {
       const el = document.getElementById("work-stats");
       if (!el) return;
@@ -10882,13 +10927,13 @@
         `<div class="stat-row stat-subrow"><span>Happiness</span><span class="${cls(s.growthHappiness)}">${pct(s.growthHappiness)}</span></div>`,
         `<div class="stat-row stat-subrow"><span>Buildings</span><span class="${cls(s.growthBuildings)}">${pct(s.growthBuildings)}</span></div>`,
         `<div class="stat-sec">Resources <span class="stat-hint">(stored / cap · rate)</span></div>`,
-        `<div class="stat-row"><span>${resName("energy")}</span><span>${resVal("energy", res.energy)} / ${resVal("energy", s.caps.energy)} <span class="${cls(s.energy)}" title="${esc(rateTip("energy", s.energy))}">${sign(s.energy)}${nf(s.energy, 1)}/yr</span></span></div>`,
-        `<div class="stat-row"><span>${resName("food")}</span><span>${resVal("food", res.food)} / ${resVal("food", s.caps.food)} <span class="${cls(s.netFood)}" title="${esc(rateTip("food", s.netFood))}">${sign(s.netFood)}${nf(s.netFood, 1)}/yr</span></span></div>`,
-        `<div class="stat-row"><span>${resName("material")}</span><span>${resVal("material", res.material)} / ${resVal("material", s.caps.material)} <span class="${cls(s.material)}" title="${esc(rateTip("material", s.material))}">${sign(s.material)}${nf(s.material, 1)}/yr</span></span></div>`,
-        `<div class="stat-row"><span>${resName("goods")}</span><span>${resVal("goods", res.goods)} / ${resVal("goods", s.caps.goods)} <span class="${cls(s.goods)}" title="${esc(rateTip("goods", s.goods))}">${sign(s.goods)}${nf(s.goods, 1)}/yr</span></span></div>`,
-        `<div class="stat-row"><span>${resName("water")}</span><span>${resVal("water", res.water)} / ${resVal("water", s.caps.water)} <span class="${cls(s.water)}" title="${esc(rateTip("water", s.water))}">${sign(s.water)}${nf(s.water, 1)}/yr</span></span></div>`,
-        `<div class="stat-row"><span>${resName("wealth")}</span><span>${resVal("wealth", res.wealth)} / ${resVal("wealth", s.caps.wealth)} <span class="${cls(s.wealthRate)}" title="${esc(rateTip("wealth", s.wealthRate))}">${sign(s.wealthRate)}${nf(s.wealthRate, 1)}/yr</span></span></div>`,
-        `<div class="stat-row"><span>Happiness</span><span>${fmtHappiness(s.storedHappiness)} / ±${fmtHappiness(s.happinessCap)} <span class="${cls(s.happinessRate)}" title="${esc(rateTip("happiness", s.happinessRate))}">${sign(s.happinessRate)}${nf(s.happinessRate, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>${resName("energy")}</span><span>${resVal("energy", res.energy)} / ${resVal("energy", s.caps.energy)} <span class="${cls(s.energy)} rate-link" data-res="energy" title="Click for a full breakdown">${sign(s.energy)}${nf(s.energy, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>${resName("food")}</span><span>${resVal("food", res.food)} / ${resVal("food", s.caps.food)} <span class="${cls(s.netFood)} rate-link" data-res="food" title="Click for a full breakdown">${sign(s.netFood)}${nf(s.netFood, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>${resName("material")}</span><span>${resVal("material", res.material)} / ${resVal("material", s.caps.material)} <span class="${cls(s.material)} rate-link" data-res="material" title="Click for a full breakdown">${sign(s.material)}${nf(s.material, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>${resName("goods")}</span><span>${resVal("goods", res.goods)} / ${resVal("goods", s.caps.goods)} <span class="${cls(s.goods)} rate-link" data-res="goods" title="Click for a full breakdown">${sign(s.goods)}${nf(s.goods, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>${resName("water")}</span><span>${resVal("water", res.water)} / ${resVal("water", s.caps.water)} <span class="${cls(s.water)} rate-link" data-res="water" title="Click for a full breakdown">${sign(s.water)}${nf(s.water, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>${resName("wealth")}</span><span>${resVal("wealth", res.wealth)} / ${resVal("wealth", s.caps.wealth)} <span class="${cls(s.wealthRate)} rate-link" data-res="wealth" title="Click for a full breakdown">${sign(s.wealthRate)}${nf(s.wealthRate, 1)}/yr</span></span></div>`,
+        `<div class="stat-row"><span>Happiness</span><span>${fmtHappiness(s.storedHappiness)} / ±${fmtHappiness(s.happinessCap)} <span class="${cls(s.happinessRate)} rate-link" data-res="happiness" title="Click for a full breakdown">${sign(s.happinessRate)}${nf(s.happinessRate, 1)}/yr</span></span></div>`,
         overNote,
         ...buildingsSection,
         ...networkSection,
@@ -10896,6 +10941,15 @@
         `<div class="stat-note">While stored happiness is positive the colony grows; if it goes negative the population declines.</div>`,
       ];
       el.innerHTML = rows.join("");
+      // Make each resource rate clickable: open a full breakdown dialog listing
+      // every signed contribution (terrain, deposits, buildings, road/monorail,
+      // population, military, trade) that sums to the shown net rate.
+      for (const link of el.querySelectorAll('.rate-link')) {
+        link.addEventListener('click', (e) => {
+          e.stopPropagation();
+          showRateBreakdownDialog(col, link.getAttribute('data-res'));
+        });
+      }
       // Wire up the Stationed Military rebase buttons (click -> colony picker).
       // Re-render this colony panel after a transfer starts so the unit shows
       // its new "departing" state.

@@ -196,6 +196,9 @@ body.dark #work-canvas { background: #20242e; }
 }
 body.dark #work-stats { background: #232327; border-color: #444; }
 #work-stats h3 { font-size: 13px; margin: 0 0 8px; }
+/* Clickable resource rate: opens a full net-rate breakdown dialog. */
+#work-stats .rate-link { cursor: pointer; text-decoration: underline dotted; }
+#work-stats .rate-link:hover { text-decoration: underline; filter: brightness(1.15); }
 #work-stats .stat-sec {
   font-weight: 600; margin: 12px 0 4px; border-bottom: 1px solid #e2e2e2; padding-bottom: 2px;
 }

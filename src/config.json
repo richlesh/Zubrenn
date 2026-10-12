@@ -770,7 +770,7 @@
     "satellite network": {
       "code": 33,
       "name": "Satellite Network",
-      "icon": "buildings/128/satellite_networkd.png",
+      "icon": "buildings/128/satellite_network.png",
       "symbol": "buildings/icons/drone.png",
       "buildCost": { "energy": 500, "goods": 1000, "wealth": 500, "water": 5, "turns": 10 },
       "costPerYear": { "energy": 50, "goods": 50, "wealth": 50 },
@@ -914,7 +914,7 @@
       "code": 31,
       "name": "Plasma Bubble",
       "icon": "buildings/128/plasma_bubble.png",
-      "symbol": "buildings/icons/plasma_bubble.png",
+      "symbol": "buildings/icons/shield.png",
       "buildCost":   { "energy": 20, "material": 100, "wealth": 100, "water": 1, "turns": 7 },
       "costPerYear": { "energy": 50, "material": 0, "wealth": 50, "water": 0 },
       "bonus":       { "defense": "2" },
@@ -1335,7 +1335,7 @@
     // colony's zone of control but NOT worked (the wildlife/old growth is left
     // undisturbed). Only the happiness component of `unworkedBonus` is used.
     "Seals": {
-      "icon": "terrain_bonus/128/seals.png",
+      "icon": "terrain_bonus/128/thaelrunners.png",
       "bonus": { "food": 2, "happiness": -0.25 },
       "unworkedBonus": { "happiness": 0.25 },
       "terrain": ["frozen"],
@@ -1343,7 +1343,7 @@
       "desc": "Rookeries of blubber-rich pinnipeds haul out on the ice. Harvest them for food, or leave the colonies in peace."
     },
     "Whales": {
-      "icon": "terrain_bonus/128/whales.png",
+      "icon": "terrain_bonus/128/vorndeeps.png",
       "bonus": { "food": 2, "happiness": -0.25 },
       "unworkedBonus": { "happiness": 0.25 },
       "terrain": ["sea"],
