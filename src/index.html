@@ -7918,7 +7918,7 @@
       // Migrate a legacy numeric `treasury` into owned.wealth on first access.
       if (!player.federation.owned || typeof player.federation.owned !== 'object') {
         player.federation.owned = {
-          energy: 0, food: 0, material: 0, water: 0,
+          energy: 0, food: 0, material: 0, goods: 0, water: 0,
           wealth: player.federation.treasury || 0, happiness: 0, population: 0,
         };
       }
@@ -7946,7 +7946,7 @@
     function federationOwnedOf(owner) {
       const fed = federationOf(owner);
       if (fed) return fed.owned;
-      return { energy: 0, food: 0, material: 0, water: 0, wealth: 0, happiness: 0, population: 0 };
+      return { energy: 0, food: 0, material: 0, goods: 0, water: 0, wealth: 0, happiness: 0, population: 0 };
     }
     // A federation's colonies (surviving biodomes for an owner), i.e. all the
     // colonies that pool resources together.
@@ -11907,7 +11907,10 @@
         overlay.style.position = 'fixed'; overlay.style.inset = '0';
         overlay.style.background = 'rgba(0,0,0,0.5)';
         overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
-        overlay.style.zIndex = '9999';
+        // Above every other overlay (colony-detail/work modals ~10003-10008,
+        // confirm 10010, lightboxes/rebase picker 10050-10060) so this reusable
+        // info/confirmation dialog always appears on top of whatever opened it.
+        overlay.style.zIndex = '10070';
         const dlg = document.createElement('div');
         dlg.className = 'dialog';
         dlg.style.background = 'var(--panel-bg, #222)'; dlg.style.color = 'var(--panel-fg, #eee)';

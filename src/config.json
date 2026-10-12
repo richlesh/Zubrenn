@@ -669,8 +669,8 @@
       "buildCost": { "energy": 25, "material": 50, "wealth": 100, "water": 1, "turns": 3 },
       "costPerYear": { "energy": 10, "wealth": 10 },
       "bonus": { "wealth": 500, "happiness": 0.5 },
-      "storage": { "wealth": 2500 },
-      "federationStorage": { "wealth": 2500 },
+      "storage": { "wealth": 250 },
+      "federationStorage": { "wealth": 250 },
       "prerequisite": {
         "building": ["solar farm"],
         "network": ["any"],
