@@ -12,6 +12,34 @@ maximum (its *unit size*) as the home building recruits colonists into it. A
 unit's fighting power scales with how full it is: a half‑manned unit fights at
 half strength and has half its hit points.
 
+### Bases
+
+Bases are where military units are trained and military assets are built.  Units can be repaired but only by the home base that built the unit originally.
+
+#### Barracks
+
+<img align="right" width="128" src="src/resources/buildings/128/barracks.png">
+
+The Barracks trains military battalions for defense and offense, drawing recruits from the colony's own population. It requires a **Factory** before it can be built. A modest build with light upkeep, it also lifts morale a little. Each Barracks supports and rebuilds a single battalion, so a would‑be military power raises them across its colonies.
+ 
+#### Army Base
+
+<img align="right" width="128" src="src/resources/buildings/128/army_base.png">
+
+The Army Base is the Barracks writ large — a full garrison that trains and fields several battalions at once. It is built as an **upgrade of an existing Barracks**, raised in its place, and still counts as a Barracks for anything that depends on one. It requires a **Solar Farm**, a **Farm**, and a **Factory** in the colony, a transport link to another of your colonies, and a colony population of at least 8,000. Where a Barracks supports a single infantry battalion, an Army Base fields **three infantry battalions and one armored (tank) battalion**, each recruited from the colony's population and rebuilt here when destroyed. A substantial build with heavier upkeep, it is the backbone of any colony meant to project real military force.
+
+#### Joint Base
+
+<img align="right" width="128" src="src/resources/buildings/128/joint_base.png">
+
+The Joint Base is the Army Base elevated to a combined‑arms command — a sprawling installation that trains ground and air forces side by side. It is built as an **upgrade of an existing Army Base**, raised in its place, and still counts as a Barracks (and Army Base) for anything that depends on one. It is a top‑tier capstone, requiring a **Solar Farm**, an **Agridome**, a **Megafactory**, and a **Bank** in the colony, a transport link to another of your colonies, and a colony population of at least 12,000. It fields the largest garrison in the game — **five infantry battalions, three armored (tank) battalions, and two fighter squadrons** — each recruited from the colony's population and rebuilt here when destroyed. A major build with substantial upkeep, it is the heart of a true military superpower.
+
+#### Naval Shipyard
+
+<img align="right" width="128" src="src/resources/buildings/128/naval_shipyard.png">
+
+The Naval Shipyard is the colony's gateway to the sea — the **only** building that can construct **Escort** groups and **Carrier** battle groups. It is raised on a shallow‑sea tile within a colony that already has a **Port**, and is a demanding late‑game build: it also requires a **Solar Farm**, an **Agridome**, a **Nanofactory**, and a **Bank**, a transport link to another of your colonies, and a colony population of at least 15,000, with a heavy, broad upkeep to keep its slipways running. It builds up to two Escorts and one Carrier, drawn from the colony's population. A shipyard is also each naval unit's **home base**: a damaged ship is **repaired** (rebuilt toward full strength) only when it returns to the shipyard that built it. Escorts and Carriers may be **stationed at any colony with a Port**, but they can only be constructed and repaired at a Naval Shipyard.
+ 
 ### Unit Types
 
 Attack, Defense, and HP are the unit's values at **full** strength; a unit at
