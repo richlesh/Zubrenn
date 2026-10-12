@@ -232,7 +232,7 @@
     
     // population costPerYear is per "unitSize/worker" population
     "population": { "name": "Population", "unitSize": 1000, "speed": 5,
-        "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
+        "buildCost": { },
         "costPerYear": { "food": 1, "goods": 10, "energy": 4.5, "water": 0.1, "wealth": 8 }
     },
     "infantry": { "name": "Infantry", "unitSize": 1000, "speed": 8,
@@ -598,7 +598,7 @@
         "buildCost": { "energy": 200, "goods": 200, "material": 200, "wealth": 200, "water": 10, "turns": 10 },
         "costPerYear": { "energy": 100, "goods": 100, "material": 100, "wealth": 100 },
         "bonus": { },
-        "storage": { "energy": 0, "food": 0, "goods": 0, "material": 0, "water": 0 },
+        "storage": { "energy": 100, "goods": 100, "material": 100 },
         "units": { "escort": 2, "carrier": 1 },
         "recruitRate": { "escort": 150, "carrier": 750 },
         "prerequisite": {
@@ -652,8 +652,8 @@
       "buildCost": { "energy": 5, "material": 10, "wealth": 20, "water": 0.5, "turns": 1 },
       "costPerYear": { "energy": 5, "wealth": 2 },
       "bonus": { "wealth": 50, "happiness": 0.25 },
-      "storage": { "wealth": 500 },
-      "federationStorage": { "wealth": 500 },
+      "storage": { "wealth": 200 },
+      "federationStorage": { "wealth": 200 },
       "prerequisite": {
         "building": ["solar panel"],
         "network": ["any"],
@@ -669,8 +669,8 @@
       "buildCost": { "energy": 25, "material": 50, "wealth": 100, "water": 1, "turns": 3 },
       "costPerYear": { "energy": 10, "wealth": 10 },
       "bonus": { "wealth": 500, "happiness": 0.5 },
-      "storage": { "wealth": 250 },
-      "federationStorage": { "wealth": 250 },
+      "storage": { "wealth": 1000 },
+      "federationStorage": { "wealth": 1000 },
       "prerequisite": {
         "building": ["solar farm"],
         "network": ["any"],
@@ -741,7 +741,7 @@
       "name": "Reservoir",
       "icon": "buildings/128/reservoir.png",
       "symbol": "buildings/icons/water_plus.png",
-      "buildCost": { "energy": 500, "material": 500, "goods": 250, "wealth": 500, "water": 10, "turns": 6 },
+      "buildCost": { "energy": 300, "material": 300, "goods": 250, "wealth": 350, "water": 10, "turns": 6 },
       "costPerYear": { "energy": 20, "goods": 10, "wealth": 50 },
       "bonus": { },
       "storage": { "water": 10000 },
@@ -826,9 +826,10 @@
       "icon": "buildings/128/mine.png",
       "symbol": "buildings/icons/crystal.png",
       "buildCost":   { "energy": 5, "material": 5, "wealth": 10, "water": 0.5, "turns": 3 },
-      "costPerYear": { "energy": 50, "material": 0, "goods": 5, "wealth": 5 },
+      "costPerYear": { "energy": 50, "goods": 5, "wealth": 5 },
       "bonus":       { "material": "15x", "wealth": "5x", "happiness": -0.25 },
-      "storage":     { "material": 500 },
+      "storage":     { "material": 250 },
+      "federationStorage": { "material": 250 },
       "prerequisite": {
         "building": ["solar panel"],
         "terrain":  ["land"],
@@ -842,9 +843,10 @@
       "icon": "buildings/128/megamine.png",
       "symbol": "buildings/icons/crystal.png",
       "buildCost":   { "energy": 25, "material": 25, "wealth": 50, "water": 1.5, "turns": 5 },
-      "costPerYear": { "energy": 75, "material": 0, "goods": 25, "wealth": 25 },
+      "costPerYear": { "energy": 75, "goods": 25, "wealth": 25 },
       "bonus":       { "material": "25x", "wealth": "10x", "happiness": -0.5 },
-      "storage":     { "material": 1000 },
+      "storage":     { "material": 1500 },
+      "federationStorage": { "material": 1500 },
       "prerequisite": {
         "building": ["solar farm"],
         "terrain":  ["land"],
@@ -859,9 +861,9 @@
       "icon": "buildings/128/habitat.png",
       "symbol": "buildings/icons/dome.png",
       "buildCost": { "material": 200, "wealth": 100, "water": 2, "turns": 3 },
-      "costPerYear": { "energy": 50, "food": 5, "goods": 30, "material": 30, "water": 3, "wealth": 50 },
-      "bonus": { "energy": 0, "food": 0, "goods": 0, "material": 0, "water": 0, "wealth": 50, "happiness": 0.5, "population": 1 },
-      "storage": { "energy": 50, "food": 10, "goods": 250, "water": 6, "wealth": 0, "happiness": 25, "population": 20 },
+      "costPerYear": { "goods": 5, "wealth": 25 },
+      "bonus": { "happiness": 0.25, "population": 1 },
+      "storage": { "happiness": 10, "population": 20 },
       "prerequisite": {
         "population": 6,
         "terrain": ["flatland","trees","mountain-low"],
@@ -875,7 +877,7 @@
       "icon": "buildings/128/aquafarm.png",
       "symbol": "buildings/icons/plant.png",
       "buildCost":   { "energy": 10, "material": 20, "wealth": 10, "water": 0.25, "turns": 1 },
-      "costPerYear": { "energy": 0.2, "material": 5, "wealth": 5, "water": 0 },
+      "costPerYear": { "energy": 0.2, "material": 5, "wealth": 5 },
       "bonus":       { "food": "3x", "wealth": 25 },
       "storage": { "food": 25 },
       "prerequisite": {
@@ -889,8 +891,8 @@
       "icon": "buildings/128/missile_battery.png",
       "symbol": "buildings/icons/shield.png",
       "buildCost":   { "energy": 10, "material": 20, "wealth": 10, "water": 0.25, "turns": 3 },
-      "costPerYear": { "energy": 0.2, "material": 0, "wealth": 5, "water": 0 },
-      "bonus":       { "defense": "0" },
+      "costPerYear": { "energy": 0.2, "wealth": 5 },
+      "bonus":       { "defense": "1" },
       "hp": 10,
       "prerequisite": {
         "building": ["factory"],
@@ -904,8 +906,8 @@
       "icon": "buildings/128/laser_battery.png",
       "symbol": "buildings/icons/shield.png",
       "buildCost":   { "energy": 10, "material": 20, "wealth": 20, "water": 0.25, "turns": 3 },
-      "costPerYear": { "energy": 0.4, "material": 0, "wealth": 5, "water": 0 },
-      "bonus":       { "defense": "1" },
+      "costPerYear": { "energy": 0.4, "wealth": 5 },
+      "bonus":       { "defense": "2" },
       "hp": 18,
       "prerequisite": {
         "building": ["factory"],
@@ -920,8 +922,8 @@
       "icon": "buildings/128/shield.png",
       "symbol": "buildings/icons/shield.png",
       "buildCost":   { "energy": 20, "material": 40, "wealth": 30, "water": 0.5, "turns": 5 },
-      "costPerYear": { "energy": 10, "material": 0, "wealth": 10, "water": 0 },
-      "bonus":       { "defense": "1" },
+      "costPerYear": { "energy": 10, "wealth": 10 },
+      "bonus":       { "defense": "4" },
       "hp": 35,
       "prerequisite": {
         "building": ["factory"],
@@ -935,8 +937,8 @@
       "icon": "buildings/128/plasma_bubble.png",
       "symbol": "buildings/icons/shield.png",
       "buildCost":   { "energy": 20, "material": 100, "wealth": 100, "water": 1, "turns": 7 },
-      "costPerYear": { "energy": 50, "material": 0, "wealth": 50, "water": 0 },
-      "bonus":       { "defense": "2" },
+      "costPerYear": { "energy": 50, "wealth": 50 },
+      "bonus":       { "defense": "8" },
       "hp": 80,
       "prerequisite": {
         "building": ["factory"],
@@ -1595,7 +1597,7 @@
   "bridge": {
     "color": { "h": 0, "s": 0.75, "l": 0.5 },
     "buildCost": { "energy": 0.3, "material": 60, "water": 0.01, "wealth": 15, "turns": 2 },
-    "costPerYear": { "energy": 0.5, "material": 0.5, "water": 0, "wealth": 1 }
+    "costPerYear": { "energy": 0.5, "material": 0.5, "wealth": 1 }
   },
 
   // Road network settings:
@@ -1612,9 +1614,9 @@
   //   catastrophicFailure.minAge - minimum segment age (years) to be failure-eligible
   "road": {
     "color": { "h": 30, "s": 0.5, "l": 0.35 },
-    "adjacentBonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 2 },
+    "adjacentBonus": { "wealth": 2 },
     "removeCost": { "energy": 2, "food": 1, "turns": 2 },
-    "costPerYear": { "energy": 0.5, "material": 1, "water": 0, "wealth": 0.75 },
+    "costPerYear": { "energy": 0.5, "material": 1, "wealth": 0.75 },
     "decayRate": 0.001,
     "minPopulation": 3,
     "catastrophicFailure": { "rate": 0.001, "minAge": 50 }
@@ -1632,9 +1634,9 @@
   //   catastrophicFailure.rate/minAge - aged-segment catastrophic failure (see road)
   "monorail": {
     "color": { "h": 40, "s": 1.0, "l": 0.5 },
-    "adjacentBonus": { "energy": 0, "food": 0, "material": 0, "water": 0, "wealth": 2 },
+    "adjacentBonus": { "wealth": 2 },
     "removeCost": { "energy": 2, "food": 1, "turns": 2 },
-    "costPerYear": { "energy": 0.5, "material": 0.5, "water": 0, "wealth": 0.5 },
+    "costPerYear": { "energy": 0.5, "material": 0.5, "wealth": 0.5 },
     "decayRate": 0.001,
     "minPopulation": 10,
     "catastrophicFailure": { "rate": 0.001, "minAge": 50 }
@@ -1650,7 +1652,7 @@
   //                   unit movement once combat is implemented)
   "river": {
     "color": { "h": 240, "s": 1, "l": 0.5 },
-    "adjacentBonus": { "energy": 0, "food": 2, "material": 0, "water": 10, "wealth": 4 },
+    "adjacentBonus": { "food": 2, "water": 10, "wealth": 4 },
     "crossingCost": 2
   },
 
@@ -1669,7 +1671,7 @@
   //   vertexClickFraction - canal-vertex click hit radius as a fraction of cell size
   "canal": {
     "color": { "h": 240, "s": 1, "l": 0.75 },
-    "adjacentBonus": { "energy": 0, "food": 2, "material": 0, "water": 10, "wealth": 4 },
+    "adjacentBonus": { "food": 2, "water": 10, "wealth": 4 },
     "removeCost": { "energy": 2, "food": 1, "turns": 2 },
     "costPerYear": { "energy": 0.1, "material": 0.5, "water": 1, "wealth": 0.3 },
     "minPopulation": 5,
@@ -1681,7 +1683,7 @@
 
   // Per-resource bonus a worked LAND cell gains when edge-adjacent to a sea tile.
   // Stacks with riverAdjacentBonus when adjacent to both.
-  "seaAdjacentBonus": { "energy": 0, "food": 2, "material": 1, "water": 0, "wealth": 2 },
+  "seaAdjacentBonus": { "food": 2, "material": 1, "wealth": 2 },
   // Cost + turns to tear down a building (Remove Improvement), paid by its colony.
   "removeImprovementCost": { "energy": 5, "food": 2, "turns": 2 },
 

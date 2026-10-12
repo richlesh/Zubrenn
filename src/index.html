@@ -2668,7 +2668,12 @@
       // When the move crosses a monorail or road edge (or a road bridge), use
       // that transport mode's cheaper enter cost — so overland networks speed up
       // route planning (colony launches AND federation-building deliveries).
-      let cost = mvAt(0, 1); // unimproved baseline
+      // A SEA tile is crossed by the sea mode (index 2), not on foot: a sea
+      // tile's movement[0] is a large "impassable on foot" sentinel (e.g. 1000),
+      // so using it for water crossings makes ETAs astronomically large. Land
+      // tiles use the unimproved (index 0) baseline.
+      const isSeaDest = (terrainAt(x, y) === WATER);
+      let cost = isSeaDest ? mvAt(2, mvAt(0, 1)) : mvAt(0, 1);
       if (fromX != null && fromY != null) {
         const tr = ensureTransport();
         const ek = edgeKey(fromX, fromY, x, y);
@@ -3631,6 +3636,11 @@
 
     // Player panel: name + aggregate population, resources, and building counts across our colonies.
     function updatePlayerPanel() {
+      // Keep the Area-of-Control air-link overlay current (air network can change
+      // when buildings/colonies change or ranges shift between turns).
+      if (hexMap && hexMap.controlMode && typeof hexMap.setAirLinks === 'function') {
+        hexMap.setAirLinks(humanAirLinks());
+      }
       const nameEl = document.getElementById("player-name");
       if (nameEl && nameEl.querySelector("input") == null) nameEl.textContent = gameState.playerName || "Human";
       const pop = gameState.humanPop != null
@@ -5807,6 +5817,23 @@
       // colony's biodome cell records a direct link but is NOT traversed further
       // (so links THROUGH a third colony don't count).
       const cellNetworkLinks = (netCells, type) => {
+        // A network cell is "terminal" for another colony when it is that
+        // colony's biodome cell OR a hex-neighbour of it — i.e. the colony
+        // attaches to the network there. Biodomes sit BESIDE roads (not on them),
+        // so stopping only AT a biodome cell never fires; we must stop at cells
+        // ADJACENT to another colony. Record the link there, but do NOT expand
+        // past it — otherwise the walk flows through the whole network and marks
+        // every attached colony as a (false) direct link.
+        const terminalFor = new Map(); // netCellKey -> Set(otherColonyKey)
+        for (const b of others) {
+          const mark = (k) => {
+            if (!netCells.has(k)) return;
+            if (!terminalFor.has(k)) terminalFor.set(k, new Set());
+            terminalFor.get(k).add(_colonyKey(b));
+          };
+          mark(cellKey(b.x, b.y));
+          for (const n of hexNeighborsRenderer(b.x, b.y)) mark(cellKey(n.x, n.y));
+        }
         const start = [];
         // Entry points: the biodome cell itself and any neighbour on the network.
         if (netCells.has(cellKey(col.x, col.y))) start.push(cellKey(col.x, col.y));
@@ -5818,17 +5845,14 @@
         const stack = [...start];
         while (stack.length) {
           const ck = stack.pop();
+          // Terminal cell: it attaches one or more OTHER colonies. Record the
+          // link(s) and stop — don't route through this colony to reach others.
+          const term = terminalFor.get(ck);
+          if (term) { for (const key of term) addType(key, type); continue; }
           const [cx, cy] = ck.split(",").map(Number);
           for (const n of hexNeighborsRenderer(cx, cy)) {
             const nk = cellKey(n.x, n.y);
-            // Reached another colony's biodome (on or beside the network)?
-            const hit = otherByCell.get(nk);
-            if (hit) addType(_colonyKey(hit), type);
-            if (netCells.has(nk) && !seen.has(nk)) {
-              // Don't traverse through a cell that IS another colony's biodome.
-              if (otherByCell.has(nk)) { seen.add(nk); continue; }
-              seen.add(nk); stack.push(nk);
-            }
+            if (netCells.has(nk) && !seen.has(nk)) { seen.add(nk); stack.push(nk); }
           }
         }
       };
@@ -6503,6 +6527,22 @@
       const ra = colonyAirRange(a), rb = colonyAirRange(b);
       if (ra <= 0 || rb <= 0) return false;
       return hexDistance(a.x, a.y, b.x, b.y) <= Math.min(ra, rb);
+    }
+    // Air-link segments for the human's colonies, for the Area-of-Control view:
+    // one { x1,y1,x2,y2 } per unordered pair of the human's colonies that are
+    // air-linked (each has an air base within control and are within range).
+    function humanAirLinks() {
+      const cols = (gameState.buildings || []).filter(
+        (b) => b.type === 1 && b.owner === 'human' && !b.inTransit);
+      const out = [];
+      for (let i = 0; i < cols.length; i++) {
+        for (let j = i + 1; j < cols.length; j++) {
+          if (coloniesAirLinked(cols[i], cols[j])) {
+            out.push({ x1: cols[i].x, y1: cols[i].y, x2: cols[j].x, y2: cols[j].y });
+          }
+        }
+      }
+      return out;
     }
     // Drop any worked cells that fall outside the colony's current control area
     // (e.g. after the radius shrinks because population dropped). The biodome
@@ -7586,6 +7626,13 @@
         }
         if (inForeignControl(x, y, owner)) {
           return { ok: false, reason: "inside another player's zone of control" };
+        }
+        // `anywhere` waives zone-of-control, but the site must still be REACHABLE
+        // from one of the owner's colonies by the same overland/shallow-sea route
+        // planning the colony launch uses (findMovementPath, which also rejects
+        // tier-9 mountain tops and impassable terrain). No route -> can't service.
+        if (!federationBuildRoute(x, y, owner)) {
+          return { ok: false, reason: "no reachable route from a colony" };
         }
       } else {
         const controlled = onSea
@@ -11464,7 +11511,11 @@
     }
     ipcRenderer.on("view-location", () => openViewLoc());
     ipcRenderer.on("view-toggle-terrain", () => { if (hexMap) hexMap.toggleTextures(); });
-    ipcRenderer.on("view-toggle-control", () => { if (hexMap) hexMap.toggleControl(); });
+    ipcRenderer.on("view-toggle-control", () => {
+      if (!hexMap) return;
+      if (typeof hexMap.setAirLinks === 'function') hexMap.airLinks = humanAirLinks();
+      hexMap.toggleControl();
+    });
     ipcRenderer.on("view-zoom-in", () => { if (hexMap) hexMap.zoomIn(); });
     ipcRenderer.on("view-zoom-out", () => { if (hexMap) hexMap.zoomOut(); });
     ipcRenderer.on("view-center-map", () => { if (hexMap) { hexMap.centerViewport(); hexMap.redraw(); } });
@@ -12729,6 +12780,7 @@
         terrainBonus: CONFIG.terrainBonus || null,
         bonuses: (map.bonuses || {}),
         freshwaterAt: (x, y) => isFreshwaterLakeCell(x, y),
+        airLinks: humanAirLinks(),
         bridgeColor: CONFIG.bridge && CONFIG.bridge.color,
         roadColor: CONFIG.road && CONFIG.road.color,
         monorailColor: CONFIG.monorail && CONFIG.monorail.color,

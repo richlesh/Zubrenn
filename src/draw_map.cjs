@@ -381,6 +381,10 @@ class HexMap {
     this.cellInfo = opts.cellInfo || null;    // (x,y) => "E:.. F:.. M:.. W:.. H:.." string
     this.cellBonus = opts.cellBonus || null;  // (x,y) => { name, desc } | null for the hover tooltip
     this.freshwaterAt = opts.freshwaterAt || null; // (x,y) => bool: a freshwater-lake SEA tile (display only)
+    // Air links to draw in Area-of-Control view: array of { x1,y1,x2,y2 } cell
+    // pairs (map coords) connecting air-linked colonies. Light-blue straight
+    // lines centre-to-centre. See setAirLinks().
+    this.airLinks = opts.airLinks || null;
     this.terrainBonus = opts.terrainBonus || null; // config terrainBonus map (name -> { icon, ... })
     this.bonuses = opts.bonuses || null;      // sparse { "y*W+x": { name } } of placed bonuses
     this.bonusIcons = {};                     // bonus name -> loaded Image
@@ -619,6 +623,13 @@ class HexMap {
     this.bonuses = bonuses || null;
     this._draw();
     this._renderBirdseye();
+  }
+
+  // Replace the air-link segment list (drawn in Area-of-Control view) and redraw.
+  // `links` is an array of { x1, y1, x2, y2 } in map cell coordinates.
+  setAirLinks(links) {
+    this.airLinks = links || null;
+    this._draw();
   }
 
   // ---- "needs attention" flashing indicator ------------------------------
@@ -1129,6 +1140,32 @@ class HexMap {
         try { this.onOverlay(ctx, spacing, (x, y) => getHexCenter(x, y, spacing), visible); } catch (e) {}
         ctx.restore();
       }
+    }
+
+    // Area-of-Control view: draw AIR LINKS as light-blue straight lines directly
+    // connecting the centres of air-linked colonies (airfields/airports in
+    // range). Drawn in the translated hex space; on wrap maps each segment is
+    // drawn at the three wrap offsets so a link crossing the seam still shows and
+    // takes the shortest on-screen path.
+    if (this.controlMode && Array.isArray(this.airLinks) && this.airLinks.length) {
+      const W = this.worldSize.x;
+      const wrapPx = W * 0.75 * spacing.x;
+      const offs = this.wrap ? [0, -wrapPx, wrapPx] : [0];
+      ctx.save();
+      ctx.strokeStyle = 'rgba(120, 200, 255, 0.9)'; // light blue
+      ctx.lineWidth = Math.max(1.5, spacing.y / 12);
+      ctx.lineCap = 'round';
+      for (const ln of this.airLinks) {
+        const a = getHexCenter(ln.x1, ln.y1, spacing);
+        const b = getHexCenter(ln.x2, ln.y2, spacing);
+        for (const ox of offs) {
+          ctx.beginPath();
+          ctx.moveTo(a.x + ox, a.y);
+          ctx.lineTo(b.x + ox, b.y);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
     }
 
     // Fog of war: paint opaque fog over every on-screen cell that is not in the
