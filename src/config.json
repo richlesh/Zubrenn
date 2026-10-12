@@ -711,7 +711,7 @@
       "prerequisite": {
         "building": ["solar farm", "bank"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains"],
-        "other": ["river"],
+        "other": [ "freshwater" ],
         "network":  ["any"],
         "population": 5
       }
@@ -733,6 +733,25 @@
         "other":    ["land"],
         "network":  ["any"],
         "population": 5
+      }
+    },
+    // Compressed-Air Storage
+    "reservoir": {
+      "code": 36,
+      "name": "Reservoir",
+      "icon": "buildings/128/reservoir.png",
+      "symbol": "buildings/icons/water_plus.png",
+      "buildCost": { "energy": 500, "material": 500, "goods": 250, "wealth": 500, "water": 10, "turns": 6 },
+      "costPerYear": { "energy": 20, "goods": 10, "wealth": 50 },
+      "bonus": { },
+      "storage": { "water": 10000 },
+      "federationStorage": { "water": 10000 },
+      "prerequisite": {
+        "building": [ "global bank"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains"],
+        "network":  ["any"],
+        "other": [ "river" ],
+        "population": 20
       }
     },
     "spaceport": {

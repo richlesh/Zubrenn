@@ -380,6 +380,7 @@ class HexMap {
     this.onColonyDblClick = opts.onColonyDblClick || null; // (building) => void
     this.cellInfo = opts.cellInfo || null;    // (x,y) => "E:.. F:.. M:.. W:.. H:.." string
     this.cellBonus = opts.cellBonus || null;  // (x,y) => { name, desc } | null for the hover tooltip
+    this.freshwaterAt = opts.freshwaterAt || null; // (x,y) => bool: a freshwater-lake SEA tile (display only)
     this.terrainBonus = opts.terrainBonus || null; // config terrainBonus map (name -> { icon, ... })
     this.bonuses = opts.bonuses || null;      // sparse { "y*W+x": { name } } of placed bonuses
     this.bonusIcons = {};                     // bonus name -> loaded Image
@@ -1795,7 +1796,12 @@ class HexMap {
       return;
     }
 
-    const name = this._terrainName(this.terrain[hex.y][hex.x]);
+    let name = this._terrainName(this.terrain[hex.y][hex.x]);
+    // Display-only: a sea tile that is part of a freshwater lake is labeled
+    // "Freshwater" instead of "Sea". It still behaves as sea everywhere else.
+    if (this.freshwaterAt && this.terrain[hex.y][hex.x] === 1 && this.freshwaterAt(hex.x, hex.y)) {
+      name = 'Freshwater';
+    }
     // Elevation is stored normalized 0..1. Report it relative to sea level:
     // (elevation - seaLevel) * 10000 m, so ocean is negative and land positive.
     let elevText = 'n/a';

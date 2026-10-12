@@ -166,6 +166,12 @@ The Compressed‑Air Energy Storage (CAES) is an advanced energy‑storage facil
 
 The Water Treatment Plant (WTP) draws from a nearby river or canal and purifies it into clean fresh water for the colony's people, farms, and industry. It must be built on habitable land **beside a river or canal** and requires a **Solar Panel** first. A major build with a heavy energy appetite to run its pumps and filtration, it is a strong, steady source of water and adds water storage besides — the mainstay water supply for any colony settled along the planet's inland waterways.
 
+<img align="right" width="128" src="src/resources/buildings/128/reservoir.png">
+
+#### Reservoir
+
+The Reservoir is a vast impounded water store — a dammed basin that banks enormous quantities of fresh water against drought and surging demand. It must be built on habitable land **beside a river or canal** (its catchment) and is a late‑game undertaking: it requires a **Global Bank** in the colony, a transport link to another of your colonies, and a colony population of at least 20,000. It produces nothing on its own and carries a modest upkeep, but it **massively** expands both the colony's and the Federation's water storage — the strategic reserve that lets a sprawling, water‑hungry civilization ride out the leanest years.
+
 <img align="right" width="128" src="src/resources/buildings/128/Desalination.png">
 
 #### Desalination Plant

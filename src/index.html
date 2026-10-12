@@ -1257,6 +1257,100 @@
       }
       return false;
     }
+    // ---- Freshwater sources (building `other: "freshwater"` prerequisite) -----
+    // A "freshwater lake" is a connected group of SEA tiles that is COMPLETELY
+    // enclosed by land (never touches the open ocean / a map edge) and is small
+    // (<= config.freshwaterLakeMaxTiles, default 300). Larger enclosed bodies are
+    // salt-water inland seas and do NOT count as freshwater. Computed once per
+    // terrain grid and cached (sea tiles never change in-game).
+    let _lakeCacheTerrain = null;      // terrain-grid identity the cache was built for
+    let _freshwaterLakeSet = null;     // Set of "x,y" keys that are freshwater-lake sea tiles
+    function freshwaterLakeMaxTiles() {
+      const v = CONFIG && CONFIG.freshwaterLakeMaxTiles;
+      return (typeof v === 'number' && v > 0) ? v : 300;
+    }
+    function _ensureFreshwaterLakes() {
+      const t = gameState.map && gameState.map.terrain;
+      if (t === _lakeCacheTerrain && _freshwaterLakeSet) return _freshwaterLakeSet;
+      _lakeCacheTerrain = t;
+      _freshwaterLakeSet = new Set();
+      if (!t || !t.length) return _freshwaterLakeSet;
+      const H = t.length, W = t[0].length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const maxTiles = freshwaterLakeMaxTiles();
+      const seen = new Set();
+      const key = (x, y) => x + ',' + y;
+      for (let sy = 0; sy < H; sy++) {
+        for (let sx = 0; sx < W; sx++) {
+          if (t[sy][sx] !== WATER) continue;
+          const sk = key(sx, sy);
+          if (seen.has(sk)) continue;
+          // Flood-fill this sea component.
+          const comp = [];
+          const stack = [{ x: sx, y: sy }];
+          seen.add(sk);
+          let open = false; // touches the open ocean / a map edge -> salt
+          while (stack.length) {
+            const c = stack.pop();
+            comp.push(c);
+            for (const n of hexNeighborsRenderer(c.x, c.y)) {
+              let nx = n.x; const ny = n.y;
+              // Top/bottom are always map edges; left/right are edges only when
+              // the map does NOT wrap east-west.
+              if (ny < 0 || ny >= H) { open = true; continue; }
+              if (wrap) { nx = ((nx % W) + W) % W; }
+              else if (nx < 0 || nx >= W) { open = true; continue; }
+              if (t[ny][nx] !== WATER) continue; // land border
+              const nk = key(nx, ny);
+              if (seen.has(nk)) continue;
+              seen.add(nk);
+              stack.push({ x: nx, y: ny });
+            }
+          }
+          // Enclosed (never reached an edge) AND small enough -> freshwater lake.
+          if (!open && comp.length <= maxTiles) {
+            for (const c of comp) _freshwaterLakeSet.add(key(c.x, c.y));
+          }
+        }
+      }
+      return _freshwaterLakeSet;
+    }
+    // Normalize a cell's x for lake-set lookup on wrap maps.
+    function _lakeKey(x, y) {
+      const t = gameState.map && gameState.map.terrain;
+      if (!t || !t.length) return x + ',' + y;
+      const W = t[0].length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const xx = wrap ? ((x % W) + W) % W : x;
+      return xx + ',' + y;
+    }
+    // True if (x,y) is a sea tile belonging to a freshwater lake.
+    function isFreshwaterLakeCell(x, y) {
+      if (terrainAt(x, y) !== WATER) return false;
+      return _ensureFreshwaterLakes().has(_lakeKey(x, y));
+    }
+    // True if the cell ITSELF is a freshwater source: non-zero terrain base
+    // water, a terrain-bonus with non-zero water, or a freshwater-lake sea tile.
+    function _cellIsFreshwaterSource(x, y) {
+      if (isFreshwaterLakeCell(x, y)) return true;
+      const tp = terrainProd(terrainAt(x, y));
+      if ((tp.water || 0) > 0) return true;
+      const tb = bonusDefAt(x, y);
+      if (tb && tb.bonus && (tb.bonus.water || 0) > 0) return true;
+      return false;
+    }
+    // The `other: "freshwater"` predicate: the cell is ON or ADJACENT to a
+    // freshwater source. Freshwater sources are: river/canal adjacency, a
+    // freshwater lake, a terrain cell with non-zero base water, or a terrain cell
+    // with a non-zero terrain-bonus water.
+    function nearFreshwater(x, y) {
+      if (nearRiver(x, y)) return true;           // river or canal adjacent
+      if (_cellIsFreshwaterSource(x, y)) return true; // the cell itself
+      for (const n of hexNeighborsRenderer(x, y)) {
+        if (_cellIsFreshwaterSource(n.x, n.y)) return true;
+      }
+      return false;
+    }
     // True if any edge-adjacent cell is wetlands/marsh.
     function nearWetlands(x, y) {
       const WL = terrainIdOf('wetlands');
@@ -3113,7 +3207,10 @@
         add(improvementName(b.type), { food: n.food, material: n.material, goods: n.goods, energy: n.energy, water: n.water, wealth: n.wealth, happiness: n.happiness });
       }
 
-      return { terrainName: tt.name || `Terrain ${terr}`, base, bonuses };
+      // Display-only: a sea tile in a freshwater lake is labeled "Freshwater".
+      const _displayName = (terr === WATER && isFreshwaterLakeCell(gx, gy))
+        ? 'Freshwater' : (tt.name || `Terrain ${terr}`);
+      return { terrainName: _displayName, base, bonuses };
     }
     // ---- status / turn -----------------------------------------------------
     function currentYear() { return (CONFIG.startingYear || 2500) + (gameState.turn || 0); }
@@ -7521,6 +7618,12 @@
         switch (tag) {
           case 'river':
             if (!nearRiver(x, y)) return { ok: false, reason: "must be adjacent to a river or canal" };
+            break;
+          case 'freshwater':
+            // On or adjacent to a freshwater source: a river/canal, a freshwater
+            // lake (small fully-enclosed sea), a terrain cell with non-zero base
+            // water, or a terrain-bonus with non-zero water.
+            if (!nearFreshwater(x, y)) return { ok: false, reason: "must be on or adjacent to fresh water" };
             break;
           case 'water':
             if (!(nearRiver(x, y) || nearSea(x, y) || nearWetlands(x, y))) return { ok: false, reason: "must be adjacent to a river, canal, sea, or wetlands" };
@@ -12625,6 +12728,7 @@
         terrainTypes: CONFIG.terrainTypes || null,
         terrainBonus: CONFIG.terrainBonus || null,
         bonuses: (map.bonuses || {}),
+        freshwaterAt: (x, y) => isFreshwaterLakeCell(x, y),
         bridgeColor: CONFIG.bridge && CONFIG.bridge.color,
         roadColor: CONFIG.road && CONFIG.road.color,
         monorailColor: CONFIG.monorail && CONFIG.monorail.color,
