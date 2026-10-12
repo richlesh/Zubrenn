@@ -1054,6 +1054,16 @@
       "abundancy": 2,
       "desc": "The massive, bison-sized beetle Bugalo zubrennensis migrates in slow herds across the twilight steppes. The meat is perfection: buttery, marbled, and objectively tastes like Kobe beef."
     },
+    "Cragwing Flock": {
+      "icon": "terrain_bonus/128/cragwing_flock.png",
+      "bonus": { "food": "10-20" },
+      "unworkedBonus": { "happiness": 0.25 },
+      "terrain": ["mountain-high", "hills"],
+      "climate": ["tropical", "temperate", "subpolar"],
+      "other": [ "dry" ],
+      "abundancy": 4,
+      "desc": "Red-orange flying lizards that roost in sheer sunlit crags — in the high mountains and the rocky bluffs of the highland hills. They bask in direct sunlight and shun forests and shade. Armed with razor-sharp teeth, they are dangerous to hunt, but the reward is worth it: the pale meat tastes, unmistakably, like chicken."
+    },
     "Thousandseed Basin": {
       "icon": "terrain_bonus/128/thousandseed_basin.png",
       "bonus": { "food": "10-20" },
