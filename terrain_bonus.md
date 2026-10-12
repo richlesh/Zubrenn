@@ -13,13 +13,13 @@ their gift.
 
 #### Myco-Tower Grove
 
-<img align="right" width="128" src="src/resources/terrain_bonus/128/myco-tower.png">
+<img align="right" width="128" src="src/resources/terrain_bonus/128/myco-tower_grove.png">
 
 The Myco-Tower Grove rises in the twilight band near the poles, where towering fractal fungi flourish in the long, dim seasons on grassland, hills, and even the edges of the ice, always within reach of water. Their branching, cathedral-like forms are farmed in the half-light, and their spores are threshed and refined into protein and starch. A worked grove is a solid source of food, making the cold frontier far more survivable than it first appears.
 
 #### Microalgae Lattice
 
-<img align="right" width="128" src="src/resources/terrain_bonus/128/microalgea.png">
+<img align="right" width="128" src="src/resources/terrain_bonus/128/microalgae_lattice.png">
 
 The Microalgae Lattice spreads across sheltered coastal seas within the temperate latitudes, a vast floating mesh of engineered microalgae clinging to the water near land. Skimmed and pressed, it becomes a reliable source of protein and carbohydrates for nearby colonies. A worked lattice is a strong source of food, turning quiet shallows into productive aquatic farmland.
 

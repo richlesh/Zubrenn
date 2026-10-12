@@ -976,7 +976,7 @@
   "terrainBonus": {
     // Food
     "Myco-Tower Grove": {
-      "icon": "terrain_bonus/128/myco-tower.png",
+      "icon": "terrain_bonus/128/myco-tower_grove.png",
       "bonus": { "food": "5-10", "water": 0.2 },
       "terrain": ["grassland","hills","frozen"],
       "climate": ["subpolar"],
@@ -986,7 +986,7 @@
       "desc": "Towering, fractal fungi farmable in the twilight band. Spores are harvested for protein and starch."
     },
     "Microalgae Lattice": {
-      "icon": "terrain_bonus/128/microalgea.png",
+      "icon": "terrain_bonus/128/microalgae_lattice.png",
       "bonus": { "food": "10-25" },
       "terrain": ["sea"],
       "climate": ["tropical", "temperate"],
