@@ -49,6 +49,12 @@ The Aquafarm is the sea's answer to the Farm — a floating lattice of pens, kel
 
 The Mine is the colony's dedicated material producer, carving ore and stone straight out of the ground. Its output *scales with how mineral‑rich the ground beneath it is*, so a Mine on rugged, ore‑laden terrain hauls up a tremendous amount — plant them on the richest ground you can reach. It requires a **Solar Panel** first and, uniquely, may be worked on the high, cold, and broken terrain other buildings avoid, where ore is richest — though the most forbidding mountain summits remain off‑limits to everyone. It is a modestly priced build with a steady energy appetite to run its machinery, and it adds a good deal of material storage. A single well‑sited Mine can single‑handedly feed a colony's Factories and keep its road network supplied with material.
 
+<img align="right" width="128" src="src/resources/buildings/128/megamine.png">
+
+#### Megamine
+
+The Megamine is the Mine scaled up to heavy extraction — a vast open‑pit and deep‑shaft complex that tears material from the ground on a scale no single Mine can match. It is built as an **upgrade of an existing Mine**, raised in its place, and still counts as a Mine for anything that depends on one. It requires a **Solar Farm** in the colony. Like the Mine, its yield *scales with how mineral‑rich the cell beneath it is* — on the richest ground it multiplies that tile's material enormously — and it brings a healthy stream of wealth besides, with large material storage to match. It is a costly build with a voracious appetite for energy and goods to keep its machinery and crews running, and the scarred land weighs a little on morale. When a colony's Factories outgrow what its Mines can supply, upgrading a key Mine to a Megamine is how its material output takes off.
+
 <img align="right" width="128" src="src/resources/buildings/128/factory.png">
 
 #### Factory
@@ -141,6 +147,12 @@ The Warehouse greatly boosts how many manufactured **Goods** a colony can store.
 #### Bank
 
 The Bank speeds up the colony's economy and unlocks more advanced building projects. It requires a **Solar Panel** before it can be built. A modest build, it more than pays for its upkeep by generating a steady flow of wealth, lifts morale a little, and greatly expands the colony's wealth storage.
+
+<img align="right" width="128" src="src/resources/buildings/128/global_bank.png">
+
+#### Global Bank
+
+The Global Bank is the Bank elevated to a world financial center — a central clearinghouse that moves wealth across the whole Federation. It is built as an **upgrade of an existing Bank**, raised in its place, and still counts as a Bank for anything that depends on one. It requires a **Solar Farm** in the colony and a colony population of at least 15,000. Where a Bank returns a steady trickle of wealth, a Global Bank pours out a torrent of it, lifts morale more strongly, and holds vast wealth reserves — both in the colony and in the Federation treasury. A costlier build with heavier upkeep, upgrading a key Bank to a Global Bank is how a mature economy turns prosperity into real financial power.
 
 <img align="right" width="128" src="src/resources/buildings/128/caes.png">
 

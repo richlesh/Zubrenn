@@ -371,7 +371,7 @@
       "prerequisite": {
         "building": ["biodome","solar farm"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
-        "upgrades": ["farm"],
+        "upgrades": "farm",
         "population": 5
       }
     },
@@ -430,12 +430,12 @@
       "symbol": "buildings/icons/goods.png",
       "buildCost": { "energy": 300, "material": 150, "wealth": 300, "water": 5, "turns": 6 },
       "costPerYear": { "energy": 600, "material": 600, "wealth": 30, "water": 2 },
-      "bonus": { "goods": 500, "wealth": 50, "happiness": -0.25 },
+      "bonus": { "goods": 500, "wealth": 50, "happiness": -0.5 },
       "storage": { "energy": 50, "goods": 1000, "material": 1200 },
       "prerequisite": {
         "building": ["solar farm"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
-        "upgrades": [ "factory" ],
+        "upgrades": "factory",
         "population": 10
       }
     },
@@ -446,12 +446,12 @@
       "symbol": "buildings/icons/goods.png",
       "buildCost": { "energy": 600, "material": 300, "wealth": 600, "water": 10, "turns": 10 },
       "costPerYear": { "energy": 1000, "material": 1000, "wealth": 100, "water": 5 },
-      "bonus": { "goods": 900, "wealth": 200, "happiness": -0.25 },
+      "bonus": { "goods": 900, "wealth": 200, "happiness": -0.75 },
       "storage": { "energy": 1000, "goods": 1800, "material": 2000 },
       "prerequisite": {
         "building": ["solar farm", "bank"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
-        "upgrades": [ "megafactory" ],
+        "upgrades": "megafactory",
         "population": 15
       }
     },
@@ -661,6 +661,24 @@
         "population": 5
       }
     },
+    "global bank": {
+      "code": 35,
+      "name": "Global Bank",
+      "icon": "buildings/128/global_bank.png",
+      "symbol": "buildings/icons/coin.png",
+      "buildCost": { "energy": 25, "material": 50, "wealth": 100, "water": 1, "turns": 3 },
+      "costPerYear": { "energy": 10, "wealth": 10 },
+      "bonus": { "wealth": 500, "happiness": 0.5 },
+      "storage": { "wealth": 2500 },
+      "federationStorage": { "wealth": 2500 },
+      "prerequisite": {
+        "building": ["solar farm"],
+        "network": ["any"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+        "population": 15,
+        "upgrades": "bank"
+      }
+    },
     // Compressed-Air Storage
     "caes": {
       "code": 11,
@@ -790,12 +808,29 @@
       "symbol": "buildings/icons/crystal.png",
       "buildCost":   { "energy": 5, "material": 5, "wealth": 10, "water": 0.5, "turns": 3 },
       "costPerYear": { "energy": 50, "material": 0, "goods": 5, "wealth": 5 },
-      "bonus":       { "material": "12x", "wealth": "5x" },
+      "bonus":       { "material": "15x", "wealth": "5x", "happiness": -0.25 },
       "storage":     { "material": 500 },
       "prerequisite": {
         "building": ["solar panel"],
         "terrain":  ["land"],
         "other":    []
+      }
+    },
+    // Megamine
+    "megamine": {
+      "code": 34,
+      "name": "Megamine",
+      "icon": "buildings/128/megamine.png",
+      "symbol": "buildings/icons/crystal.png",
+      "buildCost":   { "energy": 25, "material": 25, "wealth": 50, "water": 1.5, "turns": 5 },
+      "costPerYear": { "energy": 75, "material": 0, "goods": 25, "wealth": 25 },
+      "bonus":       { "material": "25x", "wealth": "10x", "happiness": -0.5 },
+      "storage":     { "material": 1000 },
+      "prerequisite": {
+        "building": ["solar farm"],
+        "terrain":  ["land"],
+        "other":    [],
+        "upgrades": "mine"
       }
     },
     // housing habitat

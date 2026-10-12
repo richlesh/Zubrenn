@@ -12,6 +12,31 @@ civilization. Zubrenn offers six ways to link colonies: **Roads**, **Rivers**
 **Space**. Two colonies count as connected if *any* of these links reaches
 between them, directly or through a chain of other colonies.
 
+### Infrastructure and Communication
+
+Not every resource travels the same way. **Road/monorail and river/canal
+(overland) links carry everything** — the question is which resources can *also*
+ride a sea, air, or space link:
+
+- **Food, raw materials, and goods** can be shared across *any* network —
+  overland, **sea** (shallow or deep), **air**, or **space**.
+- **Water** moves overland and across the **sea** (coastal and open-ocean
+  shipping, shallow or deep), but **not** by air or space — there are no water
+  pipelines in the sky or in orbit.
+- **Wealth** moves overland and by **air** or **space** (finance travels by
+  wire, aircraft, and satellite), but **not** across a bare **sea** route.
+- **Energy** follows the ground by power line (overland), and can **also** be
+  beamed between two colonies that each have a **Spaceport**, via microwave
+  power satellites in orbit (**space**). It cannot be shared across **sea** or
+  **air** routes.
+
+A colony covers a shortfall from any colony it is connected to *by a network
+that can carry that resource*, and it draws from (or feeds) the Federation pool
+only when such a link reaches the capital. Airfields and airports also unlock
+long-range wireless communication, and spaceports extend your reach through
+satellite links — but to keep a distant, energy-hungry colony supplied, you must
+still reach it by road, monorail, or river/canal.
+  
 #### Roads
 
 <img align="right" width="128" src="src/resources/transportation/128/road.png">

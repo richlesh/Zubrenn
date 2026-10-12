@@ -165,7 +165,7 @@ body.dark #buildings-panel .bldg-none { color: #888; }
 #work-dialog {
   background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
-  max-width: 90vw; max-height: 90vh;
+  width: 95vw; height: 95vh; max-width: 95vw; max-height: 95vh;
   /* Clamp the dialog to (at most) the viewport height; the body (map + stats)
      becomes the scroll pane while the header, info line, and Done row stay put. */
   display: flex; flex-direction: column; min-height: 0; overflow: hidden;
@@ -176,20 +176,21 @@ body.dark #work-dialog { background: #2c2c2e; color: #e0e0e0; }
 body.dark #work-info { color: #aaa; }
 #work-canvas {
   display: block; background: #cfd6e6; border-radius: 6px;
-  /* Let the canvas scale DOWN on short screens so the dialog never exceeds the
-     viewport. The 480x420 backing store is preserved (click/zoom hit-testing
-     divides by the displayed rect size, so scaling stays accurate). */
-  max-width: 100%; max-height: 62vh; height: auto;
+  /* The colony map fills the body's available width AND height. renderWorkModal
+     resizes the canvas backing store to this displayed box before drawing, so the
+     hex grid scales to use the whole area (click/zoom hit-testing divides by the
+     displayed rect, so it stays accurate). */
+  flex: 1 1 auto; width: 100%; height: 100%; min-width: 0; min-height: 0;
 }
 body.dark #work-canvas { background: #20242e; }
 #work-body {
   display: flex; gap: 14px; align-items: flex-start;
   /* Scroll pane: takes the remaining dialog height and scrolls when the map +
      stats are taller than the clamped dialog. */
-  flex: 1 1 auto; min-height: 0; overflow: auto;
+  flex: 1 1 auto; min-height: 0; overflow: hidden; align-items: stretch;
 }
 #work-stats {
-  width: 240px; flex: 0 0 240px; font-size: 12px;
+  width: 276px; flex: 0 0 276px; font-size: 12px; overflow: auto; max-height: 100%;
   background: #ffffff; border: 1px solid #ddd; border-radius: 8px; padding: 10px 12px;
   align-self: flex-start;
 }
@@ -248,6 +249,28 @@ body.dark #context-menu { background: #2c2c2e; color: #e0e0e0; border-color: #55
 #context-menu .ctx-item { padding: 6px 12px; border-radius: 4px; cursor: pointer; }
 #context-menu .ctx-item:hover { background: #0a84ff; color: #fff; }
 #context-menu .ctx-item.disabled { opacity: 0.4; cursor: default; }
+/* "Can't Build Yet" flyout: a SECOND menu panel, positioned beside the context
+   menu, listing building names the player can't build on the clicked cell yet;
+   clicking one opens an explanation. Kept on-screen by positionCantBuildFlyout. */
+#ctx-cantbuild-sub {
+  position: fixed;
+  z-index: 10007;              /* above the context menu */
+  min-width: 160px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: #fff;
+  color: #1e1e1e;
+  border: 1px solid #999;
+  border-radius: 6px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+  padding: 4px;
+}
+body.dark #ctx-cantbuild-sub { background: #2c2c2e; color: #e0e0e0; border-color: #555; }
+#ctx-cantbuild-sub .ctx-subitem {
+  padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; color: #333;
+}
+#ctx-cantbuild-sub .ctx-subitem:hover { background: #0a84ff; color: #fff; }
+body.dark #ctx-cantbuild-sub .ctx-subitem { color: #ccc; }
 #context-menu .ctx-item.disabled:hover { background: transparent; color: inherit; }
 
 /* Colony name modal. */

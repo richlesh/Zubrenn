@@ -76,7 +76,11 @@
     <div class="ctx-item" id="ctx-remove-transport" hidden>Remove Transportation</div>
     <div class="ctx-item" id="ctx-canal" hidden>Build Canal</div>
     <div class="ctx-item" id="ctx-canal-remove" hidden>Remove Canal</div>
+    <div class="ctx-item" id="ctx-cantbuild" hidden>Can't Build Yet ▸</div>
   </div>
+  <!-- Flyout submenu for "Can't Build Yet": a separate panel positioned beside
+       the context menu, listing buildings not currently buildable on the cell. -->
+  <div id="ctx-cantbuild-sub" hidden></div>
 
   <!-- Rebase destination picker: a floating menu of colonies a selected unit
        can move to. Populated/positioned from JS (openColonyPicker). Selecting
@@ -535,7 +539,12 @@
       });
     }
     // Re-clamp dialogs when the game window is resized.
-    window.addEventListener("resize", clampDialogsToWindow);
+    window.addEventListener("resize", () => {
+      clampDialogsToWindow();
+      // Re-fit the colony-detail map (its 95vw/95vh dialog + canvas change size).
+      if (typeof workOverlay !== 'undefined' && workOverlay && !workOverlay.hidden
+          && typeof renderWorkModal === 'function') renderWorkModal();
+    });
     function applyTheme(settings) {
       document.body.classList.toggle("dark", (settings.theme || "dark") === "dark");
       _autoTurnEnd = settings.autoTurnEnd !== false; // default on
@@ -1237,6 +1246,14 @@
     function nearSea(x, y) {
       for (const n of hexNeighborsRenderer(x, y)) {
         if (terrainAt(n.x, n.y) === WATER) return true;
+      }
+      return false;
+    }
+    // True if any edge-adjacent cell is land (any non-sea tile, 2..11).
+    function nearLand(x, y) {
+      for (const n of hexNeighborsRenderer(x, y)) {
+        const t = terrainAt(n.x, n.y);
+        if (t >= 2 && t <= 11) return true;
       }
       return false;
     }
@@ -3615,7 +3632,9 @@
       });
       let html = "";
       for (const r of rows) {
-        html += `<div class="bldg-stat">${r.name}: <span>${count(r.type).toLocaleString()}</span></div>`;
+        const n = count(r.type);
+        if (n <= 0) continue;               // omit building types the player has none of
+        html += `<div class="bldg-stat">${r.name}: <span>${n.toLocaleString()}</span></div>`;
       }
       list.innerHTML = html;
       updateResourcesPanel();
@@ -4966,11 +4985,42 @@
     // economy tick begins (see invalidateColonyConnectivity()).
     let _colonyGroupsCache = null; // owner -> Map(colonyKey -> groupId)
     function invalidateColonyConnectivity() { _colonyGroupsCache = null; }
+    // Which transport-network grouping governs SHARING of a given resource.
+    // Land (road/monorail) and river/canal ALWAYS count; the mode name says
+    // which of sea / air / space ALSO count:
+    //   'any'      - land, river, sea, air, space   -> food, material, goods
+    //   'surface'  - land, river, sea               -> water (pipes can ride
+    //                ships/coastal routes but not air or space)
+    //   'nosea'    - land, river, air, space        -> wealth (finance moves by
+    //                wire/air/orbit, but not over bare sea routes)
+    //   'landspace'- land, river, space             -> energy (power lines follow
+    //                the ground, plus microwave power satellites beam it between
+    //                colonies that each have a Spaceport; no sea or air)
+    function resourceShareMode(resource) {
+      if (resource === 'energy') return 'landspace';
+      if (resource === 'water') return 'surface';
+      if (resource === 'wealth') return 'nosea';
+      return 'any'; // food, material, goods (and anything else)
+    }
     function _colonyKey(col) { return col.x + "," + col.y; }
 
-    function colonyConnectivity(owner) {
+    // `mode` selects which transport networks count for grouping. Land
+    // (road/monorail) and river/canal ALWAYS count; the mode controls whether
+    // sea / air / space ALSO count (see resourceShareMode):
+    //   'any'      - land, river, sea, air, space   (food/material/goods)
+    //   'surface'  - land, river, sea               (water)
+    //   'nosea'    - land, river, air, space        (wealth)
+    //   'landspace'- land, river, space             (energy: ground power lines
+    //                plus microwave power satellites between Spaceports)
+    function colonyConnectivity(owner, mode) {
+      if (!['any', 'surface', 'nosea', 'landspace'].includes(mode)) mode = 'any';
       if (!_colonyGroupsCache) _colonyGroupsCache = new Map();
-      if (_colonyGroupsCache.has(owner)) return _colonyGroupsCache.get(owner);
+      const cacheKey = owner + "|" + mode;
+      if (_colonyGroupsCache.has(cacheKey)) return _colonyGroupsCache.get(cacheKey);
+      // Per-network allow flags derived from the mode.
+      const allowSea   = (mode === 'any' || mode === 'surface');
+      const allowAir   = (mode === 'any' || mode === 'nosea');
+      const allowSpace = (mode === 'any' || mode === 'nosea' || mode === 'landspace');
 
       const cols = gameState.buildings.filter(
         (b) => b.type === 1 && b.owner === owner && !b.inTransit);
@@ -5078,7 +5128,7 @@
       // Because the link is range-limited it isn't "any two airfields", so we
       // check pairs (colony counts are small); skip pairs already connected.
       const airCols = [];
-      for (let i = 0; i < cols.length; i++) if (colonyHasAirfield(cols[i])) airCols.push(i);
+      if (allowAir) for (let i = 0; i < cols.length; i++) if (colonyHasAirfield(cols[i])) airCols.push(i);
       for (let a = 0; a < airCols.length; a++) {
         for (let b = a + 1; b < airCols.length; b++) {
           const i = airCols[a], j = airCols[b];
@@ -5095,7 +5145,7 @@
       const seaMode = ownerSeaMode(owner); // 1 = shallow (Dock), 2 = all sea (Port)
       const seaRouteCell = (seaMode >= 2) ? ((x, y) => terrainAt(x, y) === 1) : ((x, y) => isShallowSea(x, y));
       const dockCols = [];
-      for (let i = 0; i < cols.length; i++) if (colonyHasDock(cols[i])) dockCols.push(i);
+      if (allowSea) for (let i = 0; i < cols.length; i++) if (colonyHasDock(cols[i])) dockCols.push(i);
       for (let a = 0; a < dockCols.length; a++) {
         for (let b = a + 1; b < dockCols.length; b++) {
           const i = dockCols[a], j = dockCols[b];
@@ -5110,7 +5160,7 @@
       // colony regardless of distance. Union them all into one group by linking
       // each to the first Spaceport colony seen.
       let firstSpace = -1;
-      for (let i = 0; i < cols.length; i++) {
+      if (allowSpace) for (let i = 0; i < cols.length; i++) {
         if (!colonyHasSpaceport(cols[i])) continue;
         if (firstSpace < 0) firstSpace = i;
         else union(firstSpace, i);
@@ -5119,13 +5169,13 @@
       // Final: colonyKey -> group root id.
       const groups = new Map();
       for (let i = 0; i < cols.length; i++) groups.set(_colonyKey(cols[i]), find(i));
-      _colonyGroupsCache.set(owner, groups);
+      _colonyGroupsCache.set(cacheKey, groups);
       return groups;
     }
 
     // Same-owner colonies connected to `col` (excluding itself).
-    function connectedColonies(col) {
-      const groups = colonyConnectivity(col.owner);
+    function connectedColonies(col, mode) {
+      const groups = colonyConnectivity(col.owner, mode);
       const myGroup = groups.get(_colonyKey(col));
       if (myGroup == null) return [];
       const out = [];
@@ -5273,11 +5323,11 @@
     // Is `col` network-connected (any transport modality) to its federation's
     // capital (earliest-founded surviving colony)? The capital is connected to
     // itself. Used to gate federation borrowing/overflow.
-    function colonyConnectedToCapital(col) {
+    function colonyConnectedToCapital(col, mode) {
       const capital = capitalOf(col.owner);
       if (!capital) return false;
       if (capital === col) return true;
-      const groups = colonyConnectivity(col.owner);
+      const groups = colonyConnectivity(col.owner, mode);
       const gCol = groups.get(_colonyKey(col));
       const gCap = groups.get(_colonyKey(capital));
       return gCol != null && gCol === gCap;
@@ -5305,14 +5355,15 @@
     function economyBorrow(col, resource, amount, rng) {
       if (!(amount > 0)) return 0;
       let got = 0;
+      const shareMode = resourceShareMode(resource);
       // Step 1-2: federation pool, only if connected to the capital.
-      if (colonyConnectedToCapital(col)) {
+      if (colonyConnectedToCapital(col, shareMode)) {
         const fed = federationOwnedOf(col.owner);
         const take = Math.min(Math.max(0, fed[resource] || 0), amount - got);
         if (take > 0) { fed[resource] -= take; got += take; }
       }
       // Step 3-4: connected colonies, richest-first (random tiebreak).
-      const peers = connectedColonies(col);
+      const peers = connectedColonies(col, shareMode);
       let guard = 0;
       while (amount - got > 1e-9 && guard++ < peers.length + 1) {
         let bestAmt = 0; const ties = [];
@@ -5487,8 +5538,10 @@
             if (owned[k] <= cap) { if (owned[k] < 0) owned[k] = 0; continue; }
             let excess = owned[k] - cap;
             owned[k] = cap;
-            // Overflow routes to the federation only if connected to the capital.
-            if (colonyConnectedToCapital(col)) {
+            // Overflow routes to the federation only if connected to the capital
+            // by a network that can carry this resource (energy/water: overland
+            // only; everything else: any network).
+            if (colonyConnectedToCapital(col, resourceShareMode(k))) {
               const room = Math.max(0, (fedMax[k] || 0) - (fed[k] || 0));
               const moved = Math.min(excess, room);
               fed[k] = (fed[k] || 0) + moved;
@@ -5569,7 +5622,7 @@
     // borrowing before committing to drain peers.
     function connectedAvailable(col, resource) {
       let sum = 0;
-      for (const p of connectedColonies(col)) sum += (ensureOwned(p)[resource] || 0);
+      for (const p of connectedColonies(col, resourceShareMode(resource))) sum += (ensureOwned(p)[resource] || 0);
       return sum;
     }
     // Borrow up to `amount` of `resource` from the colony's CONNECTED same-owner
@@ -5578,7 +5631,7 @@
     // is independent of the per-turn economy pipeline. Returns the amount got.
     function borrowFromConnected(col, resource, amount) {
       if (!(amount > 0)) return 0;
-      const peers = connectedColonies(col);
+      const peers = connectedColonies(col, resourceShareMode(resource));
       if (!peers.length) return 0;
       let got = 0, guard = 0;
       while (amount - got > 1e-9 && guard++ < peers.length + 1) {
@@ -7409,7 +7462,12 @@
       // A building that should be placeable on any land terrain lists the
       // `land` terrain group in its prerequisite (e.g. the Mine).
       if (!terrainAllowedForBuilding(type, terr)) {
-        return { ok: false, reason: (terr === WATER) ? "must be built on sea" : "must be land" };
+        // The reason reflects what the BUILDING requires (its allowed terrain
+        // set), not the clicked cell: a sea building needs a sea tile, a land
+        // building needs a land tile.
+        const allowed = expandTerrainTokens(buildingTerrains(type));
+        const needsSea = allowed.has("sea");
+        return { ok: false, reason: needsSea ? "must be built on sea" : "must be built on land" };
       }
       // When a building sits on the water (its terrain set allows sea), it must
       // be a shallow-sea tile (sea adjacent to land) — as Docks required.
@@ -7486,9 +7544,14 @@
             break;
           }
           case 'land':
-            // Implicit for non-sea buildings; nothing extra to check.
+            // Shoreline requirement: the cell must be adjacent to land (e.g. a
+            // Dock sits on a sea tile that touches a shore).
+            if (!nearLand(x, y)) return { ok: false, reason: "must be adjacent to land" };
             break;
           case 'sea':
+            // The cell must be adjacent to a sea tile (coastal land).
+            if (!nearSea(x, y)) return { ok: false, reason: "must be adjacent to sea" };
+            break;
           case 'pristine':
           case 'anywhere':
           default:
@@ -7535,8 +7598,11 @@
     // upgrade. An upgrade building may ONLY be placed on a cell already holding
     // the owner's building of that type, and placing it REPLACES that building.
     function buildingUpgradesCode(type) {
-      const up = btPrereq(type).upgrades;
-      if (!up) return null;
+      // `upgrades` may be a single building-name string ("mine") or an array of
+      // names (["bank"]); accept either and resolve the first entry.
+      let up = btPrereq(type).upgrades;
+      if (Array.isArray(up)) up = up[0];
+      if (!up || typeof up !== 'string') return null;
       const e = buildingType(up);
       return (e && typeof e.code === 'number') ? e.code : null;
     }
@@ -9830,10 +9896,89 @@
     const ctxRemoveTransport = document.getElementById("ctx-remove-transport");
     const ctxCanal = document.getElementById("ctx-canal");
     const ctxCanalRemove = document.getElementById("ctx-canal-remove");
+    const ctxCantBuild = document.getElementById("ctx-cantbuild");
+    const ctxCantBuildSub = document.getElementById("ctx-cantbuild-sub");
     let ctxTarget = null;
     let _ctxVertex = null; // nearest hex-corner vertex key of the last right-click
     let _ctxCanalEdge = null; // {a:{x,y}, b:{x,y}} canal border of the last right-click
-    function hideContextMenu() { ctxMenu.hidden = true; ctxTarget = null; _ctxCanalEdge = null; _ctxFromColonyView = false; }
+    function hideContextMenu() {
+      ctxMenu.hidden = true;
+      if (ctxCantBuildSub) ctxCantBuildSub.hidden = true;
+      ctxTarget = null; _ctxCanalEdge = null; _ctxFromColonyView = false;
+    }
+    // Position the "Can't Build Yet" flyout beside the context menu, preferring
+    // the right edge of the menu but flipping to the left if it would overflow,
+    // and clamping vertically so it never runs off the bottom of the window.
+    function positionCantBuildFlyout() {
+      const sub = ctxCantBuildSub; if (!sub) return;
+      const pad = 4;
+      sub.hidden = false;                       // must be visible to measure
+      const menu = ctxMenu.getBoundingClientRect();
+      const w = sub.offsetWidth, h = sub.offsetHeight;
+      // Prefer to the right of the context menu; flip left if no room.
+      let left = menu.right + 2;
+      if (left + w > window.innerWidth - pad) {
+        left = menu.left - 2 - w;               // flyout to the LEFT of the menu
+        if (left < pad) left = Math.max(pad, window.innerWidth - pad - w);
+      }
+      // Align the flyout's top with the clicked item, clamped to the viewport.
+      let top = (ctxCantBuild ? ctxCantBuild.getBoundingClientRect().top : menu.top);
+      if (top + h > window.innerHeight - pad) top = Math.max(pad, window.innerHeight - pad - h);
+      if (top < pad) top = pad;
+      sub.style.left = left + "px";
+      sub.style.top = top + "px";
+    }
+    // Build a per-colony resource shortfall label for building `type` at (x,y):
+    // "N more Material, M more Wealth", drawing on the paying colony's stored
+    // resources plus what it can borrow from connected colonies (Federation pool
+    // for Federation buildings). Returns "" if it's actually affordable.
+    function buildingShortfallAt(type, x, y, owner) {
+      const cost = buildingCost(type);
+      const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+      const availableOf = (res) => {
+        if (buildingIsFederation(type)) return (federationOwnedOf(owner)[res] || 0);
+        const col = buildColonyAt(x, y, owner, type);
+        if (!col) return 0;
+        return (ensureStored(col)[res] || 0) + connectedAvailable(col, res);
+      };
+      const parts = [];
+      for (const res of _resourceKeysOf(cost)) {
+        const need = cost[res] - availableOf(res);
+        if (need > 1e-9) parts.push(`${Math.ceil(need)} more ${cap(res)}`);
+      }
+      return parts.join(", ");
+    }
+    // Explain why building `type` can't be built on cell (x,y) right now: the
+    // placement obstacle (terrain/occupied/zone), unmet prerequisites (required
+    // buildings, network, population, Federation), and any resource shortfall.
+    function showCantBuildExplanation(type, x, y) {
+      const bt = buildingType(type) || {};
+      const name = bt.name || ("Type " + type);
+      const place = canPlaceTypeAt(type, x, y, 'human');
+      const lines = [];
+      if (!place.ok) {
+        lines.push(`<strong>Placement:</strong> ${esc(place.reason || "cannot be placed here")}.`);
+      } else {
+        // Placement is OK — report prerequisites and cost shortfalls.
+        const missing = missingPrerequisiteNames(type, x, y, 'human');
+        if (missing && missing.length) {
+          lines.push(`<strong>Requires:</strong> ${missing.map(esc).join(", ")}.`);
+        }
+        if (!canAffordBuildingAt(type, x, y, 'human')) {
+          const short = buildingShortfallAt(type, x, y, 'human');
+          lines.push(`<strong>Needs:</strong> ${esc(short || "more resources")}.`);
+        }
+      }
+      // Always show the full build cost for reference.
+      lines.push(`<strong>Build cost:</strong> ${esc(buildingCostLabel(type))}.`);
+      if (lines.length === 1) {
+        // Only the cost line -> it's actually buildable now (state changed).
+        lines.unshift(`${esc(name)} can be built here now.`);
+      }
+      showChoiceDialog(`Why can't I build ${esc(name)}?`,
+        lines.map((l) => `<div style="margin:4px 0">${l}</div>`).join(''),
+        [{ value: 'ok', label: 'OK' }]);
+    }
     // Show the context menu at (clientX, clientY), then clamp it into the
     // viewport: if it would bleed off the bottom, shift it up so its bottom
     // aligns with the window bottom; likewise clamp the right edge. Must run
@@ -9909,6 +10054,9 @@
       // Attack option is recomputed below; hide by default so canal/other early
       // returns never leave a stale "Launch Attack" item visible.
       if (ctxAttack) ctxAttack.hidden = true;
+      // Can't-Build-Yet item is recomputed below; hide + collapse by default.
+      if (ctxCantBuild) ctxCantBuild.hidden = true;
+      if (ctxCantBuildSub) { ctxCantBuildSub.hidden = true; ctxCantBuildSub.innerHTML = ""; }
       // The colony view has no vertices/canal edges — never offer canal options.
       if (_ctxFromColonyView) { _ctxVertex = null; _ctxCanalEdge = null; }
       const terr = hex ? terrainAt(hex.x, hex.y) : 0;
@@ -10017,19 +10165,25 @@
       // building must be placed on an empty land cell (terrain 2-7) within the
       // human's area of control, and the human must afford its full cost.
       ctxBuildItems.innerHTML = "";
-      const types = buildingTypeCodes();
-      for (const type of types) {
+      // Collect the buildings that can actually be built on this cell right now,
+      // then render them SORTED ALPHABETICALLY by name. (Launch/Establish Colony
+      // is the separate ctxEstablish item above, so it always stays first.)
+      const buildRows = [];
+      for (const type of buildingTypeCodes()) {
         if (type === 1) continue; // colony handled by Establish Colony
-        const bt = buildingType(type);
         const canTurn = isHumanTurn() && hex;
         const place = canTurn ? canPlaceTypeAt(type, hex.x, hex.y, 'human') : { ok: false };
         const affordable = place.ok && canAffordBuildingAt(type, hex.x, hex.y, 'human');
         const prereqOk = place.ok && hasPrerequisitesAt(type, hex.x, hex.y, 'human');
-        // Only offer buildings that can actually be built here right now.
         if (!(place.ok && affordable && prereqOk)) continue;
+        const bt = buildingType(type) || {};
+        buildRows.push({ type, name: bt.name || ("Type " + type) });
+      }
+      buildRows.sort((a, b) => a.name.localeCompare(b.name));
+      for (const { type, name } of buildRows) {
         const item = document.createElement("div");
         item.className = "ctx-item";
-        item.textContent = `Build ${bt.name || ("Type " + type)} (${buildingCostLabel(type)})`;
+        item.textContent = `Build ${name} (${buildingCostLabel(type)})`;
         item.addEventListener("click", () => {
           if (!ctxTarget) return;
           const h = ctxTarget; const fromColony = _ctxFromColonyView; hideContextMenu();
@@ -10111,7 +10265,60 @@
       }
 
       // If nothing is actionable on this cell, don't pop an empty menu.
+      // "Can't Build Yet": every non-colony building type that is NOT currently
+      // buildable on this cell (fails placement, prerequisites, or affordability)
+      // is listed in a submenu; selecting one opens an explanation dialog.
+      if (ctxCantBuild && ctxCantBuildSub && isHumanTurn() && hex) {
+        ctxCantBuildSub.innerHTML = "";
+        const cantTypes = [];
+        for (const type of buildingTypeCodes()) {
+          if (type === 1) continue;
+          const place = canPlaceTypeAt(type, hex.x, hex.y, 'human');
+          const prereq = place.ok && hasPrerequisitesAt(type, hex.x, hex.y, 'human');
+          const afford = place.ok && canAffordBuildingAt(type, hex.x, hex.y, 'human');
+          if (place.ok && prereq && afford) continue;   // currently buildable -> not listed
+          cantTypes.push(type);
+        }
+        // Sort the "can't build yet" list alphabetically by building name.
+        cantTypes.sort((a, b) => {
+          const na = (buildingType(a) || {}).name || ("Type " + a);
+          const nb = (buildingType(b) || {}).name || ("Type " + b);
+          return na.localeCompare(nb);
+        });
+        if (cantTypes.length) {
+          const bx = hex.x, by = hex.y;
+          ctxCantBuild.hidden = false;
+          ctxCantBuild.classList.remove("disabled");
+          // Open the flyout submenu beside the menu (toggle on repeat click).
+          ctxCantBuild.onclick = (e) => {
+            e.stopPropagation();
+            if (!ctxCantBuildSub.hidden) { ctxCantBuildSub.hidden = true; return; }
+            positionCantBuildFlyout();
+          };
+          // Open it on hover too, for a conventional submenu feel.
+          ctxCantBuild.onmouseenter = () => { positionCantBuildFlyout(); };
+          for (const type of cantTypes) {
+            const bt = buildingType(type) || {};
+            const item = document.createElement("div");
+            item.className = "ctx-subitem";
+            item.textContent = bt.name || ("Type " + type);
+            item.addEventListener("click", (e) => {
+              e.stopPropagation();
+              hideContextMenu();
+              showCantBuildExplanation(type, bx, by);
+            });
+            ctxCantBuildSub.appendChild(item);
+          }
+        } else {
+          ctxCantBuild.hidden = true;
+          ctxCantBuild.onclick = null;
+          ctxCantBuild.onmouseenter = null;
+        }
+      }
+
+      // If nothing is actionable on this cell, don't pop an empty menu.
       const anyItem = !ctxEstablish.hidden || (ctxAttack && !ctxAttack.hidden) ||
+        (ctxCantBuild && !ctxCantBuild.hidden) ||
         !ctxRemove.hidden || !ctxRoad.hidden ||
         !ctxMonorail.hidden || !ctxRemoveTransport.hidden || !ctxCanal.hidden ||
         !ctxCanalRemove.hidden || ctxBuildItems.children.length > 0;
@@ -10159,7 +10366,8 @@
       }
     });
     document.addEventListener("click", (e) => {
-      if (!ctxMenu.hidden && !ctxMenu.contains(e.target)) hideContextMenu();
+      const inFlyout = ctxCantBuildSub && !ctxCantBuildSub.hidden && ctxCantBuildSub.contains(e.target);
+      if (!ctxMenu.hidden && !ctxMenu.contains(e.target) && !inFlyout) hideContextMenu();
     });
 
     const nameOverlay = document.getElementById("name-overlay");
@@ -10248,6 +10456,9 @@
       workOverlay.hidden = false;
       clampDialogsToWindow(); // ensure it fits the current window size
       renderWorkModal();
+      // Re-render after the browser has laid out the now-visible dialog, so the
+      // canvas measures its real (flex-filled) size and the map fills the area.
+      requestAnimationFrame(() => { if (workOverlay && !workOverlay.hidden) renderWorkModal(); });
     }
     // Open the next queued "needs attention" colony whose prompt is still
     // relevant (it still has spare worker capacity and an unworked control
@@ -10349,6 +10560,14 @@
       }
       const gw = (maxX - minX + 1), gh = (maxY - minY + 1);
       const ctx = workCanvas.getContext("2d");
+      // Fit the backing store to the canvas's current displayed size so the hex
+      // grid fills the available area (the dialog is 95vw x 95vh). Fall back to
+      // the default 480x420 if layout hasn't measured yet.
+      const rect = workCanvas.getBoundingClientRect();
+      const dw = Math.max(320, Math.round(rect.width) || 0);
+      const dh = Math.max(280, Math.round(rect.height) || 0);
+      if (workCanvas.width !== dw) workCanvas.width = dw;
+      if (workCanvas.height !== dh) workCanvas.height = dh;
       const CW = workCanvas.width, CH = workCanvas.height;
       // Base cell size so the whole grid fits with margin (zoom 1 = fit). The
       // view zoom scales it up; scroll wheel changes _workZoom, arrow keys pan.
