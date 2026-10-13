@@ -258,6 +258,19 @@
     <div id="federation-dialog">
       <h2>Federation</h2>
       <div class="hint">Your Federation taxes your colonies and maintains the road, monorail, and canal network.</div>
+      <div class="fed-field">
+        <label for="fed-default-manager">Default Manager for New Colonies:
+          <select id="fed-default-manager">
+            <option value="none">None</option>
+            <option value="growth">Growth Priority</option>
+            <option value="production">Production Priority</option>
+            <option value="energy">Energy Priority</option>
+            <option value="wealth">Wealth Priority</option>
+            <option value="military">Military Priority</option>
+          </select>
+        </label>
+        <div class="hint">Applied to each colony when it is first settled; does not change existing colonies.</div>
+      </div>
       <table id="federation-table">
         <tbody>
           <tr><td>Colonies</td><td id="fed-colonies">0</td></tr>
@@ -3375,6 +3388,14 @@
             b.inTransit = false;
             b.population = (b.population || 0) + (b.pendingColonists || 0);
             b.pendingColonists = 0;
+            // Apply the Federation's default manager for new colonies (set in the
+            // Federation screen) to this freshly-settled colony, only if it has no
+            // manager yet. Existing colonies are never changed.
+            if (b.owner === 'human' && (!b.manager || b.manager === 'none')) {
+              const _fp = _humanPlayer();
+              const _dm = _fp ? (ensureFederation(_fp).defaultManager || 'none') : 'none';
+              if (_dm !== 'none') b.manager = _dm;
+            }
             // Population is tracked authoritatively in the colony's `owned` pool;
             // the economy mirrors owned.population -> b.population each turn, so a
             // just-arrived colony must seed owned.population too, or its transferred
@@ -8252,6 +8273,10 @@
       if (typeof player.federation.treasury !== 'number' || !isFinite(player.federation.treasury)) player.federation.treasury = 0;
       if (typeof player.federation.taxRate !== 'number' || !isFinite(player.federation.taxRate)) player.federation.taxRate = federationDefaultTaxRate();
       player.federation.taxRate = Math.max(0, Math.min(20, player.federation.taxRate));
+      // Federation-wide DEFAULT MANAGER applied to each NEWLY-settled colony (not
+      // to existing colonies). Valid values match the Colony Detail dropdown.
+      const _MGRS = ['none', 'growth', 'production', 'energy', 'wealth', 'military'];
+      if (!_MGRS.includes(player.federation.defaultManager)) player.federation.defaultManager = 'none';
       // Federation OWNED pool (7 resources). Treasury is federationOwned.wealth.
       // Migrate a legacy numeric `treasury` into owned.wealth on first access.
       if (!player.federation.owned || typeof player.federation.owned !== 'object') {
@@ -12789,6 +12814,11 @@
 
       const rate = parseFloat(fedTaxRate.value) || 0;
       document.getElementById("fed-taxrate-val").textContent = String(rate);
+      // Default-manager-for-new-colonies dropdown reflects the saved value.
+      {
+        const dm = document.getElementById("fed-default-manager");
+        if (dm) dm.value = fed.defaultManager || 'none';
+      }
       const happEl = document.getElementById("fed-happen");
       if (happEl) happEl.textContent = "\u2212" + _fmtCredits(rate); // −rate happiness/colony
       const taxes = federationTaxFor('human', rate);
@@ -12875,6 +12905,15 @@
       if (player) ensureFederation(player).taxRate = parseFloat(fedTaxRate.value) || 0;
       renderFederation();
     });
+    // Changing the default manager commits it immediately. It applies ONLY to
+    // colonies settled afterward; existing colonies keep their own setting.
+    {
+      const dm = document.getElementById("fed-default-manager");
+      if (dm) dm.addEventListener("change", () => {
+        const player = _humanPlayer();
+        if (player) ensureFederation(player).defaultManager = dm.value || 'none';
+      });
+    }
     ipcRenderer.on("view-federation", openFederation);
     document.getElementById("federation-close").addEventListener("click", closeFederation);
     federationOverlay.addEventListener("click", (e) => { if (e.target === federationOverlay) closeFederation(); });
