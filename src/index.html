@@ -4373,7 +4373,8 @@
     // become a shared per-player pool.) Caps stored Food/Material/Energy/Wealth.
     function playerResourceCaps(owner) {
       // Sum each colony's unified max storage (all 7 resources). colonyMaxStorage
-      // counts only WORKED buildings' + worked cells' `storage` keys.
+      // counts ALL built buildings' `storage` (worked or not) plus worked cells'
+      // terrain/terrain-bonus `storage`.
       const caps = {}; for (const k of RESOURCE_KEYS) caps[k] = 0;
       for (const b of gameState.buildings) {
         if (b.type !== 1 || b.owner !== owner || b.inTransit) continue;
@@ -4382,9 +4383,10 @@
       }
       return caps;
     }
-    // Per-colony happiness storage: the sum of happiness storage for the WORKED
-    // buildings in the colony's control (the biodome always counts). Stored
-    // happiness is clamped per colony to ± this value.
+    // Per-colony happiness storage: the sum of happiness storage for the BUILT
+    // (operational) buildings in the colony's control (the biodome always
+    // counts) — worked or not, since an unworked building still provides its
+    // storage capacity. Stored happiness is clamped per colony to ± this value.
     function colonyHappinessStorage(col) {
       const control = new Set(colonyControlCells(col).map((c) => cellKey(c.x, c.y)));
       let sum = 0;
@@ -4394,7 +4396,6 @@
         // The colony's own biodome always counts; other buildings must be in control.
         if (b.type !== 1 && !control.has(cellKey(b.x, b.y))) continue;
         if (b.type === 1 && !(b.x === col.x && b.y === col.y)) continue;
-        if (!isBuildingWorked(col, b)) continue; // idle buildings contribute no happiness storage
         sum += bldgStorage(b.type).happiness;
       }
       return sum;
@@ -4828,18 +4829,6 @@
         document.removeEventListener("keydown", onKey, true);
       };
     }
-    // Per-colony storage caps = sum of storage over the colony's operational
-    // buildings (built buildings provide storage even if their cell is idle).
-    function colonyStorageCaps(col) {
-      const caps = { food: 0, material: 0, energy: 0, water: 0, wealth: 0 };
-      for (const b of colonyBuildings(col)) {
-        if (!isBuildingWorked(col, b)) continue; // idle buildings contribute no storage
-        const s = bldgStorage(b.type);
-        caps.food += s.food; caps.material += s.material;
-        caps.energy += s.energy; caps.water += s.water; caps.wealth += s.wealth;
-      }
-      return caps;
-    }
     function ensureStored(col) {
       if (!col.stored) col.stored = { food: 0, material: 0, goods: 0, energy: 0, water: 0, wealth: 0 };
       for (const k of ['food', 'material', 'goods', 'energy', 'water', 'wealth']) {
@@ -4865,17 +4854,34 @@
         if (b.type === 1 && typeof b.seq !== 'number') b.seq = _nextColonySeq();
       }
     }
-    // Per-colony MAX STORAGE for all 7 resources = sum of `storage` keys over the
-    // colony's worked cells (incl. the always-worked biodome cell): building
-    // `storage`, plus terrain `storage` and terrain-bonus `storage` if present.
+    // Per-colony MAX STORAGE for all 7 resources = sum of every BUILT (operational)
+    // building's `storage` (worked or not — an unworked building still provides
+    // its capacity), plus terrain `storage` and terrain-bonus `storage` on the
+    // colony's worked cells (incl. the always-worked biodome cell) if present.
     // (Terrain/terrainBonus storage are optional and default to 0.)
     function colonyMaxStorage(col) {
       const max = {}; for (const k of RESOURCE_KEYS) max[k] = 0;
       const addMap = (m) => { const r = readResMap(m); for (const k of RESOURCE_KEYS) max[k] += r[k]; };
-      // Worked buildings' storage (biodome always worked).
+      // Built buildings' storage (biodome always worked). An unworked but
+      // operational building STILL contributes its storage capacity to the
+      // colony max (it just produces nothing while unworked). colonyBuildings()
+      // already restricts this to operational buildings in the colony.
       for (const b of colonyBuildings(col)) {
-        if (!isBuildingWorked(col, b)) continue;
         const def = buildingType(b.type) || {};
+        // EXCEPTION: a Habitat's POPULATION storage counts only when the Habitat
+        // is worked (its other storage still counts unworked, like every other
+        // building). Habitats are always worked by the planners, but guard here
+        // so an unworked Habitat never inflates the population cap.
+        if (def.code === _bldgCode('habitat')) {
+          const workedSet = new Set([cellKey(col.x, col.y), ...(col.worked || [])]);
+          const worked = workedSet.has(cellKey(b.x, b.y));
+          const s = readResMap(def.storage);
+          for (const k of RESOURCE_KEYS) {
+            if (k === 'population' && !worked) continue;   // skip pop storage when unworked
+            max[k] += s[k];
+          }
+          continue;
+        }
         addMap(def.storage);
       }
       // Terrain + terrain-bonus storage on the colony cell + each worked cell.
@@ -6494,6 +6500,19 @@
         if (ported) return true;
         return docked && isShallowSea(c.x, c.y);
       });
+    }
+    // Shallow-sea cells inside a colony's control RADIUS, independent of whether
+    // the colony already has a Dock. colonyControlCells() excludes sea tiles for
+    // a colony with no Dock/Port (sea only becomes "controlled" once a Dock
+    // exists), which creates a chicken-and-egg: a dockless colony would never see
+    // a sea cell to place its first Dock on. Coastal detection and first-Dock
+    // placement must therefore use this radius-based set. Excludes sea tiles that
+    // fall inside another player's zone of control.
+    function colonyShallowSeaCells(col) {
+      const radius = colonyControlRadius(col);
+      const foreign = foreignControlCellSet(col.owner);
+      return cellsWithin(col.x, col.y, radius).filter((c) =>
+        isShallowSea(c.x, c.y) && !foreign.has(cellKey(c.x, c.y)));
     }
     // Set of cell keys (y*W+x) covered by the area of control of every colony
     // NOT owned by `owner` (i.e. alien zones when `owner` is 'human'). Used to
@@ -8273,13 +8292,16 @@
       return (gameState.buildings || []).filter(
         (b) => b.type === 1 && b.owner === owner && !b.inTransit);
     }
-    // FEDERATION MAX STORAGE (7 resources) = sum of each colony's worked
-    // buildings' `federationStorage` across all colonies in the federation.
+    // FEDERATION MAX STORAGE (7 resources) = sum of each colony's built
+    // buildings' `federationStorage` (worked or not) across all colonies in the
+    // federation.
     function federationMaxStorage(owner) {
       const max = {}; for (const k of RESOURCE_KEYS) max[k] = 0;
       for (const col of federationColonies(owner)) {
         for (const b of colonyBuildings(col)) {
-          if (!isBuildingWorked(col, b)) continue;
+          // Unworked (but built/operational) buildings still contribute their
+          // federationStorage to the federation's pooled max storage — the
+          // capacity exists even when the building isn't being worked.
           const def = buildingType(b.type) || {};
           const fs = readResMap(def.federationStorage);
           for (const k of RESOURCE_KEYS) max[k] += fs[k];
@@ -9572,12 +9594,49 @@
     }
     // Assign idle workers (spare worker capacity) to the best unworked control
     // cells for the manager. Returns the number of workers assigned.
+    // Keep every built HABITAT worked (a Habitat only contributes its population
+    // storage when worked, and we want colonies to keep growing). If assigning a
+    // Habitat exceeds the colony's work capacity, free the lowest-value worked
+    // NON-Habitat, non-home cell to make room. Habitat cells are moved to the
+    // FRONT of col.worked so colonyBudget's capacity slice always keeps them.
+    // Shared by the general manager and the early planner, for human AND AI.
+    function ensureHabitatsWorked(col, manager, needs) {
+      ensureWorked(col);
+      const homeKey = cellKey(col.x, col.y);
+      const habCode = _bldgCode('habitat');
+      if (habCode == null) return;
+      const habKeys = colonyBuildings(col)
+        .filter((b) => b.type === habCode)
+        .map((b) => cellKey(b.x, b.y));
+      if (!habKeys.length) return;
+      const habSet = new Set(habKeys);
+      // 1) Ensure each Habitat cell is in the worked list.
+      for (const k of habKeys) {
+        if (!col.worked.includes(k)) col.worked.push(k);
+      }
+      // 2) If over capacity, evict lowest-value non-home, non-Habitat worked cells.
+      const cap = workCap(col);
+      const extrasCount = () => col.worked.filter((k) => k !== homeKey).length;
+      while (extrasCount() > cap) {
+        let worst = null, worstScore = Infinity;
+        for (const k of col.worked) {
+          if (k === homeKey || habSet.has(k)) continue;      // never evict home or a Habitat
+          const [cx, cy] = k.split(',').map(Number);
+          const sc = managerCellScore(col, { x: cx, y: cy }, manager || 'growth', needs);
+          if (sc < worstScore) { worstScore = sc; worst = k; }
+        }
+        if (worst == null) break;                            // only home + Habitats left
+        col.worked = col.worked.filter((k) => k !== worst);
+      }
+      // 3) Move Habitat cells to the front (after home) so the budget's
+      //    capacity slice always includes them.
+      const rest = col.worked.filter((k) => k !== homeKey && !habSet.has(k));
+      col.worked = [homeKey, ...habKeys.filter((k) => col.worked.includes(k)), ...rest];
+    }
     function managerAssignWorkers(col, manager, needs) {
       ensureWorked(col);
       const homeKey = cellKey(col.x, col.y);
       let assigned = 0;
-      // Repeat while there is spare worker capacity and an unworked, buildable
-      // control cell to assign one to.
       for (;;) {
         const extras = col.worked.filter((k) => k !== homeKey).length;
         if (extras >= workCap(col)) break;                   // no spare worker
@@ -9648,7 +9707,8 @@
                 || ((base.growth || 0) >= 2 && (net.growth || 0) > 0)
                 || (manager === 'military' && buildingRecruits(type))
                 || (type === _bldgCode('bank')
-                    && !colonyBuildings(col).some((b) => b.type === _bldgCode('bank')));  // Bank is a strategic unlock — never filter it out
+                    && !colonyBuildings(col).some((b) => b.type === _bldgCode('bank')))  // Bank is a strategic unlock — never filter it out
+                || (type === _bldgCode('habitat') && populationAtCap(col));              // Habitat when population is capped
               if (!advances) continue;
             }
             const score = managerBuildScore(col, type, c, manager, needs, hardDeficits);
@@ -9661,12 +9721,82 @@
       }
       return queued;
     }
+    // True if the colony already has at least one OPERATIONAL building of `type`
+    // whose cell is NOT currently worked (idled for a deficit, or beyond the
+    // colony's work capacity). In that case building ANOTHER of the same type
+    // won't help a shortfall of that building's output — the bottleneck is
+    // workers, not structures — so the planners must staff the idle one instead
+    // of over-building. The effective worked set mirrors colonyBudget: the home
+    // cell plus the first workCap non-home worked cells.
+    function hasUnworkedBuildingOfType(col, type) {
+      ensureWorked(col);
+      const homeKey = cellKey(col.x, col.y);
+      const cap = workCap(col);
+      const extras = (col.worked || []).filter((k) => k !== homeKey).slice(0, cap);
+      const workedSet = new Set([homeKey, ...extras]);
+      for (const b of colonyBuildings(col)) {
+        if (b.type !== type || b.type === 1) continue;
+        if (!workedSet.has(cellKey(b.x, b.y))) return true;   // built but not worked
+      }
+      return false;
+    }
+    // SINGLETON NETWORK HUBS: a colony needs at most ONE of each network-hub
+    // family — Dock (upgradable to Port), Air Field (upgradable to Airport), and
+    // Spaceport. There is no benefit to a second one, so the planners must never
+    // build another base hub when the colony already has that family (the base
+    // building OR its upgraded form). Upgrading the single hub is still allowed
+    // (that replaces the base on its own cell rather than adding a second).
+    // Maps each family's member codes; keyed by the BASE type code.
+    function _hubFamilyCodes() {
+      const d = _bldgCode('dock'), p = _bldgCode('port');
+      const a = _bldgCode('air field'), ap = _bldgCode('airport');
+      const sp = _bldgCode('spaceport');
+      const fams = [];
+      if (d != null) fams.push({ base: d, members: [d, p].filter((x) => x != null) });
+      if (a != null) fams.push({ base: a, members: [a, ap].filter((x) => x != null) });
+      if (sp != null) fams.push({ base: sp, members: [sp] });
+      return fams;
+    }
+    // True if `type` is a BASE network-hub (dock/air field/spaceport) whose
+    // family the colony already has (base or upgraded) — i.e. building another
+    // would be a redundant duplicate.
+    function wouldDuplicateHub(col, type) {
+      for (const fam of _hubFamilyCodes()) {
+        if (type !== fam.base) continue;                 // only guards the BASE type
+        return colonyBuildings(col).some((b) => fam.members.includes(b.type));
+      }
+      return false;
+    }
+    // True when the colony's population has reached (within one unit of) its
+    // maximum population STORAGE — the signal to build a Habitat to raise the
+    // cap. Population storage is in units (×popUnitSize citizens).
+    function populationAtCap(col) {
+      const capUnits = (colonyMaxStorage(col).population || 0);
+      if (capUnits <= 0) return false;
+      const capCitizens = capUnits * popUnitSize();
+      const owned = (ensureOwned(col).population || col.population || 0);
+      return owned >= capCitizens - popUnitSize();   // within one unit of the cap
+    }
     // Score a candidate building for a manager: weighted sum of its net per-year
     // output at that cell, with a priority nudge for the Barracks under the
     // Military manager (so it will raise military capacity when nothing is in
     // greater deficit).
     function managerBuildScore(col, type, c, manager, needs, hardDeficits) {
       const net = bldgNetAt(type, c.x, c.y);               // { food, material, goods, energy, water, wealth, growth, happiness }
+      // Don't ADD another building of a type to remedy a shortfall when the
+      // colony already has one of that type built but NOT currently worked
+      // (idled / beyond work capacity): the fix is to staff the idle one, not to
+      // over-build. Upgrades are exempt (they replace an existing base building
+      // on its own cell rather than adding parallel capacity).
+      if (buildingUpgradesCode(type) == null && hasUnworkedBuildingOfType(col, type)) {
+        return 0;
+      }
+      // SINGLETON NETWORK HUB: never build a second Dock / Air Field / Spaceport
+      // when the colony already has that family (base or upgraded). Only one is
+      // ever useful; the single hub can still be upgraded (Port/Airport) in place.
+      if (wouldDuplicateHub(col, type)) {
+        return 0;
+      }
       // DEFICIT FIRST: if the colony is running ANY resource at a loss (a need
       // with urgency), remediation takes ABSOLUTE priority over the manager's
       // optimizing goal. Score candidates ONLY by their net POSITIVE production
@@ -9708,6 +9838,14 @@
       if (!deficitKeys.length && _bankCode != null && type === _bankCode) {
         const hasBank = colonyBuildings(col).some((b) => b.type === _bankCode);
         if (!hasBank) return 1e6;   // top priority, short-circuits further boosts
+      }
+      // POPULATION-CAP PRIORITY: when the colony's population has reached its max
+      // population storage, build a Habitat (adds population storage) so the
+      // colony can keep growing. High priority (below the Bank gateway and below
+      // hard-deficit remediation) when pop is at the cap.
+      const _habitatCode = _bldgCode('habitat');
+      if (!deficitKeys.length && _habitatCode != null && type === _habitatCode && populationAtCap(col)) {
+        return 9e5;
       }
       // Prefer UPGRADING an existing building over building another of the base
       // type: if `type` upgrades a building the colony already has (e.g. Solar
@@ -9878,9 +10016,15 @@
       // on a sea cell and — via workCap's Dock bonus — brings its own worker.
       const dockCode = _bldgCode('dock');
       const controls = colonyControlCells(col);
-      const seaCells = controls.filter((c) => isShallowSea(c.x, c.y) && !cellHasBuilding(c.x, c.y));
+      // Use the Dock-INDEPENDENT shallow-sea set: colonyControlCells excludes sea
+      // for a dockless colony, which would stop the plan from ever adding a Dock.
+      const seaCells = colonyShallowSeaCells(col).filter((c) => !cellHasBuilding(c.x, c.y));
       const buildSeq = seq.slice();
-      if (dockCode != null && seaCells.length) buildSeq.push(dockCode);
+      // Add a Dock only when coastal AND the colony has no Dock/Port yet — a
+      // colony needs at most one (singleton network hub).
+      const _portCode = _bldgCode('port');
+      const _hasDockFamily = colonyBuildings(col).some((b) => b.type === dockCode || b.type === _portCode);
+      if (dockCode != null && seaCells.length && !_hasDockFamily) buildSeq.push(dockCode);
       // Candidate LAND cells (empty, buildable, non-pristine, not the biodome).
       const landCells = controls.filter((c) => {
         const k = cellKey(c.x, c.y);
@@ -10035,7 +10179,7 @@
       // Past the early size, keep the planner only until a COASTAL colony's Dock
       // is built — a Dock must always be established to open the sea network.
       const dockCode = _bldgCode('dock'), portCode = _bldgCode('port');
-      const coastal = colonyControlCells(col).some((c) => isShallowSea(c.x, c.y));
+      const coastal = colonyShallowSeaCells(col).length > 0;
       if (!coastal) return false;
       const hasDock = colonyBuildings(col).some((b) => b.type === dockCode || b.type === portCode);
       return !hasDock;
@@ -10057,7 +10201,7 @@
       // always established). If the colony has a shallow-sea cell but neither the
       // plan nor the colony has a Dock, force a re-plan to add it.
       if (planValid) {
-        const coastal = colonyControlCells(col).some((c) => isShallowSea(c.x, c.y));
+        const coastal = colonyShallowSeaCells(col).length > 0;
         if (coastal) {
           const hasDockBuilt = colonyBuildings(col).some((b) => b.type === _dockCode || b.type === _portCode);
           const planHasDock = plan.placements.some((p) => p.type === _dockCode);
@@ -10100,8 +10244,40 @@
         col.worked.push(k);
         acted = true;
       }
+      // A Habitat only provides population storage when worked, and must always
+      // be worked — force it here too (freeing a lower-value worker if needed).
+      ensureHabitatsWorked(col, (col.manager && col.manager !== 'none') ? col.manager : 'growth', null);
       // 2) Build the next unbuilt plan building when the queue is low.
       if (colonyBuildingsUnderConstruction(col) < 1) {
+        // FORCED DOCK (5th building): once the first four foundation buildings
+        // are built, a coastal colony ALWAYS builds a Dock next if a shallow-sea
+        // cell is available and it has no Dock/Port yet — independent of the
+        // plan enumeration (which may not have placed one). This opens the sea
+        // network reliably.
+        const builtNonBiodome = colonyBuildings(col).filter((b) => b.type !== 1);
+        const hasDockBuilt = builtNonBiodome.some((b) => b.type === _dockCode || b.type === _portCode);
+        // Trigger once the first four foundation buildings are built, OR once all
+        // of the plan's non-Dock foundation buildings are built (covers a short
+        // foundation that couldn't place all four, e.g. no material cell).
+        const foundationDone = (plan.placements || [])
+          .filter((p) => p.type !== _dockCode)
+          .every((p) => ownerBuildingAt(p.x, p.y, col.owner));
+        if (_dockCode != null && !hasDockBuilt && (builtNonBiodome.length >= 4 || foundationDone)) {
+          // Prefer the plan's Dock cell if present and still free; otherwise any
+          // free shallow-sea control cell where a Dock can be placed/afforded.
+          const planDock = (plan.placements || []).find((p) => p.type === _dockCode
+            && !ownerBuildingAt(p.x, p.y, col.owner));
+          const seaCandidates = planDock ? [{ x: planDock.x, y: planDock.y }]
+            : colonyShallowSeaCells(col).filter((c) => !cellHasBuilding(c.x, c.y));
+          for (const c of seaCandidates) {
+            if (canPlaceTypeAt(_dockCode, c.x, c.y, col.owner).ok
+              && hasPrerequisitesAt(_dockCode, c.x, c.y, col.owner)
+              && canAffordBuildingAt(_dockCode, c.x, c.y, col.owner)) {
+              placeBuilding(c.x, c.y, col.owner, _dockCode);
+              return true;
+            }
+          }
+        }
         // STRICT ORDER: find the FIRST plan building not yet built, and only
         // build THAT one. If it can't be built this turn (unaffordable / not yet
         // placeable), WAIT — never skip ahead to a later building (so e.g. the
@@ -10164,6 +10340,9 @@
       }
       const needs = colonyNeeds(col);
       const assigned = managerAssignWorkers(col, manager, needs);
+      // A Habitat only provides population storage when worked, and must always
+      // be worked — force it (freeing a lower-value worker if at capacity).
+      ensureHabitatsWorked(col, manager, needs);
       // Recompute needs after assigning workers (production changed).
       const needs2 = colonyNeeds(col);
       const built = managerAutoBuild(col, manager, needs2);
@@ -13442,20 +13621,23 @@
       if (typeof _aiPlanCache !== 'undefined' && _aiPlanCache) _aiPlanCache.clear();
 
       // Fog of war. Restore a saved visible set if present; otherwise seed a
-      // fresh circle around a random land tile for a NEW game (no buildings yet).
-      // Legacy saves with no stored visibility and existing colonies keep fog
-      // off (null = fully visible) so they aren't suddenly re-fogged.
-      // In debug mode the whole map is revealed from the start (no fog).
+      // fresh circle around a random land tile ONLY for a genuine NEW game
+      // (extra == null). A LOADED save (extra != null) must honor the map it
+      // was saved with — never re-seed a random fog window, which previously
+      // made a loaded empty/turn-0 map look like a freshly generated random map.
+      // Legacy/empty saves with no stored visibility keep fog off (null = fully
+      // visible). In debug mode the whole map is revealed from the start.
+      const isNewGame = (extra == null);
       const savedVisible = gameState.map.meta && Array.isArray(gameState.map.meta.visible)
         ? gameState.map.meta.visible : null;
       if (CONFIG && CONFIG.debug) {
         _visibleSet = null; // debug: everything visible
       } else if (savedVisible) {
         _visibleSet = new Set(savedVisible);
-      } else if (!gameState.buildings || gameState.buildings.length === 0) {
-        initVisibility();
+      } else if (isNewGame) {
+        initVisibility();   // new game only: seed the initial random fog circle
       } else {
-        _visibleSet = null; // legacy save without fog -> show everything
+        _visibleSet = null; // loaded save without stored fog -> show everything
       }
       // Re-derive CONFIG from the base config for this game's difficulty.
       applyGameDifficulty();

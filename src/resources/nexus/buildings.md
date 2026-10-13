@@ -22,6 +22,8 @@ The Biodome is the heart of a colony, establishing its central hub and initial z
 
 The Habitat is dedicated housing — the fastest way to grow a colony past the point where its lone Biodome runs out of room. Where every other structure merely tends the land, the Habitat builds *up*, stacking living quarters, life‑support, and community space into a dense arcology that both quickens population growth and lifts the ceiling on how many colonists a colony can hold. It may be raised on most habitable land and needs no other building first. It is a substantial, costly undertaking to build and a hungry one to run, drawing on nearly every resource to keep its systems and residents going. In return a worked Habitat speeds the colony's population growth, lifts morale, returns a healthy flow of wealth, and — crucially — greatly raises the colony's population ceiling, with a little general storage besides. Work several Habitats and a colony can swell far beyond what the land alone would support.
 
+A Habitat **must always be worked** to count. That one worker runs the support services — the shops, stores, clinics, and civic amenities — that a growing population needs; without them the arcology is just empty shells and adds no room at all. So a Habitat only raises the colony's population ceiling while it is staffed, and a managed colony will always keep a worker assigned to it, freeing up a worker from a lower‑priority cell if every slot is already full.
+
 ### Solar Panels
 
 <span class="float-right">![solar_panel](../buildings/solar_panel.png)</span>

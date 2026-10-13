@@ -360,7 +360,7 @@
       "buildCost": { "material": 200, "wealth": 100, "water": 2, "turns": 3 },
       "costPerYear": { },
       "bonus": { "energy": 50, "food": 5, "goods": 30, "material": 30, "water": 5, "wealth": 50, "happiness": 0.5, "population": 1 },
-      "storage": { "energy": 75, "food": 10, "goods": 250, "material": 250, "water": 5, "wealth": 250, "happiness": 25, "population": 20 },
+      "storage": { "energy": 75, "food": 10, "goods": 250, "material": 250, "water": 5, "wealth": 250, "happiness": 25, "population": 10 },
       "federationStorage": { "energy": 200, "food": 20, "goods": 200, "material": 200, "water":  5, "wealth": 200 },
       "prerequisite": {
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","frozen","plains","wetlands"],
@@ -906,7 +906,7 @@
       "buildCost": { "material": 200, "wealth": 100, "water": 2, "turns": 3 },
       "costPerYear": { "goods": 5, "wealth": 25 },
       "bonus": { "happiness": 0.25, "population": 1 },
-      "storage": { "happiness": 10, "population": 20 },
+      "storage": { "happiness": 10, "population": 15 },
       "prerequisite": {
         "population": 6,
         "terrain": ["flatland","trees","mountain-low"],
