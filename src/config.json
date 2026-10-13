@@ -368,6 +368,21 @@
       },
       "visibility": 16
     },
+    "outpost": {
+      "code": 37,
+      "name": "Outpost",
+      "icon": "buildings/128/outpost.png",
+      "symbol": "buildings/icons/outpost.png",
+      "buildCost": { "energy": 5, "material": 5, "wealth": 5, "water": 0.2, "turns": 2 },
+      "costPerYear": { "energy": 2, "goods": 1, "wealth": 3, "water": 0.1 },
+      "bonus": { },
+      "storage": { },
+      "federationStorage": { },
+      "prerequisite": {
+        "terrain": ["land"],
+        "other": [ "outpost" ]
+      }
+    },
     "farm": {
       "code": 2,
       "name": "Farm",
@@ -491,7 +506,7 @@
       "prerequisite": {
         "building": ["solar panel"],
         "terrain":  ["sea"],
-        "other":    ["land"]
+        "other":    ["land", "shallow"]
       }
     },
     // The Port is an UPGRADE of a Dock: "prerequisite.upgrades: "dock"" means it
@@ -1155,9 +1170,9 @@
     "Threadstone Seam": {
       "icon": "terrain_bonus/128/threadstone_seam.png",
       "bonus": { "material": "50-75" },
-      "terrain": ["grassland","mountain-low","plains"],
+      "terrain": ["land"],
       "other": [ ],
-      "abundancy": 4,
+      "abundancy": 8,
       "bonusType": "stone",
       "desc": "Naturally fibrous rock that separates into useful construction strands."
     },
@@ -1403,7 +1418,7 @@
     },
     "Pearls": {
       "icon": "terrain_bonus/128/pearls.png",
-      "bonus": { "wealth": 2, "happiness": 0.25 },
+      "bonus": { "wealth": 5, "happiness": 0.25 },
       "terrain": ["sea"],
       "other": [ "shallow" ],
       "abundancy": 2,
@@ -1572,7 +1587,7 @@
       "bonus": { "food": "10-25", "wealth": "10-30", "happiness": 0.25 },
       "terrain": ["sea"],
       "climate": ["tropical"],
-      "other": [ "shallow", "pristine" ],
+      "other": [ "land", "pristine" ],
       "abundancy": 0.25,
       "desc": "A sheltered lagoon of singing shellfish — a food harvest, a pearl trade, and a cultural wonder all at once. Must stay pristine."
     },

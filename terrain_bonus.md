@@ -25,9 +25,10 @@ what each strategic resource unlocks and which deposits provide it:
 | --- | --- | --- |
 | **Stone** | Fossilized Chitin Reefs, Threadstone Seam | Roads, Monorails |
 | **Iron** | Ferric Strata Veins, Starfall Alloy Crater, Gravalloy Veins, Ironcap Mushrooms | Armored (tank) battalions, Escorts, Carriers |
-| **Crystal** | Kinetite Crystals, Sunshard Flats, Quakecrystal Lodes, Celestite Spires | Monorails; Laser Battery, Electro-Magnetic Shield, Plasma Bubble; Fighters, Bombers, Escorts, Carriers; Spaceport, Satellite Network |
-| **Titanium** | Titanlace Deposit | Fighters, Bombers, Carriers; Spaceport, Satellite Network |
 | **Aluminum** | Bauxite Seam | Monorails, Air Field, Airport, Missile Battery; Spaceport, Satellite Network; Nanofactory |
+| **Titanium** | Titanlace Deposit | Fighters, Bombers, Carriers; Spaceport, Satellite Network |
+| **Crystal** | Kinetite Crystals, Sunshard Flats, Quakecrystal Lodes, Celestite Spires | Monorails; Laser Battery, Electro-Magnetic Shield, Plasma Bubble; Fighters, Bombers, Escorts, Carriers; Spaceport, Satellite Network |
+
 
 ### Food
 

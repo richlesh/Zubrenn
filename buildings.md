@@ -158,3 +158,9 @@ The Reservoir is a vast impounded water store — a dammed basin that banks enor
 <img align="right" width="128" src="src/resources/buildings/128/Desalination.png">
 
 The Desalination Plant turns the limitless sea into drinkable water, built on the shallows within a colony's reach. It requires a **Solar Farm** first. Construction is a major undertaking, reflecting the vast reverse‑osmosis works it entails, and its hallmark is a voracious appetite for power. In return it is a reliable source of water with water storage to match. Where a river‑fed Water Treatment Plant isn't an option, desalination keeps coastal and island colonies alive — provided they can feed its enormous energy demand.
+
+### Outpost
+
+<img align="right" width="128" src="src/resources/buildings/128/outpost.png">
+
+The Outpost is how a colony reaches out and claims a prize just beyond its grasp. Unlike every other structure, it is **not** built inside a colony's zone of control — it is raised **one cell outside** that border, on a tile that holds a **terrain bonus** the colony cannot otherwise reach. A small, self‑sufficient station of automated harvesters and drones, the Outpost taps that deposit and pipes its yield straight back home: the terrain bonus's resource becomes available to the owning colony, and — if that colony is networked to the capital — to the whole Federation as well. Crucially, the Outpost **needs no worker to operate**; it does not draw a worker from the colony the way a worked cell does, so its bonus comes at no cost to the colony's labor. It is the way to secure a rich vein, a rare grove, or an ancient ruin that lies tantalizingly just past the frontier, without founding a whole new colony to do it.

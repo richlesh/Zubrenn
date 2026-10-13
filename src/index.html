@@ -3385,6 +3385,13 @@
             if (_lostArrivalBonus && b.owner === 'human') notify(`${_lostArrivalBonus} was destroyed by founding a colony on its tile.`);
             if (b.owner === 'human') {
               notify(`${b.name || 'A new colony'} has been established at ${cellLatLonLabel(b.x, b.y)}.`);
+              // First time the human reaches TWO colonies, the Federation forms:
+              // announce it once (resource sharing + Federation status view unlock).
+              if (ownerColonyCount('human') >= 2 && !gameState._fedAnnounced) {
+                gameState._fedAnnounced = true;
+                gameState._fedJustBorn = true; // zero its pool after this turn's economy
+                try { showFederationCreatedDialog(); } catch (e) {}
+              }
               // Fog of war: reveal the biodome's configured visibility radius.
               revealBuildingVisibility(b);
               // Prompt the player to assign this colony's first worker.
@@ -3450,6 +3457,18 @@
       // delta -> borrow -> idle -> clamp happiness/disband -> federation overflow
       // -> federation happiness. Returns per-colony colonyStats for snapshots.
       const statsByCol = applyEconomyTurn(gameState.turn || 0);
+      // The turn the Federation is first established, its pooled stores start at
+      // ZERO — it inherits nothing. (This turn's colony overflow is cleared;
+      // subsequent turns accumulate normally.)
+      if (gameState._fedJustBorn) {
+        gameState._fedJustBorn = false;
+        const fed = federationOwnedOf('human');
+        // Only the storable commodities start empty; happiness is a computed
+        // population-weighted average (Step 6) and population isn't a fed store.
+        for (const k of ['energy', 'food', 'material', 'goods', 'water', 'wealth']) fed[k] = 0;
+        const _hp = _humanPlayer();
+        if (_hp && _hp.federation) _hp.federation.treasury = 0; // treasury mirrors owned.wealth
+      }
 
       // Infantry recruitment: after the economy has settled each colony's
       // population for the turn, every worked Barracks pulls up to its
@@ -4507,7 +4526,7 @@
         // bonusType must be available from a worked terrain-bonus cell in the
         // owner's colonies, or the slot cannot recruit.
         const _uPre = (CONFIG && CONFIG.units && CONFIG.units[slotType] && CONFIG.units[slotType].prerequisite) || null;
-        if (_uPre && !bonusTypesMet(_uPre.bonusType, col.owner)) continue;
+        if (_uPre && !bonusTypesMet(_uPre.bonusType, col)) continue;
         // Each slot's unit caps at its unit type's unitSize (e.g. infantry 1000,
         // tank 500) — the data-driven max strength per unit type.
         const cap = unitMaxStrength(slotType);
@@ -7112,7 +7131,7 @@
       if ((col.population || 0) < transportMinPopulation(kind)) return false;
       // Strategic resources: the owner must have the transport's required
       // bonusType(s) from a worked terrain-bonus cell (e.g. road needs "stone").
-      if (!bonusTypesMet(transportBonusTypeReq(kind), col.owner)) return false;
+      if (!bonusTypesMet(transportBonusTypeReq(kind), col)) return false;
       return true;
     }
     function beginTransport(kind, x, y) {
@@ -7125,7 +7144,7 @@
       // Population gate (e.g. road size 3+, monorail size 10+) plus a strategic
       // bonusType gate (e.g. road needs "stone").
       if (!colonyCanBuildTransport(col, kind)) {
-        const missRes = missingBonusTypes(transportBonusTypeReq(kind), col.owner);
+        const missRes = missingBonusTypes(transportBonusTypeReq(kind), col);
         if (missRes.length) {
           notify(`Building a ${kind} requires a worked source of ${missRes.join(" and ")}.`);
         } else {
@@ -7570,6 +7589,16 @@
       }
       return null;
     }
+    // True if (x,y) is in the owner's zone of control, OR exactly one hex outside
+    // it (a hex neighbour is controlled). Used by the `outpost` placement rule,
+    // which allows building up to one cell beyond the colony border.
+    function cellWithinOneOfOwnerControl(x, y, owner) {
+      if (colonyControlling(x, y, owner)) return true;
+      for (const n of hexNeighborsRenderer(x, y)) {
+        if (colonyControlling(n.x, n.y, owner)) return true;
+      }
+      return false;
+    }
     // Owner's colony whose control RADIUS covers (x,y) — includes sea cells that
     // aren't yet in the (land/dock-limited) control set. Used for placing a
     // Dock on a shallow-sea tile before any dock exists there.
@@ -7661,6 +7690,23 @@
         // tier-9 mountain tops and impassable terrain). No route -> can't service.
         if (!federationBuildRoute(x, y, owner)) {
           return { ok: false, reason: "no reachable route from a colony" };
+        }
+      } else if (tags.includes('outpost')) {
+        // An OUTPOST may be built up to ONE cell outside the owner's zone of
+        // control, but ONLY on a cell that holds a terrain bonus (which it then
+        // makes available to the Federation without a worker). It must not sit in
+        // another player's zone.
+        if (owner === 'human' && !cellIsVisible(x, y)) {
+          return { ok: false, reason: "cell not yet explored" };
+        }
+        if (inForeignControl(x, y, owner)) {
+          return { ok: false, reason: "inside another player's zone of control" };
+        }
+        if (!bonusDefAt(x, y)) {
+          return { ok: false, reason: "an outpost must be built on a resource deposit" };
+        }
+        if (!cellWithinOneOfOwnerControl(x, y, owner)) {
+          return { ok: false, reason: "must be within one cell of your zone of control" };
         }
       } else {
         const controlled = onSea
@@ -7873,7 +7919,9 @@
     function buildColonyAt(x, y, owner, type) {
       const col = colonyControlling(x, y, owner) || colonyControllingByRadius(x, y, owner);
       if (col) return col;
-      if (type != null && buildingIsAnywhere(type)) {
+      // `anywhere` and `outpost` buildings sit outside the zone of control; they
+      // are paid for and owned by the owner's NEAREST colony.
+      if (type != null && (buildingIsAnywhere(type) || buildingHasOther(type, 'outpost'))) {
         const nc = nearestColony(x, y, owner);
         if (nc) return nc.colony;
       }
@@ -7985,7 +8033,7 @@
       if (!populationReqMet(col, pre.population)) return false;
       // Strategic resources: every prerequisite.bonusType must be available from
       // a worked terrain-bonus cell somewhere in the owner's colonies.
-      if (!bonusTypesMet(pre.bonusType, owner)) return false;
+      if (!bonusTypesMet(pre.bonusType, col)) return false;
       return true;
     }
     // Human-readable list of unmet prerequisites (for the build-menu label):
@@ -8011,7 +8059,7 @@
       if (buildingIsFederation(type) && !federationEstablished(owner)) {
         missing.push("an established Federation (a second colony)");
       }
-      for (const t of missingBonusTypes(pre.bonusType, owner)) {
+      for (const t of missingBonusTypes(pre.bonusType, col)) {
         missing.push(`a worked source of ${t}`);
       }
       return missing;
@@ -8166,41 +8214,60 @@
     function playerColonies(owner) {
       return (gameState.buildings || []).filter((b) => b.type === 1 && b.owner === owner && !b.inTransit);
     }
-    // The SET of strategic resource `bonusType`s the owner currently has access
-    // to: the terrain-bonus `bonusType` of any WORKED cell (biodome home cell or
-    // a worked cell) across all of the owner's colonies. Buildings/units may
-    // require one or more of these via prerequisite.bonusType (ALL must be met).
-    // Example: a Mine on `Ferric Strata Veins` (bonusType "iron"), when worked,
-    // grants access to "iron".
-    function playerAvailableBonusTypes(owner) {
+    // The SET of strategic resource `bonusType`s available TO a given colony:
+    // the terrain-bonus `bonusType` of any WORKED cell (or any `outpost`) in a
+    // colony that is NETWORK-CONNECTED to `col` (its "any"-network group — the
+    // same reach as sharing food/material/goods). The colony itself always
+    // counts. Strategic resources are physical, so a deposit worked in a colony
+    // that cannot reach `col` by any transport link does NOT grant access.
+    // Buildings/units require one or more of these via prerequisite.bonusType
+    // (ALL must be met).
+    function availableBonusTypesFor(col) {
       const out = new Set();
-      for (const col of playerColonies(owner)) {
-        const homeKey = cellKey(col.x, col.y);
-        const worked = new Set([homeKey, ...((col.worked) || [])]);
+      if (!col) return out;
+      // Colonies reachable from `col` by ANY network (incl. col itself).
+      const group = [col, ...connectedColonies(col, 'any')];
+      const groupKeys = new Set(group.map((c) => _colonyKey(c)));
+      const addBt = (bt) => {
+        if (!bt) return;
+        if (Array.isArray(bt)) { for (const t of bt) if (t) out.add(t); }
+        else out.add(bt);
+      };
+      for (const c of group) {
+        const worked = new Set([cellKey(c.x, c.y), ...((c.worked) || [])]);
         for (const k of worked) {
           const [wx, wy] = k.split(",").map(Number);
           const tb = bonusDefAt(wx, wy);
-          const bt = tb && tb.bonusType;
-          if (!bt) continue;
-          if (Array.isArray(bt)) { for (const t of bt) if (t) out.add(t); }
-          else out.add(bt);
+          addBt(tb && tb.bonusType);
         }
+      }
+      // Outposts: a building tagged `outpost` grants its cell's bonusType with no
+      // worker. Attribute each outpost to its nearest colony; include it only
+      // when that colony is in `col`'s connectivity group.
+      for (const b of (gameState.buildings || [])) {
+        if (b.owner !== col.owner || b.type === 1 || b.inTransit) continue;
+        if (!isOperational(b)) continue;
+        if (!buildingHasOther(b.type, 'outpost')) continue;
+        const host = buildColonyAt(b.x, b.y, b.owner, b.type);
+        if (!host || !groupKeys.has(_colonyKey(host))) continue;
+        const tb = bonusDefAt(b.x, b.y);
+        addBt(tb && tb.bonusType);
       }
       return out;
     }
-    // True if EVERY bonusType in `req` (a string or array) is available to the
-    // owner from a worked terrain-bonus cell. Empty/missing requirement is met.
-    function bonusTypesMet(req, owner) {
+    // True if EVERY bonusType in `req` is available to colony `col` (via its
+    // connected group). Empty/missing requirement is met.
+    function bonusTypesMet(req, col) {
       const list = Array.isArray(req) ? req : (req ? [req] : []);
       if (!list.length) return true;
-      const have = playerAvailableBonusTypes(owner);
+      const have = availableBonusTypesFor(col);
       return list.every((t) => have.has(t));
     }
-    // The subset of a bonusType requirement the owner is MISSING (for UI labels).
-    function missingBonusTypes(req, owner) {
+    // The subset of a bonusType requirement that colony `col` is MISSING.
+    function missingBonusTypes(req, col) {
       const list = Array.isArray(req) ? req : (req ? [req] : []);
       if (!list.length) return [];
-      const have = playerAvailableBonusTypes(owner);
+      const have = availableBonusTypesFor(col);
       return list.filter((t) => !have.has(t));
     }
     // Tax a rate collects from a player's colonies: per colony, ceil(pop/1000)
@@ -12021,6 +12088,29 @@
         warn.hidden = true;
       }
     }
+    // One-time announcement shown when the human's Federation first forms (on
+    // founding a second colony): the flag, plus what the Federation unlocks.
+    function showFederationCreatedDialog() {
+      const body =
+        `<div style="text-align:center;">` +
+        `<h2 style="margin:0 0 10px;">A Federation is Born</h2>` +
+        `<img src="resources/federation_flag_256.png" alt="Federation flag" ` +
+        `style="width:180px;height:auto;margin:0 auto 12px;display:block;` +
+        `border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.5);">` +
+        `<p style="margin:0 0 10px;font-weight:600;">Your colonies have united into a Federation!</p>` +
+        `</div>` +
+        `<p style="margin:0 0 8px;">With two or more colonies, your Federation now unlocks:</p>` +
+        `<ul style="margin:0 0 8px 1.1em;padding:0;">` +
+        `<li><b>Resource sharing</b> — connected colonies cover each other's shortfalls, ` +
+        `and surplus beyond a colony's storage overflows into the shared Federation pool ` +
+        `(subject to each resource's transport rules).</li>` +
+        `<li><b>Federation status view</b> — open it any time from <b>View &rsaquo; View Federation&hellip;</b> ` +
+        `(Ctrl/Cmd+Shift+F) to see your pooled resources, treasury, capital, and tax rate.</li>` +
+        `</ul>`;
+      // Title is rendered centered inside the body; pass an empty dialog title so
+      // showChoiceDialog's default left-aligned <h2> isn't also shown.
+      showChoiceDialog("", body, [{ value: 'ok', label: 'Onward!' }]);
+    }
     function openFederation() {
       const player = _humanPlayer();
       if (!player) { notify("Start a game to view your Federation."); return; }
@@ -12196,7 +12286,7 @@
         dlg.style.padding = '16px 20px'; dlg.style.borderRadius = '8px';
         dlg.style.maxWidth = '560px'; dlg.style.maxHeight = '80vh'; dlg.style.overflow = 'auto';
         dlg.style.boxShadow = '0 6px 30px rgba(0,0,0,0.6)';
-        dlg.innerHTML = `<h2 style="margin-top:0">${esc(title)}</h2><div>${bodyHtml}</div>`;
+        dlg.innerHTML = `${title ? `<h2 style="margin-top:0">${esc(title)}</h2>` : ""}<div>${bodyHtml}</div>`;
         const row = document.createElement('div');
         row.style.marginTop = '14px'; row.style.display = 'flex'; row.style.gap = '8px'; row.style.justifyContent = 'flex-end';
         const done = (val) => { document.body.removeChild(overlay); resolve(val); };
@@ -12775,6 +12865,11 @@
       }
       // Assign/repair stable colony founding sequences (for capital + ordering).
       ensureColonySeqs();
+      // Federation-creation announcement is one-time: if the human already has a
+      // Federation (2+ colonies) when a game loads, treat it as already announced
+      // so loading a mature game never re-pops the dialog; otherwise arm it so the
+      // dialog fires the first time a second colony is founded.
+      gameState._fedAnnounced = (ownerColonyCount('human') >= 2);
       // Drop any AI pre-plan cache from a prior game/session (it is keyed by turn
       // and repopulated at the next human turn, but clear it defensively here).
       if (typeof _aiPlanCache !== 'undefined' && _aiPlanCache) _aiPlanCache.clear();
