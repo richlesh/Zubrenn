@@ -519,7 +519,7 @@ body.dark #rankings-table tbody tr:nth-child(even) { background: rgba(255,255,25
 #colonies-dialog {
   background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
-  max-width: 92vw; max-height: 90vh; display: flex; flex-direction: column;
+  max-width: 96vw; max-height: 90vh; display: flex; flex-direction: column;
 }
 body.dark #colonies-dialog { background: #2c2c2e; color: #e0e0e0; }
 #colonies-dialog h2 { font-size: 15px; margin-bottom: 6px; }

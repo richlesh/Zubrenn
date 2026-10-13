@@ -770,8 +770,8 @@
       "federationStorage": { "water":  100 },
       "prerequisite": {
         "building": ["solar farm", "bank"],
-        "terrain":  ["sea"],
-        "other":    ["land"],
+        "terrain":  ["land"],
+        "other":    ["sea"],
         "network":  ["any"],
         "population": 5
       }
