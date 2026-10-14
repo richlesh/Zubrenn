@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- watchtower outpost: splayed support legs -->
+  <path d="M44 112 L54 56"/>
+  <path d="M84 112 L74 56"/>
+  <!-- cross brace between legs -->
+  <path d="M49 84 L79 84"/>
+  <!-- lookout cabin -->
+  <path d="M50 56 L78 56 L74 36 L54 36 Z"/>
+  <!-- roof -->
+  <path d="M48 36 L64 22 L80 36"/>
+  <!-- flag on the peak -->
+  <path d="M64 22 L64 10"/>
+  <path d="M64 10 L82 14 L64 18"/>
+</svg>

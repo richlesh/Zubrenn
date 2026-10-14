@@ -781,7 +781,7 @@
       "code": 36,
       "name": "Reservoir",
       "icon": "buildings/128/reservoir.png",
-      "symbol": "buildings/icons/water_plus.png",
+      "symbol": "buildings/icons/waterdrop_plus.png",
       "buildCost": { "energy": 300, "material": 300, "goods": 250, "wealth": 350, "water": 10, "turns": 6 },
       "costPerYear": { "energy": 20, "goods": 10, "wealth": 50 },
       "bonus": { },

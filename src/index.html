@@ -398,6 +398,98 @@
     // utilities.cjs when loaded). Fallbacks keep the renderer functional.
     let RESOURCE_KEYS = ["energy", "food", "material", "goods", "water", "wealth", "happiness", "population"];
     let resolveResValue = (v) => (typeof v === "number" ? v : (parseFloat(v) || 0));
+    // --- Lightweight opt-in profiler -----------------------------------------
+    // Times labeled sections and aggregates {calls, ms} per label. Zero overhead
+    // when disabled. Enable at runtime from the DevTools console:
+    //     PROF.enabled = true          // start collecting
+    //     PROF.report('manual')        // dump the current table
+    //     PROF.enabled = false         // stop
+    // When CONFIG.debug is true it is auto-enabled and a breakdown is logged to
+    // the console at the end of every completed turn (round), so you can watch
+    // which sections grow as the game expands.
+    const PROF = {
+      enabled: false,
+      data: new Map(),                           // label -> { calls, ms }
+      _now() { return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); },
+      add(label, ms) {
+        let e = this.data.get(label);
+        if (!e) { e = { calls: 0, ms: 0 }; this.data.set(label, e); }
+        e.calls++; e.ms += ms;
+      },
+      // Wrap a function so each call is timed under `label` (handles both sync
+      // results and returned Promises). Returns the original fn when disabled is
+      // irrelevant — the check is per-call so toggling at runtime works.
+      wrap(label, fn) {
+        const self = this;
+        return function (...args) {
+          if (!self.enabled) return fn.apply(this, args);
+          const t0 = self._now();
+          let r;
+          try { r = fn.apply(this, args); }
+          finally {
+            if (r && typeof r.then === 'function') {
+              r.then(() => self.add(label, self._now() - t0),
+                     () => self.add(label, self._now() - t0));
+            } else {
+              self.add(label, self._now() - t0);
+            }
+          }
+          return r;
+        };
+      },
+      reset() { this.data.clear(); },
+      report(title) {
+        if (!this.data.size) return;
+        const rows = [...this.data.entries()]
+          .map(([label, e]) => ({ label, calls: e.calls, ms: Math.round(e.ms * 10) / 10,
+                                  avg: Math.round((e.ms / e.calls) * 1000) / 1000 }))
+          .sort((a, b) => b.ms - a.ms);
+        try {
+          console.log(`%c[PROF] ${title || ''}`, 'color:#9b59b6;font-weight:bold');
+          console.table(rows);
+        } catch (e) {
+          console.log('[PROF] ' + (title || ''), rows);
+        }
+      },
+    };
+    try { if (typeof window !== 'undefined') window.PROF = PROF; } catch (e) {}
+    // Instrument the suspected AI-turn hot paths. These are plain function
+    // declarations (hoisted), so reassigning the identifier to a timed wrapper
+    // routes every caller through the profiler. The wrapper is a no-op per call
+    // when PROF.enabled is false, so this costs nothing in normal play.
+    function _installProfilers() {
+      /* eslint-disable no-func-assign */
+      colonyControlCells = PROF.wrap('colonyControlCells', colonyControlCells);
+      cellsWithin = PROF.wrap('cellsWithin', cellsWithin);
+      colonyBudget = PROF.wrap('colonyBudget', colonyBudget);
+      colonyStats = PROF.wrap('colonyStats', colonyStats);
+      canPlaceTypeAt = PROF.wrap('canPlaceTypeAt', canPlaceTypeAt);
+      hasPrerequisitesAt = PROF.wrap('hasPrerequisitesAt', hasPrerequisitesAt);
+      managerBuildScore = PROF.wrap('managerBuildScore', managerBuildScore);
+      managerAutoBuild = PROF.wrap('managerAutoBuild', managerAutoBuild);
+      planEarlyColony = PROF.wrap('planEarlyColony', planEarlyColony);
+      runEarlyPlanner = PROF.wrap('runEarlyPlanner', runEarlyPlanner);
+      aiTakeTurn = PROF.wrap('aiTakeTurn', aiTakeTurn);
+      // Additional AI-turn hot-path candidates (added for a fuller breakdown).
+      runColonyManager = PROF.wrap('runColonyManager', runColonyManager);
+      managerAssignWorkers = PROF.wrap('managerAssignWorkers', managerAssignWorkers);
+      managerRepurpose = PROF.wrap('managerRepurpose', managerRepurpose);
+      managerCellScore = PROF.wrap('managerCellScore', managerCellScore);
+      colonyNeeds = PROF.wrap('colonyNeeds', colonyNeeds);
+      colonyBuildings = PROF.wrap('colonyBuildings', colonyBuildings);
+      colonyShallowSeaCells = PROF.wrap('colonyShallowSeaCells', colonyShallowSeaCells);
+      colonyControlRadius = PROF.wrap('colonyControlRadius', colonyControlRadius);
+      colonyControlling = PROF.wrap('colonyControlling', colonyControlling);
+      colonyControllingByRadius = PROF.wrap('colonyControllingByRadius', colonyControllingByRadius);
+      ownsCell = PROF.wrap('ownsCell', ownsCell);
+      ensureWorked = PROF.wrap('ensureWorked', ensureWorked);
+      projectColonyRates = PROF.wrap('projectColonyRates', projectColonyRates);
+      aiPlayTurn = PROF.wrap('aiPlayTurn', aiPlayTurn);
+      aiMilitaryStep = PROF.wrap('aiMilitaryStep', aiMilitaryStep);
+      pruneWorkedToControl = PROF.wrap('pruneWorkedToControl', pruneWorkedToControl);
+      /* eslint-enable no-func-assign */
+    }
+    try { _installProfilers(); } catch (e) { console.error('[PROF] install failed:', e); }
     let readResMap = (map) => {
       const out = {}; const src = (map && typeof map === "object") ? map : {};
       for (const k of RESOURCE_KEYS) out[k] = (src[k] != null) ? resolveResValue(src[k]) : 0;
@@ -3356,6 +3448,8 @@
     // Human resources accumulate; AIs just grow population for now.
     function growColonies() {
       let badgeChanged = false;
+      bumpControlGen();   // population (and thus control radius) changes this turn
+      bumpPlaceGen();
       // Human aggregate population + population-weighted growth (for the panel).
       let humanPopBefore = 0, humanPopAfter = 0;
       const _newWorkerColonies = []; // human colonies that gained a worker this year
@@ -3388,6 +3482,8 @@
             b.inTransit = false;
             b.population = (b.population || 0) + (b.pendingColonists || 0);
             b.pendingColonists = 0;
+            bumpControlGen();   // a newly-settled colony changes controlled cells
+            bumpPlaceGen();
             // Apply the Federation's default manager for new colonies (set in the
             // Federation screen) to this freshly-settled colony, only if it has no
             // manager yet. Existing colonies are never changed.
@@ -3459,6 +3555,8 @@
           }
         }
         badgeChanged = true;
+        bumpControlGen();   // removed buildings can change controlled cells
+        bumpPlaceGen();
       }
       // the sum of all human colonies' per-turn deltas).
       let yFood = 0, yMaterial = 0, yGoods = 0, yEnergy = 0, yWater = 0, yHappiness = 0, yWealth = 0;
@@ -3892,6 +3990,9 @@
         gameState.turn++;
         roundCompleted = true;
         growColonies(); // populations grow each year/turn
+        // Per-turn profiler breakdown (opt-in): dump the aggregated section
+        // timings for the round that just completed, then reset for the next.
+        if (PROF.enabled) { PROF.report(`turn ${gameState.turn} (year ${currentYear()})`); PROF.reset(); }
         _roundHadAction = false;
         if (typeof aiLog !== 'undefined') aiLog.year(currentYear());
       }
@@ -4261,9 +4362,21 @@
     // Whether a given terrain tile id is allowed for a building type. The cell's
     // numeric id is mapped to its name key, then checked against the building's
     // terrain list with any group selectors expanded.
+    // Cache the expanded allowed-terrain Set per building type. The expansion
+    // (tokens -> group members -> names) depends only on static config, so this
+    // is computed once per type. Keyed with the current CONFIG so a difficulty
+    // re-derivation of CONFIG rebuilds it. canPlaceTypeAt calls this for every
+    // (cell, type) candidate — tens of thousands of times per AI turn — so the
+    // per-call Set construction it replaces was a real cost.
+    let _terrAllowCache = new Map();
+    let _terrAllowCacheCfg = null;
     function terrainAllowedForBuilding(type, terr) {
       const name = terrainNameOf(terr);
-      return name != null && expandTerrainTokens(buildingTerrains(type)).has(name);
+      if (name == null) return false;
+      if (_terrAllowCacheCfg !== CONFIG) { _terrAllowCache.clear(); _terrAllowCacheCfg = CONFIG; }
+      let set = _terrAllowCache.get(type);
+      if (!set) { set = expandTerrainTokens(buildingTerrains(type)); _terrAllowCache.set(type, set); }
+      return set.has(name);
     }
     // General "habitable land" predicate (building-agnostic), driven by the
     // Biodome's terrain list so colony establishment / launch targeting and the
@@ -4971,6 +5084,22 @@
       }
     }
 
+    // Return a colony's `_idledCells` as a real Set, repairing it if a save
+    // round-trip turned the Set into a plain array/object (JSON can't serialize a
+    // Set). `_idledCells` is transient per-turn state (cells idled for a deficit
+    // that the planner must not re-work this turn); it is recreated fresh each
+    // economy turn, but the AI/early planner can touch it first on a freshly
+    // loaded game, so normalize on use.
+    function idledCellsOf(col) {
+      let s = col._idledCells;
+      if (s instanceof Set) return s;
+      if (Array.isArray(s)) { s = new Set(s); }
+      else if (s && typeof s === 'object') { s = new Set(Object.keys(s)); }
+      else { s = new Set(); }
+      col._idledCells = s;
+      return s;
+    }
+
     // Compute a colony's per-year budget from its WORKED cells only:
     //   production (terrain on worked cells + building bonus on worked cells)
     //   needs      (population food consumption + building upkeep on worked cells)
@@ -5212,7 +5341,7 @@
     // The result is cached and invalidated whenever transport changes or a new
     // economy tick begins (see invalidateColonyConnectivity()).
     let _colonyGroupsCache = null; // owner -> Map(colonyKey -> groupId)
-    function invalidateColonyConnectivity() { _colonyGroupsCache = null; }
+    function invalidateColonyConnectivity() { _colonyGroupsCache = null; bumpControlGen(); }
     // Which transport-network grouping governs SHARING of a given resource.
     // Land (road/monorail) and river/canal ALWAYS count; the mode name says
     // which of sea / air / space ALSO count:
@@ -5634,7 +5763,7 @@
         const idx = Math.min(consumers.length - 1, Math.floor((rng ? rng() : Math.random()) * consumers.length));
         const victim = consumers[idx];
         col.worked = col.worked.filter((k) => k !== victim.k);
-        if (col._idledCells) col._idledCells.add(victim.k);
+        idledCellsOf(col).add(victim.k);
         // Re-credit the consumption that cell would have cost this turn so the
         // balance reflects idling it (its negative contribution is removed).
         col.owned[resource] -= victim.contrib; // contrib<0 -> adds back
@@ -6492,23 +6621,51 @@
     // reaches that threshold (thresholds are converted to citizens via
     // popUnitSize()). e.g. [0,10,100,1000] with unitSize 1000 -> radius 1,2,3,4
     // at 0 / 10,000 / 100,000 / 1,000,000 citizens.
+    // Generation counter for the per-colony control-cells cache. Bumped whenever
+    // anything that affects which cells a colony controls changes: a building is
+    // added/removed, or a colony's population (hence radius) changes.
+    let _controlGen = 0;
+    function bumpControlGen() { _controlGen++; }
+    // A SEPARATE generation for the canPlaceTypeAt cache. It must advance only on
+    // changes that affect PLACEMENT VALIDITY (buildings added/removed, population
+    // -> radius, map load) — NOT on connectivity-only invalidations (transport
+    // planning, and especially projectColonyRates' temporary building add/revert
+    // which happens dozens of times per turn). Tying the placement cache to
+    // _controlGen made those temp projections clear it constantly.
+    let _placeGen = 0;
+    function bumpPlaceGen() { _placeGen++; }
     function colonyControlRadius(colony) {
+      // Hot path: this is called O(cells x colonies) from ownsCell/colonyControlCells,
+      // tens of millions of times per AI turn. It depends only on the colony's
+      // population and the (static) config thresholds, so memoize on the colony
+      // object keyed by its current population — the cache self-invalidates when
+      // population changes (once per turn in growColonies).
+      const pop = colony.population || 0;
+      if (colony._ctrlRadiusPop === pop && colony._ctrlRadius != null) {
+        return colony._ctrlRadius;
+      }
       const th = (CONFIG.zoneOfControlSize && CONFIG.zoneOfControlSize.length)
         ? CONFIG.zoneOfControlSize : [0];
-      const pop = colony.population || 0;
       const us = popUnitSize();
       let radius = 1;
       for (let i = 0; i < th.length; i++) {
         if (pop >= th[i] * us) radius = i + 1;
       }
+      colony._ctrlRadiusPop = pop;
+      colony._ctrlRadius = radius;
       return radius;
     }
     function colonyControlCells(colony) {
+      // Hot path (called tens of thousands of times per AI turn, each scanning
+      // its radius x all buildings via ownsCell). Memoize the result per colony,
+      // keyed by a global generation counter that is bumped whenever anything
+      // affecting control changes (buildings added/removed, population growth).
+      if (colony._ccGen === _placeGen && colony._ccCells) return colony._ccCells;
       const radius = colonyControlRadius(colony);
       const cells = cellsWithin(colony.x, colony.y, radius);
       const docked = colonyHasDock(colony);     // Dock OR Port in radius -> shallow sea usable
       const ported = colonyHasSeaport(colony);  // Port in radius -> ALL sea usable (incl. deep)
-      return cells.filter((c) => {
+      const out = cells.filter((c) => {
         const terr = terrainAt(c.x, c.y);
         // Overlapping zones: a cell belongs to only ONE colony (the nearest).
         if (!ownsCell(colony, c.x, c.y)) return false;
@@ -6521,6 +6678,9 @@
         if (ported) return true;
         return docked && isShallowSea(c.x, c.y);
       });
+      colony._ccGen = _placeGen;
+      colony._ccCells = out;
+      return out;
     }
     // Shallow-sea cells inside a colony's control RADIUS, independent of whether
     // the colony already has a Dock. colonyControlCells() excludes sea tiles for
@@ -6806,6 +6966,8 @@
       const rec = { x, y, type, owner, ownerName: species, improvement: improvementName(type),
                     turnsRemaining: turns };
       gameState.buildings.push(rec);
+      bumpControlGen();   // a new building can change which cells are controlled
+      bumpPlaceGen();     // ...and changes placement validity (occupancy, cap)
       // Building on a pristine-bonus tile destroys that bonus permanently.
       const _lostBuildBonus = destroyPristineBonusAt(x, y);
       if (_lostBuildBonus && owner === 'human') notify(`${_lostBuildBonus} was destroyed by building on its tile.`);
@@ -7741,7 +7903,23 @@
     // buildings (terrain includes 1, e.g. Dock / Desalination) go on shallow-sea
     // tiles within a colony's radius; land buildings go on an empty allowed-
     // terrain cell within the owner's control. Returns { ok, reason }.
+    // Memoized facade over the (relatively expensive) placement check. Results
+    // depend only on buildings, terrain, control radii, and transport — all of
+    // which bump `_controlGen` when they change — so cache by control generation
+    // and clear when it advances. This collapses the thousands of repeated
+    // canPlaceTypeAt calls the AI managers make each turn over the same cells.
+    let _cptaCache = new Map();
+    let _cptaCacheGen = -1;
     function canPlaceTypeAt(type, x, y, owner) {
+      if (_cptaCacheGen !== _placeGen) { _cptaCache.clear(); _cptaCacheGen = _placeGen; }
+      const key = type + '|' + x + '|' + y + '|' + owner;
+      const hit = _cptaCache.get(key);
+      if (hit !== undefined) return hit;
+      const r = _canPlaceTypeAtImpl(type, x, y, owner);
+      _cptaCache.set(key, r);
+      return r;
+    }
+    function _canPlaceTypeAtImpl(type, x, y, owner) {
       // An UPGRADE building (prerequisite.upgrades) may ONLY be placed on a cell
       // that already holds the owner's building of the upgraded type — it
       // replaces it. Every other building needs an empty cell.
@@ -8063,7 +8241,17 @@
     // (deep sea is never passable, so until a Deep Water Port exists, deep-sea
     // routes are unavailable). Returns the CHEAPEST-reachable source colony with
     // its path cost and travel turns, or null when no colony can reach the cell.
+    // Memoized: this runs findMovementPath from EVERY colony to the target cell
+    // (expensive pathfinding) and is called from canPlaceTypeAt for every
+    // `federation`/`anywhere` candidate cell — the dominant per-call cost. The
+    // route depends only on the target cell, owner, and map/building/transport
+    // state (which bumps _placeGen), NOT on the building type, so cache it.
+    let _fbrCache = new Map();
+    let _fbrCacheGen = -1;
     function federationBuildRoute(targetX, targetY, owner) {
+      if (_fbrCacheGen !== _controlGen) { _fbrCache.clear(); _fbrCacheGen = _controlGen; }
+      const ckey = targetX + '|' + targetY + '|' + owner;
+      if (_fbrCache.has(ckey)) return _fbrCache.get(ckey);
       let best = null;
       for (const b of gameState.buildings) {
         if (b.type !== 1 || b.owner !== owner || b.inTransit) continue;
@@ -8073,6 +8261,7 @@
           best = { colony: b, cost: pf.cost, path: pf.path, travelTurns: biodomeTravelTurns(pf.cost) };
         }
       }
+      _fbrCache.set(ckey, best);
       return best;
     }
     // Whether the owner can afford a building type at (x,y), paying from the
@@ -8132,7 +8321,22 @@
     // buildings present in the colony, a satisfying network connection (if any
     // listed), and the colony population >= citySize*1000 (if set). Terrain and
     // climate are enforced separately by canPlaceTypeAt.
+    // Memoized facade: prerequisites depend only on buildings present, population,
+    // and whether a Federation exists — all of which bump _placeGen — so cache by
+    // placement generation. The AI managers/early planner re-check the same
+    // (type, colony-probe-cell) repeatedly each turn.
+    let _hpaCache = new Map();
+    let _hpaCacheGen = -1;
     function hasPrerequisitesAt(type, x, y, owner) {
+      if (_hpaCacheGen !== _placeGen) { _hpaCache.clear(); _hpaCacheGen = _placeGen; }
+      const key = type + '|' + x + '|' + y + '|' + owner;
+      const hit = _hpaCache.get(key);
+      if (hit !== undefined) return hit;
+      const r = _hasPrerequisitesAtImpl(type, x, y, owner);
+      _hpaCache.set(key, r);
+      return r;
+    }
+    function _hasPrerequisitesAtImpl(type, x, y, owner) {
       const pre = btPrereq(type);
       const buildings = Array.isArray(pre.building) ? pre.building : [];
       // Federation buildings require an established Federation: the owner must
@@ -8230,12 +8434,21 @@
     // Cells the human currently controls (union of human colony control areas).
     // Use the colony BUILDINGS (type 1), which carry population, so the control
     // radius reflects the current zone-of-control size.
+    // Memoized: rebuilding the whole human control set (all human colonies x
+    // their control cells) was done on EVERY canPlaceTypeAt zone check. It
+    // depends only on human colonies' control cells, which change with
+    // _controlGen, so cache it per generation.
+    let _humanControlSet = null;
+    let _humanControlSetGen = -1;
     function humanControlSet() {
+      if (_humanControlSetGen === _placeGen && _humanControlSet) return _humanControlSet;
       const set = new Set();
       for (const b of gameState.buildings) {
         if (b.type !== 1 || b.owner !== 'human') continue;
         for (const cell of colonyControlCells(b)) set.add(cellKey(cell.x, cell.y));
       }
+      _humanControlSet = set;
+      _humanControlSetGen = _placeGen;
       return set;
     }
     function humanControls(x, y) { return humanControlSet().has(cellKey(x, y)); }
@@ -9710,34 +9923,65 @@
         if (queued >= budget) break;
         if (underCon >= maxUC) break;                        // per-radius concurrent cap
         let best = null, bestScore = -Infinity, bestCell = null;
-        // Candidate cells: the colony's control cells. Occupied cells are kept so
-        // an UPGRADE (which replaces the existing building, e.g. Solar Farm over
-        // Solar Panel) can be chosen; canPlaceTypeAt rejects a non-upgrade on an
-        // occupied cell and only allows an upgrade on its matching base building.
-        for (const c of colonyControlCells(col)) {
-          if (cellKey(c.x, c.y) === cellKey(col.x, col.y)) continue;  // never the biodome cell
-          for (const type of types) {
-            if (!canPlaceTypeAt(type, c.x, c.y, col.owner).ok) continue;
-            if (!hasPrerequisitesAt(type, c.x, c.y, col.owner)) continue;
-            if (!canAffordBuildingAt(type, c.x, c.y, col.owner)) continue;
-            // No-deficit mode: only build something that advances a resource the
-            // manager actually PRIORITIZES (base weight >= 2), so e.g. Growth
-            // doesn't keep adding surplus Solar it doesn't need. (During a hard
-            // deficit this filter is bypassed — remediation builds whatever helps.)
-            if (!Object.keys(hardDeficits).length) {
-              const net = bldgNetAt(type, c.x, c.y);
-              const base = MANAGER_WEIGHTS[manager] || MANAGER_WEIGHTS.growth;
-              const advances = ['food','water','energy','material','goods','wealth']
-                .some((r) => (base[r] || 0) >= 2 && (net[r] || 0) > 0)
-                || ((base.growth || 0) >= 2 && (net.growth || 0) > 0)
-                || (manager === 'military' && buildingRecruits(type))
-                || (type === _bldgCode('bank')
-                    && !colonyBuildings(col).some((b) => b.type === _bldgCode('bank')))  // Bank is a strategic unlock — never filter it out
-                || (type === _bldgCode('habitat') && populationAtCap(col));              // Habitat when population is capped
-              if (!advances) continue;
-            }
-            const score = managerBuildScore(col, type, c, manager, needs, hardDeficits);
-            if (score > bestScore) { bestScore = score; best = type; bestCell = c; }
+        // Prerequisites, affordability, and (for non-`anywhere` buildings) the
+        // Federation/building/network/citySize requirements are COLONY-WIDE —
+        // they resolve to the same colony for every control cell — so evaluate
+        // them ONCE here and only keep the types that could be built this pass.
+        // This avoids calling the expensive per-(cell,type) canPlaceTypeAt for
+        // types that can never qualify (the dominant AI-turn cost at scale).
+        const eligibleTypes = types.filter((type) =>
+          hasPrerequisitesAt(type, col.x, col.y, col.owner)
+          && canAffordBuildingAt(type, col.x, col.y, col.owner));
+        // Evaluate one (type, cell) candidate against the best so far. Shared by
+        // the empty-cell (new building) and occupied-cell (upgrade) passes below.
+        const noDeficit = !Object.keys(hardDeficits).length;
+        const _bankCode = _bldgCode('bank'), _habCode = _bldgCode('habitat');
+        const hasBank = _bankCode != null && colonyBuildings(col).some((b) => b.type === _bankCode);
+        const evalCandidate = (type, c) => {
+          if (!canPlaceTypeAt(type, c.x, c.y, col.owner).ok) return;
+          // No-deficit mode: only build something that advances a resource the
+          // manager actually PRIORITIZES (base weight >= 2), so e.g. Growth
+          // doesn't keep adding surplus Solar it doesn't need. (During a hard
+          // deficit this filter is bypassed — remediation builds whatever helps.)
+          if (noDeficit) {
+            const net = bldgNetAt(type, c.x, c.y);
+            const base = MANAGER_WEIGHTS[manager] || MANAGER_WEIGHTS.growth;
+            const advances = ['food','water','energy','material','goods','wealth']
+              .some((r) => (base[r] || 0) >= 2 && (net[r] || 0) > 0)
+              || ((base.growth || 0) >= 2 && (net.growth || 0) > 0)
+              || (manager === 'military' && buildingRecruits(type))
+              || (type === _bankCode && !hasBank)          // Bank is a strategic unlock
+              || (type === _habCode && populationAtCap(col)); // Habitat when population is capped
+            if (!advances) return;
+          }
+          const score = managerBuildScore(col, type, c, manager, needs, hardDeficits);
+          if (score > bestScore) { bestScore = score; best = type; bestCell = c; }
+        };
+        // Partition eligible types into UPGRADES (replace an existing base
+        // building on its own cell) and NON-upgrades (need an empty cell). This
+        // lets us test each type only against cells where it could possibly go,
+        // instead of the full control-cells x types matrix — the dominant cost.
+        const upgradeTypes = [], newTypes = [];
+        for (const type of eligibleTypes) {
+          (buildingUpgradesCode(type) != null ? upgradeTypes : newTypes).push(type);
+        }
+        const biodomeKey = cellKey(col.x, col.y);
+        // New (non-upgrade) buildings: only EMPTY control cells are candidates.
+        if (newTypes.length) {
+          for (const c of colonyControlCells(col)) {
+            if (cellKey(c.x, c.y) === biodomeKey) continue;      // never the biodome cell
+            if (cellHasBuilding(c.x, c.y)) continue;             // occupied -> only an upgrade could go here
+            for (const type of newTypes) evalCandidate(type, c);
+          }
+        }
+        // Upgrades: only the cell holding the matching base building is a
+        // candidate. Look each up directly instead of scanning every cell.
+        for (const type of upgradeTypes) {
+          const baseCode = buildingUpgradesCode(type);
+          for (const b of colonyBuildings(col)) {
+            if (b.type !== baseCode || b.type === 1) continue;
+            if (cellKey(b.x, b.y) === biodomeKey) continue;
+            evalCandidate(type, { x: b.x, y: b.y });
           }
         }
         if (best == null || !bestCell || bestScore <= 0) break;
@@ -10200,14 +10444,13 @@
     // size first). At size >= EARLY_SIZE with the Dock handled, the colony's
     // selected manager (its optimizer) takes over.
     function earlyPlanActive(col) {
-      if (workCap(col) < EARLY_SIZE) return true;
-      // Past the early size, keep the planner only until a COASTAL colony's Dock
-      // is built — a Dock must always be established to open the sea network.
-      const dockCode = _bldgCode('dock'), portCode = _bldgCode('port');
-      const coastal = colonyShallowSeaCells(col).length > 0;
-      if (!coastal) return false;
-      const hasDock = colonyBuildings(col).some((b) => b.type === dockCode || b.type === portCode);
-      return !hasDock;
+      // Only SMALL colonies use the enumeration-based early planner. Once a
+      // colony passes EARLY_SIZE it is driven by its general manager (which also
+      // builds a Dock via normal scoring + the singleton-hub rule). Previously a
+      // coastal colony stayed in the early planner until its Dock was built,
+      // which trapped large coastal colonies in the expensive enumeration planner
+      // for the rest of the game — the dominant AI-turn cost. Hand off cleanly.
+      return workCap(col) < EARLY_SIZE;
     }
     // Drive a SMALL colony (pop < EARLY_SIZE units) from its early plan: ensure
     // the plan's worked cells are worked, and build the next unbuilt plan
@@ -10261,7 +10504,7 @@
         // Don't re-work a cell the economy just idled for a resource deficit
         // (e.g. a Factory the colony can't supply material to) — that would
         // undo the idle and thrash.
-        if (col._idledCells && col._idledCells.has(k)) continue;
+        if (idledCellsOf(col).has(k)) continue;
         const [wx, wy] = k.split(',').map(Number);
         if (isImpassableFrozen(wx, wy)) continue;
         // Only skip a cell with a building the planner didn't place (can't work it).
@@ -10328,14 +10571,20 @@
           if (Object.keys(hd).length) {
             const mgr = (col.manager && col.manager !== 'none') ? col.manager : 'growth';
             let bestType = null, bestCell = null, bestScore = 0;
+            // Candidate cells here are always EMPTY (occupied cells are skipped
+            // below), so only NON-upgrade types can go on them. Evaluate the
+            // colony-wide prerequisite + affordability gates ONCE (same answer
+            // for every control cell) rather than per (cell, type).
+            const _fillTypes = buildingTypeCodes().filter((type) =>
+              type !== 1
+              && buildingUpgradesCode(type) == null
+              && hasPrerequisitesAt(type, col.x, col.y, col.owner)
+              && canAffordBuildingAt(type, col.x, col.y, col.owner));
             for (const c of colonyControlCells(col)) {
               if (cellKey(c.x, c.y) === homeKey || cellHasBuilding(c.x, c.y)) continue;
               if (isImpassableFrozen(c.x, c.y) || bonusIsPristine(bonusDefAt(c.x, c.y))) continue;
-              for (const type of buildingTypeCodes()) {
-                if (type === 1) continue;
+              for (const type of _fillTypes) {
                 if (!canPlaceTypeAt(type, c.x, c.y, col.owner).ok) continue;
-                if (!hasPrerequisitesAt(type, c.x, c.y, col.owner)) continue;
-                if (!canAffordBuildingAt(type, c.x, c.y, col.owner)) continue;
                 const sc = managerBuildScore(col, type, c, mgr, null, hd);
                 if (sc > bestScore) { bestScore = sc; bestType = type; bestCell = c; }
               }
@@ -13680,6 +13929,13 @@
       }
       // Re-derive CONFIG from the base config for this game's difficulty.
       applyGameDifficulty();
+      // Auto-enable the AI-turn profiler in debug builds (toggle at runtime via
+      // the console with `PROF.enabled = true/false`).
+      PROF.enabled = !!(CONFIG && CONFIG.debug);
+      // Fresh game/load: invalidate any per-colony control-cells cache that may
+      // have ridden along in a save (cache fields are runtime-only).
+      bumpControlGen();
+      bumpPlaceGen();
       _riverCellSet = null;
       _origRiverCells = null;
       _riverBorderEdges = null;
