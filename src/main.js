@@ -416,6 +416,12 @@ function buildViewMenu() {
       { type: "separator" },
       { label: "Toggle Terrain Textures", accelerator: "CmdOrCtrl+T", click: () => sendToMain("view-toggle-terrain") },
       { label: "Toggle Area of Control", accelerator: "CmdOrCtrl+Shift+C", click: () => sendToMain("view-toggle-control") },
+      { type: "separator" },
+      { label: `${overlayState.resources ? "Hide" : "Show"} Resource Icons (1)`, click: () => sendToMain("view-toggle-resources") },
+      { label: `${overlayState.roads ? "Hide" : "Show"} Roads (2)`, click: () => sendToMain("view-toggle-roads") },
+      { label: `${overlayState.monorail ? "Hide" : "Show"} Monorail (3)`, click: () => sendToMain("view-toggle-monorail") },
+      { label: `${overlayState.air ? "Hide" : "Show"} Air Routes (4)`, click: () => sendToMain("view-toggle-air") },
+      { type: "separator" },
       { label: "Zoom In", accelerator: "CmdOrCtrl+=", click: () => sendToMain("view-zoom-in") },
       { label: "Zoom Out", accelerator: "CmdOrCtrl+-", click: () => sendToMain("view-zoom-out") }
     ]
@@ -594,6 +600,21 @@ ipcMain.handle("ai-chat-tools", async (_e, { messages, tools, maxTokens, timeout
 let gameColonies = [];
 ipcMain.handle("colonies-updated", (_e, list) => {
   gameColonies = Array.isArray(list) ? list : [];
+  buildMenu();
+});
+// Current visibility of the toggleable overlay layers, pushed by the renderer.
+// Drives the dynamic "Show …"/"Hide …" labels in the View menu. Defaults to all
+// shown (matching the renderer's HexMap defaults).
+let overlayState = { resources: true, roads: true, monorail: true, air: true };
+ipcMain.handle("overlay-state-updated", (_e, st) => {
+  if (st && typeof st === "object") {
+    overlayState = {
+      resources: st.resources !== false,
+      roads: st.roads !== false,
+      monorail: st.monorail !== false,
+      air: st.air !== false,
+    };
+  }
   buildMenu();
 });
 

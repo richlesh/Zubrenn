@@ -76,9 +76,9 @@
       "color": { "h": 120, "s": 1, "l": 0.6 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 10, "material": 5 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 },
-      "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 1 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 0.5 },
+      "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 2 }
     },
     "hills": {
       "code": 3,
@@ -87,8 +87,8 @@
       "color": { "h": 90, "s": 0.583, "l": 0.52 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 5, "material": 15 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 },
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 1.5 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 0.75 },
       "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
     },
     "forest": {
@@ -99,7 +99,7 @@
       "movement": [4, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 5, "material": 15 },
       "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 1 },
       "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
     },
     "jungle": {
@@ -110,7 +110,7 @@
       "movement": [5, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 5, "material": 10, "water": 0.5 },
       "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 1 },
       "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
     },
     "desert": {
@@ -120,9 +120,9 @@
       "color": { "h": 60, "s": 0.6, "l": 0.469 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "material": 5 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 },
-      "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 1 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 0.5 },
+      "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 2 }
     },
     "mountain-low": {
       "code": 7,
@@ -132,7 +132,7 @@
       "movement": [4, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "material": 30 },
       "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 }
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 1 }
       // canals are disallowed
     },
     "mountain-high": {
@@ -142,8 +142,8 @@
       "color": { "h": 30, "s": 0.333, "l": 0.225 },
       "movement": [5, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "material": 40 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 }
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 3 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 1.5 }
       // canals are disallowed
     },
     "frozen": {
@@ -153,8 +153,8 @@
       "color": { "h": 0, "s": 0, "l": 1 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "material": 3 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 }
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 1 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 0.5 }
       // canals are disallowed
     },
     "plains": {
@@ -164,9 +164,9 @@
       "color": { "h": 120, "s": 1, "l": 0.8 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "food": 5, "material": 5 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 },
-      "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 1 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 0.5 },
+      "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 2 }
     },
     "wetlands": {
       "code": 11,
@@ -175,8 +175,8 @@
       "color": { "h": 120, "s": 1, "l": 0.4 },
       "movement": [3, 0.5, 0.75, 0.2, 0.1],
       "bonus": { "material": 5, "water": 0.5, "happiness": 0.25 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 },
+      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 1.5 },
+      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 0.75 },
       "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
     }
   },
@@ -501,8 +501,8 @@
       "symbol": "buildings/icons/ship.png",
       "buildCost": { "energy": 5, "material": 10, "wealth": 5, "water": 0.25, "turns": 1 },
       "costPerYear": { "energy": 5, "wealth": 3, "water": 0.1 },
-      "bonus": { "food": 5, "wealth": 5 },
-      "storage": { "food": 5 },
+      "bonus": { "food": 10, "wealth": 10 },
+      "storage": { "food": 10 },
       "prerequisite": {
         "building": ["solar panel"],
         "terrain":  ["sea"],
@@ -1181,7 +1181,7 @@
       "bonus": { "material": "50-75" },
       "terrain": ["hills","mountain-low","mountain-high"],
       "other": [ ],
-      "abundancy": 6,
+      "abundancy": 8,
       "bonusType": "aluminum",
       "desc": "Rich seams of Bauxite ore from which Aluminum is extracted. Aluminum is the most abundant metal in Zubrenn's crust just like Earth."
     },
@@ -1870,7 +1870,7 @@
   "road": {
     "color": { "h": 30, "s": 0.5, "l": 0.35 },
     "adjacentBonus": { "wealth": 2 },
-    "removeCost": { "energy": 2, "food": 1, "turns": 2 },
+    "removeCost": { "energy": 2, "food": 1, "turns": 1 },
     "costPerYear": { "energy": 0.5, "material": 1, "wealth": 0.75 },
     "decayRate": 0.001,
     "prerequisite": {
@@ -1893,7 +1893,7 @@
   "monorail": {
     "color": { "h": 40, "s": 1.0, "l": 0.5 },
     "adjacentBonus": { "wealth": 2 },
-    "removeCost": { "energy": 2, "food": 1, "turns": 2 },
+    "removeCost": { "energy": 2, "food": 1, "turns": 1 },
     "costPerYear": { "energy": 0.5, "material": 0.5, "wealth": 0.5 },
     "decayRate": 0.001,
     "prerequisite": {
@@ -1948,7 +1948,7 @@
   // Stacks with riverAdjacentBonus when adjacent to both.
   "seaAdjacentBonus": { "food": 2, "material": 1, "wealth": 2 },
   // Cost + turns to tear down a building (Remove Improvement), paid by its colony.
-  "removeImprovementCost": { "energy": 5, "food": 2, "turns": 2 },
+  "removeImprovementCost": { "energy": 5, "food": 2, "turns": 1 },
 
   // Combat / strike-force tuning (attack system).
   //   Each combatant has HP (a health pool), ATTACK (damage dealt), and DEFENSE

@@ -546,6 +546,21 @@ body.dark #colonies-table .sub { color: #888; }
 #colonies-table .rate-neg { color: #d23b3b; }
 #colonies-table .worked-ok { color: #1a9e1a; font-weight: 600; }
 #colonies-table .worked-idle { color: #d23b3b; font-weight: 600; }
+#colonies-table .transport-building { color: #1a7fd2; font-weight: 600; }
+#colonies-table .transport-idle { color: #999; }
+body.dark #colonies-table .transport-idle { color: #888; }
+#colonies-table .transport-cancel {
+  margin-left: 6px;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  color: #d23b3b;
+  vertical-align: middle;
+}
+#colonies-table .transport-cancel:hover { color: #ff5a5a; }
 
 /* Debug: terrain-type cell-count dialog (reuses the colonies-table look). */
 #terraindebug-overlay {

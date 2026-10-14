@@ -2273,6 +2273,33 @@
       tr.plans.push(plan);
       return plan;
     }
+    // The colony's in-progress ROAD or MONORAIL construction plan, if any (not
+    // canals). A plan belongs to the colony whose cell is its `source`.
+    function colonyTransportPlan(col) {
+      const tr = ensureTransport();
+      if (!tr || !Array.isArray(tr.plans)) return null;
+      return tr.plans.find((p) => p && p.owner === col.owner
+        && (p.kind === 'road' || p.kind === 'monorail')
+        && !p.edges
+        && p.source && p.source.x === col.x && p.source.y === col.y) || null;
+    }
+    // Cancel a colony's in-progress road/monorail plan: drop it from the queue,
+    // prune its planning (green) overlay, and refresh the map overlay.
+    function cancelColonyTransportPlan(col) {
+      const tr = ensureTransport();
+      const plan = colonyTransportPlan(col);
+      if (!plan) return false;
+      tr.plans = (tr.plans || []).filter((p) => p !== plan);
+      if (typeof _transportPlannedPaths !== 'undefined' && Array.isArray(_transportPlannedPaths)) {
+        _transportPlannedPaths = _transportPlannedPaths.filter((pp) => pp.planId !== plan.id);
+      }
+      if (hexMap) {
+        const anyPlanned = (Array.isArray(_transportPlannedPaths) && _transportPlannedPaths.length)
+          || (typeof _canalPlannedEdges !== 'undefined' && Array.isArray(_canalPlannedEdges) && _canalPlannedEdges.length);
+        hexMap.setOverlay(anyPlanned ? transportOverlayDraw : null);
+      }
+      return true;
+    }
     // Create a CANAL plan from an explicit list of edges [{a:{x,y},b:{x,y}}...].
     // Built one edge (border) per turn's worth of turns, paid from source.
     function planCanalEdges(owner, source, edges) {
@@ -12668,6 +12695,50 @@
     ipcRenderer.on("view-zoom-out", () => { if (hexMap) hexMap.zoomOut(); });
     ipcRenderer.on("view-center-map", () => { if (hexMap) { hexMap.centerViewport(); hexMap.redraw(); } });
 
+    // Overlay layer toggles (keyboard 1/2/3/4 and View menu). Each flips the
+    // layer in the renderer map, then pushes the new visibility state to the
+    // main process so the View-menu labels can read "Show …"/"Hide …".
+    function pushOverlayStateToMain() {
+      if (!hexMap) return;
+      try {
+        ipcRenderer.invoke("overlay-state-updated", {
+          resources: !!hexMap.showResourceIcons,
+          roads: !!hexMap.showRoads,
+          monorail: !!hexMap.showMonorail,
+          air: !!hexMap.showAirRoutes,
+        });
+      } catch (e) {}
+    }
+    function toggleResourceOverlay() { if (hexMap) { hexMap.toggleResourceIcons(); pushOverlayStateToMain(); } }
+    function toggleRoadsOverlay() { if (hexMap) { hexMap.toggleRoads(); pushOverlayStateToMain(); } }
+    function toggleMonorailOverlay() { if (hexMap) { hexMap.toggleMonorail(); pushOverlayStateToMain(); } }
+    function toggleAirRoutesOverlay() {
+      if (!hexMap) return;
+      // Keep the air-link geometry current before toggling it on.
+      if (typeof hexMap.setAirLinks === 'function') hexMap.airLinks = humanAirLinks();
+      hexMap.toggleAirRoutes();
+      pushOverlayStateToMain();
+    }
+    ipcRenderer.on("view-toggle-resources", toggleResourceOverlay);
+    ipcRenderer.on("view-toggle-roads", toggleRoadsOverlay);
+    ipcRenderer.on("view-toggle-monorail", toggleMonorailOverlay);
+    ipcRenderer.on("view-toggle-air", toggleAirRoutesOverlay);
+    // Keyboard shortcuts: 1 resources, 2 roads, 3 monorail, 4 air routes. Ignore
+    // when a dialog/overlay is open or focus is in a text field.
+    document.addEventListener("keydown", (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      const gameVisible = (() => { const g = document.getElementById('game'); return g && !g.hidden; })();
+      if (!gameVisible || !hexMap) return;
+      switch (e.key) {
+        case '1': e.preventDefault(); toggleResourceOverlay(); break;
+        case '2': e.preventDefault(); toggleRoadsOverlay(); break;
+        case '3': e.preventDefault(); toggleMonorailOverlay(); break;
+        case '4': e.preventDefault(); toggleAirRoutesOverlay(); break;
+      }
+    });
+
     // ---- Rankings dialog (View ▸ View Rankings) ---------------------------
     const rankingsOverlay = document.getElementById("rankings-overlay");
     const rankingsHead = document.getElementById("rankings-head");
@@ -12837,6 +12908,7 @@
       { key: "population", label: "Pop / Growth", num: true },
       { key: "buildings", label: "Buildings", num: true },
       { key: "worked", label: "Tiles Worked", num: true },
+      { key: "transport", label: "Transportation", num: false },
       ...COL_RES.map((r) => ({ key: r.key, label: r.label, num: true, res: r })),
     ];
     let _colSort = { key: "name", dir: 1 };
@@ -12857,6 +12929,7 @@
             turnsRemaining: b.turnsRemaining || 0,
             population: b.pendingColonists || 0, growthRate: 0,
             buildings: 0, worked: 0, workedControl: 0, canWorkMore: false,
+            transport: null,
             energy: 0, energyMax: 0, energyRate: 0,
             food: 0, foodMax: 0, foodRate: 0,
             goods: 0, goodsMax: 0, goodsRate: 0,
@@ -12872,7 +12945,13 @@
         // Buildings in the colony's control area, excluding the biodome itself.
         const buildings = colonyBuildings(b).filter((x) => x.type !== 1).length;
         // Worked vs workable: green if no spare worker can open another tile.
-        const workedCount = b.worked.length;
+        // Count the EFFECTIVE worked set (home + the first workCap extras),
+        // matching how colonyBudget/colonyStats cap it. col.worked may hold stale
+        // extras beyond the cap (e.g. after population or a Dock drops workCap);
+        // those don't produce and must not be shown as assigned workers.
+        const _homeKey = cellKey(b.x, b.y);
+        const _cap = workCap(b);
+        const workedCount = 1 + b.worked.filter((k) => k !== _homeKey).slice(0, _cap).length;
         const controlCount = colonyControlCells(b).length;
         const homeKey = cellKey(b.x, b.y);
         const extras = b.worked.filter((k) => k !== homeKey).length;
@@ -12886,6 +12965,7 @@
           growthRate: s.growthRate,
           buildings,
           worked: workedCount, workedControl: controlCount, canWorkMore,
+          transport: (() => { const p = colonyTransportPlan(b); return p ? p.kind : null; })(),
           energy: s.stored.energy || 0, energyMax: s.caps.energy || 0, energyRate: s.energy,
           food: s.stored.food || 0, foodMax: s.caps.food || 0, foodRate: s.food,
           goods: s.stored.goods || 0, goodsMax: s.caps.goods || 0, goodsRate: s.goods,
@@ -12973,6 +13053,31 @@
         const tdW = document.createElement("td");
         tdW.innerHTML = `<span class="${r.canWorkMore ? "worked-idle" : "worked-ok"}">${r.worked} / ${r.workedControl}</span>`;
         tr.appendChild(tdW);
+        // Transportation: shows the colony's in-progress build (Road / Monorail)
+        // with a trash-can to cancel it, or "Idle" when nothing is building.
+        const tdT = document.createElement("td");
+        if (!r.inTransit && (r.transport === 'road' || r.transport === 'monorail')) {
+          const label = r.transport === 'monorail' ? 'Monorail' : 'Road';
+          const span = document.createElement('span');
+          span.className = 'transport-building';
+          span.textContent = label;
+          tdT.appendChild(span);
+          const cancel = document.createElement('button');
+          cancel.className = 'transport-cancel';
+          cancel.type = 'button';
+          cancel.title = `Cancel the ${label.toLowerCase()} construction in progress`;
+          cancel.setAttribute('aria-label', cancel.title);
+          cancel.textContent = '\uD83D\uDDD1'; // 🗑 trash can
+          cancel.addEventListener('click', (e) => {
+            e.stopPropagation();          // don't trigger the row double-click
+            cancelColonyTransportPlan(r.col);
+            renderColonies();             // refresh the table (and this cell)
+          });
+          tdT.appendChild(cancel);
+        } else {
+          tdT.innerHTML = `<span class="transport-idle">Idle</span>`;
+        }
+        tr.appendChild(tdT);
         // Resource columns: total / max · rate.
         for (const res of COL_RES) {
           const td = document.createElement("td");
@@ -14135,6 +14240,8 @@
 
       // Sync the View menu with current colonies (may be empty for a new game).
       pushColoniesToMain();
+      // Sync the View menu's overlay-toggle labels with the current layer state.
+      pushOverlayStateToMain();
       updateColonyAttention();
     }
 

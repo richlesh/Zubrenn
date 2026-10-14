@@ -372,6 +372,12 @@ class HexMap {
     this.aiCount = opts.aiCount || 0;         // number of AI players (for control colors)
     this.controlMode = false;                 // Area-of-Control view toggle
     this.controlRadius = opts.controlRadius || 2; // fallback radius
+    // Independently-toggleable overlay layers (keyboard 1/2/3/4 + View menu).
+    // Resource/deposit icons, roads, monorail, and air routes. All on by default.
+    this.showResourceIcons = (opts.showResourceIcons !== false);
+    this.showRoads = (opts.showRoads !== false);
+    this.showMonorail = (opts.showMonorail !== false);
+    this.showAirRoutes = (opts.showAirRoutes !== false);
     this.zoneOfControlSize = opts.zoneOfControlSize || null; // pop thresholds -> radius
     this.popUnitSize = (Number(opts.popUnitSize) > 0) ? Number(opts.popUnitSize) : 1000; // citizens per population unit
     this.tooltipEl = opts.tooltip || null;   // floating hover tooltip element
@@ -665,6 +671,14 @@ class HexMap {
     this._draw();
     this._renderBirdseye();
   }
+  // Public: toggle individual overlay layers. Each returns the NEW visibility
+  // (true = shown) so callers can update menu labels. Redraw the main canvas and
+  // the offscreen/minimap so both reflect the change.
+  _redrawAll() { this._renderMapFull(); this._draw(); this._renderBirdseye(); }
+  toggleResourceIcons() { this.showResourceIcons = !this.showResourceIcons; this._redrawAll(); return this.showResourceIcons; }
+  toggleRoads() { this.showRoads = !this.showRoads; this._redrawAll(); return this.showRoads; }
+  toggleMonorail() { this.showMonorail = !this.showMonorail; this._redrawAll(); return this.showMonorail; }
+  toggleAirRoutes() { this.showAirRoutes = !this.showAirRoutes; this._redrawAll(); return this.showAirRoutes; }
 
   // Compute a control map: for each land cell, which colony owner controls it
   // (nearest colony within controlRadius; ties -> first found). Multi-source
@@ -1097,7 +1111,7 @@ class HexMap {
 
     this._drawRivers(ctx, spacing);
     this._drawTransport(ctx, spacing);
-    this._drawBonuses(ctx, spacing);
+    if (this.showResourceIcons) this._drawBonuses(ctx, spacing);
     this._drawBuildings(ctx, spacing);
 
     // Optional overlay (e.g. colony-launch path preview), drawn in the same
@@ -1147,7 +1161,7 @@ class HexMap {
     // range). Drawn in the translated hex space; on wrap maps each segment is
     // drawn at the three wrap offsets so a link crossing the seam still shows and
     // takes the shortest on-screen path.
-    if (this.controlMode && Array.isArray(this.airLinks) && this.airLinks.length) {
+    if (this.showAirRoutes && this.controlMode && Array.isArray(this.airLinks) && this.airLinks.length) {
       const W = this.worldSize.x;
       const wrapPx = W * 0.75 * spacing.x;
       const offs = this.wrap ? [0, -wrapPx, wrapPx] : [0];
@@ -1306,8 +1320,8 @@ class HexMap {
     };
     // Roads brown, monorails silver — center-to-center, uniform width. A cell
     // never carries both (a monorail replaces a road on that cell).
-    linkKind(roadsSet, roadEdgeSet, resolveColor(this.roadColor, "#8a5a2b"), lineW);   // road
-    linkKind(monoSet, monoEdgeSet, resolveColor(this.monorailColor, "#c8cdd6"), lineW);    // monorail
+    if (this.showRoads) linkKind(roadsSet, roadEdgeSet, resolveColor(this.roadColor, "#8a5a2b"), lineW);   // road
+    if (this.showMonorail) linkKind(monoSet, monoEdgeSet, resolveColor(this.monorailColor, "#c8cdd6"), lineW);    // monorail
 
     // Road <-> monorail junctions. A cell carries only one kind, so where a
     // road cell meets an adjacent monorail cell the two same-kind passes above
@@ -1350,8 +1364,8 @@ class HexMap {
           if (!monoSet.has(nk)) continue;              // only road<->monorail junctions
           const ek = (k < nk) ? (k + "|" + nk) : (nk + "|" + k);
           if (seenCross.has(ek)) continue; seenCross.add(ek);
-          drawHalfLink(a, { x: nx, y: ny }, roadColor, lineW);   // road half (brown)
-          drawHalfLink({ x: nx, y: ny }, a, monoColor, lineW);   // monorail half (silver)
+          if (this.showRoads) drawHalfLink(a, { x: nx, y: ny }, roadColor, lineW);   // road half (brown)
+          if (this.showMonorail) drawHalfLink({ x: nx, y: ny }, a, monoColor, lineW);   // monorail half (silver)
         }
       }
     }
