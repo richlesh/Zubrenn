@@ -1981,6 +1981,11 @@
   "foundColonyMinPopulation": 3,
   // Colonists transferred from the host colony to a newly founded colony.
   "foundColonyPopulationTransfer": 1,
+  // How often (in turns) each AI colony runs its launch-site search. The search
+  // is a whole-map movement-cost flood-fill (the dominant AI-turn cost), so
+  // scanning every few turns instead of every turn cuts AI time with only a
+  // minor change to how quickly colonies expand. Set to 1 to scan every turn.
+  "aiLaunchSearchInterval": 4,
   // Hit-test fraction (of cell size) treated as the border region when picking a
   // cell border vs its interior on click.
   "cellClickBorderMargin": 0.28,

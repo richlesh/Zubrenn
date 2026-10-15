@@ -451,6 +451,79 @@
           console.log('[PROF] ' + (title || ''), rows);
         }
       },
+      // --- Repeatable AI-turn benchmark (dev-only) --------------------------
+      // Runs the SYNCHRONOUS built-in heuristic turn (aiPlayTurn) for every AI
+      // player, `iters` times, timing the whole thing under the profiler and
+      // dumping a per-function breakdown. Isolates exactly the code this
+      // optimization pass targets (no async scheduler / LLM / overlay).
+      //
+      // Deterministic within a run: the game state is deep-snapshotted before
+      // and restored after, so repeated calls start from the same state and the
+      // live game is left untouched. Call from the DevTools console:
+      //     PROF.bench()        // 50 iterations over the current save
+      //     PROF.bench(100)     // custom iteration count
+      // Returns the sorted rows array (also console.table'd) for scripted diffs.
+      bench(iters) {
+        const N = (Number(iters) > 0) ? Math.floor(iters) : 50;
+        if (typeof gameState === 'undefined' || !gameState || !Array.isArray(gameState.players)) {
+          console.warn('[PROF.bench] no active game — load/start a game first.');
+          return null;
+        }
+        if (typeof aiPlayTurn !== 'function') {
+          console.warn('[PROF.bench] aiPlayTurn not available.');
+          return null;
+        }
+        // Snapshot the parts the built-in turn mutates (buildings carry colony
+        // state incl. .worked; colonies/map round it out). Structured deep copy
+        // keeps the live game pristine across the benchmark.
+        const _snap = (v) => (typeof structuredClone === 'function')
+          ? structuredClone(v) : JSON.parse(JSON.stringify(v));
+        const saved = {
+          buildings: _snap(gameState.buildings),
+          colonies: _snap(gameState.colonies),
+          players: _snap(gameState.players),
+          turn: gameState.turn,
+          currentPlayer: gameState.currentPlayer,
+        };
+        const aiIdx = gameState.players
+          .map((p, i) => ({ p, i }))
+          .filter(({ p }) => p && (p.kind === 'ai' || p.kind === undefined))
+          .map(({ i }) => i);
+        const wasEnabled = this.enabled;
+        this.enabled = true;
+        this.reset();
+        const t0 = this._now();
+        let turnsRun = 0;
+        try {
+          for (let it = 0; it < N; it++) {
+            // Restore to the snapshot each iteration so every pass measures the
+            // same starting state (and the AI always has actions to take).
+            gameState.buildings = _snap(saved.buildings);
+            gameState.colonies = _snap(saved.colonies);
+            gameState.players = _snap(saved.players);
+            if (typeof bumpPlaceGen === 'function') bumpPlaceGen();
+            for (const pi of aiIdx) {
+              try { aiPlayTurn(pi); turnsRun++; } catch (e) { console.error('[PROF.bench] aiPlayTurn threw:', e); }
+            }
+          }
+        } finally {
+          const totalMs = this._now() - t0;
+          this.report(`bench: ${N} iters x ${aiIdx.length} AI = ${turnsRun} built-in turns in ${Math.round(totalMs)}ms (${Math.round((totalMs / Math.max(1, turnsRun)) * 1000) / 1000}ms/turn)`);
+          // Restore the live game exactly as it was.
+          gameState.buildings = saved.buildings;
+          gameState.colonies = saved.colonies;
+          gameState.players = saved.players;
+          gameState.turn = saved.turn;
+          gameState.currentPlayer = saved.currentPlayer;
+          if (typeof bumpPlaceGen === 'function') bumpPlaceGen();
+          this.enabled = wasEnabled;
+          if (hexMap && typeof hexMap.setBuildings === 'function') hexMap.setBuildings(gameState.buildings);
+        }
+        const rows = [...this.data.entries()]
+          .map(([label, e]) => ({ label, calls: e.calls, ms: Math.round(e.ms * 10) / 10 }))
+          .sort((a, b) => b.ms - a.ms);
+        return rows;
+      },
     };
     try { if (typeof window !== 'undefined') window.PROF = PROF; } catch (e) {}
     // Instrument the suspected AI-turn hot paths. These are plain function
@@ -487,6 +560,11 @@
       aiPlayTurn = PROF.wrap('aiPlayTurn', aiPlayTurn);
       aiMilitaryStep = PROF.wrap('aiMilitaryStep', aiMilitaryStep);
       pruneWorkedToControl = PROF.wrap('pruneWorkedToControl', pruneWorkedToControl);
+      // Launch / pathfinding hot-path candidates (previously uninstrumented).
+      aiChooseLaunchSite = PROF.wrap('aiChooseLaunchSite', aiChooseLaunchSite);
+      findMovementCostsFrom = PROF.wrap('findMovementCostsFrom', findMovementCostsFrom);
+      foreignControlCellSet = PROF.wrap('foreignControlCellSet', foreignControlCellSet);
+      launchColony = PROF.wrap('launchColony', launchColony);
       /* eslint-enable no-func-assign */
     }
     try { _installProfilers(); } catch (e) { console.error('[PROF] install failed:', e); }
@@ -2856,12 +2934,35 @@
       // bestCell tracks the cheapest cost to REACH each cell (any phase), which
       // is what callers consume (reachable cells + their movement cost).
       const bestCell = new Map(); bestCell.set(cellKey(sx, sy), 0);
-      const pq = [{ k: startK, x: wxf(sx), y: sy, ph: startPhase, d: 0 }];
+      // Binary min-heap keyed by d (movement cost so far). Replaces the former
+      // O(n) linear-scan-and-splice extract-min, which made the whole flood-fill
+      // O(n^2) over up to W*H*4 states. Dijkstra is correct for any valid
+      // priority queue, and no caller uses `prev` (only per-cell `dist`), so the
+      // returned best-cost map is identical regardless of equal-cost pop order.
+      const heap = [{ k: startK, x: wxf(sx), y: sy, ph: startPhase, d: 0 }];
+      const _hswap = (i, j) => { const t = heap[i]; heap[i] = heap[j]; heap[j] = t; };
+      const _hpush = (node) => {
+        heap.push(node);
+        let i = heap.length - 1;
+        while (i > 0) { const p = (i - 1) >> 1; if (heap[p].d <= heap[i].d) break; _hswap(i, p); i = p; }
+      };
+      const _hpop = () => {
+        const top = heap[0]; const last = heap.pop();
+        if (heap.length) {
+          heap[0] = last;
+          let i = 0; const n = heap.length;
+          for (;;) {
+            let s = i; const l = 2 * i + 1, r = 2 * i + 2;
+            if (l < n && heap[l].d < heap[s].d) s = l;
+            if (r < n && heap[r].d < heap[s].d) s = r;
+            if (s === i) break; _hswap(i, s); i = s;
+          }
+        }
+        return top;
+      };
       let _guard = 0, _cap = W * H * 6 + 100;
-      while (pq.length && _guard++ < _cap) {
-        let bi = 0;
-        for (let i = 1; i < pq.length; i++) if (pq[i].d < pq[bi].d) bi = i;
-        const cur = pq.splice(bi, 1)[0];
+      while (heap.length && _guard++ < _cap) {
+        const cur = _hpop();
         if (done.has(cur.k)) continue;
         done.add(cur.k);
         if (maxCost != null && cur.d > maxCost) continue;
@@ -2883,7 +2984,7 @@
             dist.set(nk, nd); prev.set(nk, cur.k);
             const ck = cellKey(nx, ny);
             if (!bestCell.has(ck) || nd < bestCell.get(ck)) bestCell.set(ck, nd);
-            pq.push({ k: nk, x: nx, y: ny, ph: nph, d: nd });
+            _hpush({ k: nk, x: nx, y: ny, ph: nph, d: nd });
           }
         }
       }
@@ -5049,7 +5150,7 @@
       const homeKey = cellKey(col.x, col.y);
       const workedSet = new Set([homeKey, ...(col.worked || [])]);
       for (const k of workedSet) {
-        const [wx, wy] = k.split(",").map(Number);
+        const _c = parseCellKey(k); const wx = _c.x, wy = _c.y;
         const tt = (terrainTypeById(terrainAt(wx, wy))) || {};
         addMap(tt.storage);
         const tb = bonusDefAt(wx, wy);
@@ -5170,7 +5271,7 @@
 
       // Terrain production from each worked cell.
       for (const k of worked) {
-        const [wx, wy] = k.split(",").map(Number);
+        const _c = parseCellKey(k); const wx = _c.x, wy = _c.y;
         const tp = terrainProd(terrainAt(wx, wy));
         const wfb = waterFoodBonus(wx, wy);
         const rwb = riverWealthBonus(wx, wy);
@@ -6742,33 +6843,81 @@
       }
       return set;
     }
+    // --- Per-turn cell-ownership map (perf) ----------------------------------
+    // ownsCell() answers "does THIS colony own (x,y)?" and was previously O(all
+    // buildings) per call, invoked per cell per colony — the dominant AI-turn
+    // cost (quadratic in colony count). Since its only caller is
+    // colonyControlCells() — which is itself memoized per _placeGen — the full
+    // cell->owner assignment is stable for a given _placeGen. So compute it ONCE
+    // per generation into a Map<"x,y" -> owning colony> and make ownsCell a
+    // lookup. The assignment rule is reproduced EXACTLY:
+    //   (1) if exactly one in-range colony is WORKING the cell, it owns it;
+    //   (2) else the nearest in-range colony owns it, ties broken by the
+    //       smallest "bx,by" string key.
+    // Ownership is GLOBAL across all players (a cell belongs to one colony),
+    // matching the original which scanned every type-1 building regardless of
+    // owner.
+    let _ownMap = null;
+    let _ownMapGen = -1;
+    function ownershipMap() {
+      if (_ownMap && _ownMapGen === _placeGen) return _ownMap;
+      const map = new Map();
+      const cols = [];
+      for (const b of gameState.buildings) {
+        if (b.type !== 1) continue;
+        cols.push({ b, r: colonyControlRadius(b), bk: b.x + "," + b.y });
+      }
+      // Pass 1 — nearest colony per cell (rule 2). Iterate colonies in
+      // gameState.buildings order; the (d, bk) comparison is identical to the
+      // original ownsCell, so the winner matches exactly.
+      // We also tally workers per cell for rule 1 in the same sweep.
+      const nearest = map; // "x,y" -> colony (rule-2 result, overridden below)
+      const bestD = new Map();   // "x,y" -> number
+      const bestKey = new Map(); // "x,y" -> string
+      const workerColony = new Map(); // "x,y" -> colony (last seen worker)
+      const workerCount = new Map();  // "x,y" -> number
+      for (let i = 0; i < cols.length; i++) {
+        const { b, r, bk } = cols[i];
+        const cells = cellsWithin(b.x, b.y, r);
+        for (let j = 0; j < cells.length; j++) {
+          const c = cells[j];
+          const k = c.x + "," + c.y;
+          const d = hexDistance(b.x, b.y, c.x, c.y);
+          if (d > r) continue; // cellsWithin is radius-bounded, but match guard
+          const pd = bestD.get(k);
+          if (pd === undefined || d < pd || (d === pd && bk < bestKey.get(k))) {
+            bestD.set(k, d); bestKey.set(k, bk); nearest.set(k, b);
+          }
+        }
+      }
+      // Worker tally (rule 1): a colony working a cell within its radius. Uses
+      // the SAME in-range test (hexDistance <= radius) as the original.
+      for (let i = 0; i < cols.length; i++) {
+        const { b, r } = cols[i];
+        if (!b.worked) continue;
+        for (let w = 0; w < b.worked.length; w++) {
+          const key = b.worked[w];
+          const ci = parseCellKey(key);
+          if (hexDistance(b.x, b.y, ci.x, ci.y) > r) continue;
+          workerCount.set(key, (workerCount.get(key) || 0) + 1);
+          workerColony.set(key, b);
+        }
+      }
+      // Rule 1 overrides rule 2 wherever exactly one colony works the cell.
+      for (const [k, n] of workerCount) {
+        if (n === 1) map.set(k, workerColony.get(k));
+      }
+      _ownMap = map;
+      _ownMapGen = _placeGen;
+      return map;
+    }
     // Whether `colony` is the owner of cell (x,y) among all colonies whose
     // control radius covers it. A colony that is already WORKING the cell keeps
     // it (so overlapping zones don't steal an assigned worker); otherwise the
     // nearest colony wins, ties broken deterministically by cell key. Exactly
-    // one colony claims each cell.
+    // one colony claims each cell. O(1) lookup via the per-generation map.
     function ownsCell(colony, x, y) {
-      const key = x + "," + y;
-      // 1) If exactly one in-range colony is working this cell, it owns it.
-      let worker = null, workerCount = 0;
-      for (const b of gameState.buildings) {
-        if (b.type !== 1) continue;
-        if (hexDistance(b.x, b.y, x, y) > colonyControlRadius(b)) continue;
-        if (b.worked && b.worked.includes(key)) { worker = b; workerCount++; }
-      }
-      if (workerCount === 1) return worker === colony;
-      // 2) Otherwise the nearest in-range colony (tie -> smallest coord key).
-      let best = null, bestD = Infinity, bestKey = null;
-      for (const b of gameState.buildings) {
-        if (b.type !== 1) continue;
-        const d = hexDistance(b.x, b.y, x, y);
-        if (d > colonyControlRadius(b)) continue;    // outside this colony's reach
-        const bk = b.x + "," + b.y;
-        if (d < bestD || (d === bestD && (bestKey === null || bk < bestKey))) {
-          bestD = d; best = b; bestKey = bk;
-        }
-      }
-      return best === colony;
+      return ownershipMap().get(x + "," + y) === colony;
     }
     // Shallow sea = a sea tile edge-adjacent to at least one land tile.
     function isShallowSea(x, y) {
@@ -6881,12 +7030,46 @@
       colony.worked = colony.worked.filter((k) => k === homeKey || inControl.has(k));
     }
     function cellKey(x, y) { return x + "," + y; }
+    // Inverse of cellKey: parse an "x,y" key back to numeric coords without the
+    // allocation of split(",").map(Number) (two throwaway arrays per call). Hot
+    // in the AI path, which reads worked-cell keys repeatedly.
+    function parseCellKey(k) {
+      const i = k.indexOf(",");
+      return { x: +k.slice(0, i), y: +k.slice(i + 1) };
+    }
     // Ensure a colony has a worked set (its own cell is always worked).
     function ensureWorked(colony) {
       if (!colony.worked) colony.worked = [cellKey(colony.x, colony.y)];
       if (!colony.worked.includes(cellKey(colony.x, colony.y)))
         colony.worked.unshift(cellKey(colony.x, colony.y));
       return colony.worked;
+    }
+    // --- Fast worked-cell membership (perf; behavior-preserving) -------------
+    // col.worked stays the authoritative, SERIALIZED string[] of "x,y" keys.
+    // These helpers maintain a lazily-rebuilt Set mirror so the AI hot path can
+    // test membership in O(1) instead of Array.includes()'s O(n) linear scan,
+    // and read the "extras" (non-home) worked count without allocating a
+    // filtered array each call. The mirror self-validates: it rebuilds whenever
+    // the worked array's identity OR length changes (which covers every
+    // push/filter-reassignment mutation in the codebase), so callers never have
+    // to keep it in sync manually. Returns identical answers to the old code.
+    function workedSetOf(colony) {
+      const w = colony.worked || (colony.worked = [cellKey(colony.x, colony.y)]);
+      if (colony._wsArr !== w || colony._wsLen !== w.length || !colony._wsSet) {
+        colony._wsSet = new Set(w);
+        colony._wsArr = w;
+        colony._wsLen = w.length;
+      }
+      return colony._wsSet;
+    }
+    // Does the colony work the given string key? O(1).
+    function worksKey(colony, key) { return workedSetOf(colony).has(key); }
+    // Count of worked cells other than the home cell. O(1) amortized (uses the
+    // validated Set's size; home is always present once ensureWorked has run).
+    function workedExtrasCount(colony, homeKey) {
+      const set = workedSetOf(colony);
+      const hk = (homeKey != null) ? homeKey : cellKey(colony.x, colony.y);
+      return set.size - (set.has(hk) ? 1 : 0);
     }
     // Max extra worked cells for a colony = floor(population / 1000).
     function workCap(colony) {
@@ -6908,7 +7091,7 @@
     function colonyCanWorkMore(colony) {
       ensureWorked(colony);
       const homeKey = cellKey(colony.x, colony.y);
-      const extras = colony.worked.filter((k) => k !== homeKey).length;
+      const extras = workedExtrasCount(colony, homeKey);
       if (extras >= workCap(colony)) return false;            // no spare worker capacity
       const controlCount = colonyControlCells(colony).length;
       return colony.worked.length < controlCount;             // an unworked control cell exists
@@ -9064,12 +9247,18 @@
         ensureWorked(col);
         const homeKey = cellKey(col.x, col.y);
         const control = colonyControlCells(col);
-        const workedExtras = col.worked.filter((k) => k !== homeKey).length;
+        const workedExtras = workedExtrasCount(col, homeKey);
         const cap = workCap(col);
-        const unworked = control.filter((c) =>
-          cellKey(c.x, c.y) !== homeKey && !col.worked.includes(cellKey(c.x, c.y)));
-        // (a) a free worker slot AND an unworked cell to fill it.
-        if (workedExtras < cap && unworked.length > 0) return true;
+        // (a) a free worker slot AND an unworked cell to fill it. Only need to
+        //     know whether at least one unworked control cell exists, so test
+        //     membership (O(1)) and stop early instead of building an array.
+        if (workedExtras < cap) {
+          const ws = workedSetOf(col);
+          for (const c of control) {
+            const k = cellKey(c.x, c.y);
+            if (k !== homeKey && !ws.has(k)) return true;
+          }
+        }
         // (b) a buildable, affordable building (with prerequisites) on an empty
         //     controlled land cell (paid from the colony's own storage).
         for (const c of control) {
@@ -9181,6 +9370,8 @@
         // Any valid reachable site within a reasonable band?
         const minD = CONFIG.minColonyDistance || 20;
         const reachable = findMovementCostsFrom(col.x, col.y, col.owner);
+        const colonyPts = [];
+        for (const b of gameState.buildings) if (b.type === 1) colonyPts.push(b);
         for (const c of cellsWithin(col.x, col.y, minD + 12)) {
           const terr = terrainAt(c.x, c.y);
           if (!isHabitableLandTerrain(terr)) continue;
@@ -9188,8 +9379,9 @@
           if (hexDistance(col.x, col.y, c.x, c.y) < minD) continue;
           if (cellHasBuilding(c.x, c.y)) continue;
           let tooClose = false;
-          for (const b of gameState.buildings) {
-            if (b.type === 1 && hexDistance(b.x, b.y, c.x, c.y) < minD) { tooClose = true; break; }
+          for (let bi = 0; bi < colonyPts.length; bi++) {
+            const b = colonyPts[bi];
+            if (hexDistance(b.x, b.y, c.x, c.y) < minD) { tooClose = true; break; }
           }
           if (tooClose) continue;
           if (reachable.dist.has(key(c.x, c.y))) return true;
@@ -11049,31 +11241,45 @@
         const homeKey = cellKey(col.x, col.y);
         const cap = workCap(col);
         const control = colonyControlCells(col);
+        // O(1) membership mirror + running extras count for this colony. The
+        // Set is kept in sync as we push below; `extras` tracks the non-home
+        // worked count so the fill loops don't re-filter the array each pass.
+        const workedSet = workedSetOf(col);
+        let extras = workedExtrasCount(col, homeKey);
 
         // (1) Assign workers: fill up to cap, preferring food when the colony
         // is (or is near) starving, else the highest total yield.
         const popUnits = Math.floor((col.population || 0) / 1000);
         const workedFood = col.worked.reduce((s, k) => {
-          const [x, y] = k.split(",").map(Number);
-          return s + terrainProd(terrainAt(x, y)).food + waterFoodBonus(x, y);
+          const ci = parseCellKey(k);
+          return s + terrainProd(terrainAt(ci.x, ci.y)).food + waterFoodBonus(ci.x, ci.y);
         }, 0);
         const consumption = popUnits * (((CONFIG.units && CONFIG.units.population && CONFIG.units.population.costPerYear && CONFIG.units.population.costPerYear.food) != null) ? CONFIG.units.population.costPerYear.food : 1);
         const hungry = workedFood < consumption;
 
-        const candidates = control
-          .filter((c) => cellKey(c.x, c.y) !== homeKey && !col.worked.includes(cellKey(c.x, c.y)))
-          .map((c) => {
-            const tp = terrainProd(terrainAt(c.x, c.y));
-            const food = tp.food + waterFoodBonus(c.x, c.y);
-            const material = tp.material;
-            return { c, food, material, score: hungry ? food * 3 + material : food + material };
-          })
-          .sort((a, b) => b.score - a.score);
+        // Build candidate list once, carrying the cell's string key AND numeric
+        // coords so later steps never re-derive or re-parse them. Same iteration
+        // order over `control` and same score comparator as before, so the
+        // selected cells (and ties) are identical to the pre-optimization code.
+        const candidates = [];
+        for (let i = 0; i < control.length; i++) {
+          const c = control[i];
+          const k = cellKey(c.x, c.y);
+          if (k === homeKey || workedSet.has(k)) continue;
+          const tp = terrainProd(terrainAt(c.x, c.y));
+          const food = tp.food + waterFoodBonus(c.x, c.y);
+          const material = tp.material;
+          candidates.push({ c, k, food, material, score: hungry ? food * 3 + material : food + material });
+        }
+        candidates.sort((a, b) => b.score - a.score);
 
-        while (col.worked.filter((k) => k !== homeKey).length < cap && candidates.length) {
-          const pick = candidates.shift();
+        let ci = 0;
+        while (extras < cap && ci < candidates.length) {
+          const pick = candidates[ci++];
           if (pick.score <= 0) break; // nothing useful left
-          col.worked.push(cellKey(pick.c.x, pick.c.y));
+          col.worked.push(pick.k);
+          workedSet.add(pick.k);
+          extras++;
           acted = true;
         }
 
@@ -11106,8 +11312,11 @@
             placeBuilding(spot.x, spot.y, pi, type);
             // Work the new building's cell if there is spare capacity, so it
             // actually produces (idle buildings produce nothing).
-            if (col.worked.filter((k) => k !== homeKey).length < cap) {
-              col.worked.push(cellKey(spot.x, spot.y));
+            if (extras < cap) {
+              const sk = cellKey(spot.x, spot.y);
+              col.worked.push(sk);
+              workedSet.add(sk);
+              extras++;
             }
             acted = true;
             break;
@@ -11122,7 +11331,7 @@
         // share; isolationists usually skip them.
         if (!colonyHasDock(col) && knobs.wantsDock &&
             Math.random() >= knobs.dockSkipChance &&
-            col.worked.filter((k) => k !== homeKey).length < cap) {
+            extras < cap) {
           let seaSpot = null;
           for (const c of cellsWithin(col.x, col.y, colonyControlRadius(col))) {
             if (terrainAt(c.x, c.y) !== 1 || !isShallowSea(c.x, c.y)) continue;
@@ -11133,7 +11342,10 @@
               && hasPrerequisitesAt(5, seaSpot.x, seaSpot.y, pi)
               && canAffordBuildingAt(5, seaSpot.x, seaSpot.y, pi)) {
             placeBuilding(seaSpot.x, seaSpot.y, pi, 5);
-            col.worked.push(cellKey(seaSpot.x, seaSpot.y)); // work the new sea tile
+            const dk = cellKey(seaSpot.x, seaSpot.y);
+            col.worked.push(dk); // work the new sea tile
+            workedSet.add(dk);
+            extras++;
             acted = true;
           }
         }
@@ -11145,11 +11357,27 @@
         if ((col.population || 0) > launchPop &&
             Math.random() >= knobs.launchSkipChance &&
             canAffordBuildingAt(1, col.x, col.y, pi)) {
-          const site = aiChooseLaunchSite(col, pi, knobs.launchSearchBonus);
-          if (site) {
-            const name = (gameState.players[pi] && gameState.players[pi].name || 'Colony') + ' ' +
-              (gameState.colonies.filter((c) => c.owner === pi).length + 1);
-            if (launchColony(col, site.x, site.y, pi, name)) acted = true;
+          // Throttle the (expensive) launch-site flood-fill search: a colony
+          // only scans for a new site every N turns instead of every turn.
+          // This is the dominant AI-turn cost (a whole-map Dijkstra), and a
+          // colony that is eligible to found will simply do so on its next
+          // scan turn — a minor cadence change, no effect on resources/saves.
+          // Interval is config-driven; <=1 disables throttling (scan every turn).
+          const interval = Math.max(1, (CONFIG.aiLaunchSearchInterval != null) ? CONFIG.aiLaunchSearchInterval : 4);
+          const turnNow = gameState.turn || 0;
+          // Stagger colonies by their position so they don't all scan on the
+          // same turn (spreads the cost across turns), while staying periodic.
+          const phase = interval > 1 ? (((col.x + col.y) % interval) + interval) % interval : 0;
+          const dueThisTurn = interval <= 1 || (turnNow % interval) === phase ||
+            (col._nextLaunchScanTurn != null && turnNow >= col._nextLaunchScanTurn);
+          if (dueThisTurn) {
+            col._nextLaunchScanTurn = turnNow + interval;
+            const site = aiChooseLaunchSite(col, pi, knobs.launchSearchBonus);
+            if (site) {
+              const name = (gameState.players[pi] && gameState.players[pi].name || 'Colony') + ' ' +
+                (gameState.colonies.filter((c) => c.owner === pi).length + 1);
+              if (launchColony(col, site.x, site.y, pi, name)) acted = true;
+            }
           }
         }
       }
@@ -11172,6 +11400,10 @@
       const wrap = !!(gameState.map && gameState.map.meta && gameState.map.meta.wrap);
       const wxf = (x) => wrap ? ((x % W) + W) % W : x;
       const key = (x, y) => y * W + wxf(x);
+      // Hoist the "too close to an existing colony" test: collect colony
+      // positions once instead of scanning all buildings per candidate cell.
+      const colonyPts = [];
+      for (const b of gameState.buildings) if (b.type === 1) colonyPts.push(b);
       let best = null, bestScore = -Infinity;
       for (const c of cellsWithin(host.x, host.y, SEARCH)) {
         const terr = terrainAt(c.x, c.y);
@@ -11181,8 +11413,9 @@
         if (cellHasBuilding(c.x, c.y)) continue;
         if (hexDistance(host.x, host.y, c.x, c.y) < minD) continue; // too close
         let tooClose = false;
-        for (const b of gameState.buildings) {
-          if (b.type === 1 && hexDistance(b.x, b.y, c.x, c.y) < minD) { tooClose = true; break; }
+        for (let bi = 0; bi < colonyPts.length; bi++) {
+          const b = colonyPts[bi];
+          if (hexDistance(b.x, b.y, c.x, c.y) < minD) { tooClose = true; break; }
         }
         if (tooClose) continue;
         const ck = key(c.x, c.y);
