@@ -390,6 +390,33 @@
       if (!RiverEdges) console.error("[index] could not load river_edges.cjs");
     })();
 
+    // Load the optional Rust/WASM flood-fill kernel (findMovementCostsFrom
+    // acceleration). Entirely optional: if the module or the .wasm fails to
+    // load, _wasmFlood stays null and findMovementCostsFrom uses its JS path.
+    // Gated by USE_WASM_FLOOD so it can be toggled off at runtime for A/B.
+    let _wasmFlood = null;
+    let USE_WASM_FLOOD = true;
+    (function loadWasmFlood() {
+      try {
+        const fs = require("fs");
+        const path = require("path");
+        let glue = null;
+        for (const c of [path.join(__dirname, "wasm_flood.cjs"), "./wasm_flood.cjs"]) {
+          try { glue = require(c); if (glue && glue.makeWasmFlood) break; } catch (e) {}
+        }
+        if (!glue || !glue.makeWasmFlood) return;
+        let bytes = null;
+        for (const c of [path.join(__dirname, "zubrenn_kernel.wasm"), "./zubrenn_kernel.wasm"]) {
+          try { bytes = fs.readFileSync(c); if (bytes) break; } catch (e) {}
+        }
+        if (!bytes) return;
+        _wasmFlood = glue.makeWasmFlood(bytes);
+        if (_wasmFlood) console.log("[index] WASM flood kernel loaded");
+      } catch (e) {
+        _wasmFlood = null;
+      }
+    })();
+
     // Load formatting utilities.
     // Fallbacks are replaced by utilities.cjs implementations when available.
     let formatSISignificant = (x) => (typeof x === "number" ? String(Number(x.toPrecision(3))) : String(x));
@@ -2913,12 +2940,115 @@
       }
       return cost;
     }
+    // --- WASM flood param assembly ------------------------------------------
+    // Builds the flat arrays the Rust kernel needs. Static layers (terrain /
+    // impassable / shallow / movement table) are cached by map identity; the
+    // control-edge Sets are passed through with _controlGen as the cache token
+    // (the glue rebuilds its direction masks only when the token changes). The
+    // per-owner place bitsets (foreign / dock / port) are rebuilt per call.
+    let _wfStatic = null, _wfStaticMap = null;
+    function _wasmStaticLayers(map, W, H) {
+      if (_wfStatic && _wfStaticMap === map) return _wfStatic;
+      const n = W * H;
+      const terrain = new Uint8Array(n);
+      const impassable = new Uint8Array(n);
+      const shallow = new Uint8Array(n);
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = y * W + x;
+          const t = map.terrain[y][x] | 0;
+          terrain[i] = t;
+          if (isImpassableFrozen(x, y)) impassable[i] = 1;
+          if (t === 1 && isShallowSea(x, y)) shallow[i] = 1;
+        }
+      }
+      // movement table rows for terrain ids 0..11 x 5 modes (NaN => "absent",
+      // the kernel's mv_at falls back exactly like JS mvAt).
+      const movement = new Float64Array(12 * 5);
+      movement.fill(NaN);
+      for (let id = 1; id <= 11; id++) {
+        const tt = terrainTypeById(id);
+        const mv = tt && Array.isArray(tt.movement) ? tt.movement : null;
+        for (let m = 0; m < 5; m++) {
+          const v = mv && mv[m] != null ? mv[m] : NaN;
+          movement[id * 5 + m] = v;
+        }
+      }
+      _wfStatic = { terrain, impassable, shallow, movement };
+      _wfStaticMap = map;
+      return _wfStatic;
+    }
+    // River edge set for the kernel = river border edges + canals (a canal is a
+    // river for crossing). Both are edgeKey strings.
+    function _wasmRiverEdges() {
+      const tr = ensureTransport();
+      const set = new Set(riverEdgeSet());
+      if (tr.canals) for (const k of tr.canals) set.add(k);
+      return set;
+    }
+    // Per-owner place bitsets. foreign = foreign zone-of-control cells; dock /
+    // port = the owner's operational Dock / Port cells (match routePhaseNext's
+    // cellHasDock/cellHasPort(nx,ny,owner)).
+    function _wasmPlaceLayers(owner, W, H, wxf) {
+      const n = W * H;
+      const foreign = new Uint8Array(n);
+      const dock = new Uint8Array(n);
+      const port = new Uint8Array(n);
+      for (const ck of foreignControlCellSet(owner)) foreign[ck] = 1;
+      for (const b of gameState.buildings) {
+        if (b.owner !== owner || !isOperational(b)) continue;
+        const isPort = buildingHasOther(b.type, 'seaport');
+        const isDock = (b.type === 5) || isPort;
+        if (!isDock) continue;
+        const i = b.y * W + wxf(b.x);
+        if (i >= 0 && i < n) { dock[i] = 1; if (isPort) port[i] = 1; }
+      }
+      return { foreign, dock, port };
+    }
+    function _wasmFloodRun(sx, sy, owner, maxCost, W, H) {
+      const map = gameState.map;
+      const wrap = !!(map.meta && map.meta.wrap);
+      const wxf = (x) => wrap ? ((x % W) + W) % W : x;
+      const stat = _wasmStaticLayers(map, W, H);
+      const crossCost = (CONFIG.river && CONFIG.river.crossingCost != null) ? CONFIG.river.crossingCost : 2;
+      const tr = ensureTransport();
+      const params = {
+        W, H, wrap: wrap ? 1 : 0,
+        terrain: stat.terrain, impassable: stat.impassable, shallow: stat.shallow,
+        movement: stat.movement, crossCost,
+        controlSets: {
+          monoEdges: tr.monorailEdges, roadEdges: tr.roadEdges,
+          bridges: tr.bridges, riverEdges: _wasmRiverEdges(),
+        },
+        // Token: control masks depend on transport (controlGen) AND the river/
+        // canal set; _controlGen bumps on transport changes. Combine with map
+        // identity so a new map rebuilds. The river set is static+canals, and
+        // canals mutate transport => controlGen covers it.
+        controlToken: 'c' + _controlGen,
+        staticGen: (map._wfMapId || (map._wfMapId = ++_wfMapIdCounter)),
+      };
+      const place = _wasmPlaceLayers(owner, W, H, wxf);
+      const sxx = wxf(sx);
+      return _wasmFlood.flood(params, sxx, sy, (maxCost == null ? null : maxCost), place);
+    }
+    let _wfMapIdCounter = 0;
+
     // Dijkstra movement cost exploration from (sx,sy) over reachable cells for `owner`.
     // Returns { dist: Map<key, cost>, prev: Map<key, fromKey> }.
     function findMovementCostsFrom(sx, sy, owner, maxCost) {
       const map = gameState.map;
       if (!map) return { dist: new Map(), prev: new Map() };
       const W = map.terrain[0].length, H = map.terrain.length;
+      // --- WASM fast path (optional) ---------------------------------------
+      // Delegates the flood-fill to the Rust kernel when loaded/enabled. Returns
+      // the same { dist } shape callers consume (prev is unused by callers).
+      // Any failure falls through to the JS implementation below.
+      if (_wasmFlood && USE_WASM_FLOOD) {
+        try {
+          const r = _wasmFloodRun(sx, sy, owner, maxCost, W, H);
+          if (r) return r;
+        } catch (e) { /* fall through to JS */ }
+      }
       const wrap = !!(map.meta && map.meta.wrap);
       const wxf = (x) => wrap ? ((x % W) + W) % W : x;
       const cellKey = (x, y) => y * W + wxf(x);

@@ -7,3 +7,7 @@ license.js
 license.cjs
 .kiro/
 prompts/
+# Rust/WASM kernel build intermediates (the prebuilt src/zubrenn_kernel.wasm is
+# committed; the Cargo target dir is not).
+native/**/target/
+native/**/Cargo.lock
