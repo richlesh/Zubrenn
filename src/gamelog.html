@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Game Log</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      display: flex;
+      flex-direction: column;
+      background: #141418;
+      color: #e6e6e6;
+      font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    body.light { background: #f5f5f5; color: #1e1e1e; }
+
+    #head {
+      flex: 0 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 10px;
+      border-bottom: 1px solid #3a3a3a;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    body.light #head { border-bottom-color: #d0d0d0; background: #ececec; }
+    #head button {
+      background: none;
+      border: 1px solid #4a4a4a;
+      color: inherit;
+      border-radius: 4px;
+      font: inherit;
+      padding: 2px 8px;
+      cursor: pointer;
+    }
+    #head button:hover { border-color: #6a9bd8; color: #6a9bd8; }
+
+    #body { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 10px; }
+
+    .log-year {
+      color: #ffd27f;
+      font-weight: 700;
+      margin: 8px 0 2px;
+      border-top: 1px solid #3a3a3a;
+      padding-top: 5px;
+    }
+    .log-year:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+    body.light .log-year { color: #a66400; border-top-color: #d0d0d0; }
+    .log-msg { margin: 1px 0 1px 10px; white-space: pre-wrap; word-break: break-word; }
+    #empty { color: #777; padding: 10px; font-style: italic; }
+  </style>
+</head>
+<body>
+  <div id="head">
+    <span>Game Log</span>
+    <button id="clear" type="button" title="Clear the log">Clear</button>
+  </div>
+  <div id="body"><div id="empty">No messages yet.</div></div>
+
+  <script>
+    const { ipcRenderer } = require("electron");
+    const bodyEl = document.getElementById("body");
+    const emptyEl = document.getElementById("empty");
+    let lastYear = null;
+
+    function esc(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+    function dropEmpty() { const e = document.getElementById("empty"); if (e && e.parentNode) e.remove(); }
+    const MAX_LINES = 1500; // keep the DOM bounded; drop the oldest beyond this
+    function append(el) {
+      dropEmpty();
+      bodyEl.appendChild(el);
+      // Trim oldest nodes so a long session / large batch can't grow unbounded.
+      while (bodyEl.childNodes.length > MAX_LINES) bodyEl.removeChild(bodyEl.firstChild);
+      bodyEl.scrollTop = bodyEl.scrollHeight;
+    }
+    function clearLog() {
+      bodyEl.innerHTML = "";
+      lastYear = null;
+      const e = document.createElement("div");
+      e.id = "empty"; e.textContent = "No messages yet.";
+      bodyEl.appendChild(e);
+    }
+
+    // Render one log entry. entry: { kind:'year'|'message'|'clear', ... }
+    function render(entry) {
+      if (!entry) return;
+      if (entry.kind === "clear") { clearLog(); return; }
+      if (entry.kind === "year") {
+        if (entry.year === lastYear) return;
+        lastYear = entry.year;
+        const d = document.createElement("div");
+        d.className = "log-year";
+        d.textContent = "Year " + entry.year;
+        append(d);
+      } else if (entry.kind === "message") {
+        const d = document.createElement("div");
+        d.className = "log-msg";
+        d.textContent = String(entry.text == null ? "" : entry.text);
+        append(d);
+      }
+    }
+
+    // On open, the main process replays the buffered history as an array, then
+    // streams new entries one at a time.
+    ipcRenderer.on("game-log-history", (_e, entries) => {
+      clearLog();
+      if (Array.isArray(entries)) for (const en of entries) render(en);
+    });
+    ipcRenderer.on("game-log-entry", (_e, entry) => render(entry));
+    ipcRenderer.on("game-log-entries", (_e, entries) => {
+      if (Array.isArray(entries)) for (const en of entries) render(en);
+    });
+    ipcRenderer.on("game-log-clear", () => clearLog());
+
+    // Theme: light/dark from settings.
+    ipcRenderer.invoke("settings-get").then((s) => {
+      document.body.classList.toggle("light", (s && s.theme) === "light");
+    }).catch(() => {});
+    ipcRenderer.on("settings-updated", () => {
+      ipcRenderer.invoke("settings-get").then((s) => {
+        document.body.classList.toggle("light", (s && s.theme) === "light");
+      }).catch(() => {});
+    });
+
+    document.getElementById("clear").addEventListener("click", () => {
+      clearLog();
+      ipcRenderer.invoke("game-log-clear-request"); // clear the main-process buffer + reset dedupe
+    });
+  </script>
+</body>
+</html>

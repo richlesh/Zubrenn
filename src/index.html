@@ -986,6 +986,8 @@
       // Coalesce consecutive identical messages (avoids year-tick spam).
       const last = _notifyQueue[_notifyQueue.length - 1];
       if (last && last.message === message) return;
+      // Record every user-facing message in the separate Game Log window.
+      try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(message); } catch (e) {}
       // If a key is given, replace any QUEUED (not currently showing) message
       // with the same key so e.g. rapid "Year begins" ticks collapse to the
       // latest while important one-off messages (AI colonies) stay queued.
@@ -3618,6 +3620,62 @@
     // year-dedupe here so the next year header reprints.
     ipcRenderer.on("ai-log-reset", () => { try { aiLog.resetDedupe(); } catch (e) {} });
 
+    // ---- Game Log window (View ▸ Log Window) ------------------------------
+    // Records every user-facing message (the same text shown in the on-screen
+    // notifications: year-begins, colony founded, Federation events, warnings,
+    // etc.) into a SEPARATE, movable window (src/gamelog.html), opened on demand
+    // from the View menu. Entries are sent to the main process, which buffers
+    // them and replays the buffer when the window is opened, then streams new
+    // ones while it is open. A year header is emitted when the game year changes
+    // so messages group by year. Not gated on debug — this is a normal feature.
+    const gameLog = (function () {
+      let _lastYear = null;
+      // Entries are QUEUED and flushed to the main process in batches on a short
+      // timer, never one IPC call per message. A single turn can emit a very
+      // large number of notifications (hundreds of colonies); one ipcRenderer
+      // invoke per message would flood the IPC channel and stall the UI thread.
+      let _queue = [];
+      let _flushTimer = null;
+      const QUEUE_MAX = 5000; // safety cap on unflushed entries
+      function _flush() {
+        _flushTimer = null;
+        if (!_queue.length) return;
+        const batch = _queue;
+        _queue = [];
+        try { ipcRenderer.invoke("game-log-batch", batch).catch(() => {}); } catch (e) {}
+      }
+      function _enqueue(entry) {
+        _queue.push(entry);
+        if (_queue.length > QUEUE_MAX) _queue.splice(0, _queue.length - QUEUE_MAX);
+        if (_flushTimer == null) _flushTimer = setTimeout(_flush, 120);
+      }
+      return {
+        year(y) {
+          if (y == null || y === _lastYear) return;
+          _lastYear = y;
+          _enqueue({ kind: "year", year: y });
+        },
+        message(text) {
+          if (text == null) return;
+          // Make sure the current year heads the log before the first message of
+          // the turn, even if year() wasn't called yet.
+          try { if (typeof currentYear === "function") this.year(currentYear()); } catch (e) {}
+          _enqueue({ kind: "message", text: String(text) });
+        },
+        // Clear flushes immediately (and drops any queued entries) so the buffer
+        // resets right away on a new game/load.
+        clear() {
+          _lastYear = null; _queue = [];
+          if (_flushTimer) { clearTimeout(_flushTimer); _flushTimer = null; }
+          try { ipcRenderer.invoke("game-log-batch", [{ kind: "clear" }]).catch(() => {}); } catch (e) {}
+        },
+        resetDedupe() { _lastYear = null; },
+      };
+    })();
+    // The Game Log window's Clear button resets its own view; reset our year
+    // dedupe so the next year header reprints.
+    ipcRenderer.on("game-log-reset", () => { try { gameLog.resetDedupe(); } catch (e) {} });
+
     // Latitude/longitude of a cell center, mirroring draw_map.cjs _cellLatLon /
     // _formatLatLon. The map spans +/-70 degrees latitude and -180..+180 longitude.
     function cellLatLon(x, y) {
@@ -4253,6 +4311,7 @@
         if (PROF.enabled) { PROF.report(`turn ${gameState.turn} (year ${currentYear()})`); PROF.reset(); }
         _roundHadAction = false;
         if (typeof aiLog !== 'undefined') aiLog.year(currentYear());
+        if (typeof gameLog !== 'undefined') gameLog.year(currentYear());
       }
       updateStatus();
       const p = players[gameState.currentPlayer];
@@ -6430,12 +6489,23 @@
           }
           const seen = new Set(mySea);
           const stack = [...mySea];
+          // Canonicalize x into [0,W) for WRAPPING maps. terrainAt() wraps x
+          // internally, but hexNeighborsRenderer returns raw neighbor coords that
+          // run off the seam (x = -1, W, W+1, ...). Without wrapping the KEY to a
+          // single canonical cell, the flood-fill treats each off-range copy as a
+          // new sea tile and marches outward forever — growing `seen`/`stack`
+          // until a Set exceeds its max size and throws (the colony-detail freeze).
+          const _W = gameState.map.terrain[0].length;
+          const _wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+          const _canonX = (x) => _wrap ? (((x % _W) + _W) % _W) : x;
           while (stack.length) {
             const ck = stack.pop();
             const [cx, cy] = ck.split(",").map(Number);
             for (const n of hexNeighborsRenderer(cx, cy)) {
               if (terrainAt(n.x, n.y) !== 1) continue; // sea tiles only
-              const nk = cellKey(n.x, n.y);
+              const nx = _canonX(n.x), ny = n.y;
+              if (ny < 0 || ny >= gameState.map.terrain.length) continue;
+              const nk = cellKey(nx, ny);
               const hit = otherSea.get(nk);
               if (hit) seaLinked.add(_colonyKey(hit));
               if (!seen.has(nk)) {
@@ -14375,6 +14445,9 @@
       // Drop any AI pre-plan cache from a prior game/session (it is keyed by turn
       // and repopulated at the next human turn, but clear it defensively here).
       if (typeof _aiPlanCache !== 'undefined' && _aiPlanCache) _aiPlanCache.clear();
+      // Fresh session: start the Game Log clean (clears the main-process buffer
+      // and any open Game Log window).
+      try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.clear(); } catch (e) {}
 
       // Fog of war. Restore a saved visible set if present; otherwise seed a
       // fresh circle around a random land tile ONLY for a genuine NEW game

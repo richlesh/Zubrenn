@@ -356,6 +356,77 @@ ipcMain.handle("ai-log-clear-request", () => {
   if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send("ai-log-reset");
 });
 
+// ---- Game Log window (View ▸ Log Window) ---------------------------------
+// A separate, movable window that shows every user-facing message the game
+// sends (year-begins, colony founded, Federation events, warnings, etc.).
+// Entries from the game renderer are BUFFERED here so the window can show the
+// full session history when opened on demand; new entries then stream live.
+let gameLogWin = null;
+let gameLogBuffer = [];           // session history of { kind, ... } entries
+const GAME_LOG_BUFFER_MAX = 2000; // cap so a very long game doesn't grow unbounded
+function showGameLog() {
+  if (gameLogWin && !gameLogWin.isDestroyed()) { gameLogWin.show(); gameLogWin.focus(); return gameLogWin; }
+  gameLogWin = new BrowserWindow({
+    width: 420,
+    height: 520,
+    minWidth: 280,
+    minHeight: 220,
+    parent: mainWin,
+    modal: false,
+    icon: appIcon,
+    show: false,
+    title: "Game Log",
+    webPreferences: { nodeIntegration: true, contextIsolation: false },
+  });
+  gameLogWin.setMenuBarVisibility(false);
+  gameLogWin.loadFile(path.join(__dirname, "gamelog.html"));
+  const replay = () => {
+    if (gameLogWin && !gameLogWin.isDestroyed()) gameLogWin.webContents.send("game-log-history", gameLogBuffer);
+  };
+  gameLogWin.webContents.once("did-finish-load", replay);
+  gameLogWin.once("ready-to-show", () => {
+    if (mainWin && !mainWin.isDestroyed()) {
+      const [px, py] = mainWin.getPosition();
+      const [pw] = mainWin.getSize();
+      const [w] = gameLogWin.getSize();
+      gameLogWin.setPosition(Math.round(px + pw - w - 20), Math.round(py + 40));
+    }
+    gameLogWin.show();
+  });
+  gameLogWin.on("closed", () => { gameLogWin = null; });
+  return gameLogWin;
+}
+// Receive a BATCH of log entries from the game renderer: buffer them (capped)
+// and, if the window is open, stream them live. The window is NOT auto-opened —
+// the user calls it up from the View menu. Batching keeps IPC traffic low even
+// when a turn emits a large number of notifications.
+ipcMain.handle("game-log-batch", (_e, entries) => {
+  if (!Array.isArray(entries) || !entries.length) return;
+  const open = gameLogWin && !gameLogWin.isDestroyed() && !gameLogWin.webContents.isLoading();
+  const live = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue;
+    if (entry.kind === "clear") {
+      gameLogBuffer = [];
+      if (open) gameLogWin.webContents.send("game-log-clear");
+      live.length = 0; // entries before a clear in the same batch are moot
+      continue;
+    }
+    gameLogBuffer.push(entry);
+    if (open) live.push(entry);
+  }
+  if (gameLogBuffer.length > GAME_LOG_BUFFER_MAX) {
+    gameLogBuffer.splice(0, gameLogBuffer.length - GAME_LOG_BUFFER_MAX);
+  }
+  if (open && live.length) gameLogWin.webContents.send("game-log-entries", live);
+});
+// The Game Log window's Clear button: wipe the buffer and reset the renderer's
+// year dedupe so the next year header reprints.
+ipcMain.handle("game-log-clear-request", () => {
+  gameLogBuffer = [];
+  if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send("game-log-reset");
+});
+
 function buildViewMenu() {
   const isMac = process.platform === "darwin";
   const ours = gameColonies.filter((c) => c.kind === "human");
@@ -408,12 +479,6 @@ function buildViewMenu() {
         submenu: alienSubmenu.length ? alienSubmenu : [{ label: "(none yet)", enabled: false }]
       },
       { type: "separator" },
-      { label: "View Rankings…", accelerator: "CmdOrCtrl+R", click: () => sendToMain("view-rankings") },
-      { label: "View Colonies…", accelerator: "CmdOrCtrl+Shift+O", enabled: ours.length > 0, click: () => sendToMain("view-colonies") },
-      { label: "View Federation…", accelerator: "CmdOrCtrl+Shift+F", enabled: ours.length >= 2, click: () => sendToMain("view-federation") },
-      { label: "View Military…", accelerator: "CmdOrCtrl+Shift+M", enabled: ours.length > 0, click: () => sendToMain("view-military") },
-      { label: "View Diplomacy…", accelerator: "CmdOrCtrl+Shift+D", click: () => sendToMain("view-diplomacy") },
-      { type: "separator" },
       { label: "Toggle Terrain Textures", accelerator: "CmdOrCtrl+T", click: () => sendToMain("view-toggle-terrain") },
       { label: "Toggle Area of Control", accelerator: "CmdOrCtrl+Shift+C", click: () => sendToMain("view-toggle-control") },
       { type: "separator" },
@@ -430,6 +495,9 @@ function buildViewMenu() {
 
 function buildMenu() {
   const isMac = process.platform === "darwin";
+  // Human colonies, used for the enabled state of the view items now hosted in
+  // the Window menu (View Colonies / Federation / Military require colonies).
+  const ours = gameColonies.filter((c) => c.kind === "human");
   const template = [
     {
       label: app.name,
@@ -472,6 +540,13 @@ function buildMenu() {
       submenu: [
         { role: "minimize" },
         ...(isMac ? [{ role: "zoom" }] : []),
+        { type: "separator" },
+        { label: "View Colonies…", accelerator: "CmdOrCtrl+Shift+O", enabled: ours.length > 0, click: () => sendToMain("view-colonies") },
+        { label: "View Federation…", accelerator: "CmdOrCtrl+Shift+F", enabled: ours.length >= 2, click: () => sendToMain("view-federation") },
+        { label: "View Rankings…", accelerator: "CmdOrCtrl+R", click: () => sendToMain("view-rankings") },
+        { label: "View Military…", accelerator: "CmdOrCtrl+Shift+M", enabled: ours.length > 0, click: () => sendToMain("view-military") },
+        { label: "View Diplomacy…", accelerator: "CmdOrCtrl+Shift+D", click: () => sendToMain("view-diplomacy") },
+        { label: "View Communication Log", accelerator: "CmdOrCtrl+Shift+L", click: () => showGameLog() },
         { type: "separator" },
         {
           label: "Toggle Developer Tools",
