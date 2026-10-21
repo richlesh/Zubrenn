@@ -115,7 +115,7 @@ The Airport is the Air Field's big sibling — a full international hub that ext
 
 <span class="float-right">![launchpad](../buildings/launchpad.png)</span>
 
-The Launchpad is your first foothold in the **space transport network** — a modest pad for orbital shuttles that links any two of your colonies regardless of distance or terrain, the moment it is built. Like the Dock and the Air Field, it provides its link as soon as it is **operational**; its tile need not be worked. It requires an **Air Field**, a **Factory**, and a **Bank** first, a warm tropical or temperate climate, and access to the strategic metals (aluminum, titanium, or crystal) its rockets demand. Cheap and quick to raise for what it offers, it is the practical way to stitch a far‑flung outpost into your civilization long before you can afford its grander successor — and it is built as the foundation that later becomes a **Spaceport**.
+The Launchpad is your first foothold in the **space transport network** — a modest pad for orbital shuttles that links any two of your colonies regardless of distance or terrain, the moment it is built. Like the Dock and the Air Field, it provides its link as soon as it is **operational**; its tile need not be worked. It requires an **Air Field**, a **Factory**, and a **Bank** first, a warm tropical or temperate climate, and access to the strategic metals (aluminum, titanium, and crystal) its rockets demand. Cheap and quick to raise for what it offers, it is the practical way to stitch a far‑flung outpost into your civilization long before you can afford its grander successor — and it is built as the foundation that later becomes a **Spaceport**.
 
 ### Spaceport
 
