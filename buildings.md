@@ -101,11 +101,17 @@ The Air Field creates an air‑transportation network, linking nearby colonies t
 
 The Airport is the Air Field's big sibling — a full international hub that extends the air network far beyond a modest airstrip, drawing in colonies much farther away than an Air Field could reach. It is built as an **upgrade of an existing Air Field**, raised in its place (and it still counts as an Air Field for anything that requires one, such as the Spaceport). A large, expensive structure that is demanding to run, it returns a good flow of wealth, lifts morale, and adds generous storage. For a sprawling empire, a well‑placed Airport is what stitches far‑flung colonies into one air network.
 
+### Launchpad
+
+<img align="right" width="128" src="src/resources/buildings/128/launchpad.png">
+
+The Launchpad is your first foothold in the **space transport network** — a modest pad for orbital shuttles that links any two of your colonies regardless of distance or terrain, the moment it is built. Like the Dock and the Air Field, it provides its link as soon as it is **operational**; its tile need not be worked. It requires an **Air Field**, a **Factory**, and a **Bank** first, a warm tropical or temperate climate, and access to the strategic metals (aluminum, titanium, or crystal) its rockets demand. Cheap and quick to raise for what it offers, it is the practical way to stitch a far‑flung outpost into your civilization long before you can afford its grander successor — and it is built as the foundation that later becomes a **Spaceport**.
+
 ### Spaceport
 
 <img align="right" width="128" src="src/resources/buildings/128/spaceport.png">
 
-The Spaceport opens the **space transport network** — the only link with no limit on distance at all. Any two of your colonies that each raise a Spaceport are connected and share resources no matter how far apart they lie or what terrain divides them. It is a late‑game capstone that requires an **Air Field** first and may be built only in a warm, tropical climate. A major build with a heavy energy appetite to keep its launch systems running, it returns a little wealth and lifts morale — but its true value is tying the most distant colonies directly into the heart of your civilization.
+The Spaceport is the **upgrade of a Launchpad**, raised in its place as the full capstone of the **space transport network** — the only link with no limit on distance at all. Any two of your colonies joined to the space network are connected and share resources no matter how far apart they lie or what terrain divides them. Unlike the Launchpad, a Spaceport provides its link **only while its own tile is worked** — a built‑but‑idle Spaceport carries no traffic. It is a late‑game structure that requires an **Air Field**, **Factory**, and **Bank**, a warm tropical or temperate climate, and the strategic metals its heavy lift demands. A major build with a voracious energy appetite to keep its launch systems running, it returns a little wealth and lifts morale — but its true value is tying the most distant colonies directly into the heart of your civilization.
 
 ### Granary
 

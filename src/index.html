@@ -1173,6 +1173,22 @@
       }
       return false;
     }
+    // Whether a colony has an active SEA LINK hub within its control radius — a
+    // sea-network hub that is hubLinkActive (operational, AND worked when its
+    // network.mustWork is true). This is the LINK predicate used by resource-
+    // sharing connectivity and the sea-link overlay: an unworked Port provides
+    // no link even though colonyHasDock (capability) is true for it. Docks
+    // (mustWork:false) are link-active whenever operational.
+    function colonyHasSeaLink(colony) {
+      const radius = colonyControlRadius(colony);
+      for (const b of gameState.buildings) {
+        if (b.owner !== colony.owner) continue;
+        if (!buildingInNetwork(b.type, 'sea')) continue;
+        if (!hubLinkActive(colony, b)) continue;
+        if (hexDistance(colony.x, colony.y, b.x, b.y) <= radius) return true;
+      }
+      return false;
+    }
     // Whether a unit of `unitType` may be stationed/deployed at `colony`, per the
     // data-driven units[unitType].station capability tag. No station tag means
     // the unit may be stationed in any colony (infantry, tank). A tagged unit
@@ -2765,16 +2781,16 @@
     // travel for that owner's colony-launch paths).
     function ownerHasDock(owner) {
       for (const b of gameState.buildings) {
-        if (b.type === 5 && b.owner === owner && isOperational(b)) return true;
+        if (b.owner === owner && isOperational(b) && buildingInNetwork(b.type, 'sea')) return true;
       }
       return false;
     }
-    // Whether an owner has any operational building with the `seaport`
-    // capability tag (the Port). A seaport opens travel across ALL sea tiles
-    // (deep sea included), not just the shallow sea a Dock enables.
+    // Whether an owner has any operational DEEP-sea hub (network.shallowOnly ===
+    // false — the Port). A deep-sea hub opens travel across ALL sea tiles (deep
+    // sea included), not just the shallow sea a Dock enables.
     function ownerHasSeaport(owner) {
       for (const b of gameState.buildings) {
-        if (b.owner === owner && isOperational(b) && buildingHasOther(b.type, 'seaport')) return true;
+        if (b.owner === owner && isOperational(b) && buildingAllowsDeepSea(b.type)) return true;
       }
       return false;
     }
@@ -2786,15 +2802,20 @@
       if (ownerHasDock(owner)) return 1;
       return 0;
     }
-    // Whether a specific CELL holds the owner's operational Dock (type 5).
+    // Whether a specific CELL holds one of the owner's operational SEA-network
+    // hubs (a Dock or its Port upgrade — any building whose config network.type
+    // is "sea"). Used by route pathing (physical crossing), so operational-only.
     function cellHasDock(x, y, owner) {
       return (gameState.buildings || []).some((b) =>
-        b.x === x && b.y === y && b.owner === owner && b.type === 5 && isOperational(b));
+        b.x === x && b.y === y && b.owner === owner && isOperational(b) &&
+        buildingInNetwork(b.type, 'sea'));
     }
-    // Whether a specific CELL holds the owner's operational Port (seaport tag).
+    // Whether a specific CELL holds one of the owner's operational DEEP-sea hubs
+    // (network.shallowOnly === false — the Port). Used by route pathing to allow
+    // deep-sea crossings; operational-only (physical structure).
     function cellHasPort(x, y, owner) {
       return (gameState.buildings || []).some((b) =>
-        b.x === x && b.y === y && b.owner === owner && isOperational(b) && buildingHasOther(b.type, 'seaport'));
+        b.x === x && b.y === y && b.owner === owner && isOperational(b) && buildingAllowsDeepSea(b.type));
     }
     // --- State-aware route phases for sea crossings -------------------------
     // A route may make AT MOST ONE sea crossing, and the kind of facility it
@@ -2999,9 +3020,12 @@
       for (const ck of foreignControlCellSet(owner)) foreign[ck] = 1;
       for (const b of gameState.buildings) {
         if (b.owner !== owner || !isOperational(b)) continue;
-        const isPort = buildingHasOther(b.type, 'seaport');
-        const isDock = (b.type === 5) || isPort;
-        if (!isDock) continue;
+        // Deep-sea reach is config-driven (network.shallowOnly === false).
+        const isPort = buildingAllowsDeepSea(b.type);
+        // A sea-network hub (Dock or Port) sits on a sea tile a travel path may
+        // cross. This is physical-structure pathing, so it uses operational
+        // state only (not the resource-link `mustWork` gate).
+        if (!buildingInNetwork(b.type, 'sea')) continue;
         const i = b.y * W + wxf(b.x);
         if (i >= 0 && i < n) { dock[i] = 1; if (isPort) port[i] = 1; }
       }
@@ -3397,13 +3421,7 @@
           let level = 0;
           if (coloniesAirLinked(a, b)) level = 4;
           else if (_pathExists(a, b, owner, (x, y) => hasMonorail(x, y))) level = 3;
-          else if (colonyHasDock(a) && colonyHasDock(b) &&
-                   _pathExists(a, b, owner,
-                     // A Port owner routes over ALL sea (deep included); a
-                     // Dock-only owner uses the shallow-sea/river/canal route.
-                     (ownerSeaMode(owner) >= 2)
-                       ? ((x, y) => isWaterRoute(x, y) || terrainAt(x, y) === 1)
-                       : isWaterRoute)) level = 2;
+          else if (seaRouteBetween(a, b, owner, isWaterRoute)) level = 2;
           else if (_pathExists(a, b, owner, (x, y) => hasRoad(x, y))) level = 1;
           else level = 0;
           m[i][j] = m[j][i] = level;
@@ -5719,7 +5737,7 @@
           const ck = stack.pop();
           const [cx, cy] = ck.split(",").map(Number);
           for (const n of hexNeighborsRenderer(cx, cy)) {
-            const nk = cellKey(n.x, n.y);
+            const nk = cellKeyWrapped(n.x, n.y);
             if (netCells.has(nk) && !cellComp.has(nk)) { cellComp.set(nk, id); stack.push(nk); }
           }
         }
@@ -5731,7 +5749,7 @@
         const own = cellKey(col.x, col.y);
         if (cellComp.has(own)) set.add(cellComp.get(own));
         for (const n of hexNeighborsRenderer(col.x, col.y)) {
-          const nk = cellKey(n.x, n.y);
+          const nk = cellKeyWrapped(n.x, n.y);
           if (cellComp.has(nk)) set.add(cellComp.get(nk));
         }
         return set;
@@ -5819,7 +5837,8 @@
       const seaMode = ownerSeaMode(owner); // 1 = shallow (Dock), 2 = all sea (Port)
       const seaRouteCell = (seaMode >= 2) ? ((x, y) => terrainAt(x, y) === 1) : ((x, y) => isShallowSea(x, y));
       const dockCols = [];
-      if (allowSea) for (let i = 0; i < cols.length; i++) if (colonyHasDock(cols[i])) dockCols.push(i);
+      // LINK predicate (not mere capability): an unworked Port forms no sea link.
+      if (allowSea) for (let i = 0; i < cols.length; i++) if (colonyHasSeaLink(cols[i])) dockCols.push(i);
       for (let a = 0; a < dockCols.length; a++) {
         for (let b = a + 1; b < dockCols.length; b++) {
           const i = dockCols[a], j = dockCols[b];
@@ -5889,7 +5908,7 @@
             const ck = stack.pop();
             const [cx, cy] = ck.split(",").map(Number);
             for (const n of hexNeighborsRenderer(cx, cy)) {
-              const nk = cellKey(n.x, n.y);
+              const nk = cellKeyWrapped(n.x, n.y);
               if (netCells.has(nk) && !cellComp.has(nk)) { cellComp.set(nk, id); stack.push(nk); }
             }
           }
@@ -5899,7 +5918,7 @@
           const own = cellKey(c.x, c.y);
           if (cellComp.has(own)) set.add(cellComp.get(own));
           for (const n of hexNeighborsRenderer(c.x, c.y)) {
-            const nk = cellKey(n.x, n.y);
+            const nk = cellKeyWrapped(n.x, n.y);
             if (cellComp.has(nk)) set.add(cellComp.get(nk));
           }
           return set;
@@ -5962,15 +5981,17 @@
       // sea: both colonies have a Dock OR Port, and a sea route links them.
       // A plain Dock reaches only shallow (land-adjacent) sea; when BOTH
       // colonies have a Port (seaport), the route may also cross deep sea.
-      if (colonyHasDock(col)) {
+      // The route is traced between each colony's PORT CELL (the Dock/Port tile
+      // that actually touches the water), not the colony center — a colony may
+      // control a coastal Dock while its biodome sits one or two tiles inland,
+      // in which case a center-to-center sea walk could never leave the land.
+      if (colonyDockCell(col, false)) {
         const colSeaport = colonyHasSeaport(col);
         for (const o of others) {
-          if (!colonyHasDock(o)) continue;
+          // Both ends must have a seaport for the route to cross deep sea;
+          // otherwise it is limited to shallow (land-adjacent) sea.
           const deepOk = colSeaport && colonyHasSeaport(o);
-          const seaOk = deepOk
-            ? (x, y) => (terrainAt(x, y) === WATER)
-            : (x, y) => isShallowSea(x, y);
-          if (_pathExists(col, o, owner, seaOk)) { modes.add('sea'); break; }
+          if (seaRouteBetween(col, o, owner, isShallowSea, deepOk)) { modes.add('sea'); break; }
         }
       }
       // air: both have an air facility (Air Field or Airport); mixed pairs link
@@ -6401,13 +6422,13 @@
             terminalFor.get(k).add(_colonyKey(b));
           };
           mark(cellKey(b.x, b.y));
-          for (const n of hexNeighborsRenderer(b.x, b.y)) mark(cellKey(n.x, n.y));
+          for (const n of hexNeighborsRenderer(b.x, b.y)) mark(cellKeyWrapped(n.x, n.y));
         }
         const start = [];
         // Entry points: the biodome cell itself and any neighbour on the network.
         if (netCells.has(cellKey(col.x, col.y))) start.push(cellKey(col.x, col.y));
         for (const n of hexNeighborsRenderer(col.x, col.y)) {
-          const nk = cellKey(n.x, n.y);
+          const nk = cellKeyWrapped(n.x, n.y);
           if (netCells.has(nk)) start.push(nk);
         }
         const seen = new Set(start);
@@ -6420,7 +6441,7 @@
           if (term) { for (const key of term) addType(key, type); continue; }
           const [cx, cy] = ck.split(",").map(Number);
           for (const n of hexNeighborsRenderer(cx, cy)) {
-            const nk = cellKey(n.x, n.y);
+            const nk = cellKeyWrapped(n.x, n.y);
             if (netCells.has(nk) && !seen.has(nk)) { seen.add(nk); stack.push(nk); }
           }
         }
@@ -6476,7 +6497,7 @@
       // colony's sea tiles. Sea links are gathered first, then filtered by the
       // 15-cell radius rule below.
       const seaLinked = new Set(); // colonyKey of sea-connected colonies
-      if (colonyHasDock(col)) {
+      if (colonyHasSeaLink(col)) {
         const seaOf = (c) => new Set(
           colonyControlCells(c).filter((cc) => terrainAt(cc.x, cc.y) === 1)
             .map((cc) => cellKey(cc.x, cc.y)));
@@ -6484,7 +6505,7 @@
         if (mySea.size) {
           const otherSea = new Map(); // seaCellKey -> colony
           for (const b of others) {
-            if (!colonyHasDock(b)) continue;
+            if (!colonyHasSeaLink(b)) continue;
             for (const sk of seaOf(b)) otherSea.set(sk, b);
           }
           const seen = new Set(mySea);
@@ -7119,6 +7140,42 @@
     function ownsCell(colony, x, y) {
       return ownershipMap().get(x + "," + y) === colony;
     }
+    // The config-driven network descriptor for a building type: the object
+    // buildingTypes[x].network = { type: "sea"|"air"|"space", mustWork: bool }.
+    // Buildings without a `network` key are not network hubs and return null.
+    function buildingNetwork(type) {
+      const bt = buildingType(type) || {};
+      const n = bt.network;
+      return (n && typeof n === 'object' && n.type) ? n : null;
+    }
+    // Whether a building type participates in the given network ("sea"/"air"/
+    // "space"). Membership is entirely config-driven via buildingTypes[x].network.
+    function buildingInNetwork(type, networkType) {
+      const n = buildingNetwork(type);
+      return !!(n && n.type === networkType);
+    }
+    // Whether a building is a SEA-network hub that reaches DEEP sea (all sea
+    // tiles), not just shallow (land-adjacent) sea. Config-driven via
+    // network.shallowOnly: a Dock sets shallowOnly:true (shallow only); a Port
+    // sets shallowOnly:false (deep sea too). A non-sea hub is never a deep hub.
+    function buildingAllowsDeepSea(type) {
+      const n = buildingNetwork(type);
+      return !!(n && n.type === 'sea' && n.shallowOnly === false);
+    }
+    // Whether a network-hub building `b` currently provides its transport link
+    // for `colony`. Always requires the hub to be operational. Additionally, a
+    // hub whose config `network.mustWork` is true (e.g. the Port, Airport, and
+    // Spaceport) only provides its link when ITS OWN cell is being worked; hubs
+    // with `mustWork: false` (the Dock and Air Field) link while merely
+    // operational. A building with no `network` key is not a hub (returns false).
+    // `worksKey` membership is O(1).
+    function hubLinkActive(colony, b) {
+      if (!isOperational(b)) return false;
+      const net = buildingNetwork(b.type);
+      if (!net) return false;
+      if (net.mustWork) return worksKey(colony, cellKey(b.x, b.y));
+      return true;
+    }
     // Shallow sea = a sea tile edge-adjacent to at least one land tile.
     function isShallowSea(x, y) {
       if (terrainAt(x, y) !== 1) return false;
@@ -7128,45 +7185,95 @@
       }
       return false;
     }
-    // Whether a colony owns an operational Dock (type 5) on a shallow-sea tile
-    // within its control radius. Checked directly (no colonyControlCells call)
+    // Whether a colony has an active SEA-network hub (any building whose config
+    // network.type is "sea" — the Dock and its Port upgrade) within its control
+    // radius. "Active" = hubLinkActive (operational, plus worked when the hub's
+    // network.mustWork is true). Checked directly (no colonyControlCells call)
     // to avoid recursion.
+    // Whether a colony has an operational SEA-network hub (Dock or Port) within
+    // its control radius. This is the colony's sea CAPABILITY/presence — it
+    // decides whether shallow sea in the zone is workable/buildable — and must
+    // NOT depend on the hub's tile being worked: the hub sits ON a sea tile, so
+    // gating this by "worked" would be circular (you could never work the tile
+    // to unlock the capability that lets you work it). The resource-sharing LINK
+    // (which does honour network.mustWork) is handled separately by the
+    // sea-route helpers via colonyDockCell/hubLinkActive.
     function colonyHasDock(colony) {
       const radius = colonyControlRadius(colony);
       for (const b of gameState.buildings) {
         if (b.owner !== colony.owner) continue;
         if (!isOperational(b)) continue;
-        // A Port (seaport) upgrades a Dock and subsumes its shallow-sea role.
-        if (b.type !== 5 && !buildingHasOther(b.type, 'seaport')) continue;
+        if (!buildingInNetwork(b.type, 'sea')) continue;
         if (hexDistance(colony.x, colony.y, b.x, b.y) <= radius) return true;
       }
       return false;
     }
-    // Whether a colony owns an operational Port (seaport) within its control
-    // radius. A Port opens ALL sea tiles in the zone of control (deep sea
-    // included) for working and building; a plain Dock opens only shallow sea.
+    // Whether a colony has an operational DEEP-sea hub (network.shallowOnly ===
+    // false — the Port) within its control radius. Like colonyHasDock this is a
+    // CAPABILITY check (it opens ALL sea, deep included, for working/building),
+    // so it uses operational state only — never the worked gate, which would be
+    // circular for a hub that sits on the very sea tile it unlocks.
     function colonyHasSeaport(colony) {
       const radius = colonyControlRadius(colony);
       for (const b of gameState.buildings) {
         if (b.owner !== colony.owner) continue;
         if (!isOperational(b)) continue;
-        if (!buildingHasOther(b.type, 'seaport')) continue;
+        if (!buildingAllowsDeepSea(b.type)) continue;
         if (hexDistance(colony.x, colony.y, b.x, b.y) <= radius) return true;
       }
       return false;
     }
-    // Whether a colony owns an operational Air Field (building type 6) within
-    // its control radius. Used for air-transport network links.
-    // An "air facility" is any operational building tagged `airbase` in config
-    // (the Air Field and its Airport upgrade). colonyAirRange returns the GREATEST
-    // link range (buildingTypes[type].range) among the air facilities inside the
-    // colony's control radius, or 0 if it has none.
+    // The colony's own port cell: the NEAREST operational Dock/Port (type 5 or
+    // any `seaport` building) within its control radius, or null if it has none.
+    // Sea routes must start/end at the port tile that actually touches the
+    // water — NOT the colony center, which may sit inland from its coast — so
+    // that a colony whose biodome is not itself coast-adjacent can still use a
+    // Dock it owns a few tiles away. When `requireSeaport` is true, only a Port
+    // (deep-sea) facility qualifies.
+    function colonyDockCell(colony, requireSeaport) {
+      const radius = colonyControlRadius(colony);
+      let best = null, bestDist = Infinity;
+      for (const b of gameState.buildings) {
+        if (b.owner !== colony.owner) continue;
+        if (!hubLinkActive(colony, b)) continue;
+        // requireSeaport = only a deep-sea hub qualifies (network.shallowOnly ===
+        // false, i.e. the Port); otherwise any sea-network hub (Dock or Port) counts.
+        if (requireSeaport) { if (!buildingAllowsDeepSea(b.type)) continue; }
+        else if (!buildingInNetwork(b.type, 'sea')) continue;
+        const d = hexDistance(colony.x, colony.y, b.x, b.y);
+        if (d <= radius && d < bestDist) { bestDist = d; best = b; }
+      }
+      return best ? { x: best.x, y: best.y } : null;
+    }
+    // Whether two colonies of the same owner are linked by a SEA route. Both
+    // must own a Dock/Port within their control radius, and a water path must
+    // connect their PORT CELLS (not their centers — see colonyDockCell). When
+    // `seaDeep` resolves true the route may cross deep sea (owner has a Port);
+    // otherwise only shallow (land-adjacent) sea / river / canal tiles count.
+    // `waterOk(x,y)` supplies the base shallow-water predicate (e.g.
+    // isShallowSea, or an isWaterRoute that also admits river/canal land tiles).
+    function seaRouteBetween(a, b, owner, waterOk, seaDeep) {
+      const aDock = colonyDockCell(a, false);
+      if (!aDock) return false;
+      const bDock = colonyDockCell(b, false);
+      if (!bDock) return false;
+      const deep = (seaDeep !== undefined) ? seaDeep : (ownerSeaMode(owner) >= 2);
+      const cellOk = deep
+        ? ((x, y) => waterOk(x, y) || terrainAt(x, y) === WATER)
+        : waterOk;
+      return _pathExists(aDock, bDock, owner, cellOk);
+    }
+    // Air-network reach for a colony. An air hub is any building whose config
+    // network.type is "air" (the Air Field and its Airport upgrade) that is
+    // hubLinkActive (operational, plus worked when network.mustWork) within the
+    // colony's control radius. Returns the GREATEST link range
+    // (buildingTypes[type].range) among those hubs, or 0 if it has none.
     function colonyAirRange(colony) {
       const radius = colonyControlRadius(colony);
       let best = 0;
       for (const b of gameState.buildings) {
-        if (b.owner !== colony.owner || !isOperational(b)) continue;
-        if (!buildingHasOther(b.type, 'airbase')) continue;
+        if (b.owner !== colony.owner || !hubLinkActive(colony, b)) continue;
+        if (!buildingInNetwork(b.type, 'air')) continue;
         if (hexDistance(colony.x, colony.y, b.x, b.y) > radius) continue;
         const bt = buildingType(b.type) || {};
         const r = (bt.range != null) ? Number(bt.range) : 16;
@@ -7176,13 +7283,16 @@
     }
     function colonyHasAirfield(colony) { return colonyAirRange(colony) > 0; }
     // Whether a colony owns an operational Spaceport (building type 14) within
-    // its control radius. Used for the UNLIMITED-range space-transport network:
-    // any two of a player's Spaceport colonies are linked regardless of distance.
+    // Whether a colony has an active SPACE-network hub (any building whose config
+    // network.type is "space" — the Spaceport) within its control radius. Used
+    // for the UNLIMITED-range space-transport network: any two of a player's
+    // space-hub colonies are linked regardless of distance.
     function colonyHasSpaceport(colony) {
       const radius = colonyControlRadius(colony);
       for (const b of gameState.buildings) {
-        if (b.type !== 14 || b.owner !== colony.owner) continue;
-        if (!isOperational(b)) continue;
+        if (b.owner !== colony.owner) continue;
+        if (!hubLinkActive(colony, b)) continue;
+        if (!buildingInNetwork(b.type, 'space')) continue;
         if (hexDistance(colony.x, colony.y, b.x, b.y) <= radius) return true;
       }
       return false;
@@ -7230,6 +7340,20 @@
       colony.worked = colony.worked.filter((k) => k === homeKey || inControl.has(k));
     }
     function cellKey(x, y) { return x + "," + y; }
+    // Wrap-aware cell key: on an east–west wrapping map, column x is normalized
+    // into [0, W) so a hex neighbour produced at x = -1 or x = W (which
+    // hexNeighborsRenderer returns unwrapped) matches the stored key for the
+    // cell on the other side of the seam. Road/monorail connectivity stores
+    // cells with the plain cellKey (x already in range), so comparisons must
+    // canonicalize the *neighbour* side through this helper or seam-crossing
+    // links are missed.
+    function cellKeyWrapped(x, y) {
+      const t = gameState.map && gameState.map.terrain;
+      const W = (t && t[0]) ? t[0].length : 0;
+      const wrap = !!(gameState.map && gameState.map.meta && gameState.map.meta.wrap);
+      const xx = (wrap && W) ? (((x % W) + W) % W) : x;
+      return xx + "," + y;
+    }
     // Inverse of cellKey: parse an "x,y" key back to numeric coords without the
     // allocation of split(",").map(Number) (two throwaway arrays per call). Hot
     // in the AI path, which reads worked-cell keys repeatedly.
@@ -7274,13 +7398,19 @@
     // Max extra worked cells for a colony = floor(population / 1000).
     function workCap(colony) {
       let cap = Math.floor((colony.population || 0) / 1000);
-      // A Dock (and its Port upgrade) is self-staffing: it provides its own
-      // worker to work its sea tile, granting +1 work capacity each.
+      // Self-staffing buildings: any building type that declares a `bonus.worker`
+      // in config provides that many extra workers (e.g. a Dock/Port is
+      // self-staffing and grants +1 to work its own sea tile). The amount is
+      // config-driven (buildingTypes[x].bonus.worker) rather than hard-coded, so
+      // new self-staffing buildings need no code change. Counted per operational
+      // building — a self-staffing building brings its own crew, so it does NOT
+      // require its cell to already be worked.
       try {
-        const dockCode = _bldgCode('dock'), portCode = _bldgCode('port');
         for (const b of colonyBuildings(colony)) {
           if (!isOperational(b)) continue;
-          if (b.type === dockCode || b.type === portCode) cap += 1;
+          const bt = buildingType(b.type);
+          const w = bt && bt.bonus ? Number(bt.bonus.worker) : 0;
+          if (Number.isFinite(w) && w > 0) cap += w;
         }
       } catch (e) {}
       return cap;
@@ -7771,7 +7901,7 @@
         const c = stack.pop();
         for (const n of hexNeighborsRenderer(c.x, c.y)) {
           if (n.y < 0 || n.y >= H) continue;
-          const nk = cellKey(n.x, n.y);
+          const nk = cellKeyWrapped(n.x, n.y);
           if (comp.has(nk)) continue;
           if (tr.roads.has(nk) || tr.monorails.has(nk)) { comp.add(nk); stack.push({ x: n.x, y: n.y }); }
         }
@@ -7783,7 +7913,7 @@
         let attached = comp.has(cellKey(b.x, b.y));
         if (!attached) {
           for (const n of hexNeighborsRenderer(b.x, b.y)) {
-            if (comp.has(cellKey(n.x, n.y))) { attached = true; break; }
+            if (comp.has(cellKeyWrapped(n.x, n.y))) { attached = true; break; }
           }
         }
         if (!attached) continue;
@@ -8281,10 +8411,13 @@
     }
     // The owner's colony (biodome) whose control area contains (x,y), if any.
     function colonyControlling(x, y, owner) {
-      const k = cellKey(x, y);
+      // Canonicalize the query column so a neighbour coordinate produced at
+      // x = -1 or x = W (e.g. from hexNeighborsRenderer at the seam) matches the
+      // canonical control cells, which are stored wrapped via cellsWithin.
+      const k = cellKeyWrapped(x, y);
       for (const b of gameState.buildings) {
         if (b.type !== 1 || b.owner !== owner) continue;
-        if (colonyControlCells(b).some((c) => cellKey(c.x, c.y) === k)) return b;
+        if (colonyControlCells(b).some((c) => cellKeyWrapped(c.x, c.y) === k)) return b;
       }
       return null;
     }
@@ -8342,6 +8475,13 @@
         if (existing.removeTurns != null && existing.removeTurns > 0) {
           return { ok: false, reason: "the building here is being removed" };
         }
+        // The base building must be finished (operational) before it can be
+        // upgraded — otherwise a player could chain upgrades through buildings
+        // still under construction (e.g. Barracks -> Army Base -> Joint Base all
+        // in one turn). An unfinished base still has turnsRemaining > 0.
+        if (!isOperational(existing)) {
+          return { ok: false, reason: `the ${improvementName(upgradeCode)} here is still under construction` };
+        }
       } else if (cellHasBuilding(x, y)) {
         return { ok: false, reason: "cell occupied" };
       }
@@ -8378,11 +8518,36 @@
         const needsSea = allowed.has("sea");
         return { ok: false, reason: needsSea ? "must be built on sea" : "must be built on land" };
       }
-      // When a building sits on the water (its terrain set allows sea), it must
-      // be a shallow-sea tile (sea adjacent to land) — as Docks required.
+      // When a building sits on the water, sea DEPTH is gated by the colony's
+      // sea capability (mirroring what colonyControlCells opens for working):
+      //   shallow sea (land-adjacent) -> requires a Dock (or Port) in radius;
+      //   deep sea                    -> requires a Port (seaport) in radius.
+      // A building may still narrow this further with an explicit `other`
+      // "shallow"/"deep" tag (handled by the tag evaluator below). The Dock
+      // itself is exempt — it is the structure that first opens shallow sea, so
+      // it only needs a shallow tile (its own `other: ["shallow"]` tag enforces
+      // that) and must not require a pre-existing Dock to be placed.
       const onSea = (terr === WATER);
-      if (onSea && !isShallowSea(x, y)) {
-        return { ok: false, reason: "needs sea adjacent to land" };
+      if (onSea) {
+        const seaCol = colonyControllingByRadius(x, y, owner);
+        const isSeaHub = buildingInNetwork(type, 'sea');   // a Dock/Port opens its own tile
+        const shallow = isShallowSea(x, y);
+        if (shallow) {
+          // Shallow sea needs a Dock/Port already present (unless this building
+          // IS the sea hub that provides it, e.g. placing the Dock itself).
+          if (!isSeaHub && !(seaCol && colonyHasDock(seaCol))) {
+            return { ok: false, reason: "needs a Dock to build on shallow sea" };
+          }
+        } else {
+          // Deep sea needs a Port (seaport). A Dock does not open deep water;
+          // and a sea hub that only reaches shallow (a Dock) can't sit here.
+          if (isSeaHub && !buildingAllowsDeepSea(type)) {
+            return { ok: false, reason: "needs sea adjacent to land" };
+          }
+          if (!(seaCol && colonyHasSeaport(seaCol))) {
+            return { ok: false, reason: "needs a Port to build on deep sea" };
+          }
+        }
       }
 
       // Zone-of-control check. The `anywhere` tag waives the owner's
@@ -8784,11 +8949,25 @@
       const pre = btPrereq(type);
       const buildings = Array.isArray(pre.building) ? pre.building : [];
       const col = buildColonyAt(x, y, owner, type);
-      const present = new Set(col ? colonyBuildings(col).map((b) => b.type) : []);
+      // Mirror hasPrerequisitesAt: an UPGRADE building also satisfies a
+      // requirement for the building it upgraded (a Solar Farm counts as a
+      // Solar Panel), so the displayed "missing" list can't diverge from the
+      // real build-eligibility check.
+      const present = new Set();
+      if (col) {
+        for (const b of colonyBuildings(col)) {
+          present.add(b.type);
+          let up = buildingUpgradesCode(b.type);
+          while (up != null && !present.has(up)) { present.add(up); up = buildingUpgradesCode(up); }
+        }
+      }
       const codes = buildings.map((p) => { const e = buildingType(p); return e ? e.code : p; });
       const missing = codes.filter((t) => !present.has(t)).map((t) => improvementName(t));
       if (!networkRequirementMet(col, pre.network)) {
-        const nets = pre.network.map((n) => n === 'any' ? 'network' : (n + ' network'));
+        // A network requirement is always a connection to ANOTHER of the
+        // owner's colonies, so spell that out instead of a bare "network".
+        const nets = pre.network.map((n) =>
+          n === 'any' ? 'a transport link to another colony' : (n + ' link to another colony'));
         missing.push(nets.join(" or "));
       }
       if (!citySizeMet(col, pre.citySize)) {
@@ -10438,11 +10617,15 @@
     function _hubFamilyCodes() {
       const d = _bldgCode('dock'), p = _bldgCode('port');
       const a = _bldgCode('air field'), ap = _bldgCode('airport');
-      const sp = _bldgCode('spaceport');
+      const lp = _bldgCode('launchpad'), sp = _bldgCode('spaceport');
       const fams = [];
       if (d != null) fams.push({ base: d, members: [d, p].filter((x) => x != null) });
       if (a != null) fams.push({ base: a, members: [a, ap].filter((x) => x != null) });
-      if (sp != null) fams.push({ base: sp, members: [sp] });
+      // Space family: the Launchpad is the base and the Spaceport is its upgrade
+      // (mirrors dock→port and air field→airport). Fall back to the Spaceport as
+      // base if no Launchpad type exists.
+      if (lp != null) fams.push({ base: lp, members: [lp, sp].filter((x) => x != null) });
+      else if (sp != null) fams.push({ base: sp, members: [sp] });
       return fams;
     }
     // True if `type` is a BASE network-hub (dock/air field/spaceport) whose
@@ -12378,8 +12561,11 @@
           ctx.fillStyle = terrainColorLightened(terrainAt(c.x, c.y), 0.5);
         }
         ctx.fill();
-        ctx.lineWidth = (isHome ? 3 : (isWorked ? 2 : 1));
-        ctx.strokeStyle = (isHome ? "#b00020" : (isWorked ? "#d43a4a" : "#888"));
+        // Worked cells get a medium red edge, unworked a thin gray. The biodome
+        // (home) cell's THICK WHITE border is drawn in a post-pass AFTER all
+        // cells (below) so neighbouring cells' strokes can't overdraw it.
+        ctx.lineWidth = (isWorked ? 2 : 1);
+        ctx.strokeStyle = (isWorked ? "#d43a4a" : "#888");
         ctx.stroke();
         // Per-cell properties: a header (improvement name if any, then terrain
         // type) followed by each resource via the shared formatResource helper
@@ -12442,6 +12628,24 @@
         ctx.fillText(happRow, cx, ty + smallPx * 0.35);
         ty += lh;
         ctx.textAlign = "center"; // restore for subsequent cells
+      }
+      // Thick WHITE border around the biodome (home) cell, drawn last so it sits
+      // on top of every neighbouring cell's edge stroke and reads as a clear,
+      // unbroken outline marking the colony center.
+      {
+        const home = _workHexes.find((h) => h.isHome);
+        if (home) {
+          const r = spacing.x / 2, r2 = r / 2, yr = spacing.y / 2;
+          const cx = home.cx, cy = home.cy;
+          ctx.beginPath();
+          ctx.moveTo(cx - r2, cy - yr); ctx.lineTo(cx + r2, cy - yr); ctx.lineTo(cx + r, cy);
+          ctx.lineTo(cx + r2, cy + yr); ctx.lineTo(cx - r2, cy + yr); ctx.lineTo(cx - r, cy);
+          ctx.closePath();
+          ctx.lineJoin = "round";
+          ctx.lineWidth = Math.max(4, Math.round(cell / 9));
+          ctx.strokeStyle = "#ffffff";
+          ctx.stroke();
+        }
       }
       renderWorkStats(col);
     }

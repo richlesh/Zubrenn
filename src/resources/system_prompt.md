@@ -106,6 +106,10 @@ civilization.
   Food/Material (plus the water bonus, plus any building on it).
 - The Biodome cell is always worked. You may work up to
   **floor(population / 1,000)** additional cells within the zone of control.
+  A **Dock** (and its **Port** upgrade) is **self-staffing**: it brings its own
+  worker, granting **+1** work capacity each (so a colony with a Dock can work
+  one more cell than `floor(population / 1,000)` alone would allow). This applies
+  while the Dock/Port is operational.
 - **Happiness** is driven by your food balance: a colony's food **surplus**
   raises happiness, a food **shortfall** lowers it (see growth section).
 
@@ -162,7 +166,22 @@ resource.
 Dock (1) **opens all shallow-sea tiles in the colony to being worked** (they
 join the control area), and (2) **lets your colony-launch travel paths cross
 shallow sea**. Without a Dock, sea tiles are impassable and unworkable; deep sea
-(not adjacent to land) is always impassable.
+(not adjacent to land) is always impassable. A sea route between two colonies is
+traced **between their Dock tiles** (the shallow-sea cell each Dock sits on),
+**not** between their biodome centers — so a colony whose biodome is a tile or
+two inland still gets a sea link as long as it owns a coastal Dock within its
+zone of control. (A plain Dock routes only over shallow sea; when **both**
+colonies have a **Port**/seaport, the route may also cross deep sea.)
+
+**When a network hub provides its link depends on the hub.** A **Dock** and an
+**Air Field** link as soon as they are **operational** (construction finished) —
+you do **not** need to work their tile, and a Dock's self-staffing **+1 worker**
+also counts while merely operational. Their upgrades — the **Port**, **Airport**,
+and **Spaceport** — are stricter: they provide their link **only while their own
+tile is being worked**. A built-but-unworked Port, Airport, or Spaceport gives
+**no** connection, so if you upgrade a Dock to a Port (or an Air Field to an
+Airport) be sure to keep that tile worked or you lose the link. (Working a
+Dock/Port tile also affects its own `food`/`wealth` output.)
 
 | Building | Build cost | Build turns | Per-year upkeep | Prerequisites | Effect (when worked) |
 | --- | --- | --- | --- | --- | --- |
@@ -221,7 +240,9 @@ connected to it**. Two of your colonies are connected when any of these holds:
 
 - a **road/monorail path** links their biodomes, or
 - a **connected river/canal path** touches a corner of each colony, or
-- **both have a Dock** and a **shallow-sea route** links them (sea), or
+- **both have a Dock** and a **shallow-sea route** links them **Dock-to-Dock**
+  (the route runs between the two Dock tiles, so an inland biodome with a
+  coastal Dock still counts) (sea), or
 - **both have an Air Field** within the Air Field's **`range`** (config
   `buildingTypes["air field"].range`) of each other (air), or
 - **both have a Spaceport** — the space network has **no range limit at all**,

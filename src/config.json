@@ -497,11 +497,12 @@
     "dock": {
       "code": 5,
       "name": "Dock",
+      "network": { "type": "sea", "mustWork": false, "shallowOnly": true },
       "icon": "buildings/128/dock.png",
       "symbol": "buildings/icons/ship.png",
       "buildCost": { "energy": 5, "material": 10, "wealth": 5, "water": 0.25, "turns": 1 },
       "costPerYear": { "energy": 5, "wealth": 3, "water": 0.1 },
-      "bonus": { "food": 10, "wealth": 10 },
+      "bonus": { "food": 10, "wealth": 10, "worker": 1 },
       "storage": { "food": 10 },
       "prerequisite": {
         "building": ["solar panel"],
@@ -517,11 +518,12 @@
     "port": {
       "code": 20,
       "name": "Port",
+      "network": { "type": "sea", "mustWork": true, "shallowOnly": false },
       "icon": "buildings/128/port.png",
       "symbol": "buildings/icons/ship.png",
       "buildCost": { "energy": 20, "material": 40, "wealth": 20, "water": 0.5, "turns": 5 },
       "costPerYear": { "energy": 20, "goods": 10,"wealth": 15, "water": 0.2 },
-      "bonus": { "food": 10, "wealth": 15 },
+      "bonus": { "food": 10, "wealth": 15, "worker": 1 },
       "storage": { "food": 30, "goods": 300, "material": 300 },
       "federationStorage": { "food": 50, "goods": 500, "material": 500 },
       "prerequisite": {
@@ -535,6 +537,7 @@
     "air field": {
       "code": 6,
       "name": "Air Field",
+      "network": { "type": "air", "mustWork": false },
       "icon": "buildings/128/air_field.png",
       "symbol": "buildings/icons/airplane.png",
       "buildCost": { "energy": 20, "material": 50, "goods": 15, "wealth": 50, "water": 3, "turns": 3 },
@@ -559,6 +562,7 @@
     "airport": {
       "code": 21,
       "name": "Airport",
+      "network": { "type": "air", "mustWork": true },
       "icon": "buildings/128/airport.png",
       "symbol": "buildings/icons/airplane.png",
       "buildCost": { "energy": 60, "material": 120, "goods": 45, "wealth": 200, "water": 8, "turns": 5 },
@@ -697,7 +701,6 @@
       "federationStorage": { "wealth": 200 },
       "prerequisite": {
         "building": ["solar panel"],
-        "network": ["any"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
         "population": 5
       }
@@ -795,9 +798,28 @@
         "population": 20
       }
     },
+    "launchpad": {
+      "code": 38,
+      "name": "Launchpad",
+      "network": { "type": "space", "mustWork": false },
+      "icon": "buildings/128/launchpad.png",
+      "symbol": "buildings/icons/rocket.png",
+      "buildCost": { "energy": 5, "material": 10, "goods": 5, "wealth": 15, "water": 1, "turns": 1 },
+      "costPerYear": { "energy": 10, "material": 2, "goods": 2, "wealth": 5, "water": 0.2 },
+      "bonus": { "wealth": 5, "happiness": 0.25 },
+      "prerequisite": {
+        "building": ["air field", "factory", "bank"],
+        "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands"],
+        "climate": ["tropical","temperate"],
+        "network":  ["any"],
+        "population": 8,
+        "bonusType": ["aluminum", "titanium", "crystal"]
+      }
+    },
     "spaceport": {
       "code": 14,
       "name": "Spaceport",
+      "network": { "type": "space", "mustWork": true },
       "icon": "buildings/128/spaceport.png",
       "symbol": "buildings/icons/rocket.png",
       "buildCost": { "energy": 30, "material": 50, "goods": 25, "wealth": 75, "water": 3, "turns": 3 },
@@ -809,8 +831,9 @@
         "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands"],
         "climate": ["tropical","temperate"],
         "network":  ["any"],
-        "population": 8,
-        "bonusType": ["aluminum", "titanium", "crystal"]
+        "population": 12,
+        "bonusType": ["aluminum", "titanium", "crystal"],
+        "upgrades": "launchpad"
       }
     },
     "drone base": {
@@ -1940,8 +1963,8 @@
     },
     "terrain": ["grassland", "hills", "forest", "jungle", "desert", "plains", "wetlands"],
     "buildRadius": 7,
-    "vertexClickPixels": 7.5,
-    "vertexClickFraction": 0.21
+    "vertexClickPixels": 12,
+    "vertexClickFraction": 0.3
   },
 
   // Per-resource bonus a worked LAND cell gains when edge-adjacent to a sea tile.

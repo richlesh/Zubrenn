@@ -67,6 +67,14 @@ with alien AI opponents for resources.
   **air** route (both have an Air Field within its `range`) can cover each
   other's shortfalls, borrowing from whichever connected colony stores the most
   of a resource.
+  A **Dock** and an **Air Field** provide their link as soon as they are
+  **operational** (finished building) within a colony's zone of control — the
+  hub's tile does **not** need to be worked (and a Dock's self-staffing worker
+  likewise counts while operational). Their upgrades — the **Port**, **Airport**,
+  and **Spaceport** — instead require their tile to be **worked** for the link
+  to count (config key `network.mustWork`): a built-but-unworked Port,
+  Airport, or Spaceport provides no connection. Working a Dock/Port tile also
+  affects its own `food`/`wealth` output.
 - **Found new colonies** — a colony above a population threshold can launch a
   new biodome to a distant land cell; the materials travel overland (time based
   on terrain movement cost and river crossings), transferring colonists and
@@ -171,6 +179,13 @@ without code changes:
   - `costPerYear` — per-year upkeep (Material/Energy/Wealth) subtracted from output.
   - `bonus` — per-year production: `food`, `material`, `energy`, `wealth`, and
     `growth` (growth-rate modifier). Only applied when the building's cell is worked.
+    A building may also declare `worker` — the number of **self-staffing
+    workers** it adds to its colony's work capacity (see `workCap`): a building
+    with `worker` brings its own crew, letting the colony work that many extra
+    cells beyond `floor(population ÷ 1,000)`. The **Dock** and **Port** each set
+    `"worker": 1` (to staff the sea tile the Dock sits on). Unlike the other
+    `bonus` keys, `worker` applies while the building is **operational** (it does
+    not require its own cell to already be worked, which would be circular).
   - `storage` — how much Food/Material/Energy/Wealth/Happiness this building can
     hold; a colony's cap for each is the **sum** of its buildings' storage.
   - `prerequisite` — all build-eligibility requirements for the building, as an
@@ -199,6 +214,19 @@ without code changes:
   - `range` — for the **Air Field**, the maximum hex distance for an air link:
     two colonies that each have an Air Field within this distance are connected
     (and can share resources).
+  - `network` — marks a building as a **transport-network hub** and is fully
+    data-driven: `{ "type": "sea" | "air" | "space", "mustWork": <bool> }`.
+    `type` is which network the hub joins (a **Dock**/**Port** are `"sea"`, an
+    **Air Field**/**Airport** are `"air"`, a **Spaceport** is `"space"`).
+    `mustWork` decides when the hub provides its link: `false` means the link is
+    live as soon as the hub is **operational** (the Dock and Air Field);
+    `true` means the link counts **only while the hub's own tile is worked**
+    (the Port, Airport, and Spaceport). A building with no `network` key is not
+    a hub. For a `"sea"` hub, `shallowOnly` sets its reach: `true` reaches only
+    **shallow** (land-adjacent) sea — the **Dock**; `false` reaches **all** sea,
+    deep included — the **Port**. (Air link range is set by `range`; the
+    `seaport`/`airbase`/`airport` capability tags are now used only for military
+    unit stationing.)
 - `bridgeCost`, `roadColor`, `monorailColor`, `riverColor`, `canalColor`,
   `bridgeColor`, `planningPathColor`, `underConstructionColor`, `launchPathColor`,
   `workedCellColor` — transport/overlay costs and colors.
