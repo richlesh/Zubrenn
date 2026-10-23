@@ -335,7 +335,8 @@
       "range": 1000,
       "prerequisite": {
         "population": 18,
-        "bonusType": [ "aluminum", "crystal", "uranium" ]
+        "bonusType": [ "aluminum", "crystal", "uranium" ],
+        "other": [ "useOnce" ]
       }
     }
   },
@@ -695,25 +696,44 @@
       }
     },
     "naval shipyard": {
-        "code": 32,
-        "name": "Naval Shipyard",
-        "icon": "buildings/128/naval_shipyard.png",
-        "symbol": "buildings/icons/shield.png",
-        "buildCost": { "energy": 200, "goods": 200, "material": 200, "wealth": 200, "water": 10, "turns": 10 },
-        "costPerYear": { "energy": 100, "goods": 100, "material": 100, "wealth": 100 },
-        "bonus": { },
-        "storage": { "energy": 100, "goods": 100, "material": 100 },
-        "units": { "escort": 2, "carrier": 1 },
-        "recruitRate": { "escort": 150, "carrier": 750 },
-        "prerequisite": {
-          "building": ["solar farm", "agridome", "nanofactory", "bank", "port"],
-          "terrain": ["sea"],
-          "other":  ["land"],
-          "network":  ["any"],
-          "upgrades": "",
-          "population": 15
-        }
-      },
+      "code": 32,
+      "name": "Naval Shipyard",
+      "icon": "buildings/128/naval_shipyard.png",
+      "symbol": "buildings/icons/shield.png",
+      "buildCost": { "energy": 200, "goods": 200, "material": 200, "wealth": 200, "water": 10, "turns": 10 },
+      "costPerYear": { "energy": 100, "goods": 100, "material": 100, "wealth": 100 },
+      "bonus": { },
+      "storage": { "energy": 100, "goods": 100, "material": 100 },
+      "units": { "escort": 2, "carrier": 1 },
+      "recruitRate": { "escort": 150, "carrier": 750 },
+      "prerequisite": {
+        "building": ["solar farm", "agridome", "nanofactory", "bank", "port"],
+        "terrain": ["sea"],
+        "other":  ["land"],
+        "network":  ["any"],
+        "upgrades": "",
+        "population": 15
+      }
+    },
+    "icbm factory": {
+      "code": 40,
+      "name": "ICBM Factory",
+      "icon": "buildings/128/icbm_factory.png",
+      "symbol": "buildings/icons/shield.png",
+      "buildCost": { "energy": 200, "goods": 200, "material": 200, "wealth": 200, "water": 10, "turns": 10 },
+      "costPerYear": { "energy": 100, "goods": 100, "material": 100, "wealth": 100 },
+      "bonus": { },
+      "storage": { "energy": 100, "goods": 100, "material": 100 },
+      "units": { "icbm": 5 },
+      "recruitRate": { "icbm": 50 },
+      "prerequisite": {
+        "building": ["launchpad", "nuclear reactor"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+        "network":  ["any"],
+        "upgrades": "",
+        "population": 18
+      }
+    },
     "granary": {
       "code": 8,
       "name": "Granary",

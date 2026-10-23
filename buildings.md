@@ -119,6 +119,12 @@ The Launchpad is your first foothold in the **space transport network** — a mo
 
 The Spaceport is the **upgrade of a Launchpad**, raised in its place as the full capstone of the **space transport network** — the only link with no limit on distance at all. Any two of your colonies joined to the space network are connected and share resources no matter how far apart they lie or what terrain divides them. Unlike the Launchpad, a Spaceport provides its link **only while its own tile is worked** — a built‑but‑idle Spaceport carries no traffic. It is a late‑game structure that requires an **Air Field**, **Factory**, and **Bank**, a warm tropical or temperate climate, and the strategic metals its heavy lift demands. A major build with a voracious energy appetite to keep its launch systems running, it returns a little wealth and lifts morale — but its true value is tying the most distant colonies directly into the heart of your civilization.
 
+### ICBM Factory
+
+<img align="right" width="128" src="src/resources/buildings/128/icbm_factory.png">
+
+The ICBM Factory is where a colony builds its strategic missile arsenal — the **only** structure that can construct **ICBMs**, the long‑range, single‑use nuclear weapons. It is a top‑tier build gated behind the full space‑age chain: the colony must already have a **Launchpad** (to loft the missiles) and a **Nuclear Reactor** (to supply both the power and the uranium‑fueled infrastructure its warheads demand), a transport link to another of your colonies, and a large population, with a heavy, broad construction cost and upkeep. It holds a modest reserve of energy, goods, and material, and can field up to **five ICBM silos**, each steadily arming a missile over time. Once armed, those ICBMs can be launched at any colony on the planet — and are spent in the strike. For a mature, uranium‑rich civilization, the ICBM Factory is the key that unlocks planet‑spanning nuclear reach.
+
 ### Granary
 
 <img align="right" width="128" src="src/resources/buildings/128/granary.png">

@@ -1217,6 +1217,14 @@
     // A unit's configured max attack/defense ratings (strength.attack/defense).
     function unitRatedAttack(type) { const e = (CONFIG && CONFIG.units && CONFIG.units[type]) || {}; return Number((e.strength || {}).attack) || 0; }
     function unitRatedDefense(type) { const e = (CONFIG && CONFIG.units && CONFIG.units[type]) || {}; return Number((e.strength || {}).defense) || 0; }
+    // Whether a unit type is marked single-use (prerequisite.other includes
+    // "useOnce", e.g. the ICBM): it is expended — destroyed and removed from the
+    // game — the moment it attacks, win or lose.
+    function unitUsesOnce(type) {
+      const e = (CONFIG && CONFIG.units && CONFIG.units[type]) || null;
+      const other = e && e.prerequisite && e.prerequisite.other;
+      return Array.isArray(other) && other.includes('useOnce');
+    }
     // Effective combat strength scales the rated value by current manpower:
     // rated x (currentStrength / fullStrength). A freshly recruited/partial unit
     // fights proportionally weaker.
@@ -14295,14 +14303,31 @@
       };
       for (const c of atkC) { if (applyUnit(c)) atkLost++; }
       for (const c of defUnitC) { if (applyUnit(c)) defUnitLost++; }
-      // Remove dead units from the game.
+      // Determine the battle OUTCOME from the rounds (did the attackers clear
+      // every defender while at least one attacker was still alive at the end?).
+      // Computed BEFORE expending single-use units below, so an ICBM that wipes
+      // out a colony's defenses still counts as a won battle even though it is
+      // then destroyed (a win with no surviving land unit resolves to "Leave
+      // neutral", as usual).
+      const combatWon = defenders.every((c) => c.hp <= 0) && atkC.some((c) => c.unit && (Number(c.unit.strength) || 0) > 0);
+      // Single-use attackers (prerequisite.other "useOnce", e.g. the ICBM) are
+      // EXPENDED the moment they attack: force them to zero strength so they are
+      // removed from the game, win or lose. They never settle or retreat.
+      let atkExpended = 0;
+      for (const c of atkC) {
+        if (c.unit && unitUsesOnce(c.unit.type) && (Number(c.unit.strength) || 0) > 0) {
+          c.unit.strength = 0;
+          atkExpended++;
+        }
+      }
+      // Remove dead units from the game (including just-expended single-use units).
       removeDeadUnits();
       // Defense buildings whose pool fell to <= 0 are destroyed/removed.
       for (const c of defBldgC) {
         if (c.hp <= 0) { c.building._delete = true; defBldgLost++; }
       }
       gameState.buildings = gameState.buildings.filter((b) => !b._delete);
-      const attackerWon = defenders.every((c) => c.hp <= 0) && atkC.some((c) => c.unit && c.unit.strength > 0);
+      const attackerWon = combatWon;
       // Survivors who are still alive settle at the target (if captured) or retreat.
       const survivors = atkC.filter((c) => c.unit && c.unit.strength > 0).map((c) => c.unit);
       // The attacking player (strike-force owner); 'human' shows dialogs, AIs
@@ -14314,6 +14339,7 @@
       lines.push(`<strong>${esc(sf.name)}</strong> attacked <strong>${esc(targetBio.name || 'the enemy colony')}</strong>.`);
       lines.push(`Rounds fought: ${round}.`);
       lines.push(`Attacker losses: ${atkLost} unit${atkLost === 1 ? '' : 's'}.`);
+      if (atkExpended > 0) lines.push(`Single-use units expended: ${atkExpended}.`);
       lines.push(`Defender losses: ${defUnitLost} unit${defUnitLost === 1 ? '' : 's'}, ${defBldgLost} defense building${defBldgLost === 1 ? '' : 's'}.`);
       if (attackerWon) {
         finishWonBattle(targetBio, survivors, sf, lines, attackerOwner);
