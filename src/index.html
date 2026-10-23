@@ -8421,13 +8421,17 @@
       }
       return null;
     }
-    // True if (x,y) is in the owner's zone of control, OR exactly one hex outside
-    // it (a hex neighbour is controlled). Used by the `outpost` placement rule,
-    // which allows building up to one cell beyond the colony border.
-    function cellWithinOneOfOwnerControl(x, y, owner) {
+    // Whether (x,y) is within `dist` hex-cells of one of the owner's controlled
+    // cells (dist 0 = the cell itself must be controlled). Used for the outpost
+    // placement rule, which allows building up to `outpostMaxControlDistance`
+    // (config, default 3) cells beyond the colony border.
+    function cellWithinNOfOwnerControl(x, y, owner, dist) {
+      const d = Math.max(0, Math.floor(Number(dist) || 0));
       if (colonyControlling(x, y, owner)) return true;
-      for (const n of hexNeighborsRenderer(x, y)) {
-        if (colonyControlling(n.x, n.y, owner)) return true;
+      if (d <= 0) return false;
+      for (const c of cellsWithin(x, y, d)) {
+        if (c.x === x && c.y === y) continue;
+        if (colonyControlling(c.x, c.y, owner)) return true;
       }
       return false;
     }
@@ -8572,10 +8576,10 @@
           return { ok: false, reason: "no reachable route from a colony" };
         }
       } else if (tags.includes('outpost')) {
-        // An OUTPOST may be built up to ONE cell outside the owner's zone of
-        // control, but ONLY on a cell that holds a terrain bonus (which it then
-        // makes available to the Federation without a worker). It must not sit in
-        // another player's zone.
+        // An OUTPOST may be built up to `outpostMaxControlDistance` cells
+        // (config, default 3) outside the owner's zone of control, but ONLY on a
+        // cell that holds a terrain bonus (which it then makes available to the
+        // Federation without a worker). It must not sit in another player's zone.
         if (owner === 'human' && !cellIsVisible(x, y)) {
           return { ok: false, reason: "cell not yet explored" };
         }
@@ -8585,8 +8589,10 @@
         if (!bonusDefAt(x, y)) {
           return { ok: false, reason: "an outpost must be built on a resource deposit" };
         }
-        if (!cellWithinOneOfOwnerControl(x, y, owner)) {
-          return { ok: false, reason: "must be within one cell of your zone of control" };
+        const _outpostDist = (CONFIG && CONFIG.outpostMaxControlDistance != null)
+          ? CONFIG.outpostMaxControlDistance : 3;
+        if (!cellWithinNOfOwnerControl(x, y, owner, _outpostDist)) {
+          return { ok: false, reason: `must be within ${_outpostDist} cell${_outpostDist === 1 ? '' : 's'} of your zone of control` };
         }
       } else {
         const controlled = onSea

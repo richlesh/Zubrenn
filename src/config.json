@@ -64,9 +64,9 @@
       "icon": "Port of Taganrog.png",
       "color": { "h": 240, "s": 1, "l": 0.25 },
       "movement": [1000, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 2.5 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 2 }
+      "bonus": { "food": 0.5 },
+      "roadCostPerTile": { "energy": 10, "material": 150, "water": 0.3, "wealth": 10, "turns": 1 },
+      "monorailCostPerTile": { "energy": 5, "material": 50, "water": 0.1, "wealth": 18, "turns": 1 }
       // canals are disallowed
     },
     "grassland": {
@@ -75,9 +75,9 @@
       "icon": "Open Square Path Grass.png",
       "color": { "h": 120, "s": 1, "l": 0.6 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 10, "material": 5 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 1 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 0.5 },
+      "bonus": { "food": 2, "material": 1 },
+      "roadCostPerTile": { "energy": 10, "material": 150, "water": 0.3, "wealth": 10, "turns": 0.5 },
+      "monorailCostPerTile": { "energy": 5, "material": 50, "water": 0.1, "wealth": 10, "turns": 0.5 },
       "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 2 }
     },
     "hills": {
@@ -86,9 +86,9 @@
       "icon": "Just Add Bison.png",
       "color": { "h": 90, "s": 0.583, "l": 0.52 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 5, "material": 15 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 1.5 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 0.75 },
+      "bonus": { "food": 1, "material": 2 },
+      "roadCostPerTile": { "energy": 10, "material": 150, "water": 0.3, "wealth": 10, "turns": 0.75 },
+      "monorailCostPerTile": { "energy": 5, "material": 50, "water": 0.1, "wealth": 10, "turns": 0.75 },
       "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
     },
     "forest": {
@@ -97,9 +97,9 @@
       "icon": "Shrub Cover.png",
       "color": { "h": 120, "s": 1, "l": 0.3 },
       "movement": [4, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 5, "material": 15 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 1 },
+      "bonus": { "food": 0.5, "material": 5 },
+      "roadCostPerTile": { "energy": 10, "material": 150, "water": 0.3, "wealth": 10, "turns": 1 },
+      "monorailCostPerTile": { "energy": 5, "material": 50, "water": 0.1, "wealth": 10, "turns": 1 },
       "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
     },
     "jungle": {
@@ -108,10 +108,10 @@
       "icon": "Deep Forest.png",
       "color": { "h": 120, "s": 1, "l": 0.15 },
       "movement": [5, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 5, "material": 10, "water": 0.5 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 1 },
-      "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
+      "bonus": { "food": 0.5, "material": 3, "water": 0.2 },
+      "roadCostPerTile": { "energy": 10, "material": 150, "water": 0.3, "wealth": 10, "turns": 1 },
+      "monorailCostPerTile": { "energy": 5, "material": 50, "water": 0.1, "wealth": 10, "turns": 1 },
+      "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 4 }
     },
     "desert": {
       "code": 6,
@@ -119,9 +119,9 @@
       "icon": "Slush.png",
       "color": { "h": 60, "s": 0.6, "l": 0.469 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "material": 5 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 1 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 0.5 },
+      "bonus": { "material": 1 },
+      "roadCostPerTile": { "energy": 10, "material": 150, "water": 0.3, "wealth": 10, "turns": 0.5 },
+      "monorailCostPerTile": { "energy": 5, "material": 50, "water": 0.1, "wealth": 10, "turns": 0.5 },
       "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 2 }
     },
     "mountain-low": {
@@ -130,9 +130,9 @@
       "icon": "Dense Pine Forest.png",
       "color": { "h": 120, "s": 0.818, "l": 0.275 },
       "movement": [4, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "material": 30 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 2 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 1 }
+      "bonus": { "material": 2 },
+      "roadCostPerTile": { "energy": 10, "material": 150, "water": 0.3, "wealth": 10, "turns": 1.5 },
+      "monorailCostPerTile": { "energy": 5, "material": 50, "water": 0.1, "wealth": 10, "turns": 1.5 }
       // canals are disallowed
     },
     "mountain-high": {
@@ -141,9 +141,9 @@
       "icon": "Age of the Canyon.png",
       "color": { "h": 30, "s": 0.333, "l": 0.225 },
       "movement": [5, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "material": 40 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 3 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 1.5 }
+      "bonus": { "material": 3 },
+      "roadCostPerTile": { "energy": 10, "material": 150, "water": 0.3, "wealth": 10, "turns": 2 },
+      "monorailCostPerTile": { "energy": 5, "material": 50, "water": 0.1, "wealth": 10, "turns": 2 }
       // canals are disallowed
     },
     "frozen": {
@@ -152,9 +152,9 @@
       "icon": "Polar Zone.png",
       "color": { "h": 0, "s": 0, "l": 1 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "material": 3 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 1 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 0.5 }
+      "bonus": { "material": 0.5 },
+      "roadCostPerTile": { "energy": 10, "material": 150, "water": 0.3, "wealth": 10, "turns": 0.5 },
+      "monorailCostPerTile": { "energy": 5, "material": 50, "water": 0.1, "wealth": 10, "turns": 0.5 }
       // canals are disallowed
     },
     "plains": {
@@ -163,9 +163,9 @@
       "icon": "Sage Stone.png",
       "color": { "h": 120, "s": 1, "l": 0.8 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 5, "material": 5 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 1 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 0.5 },
+      "bonus": { "food": 1.5, "material": 1.5 },
+      "roadCostPerTile": { "energy": 10, "material": 150, "water": 0.3, "wealth": 10, "turns": 0.5 },
+      "monorailCostPerTile": { "energy": 5, "material": 50, "water": 0.1, "wealth": 10, "turns": 0.5 },
       "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 2 }
     },
     "wetlands": {
@@ -174,9 +174,9 @@
       "icon": "Dodders Marsh.png",
       "color": { "h": 120, "s": 1, "l": 0.4 },
       "movement": [3, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "material": 5, "water": 0.5, "happiness": 0.25 },
-      "roadCostPerTile": { "energy": 10, "material": 50, "water": 3, "wealth": 20, "turns": 1.5 },
-      "monorailCostPerTile": { "energy": 5, "material": 25, "water": 1.5, "wealth": 18, "turns": 0.75 },
+      "bonus": { "material": 0.5, "water": 0.5, "happiness": 0.25 },
+      "roadCostPerTile": { "energy": 10, "material": 150, "water": 0.3, "wealth": 10, "turns": 0.75 },
+      "monorailCostPerTile": { "energy": 5, "material": 50, "water": 0.1, "wealth": 10, "turns": 0.75 },
       "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
     }
   },
@@ -186,7 +186,7 @@
   // Water 1 unit = 1 G L, Wealth 1 = 1M credits where 1 credit = $10 USD.
   // Population 1 unit = 1000 people.
   // Happiness is a percent 0-100%
-  // Cells are 10km across flats.  One cell of land is 86.6 km².
+  // Hexagonal Cells are 10km across flats.  One cell of land is 86.6 km².
   // One road/monorail segment is 10 km. One river/canal segment is 5.77 km.
   // 1 turn = 1 Year
   // 1 metric ton = 1,000 × 2.20462 lb ≈ 2,204.62 lb
@@ -200,8 +200,8 @@
   // Optional "station": a facility CAPABILITY tag a colony must provide (via a
   // building's `other` tag within the colony's control radius) for the unit to
   // be stationed/deployed there — "airbase" (Air Field or Airport), "airport"
-  // (Airport only), "seaport" (Port). Omitted = may be stationed in any colony
-  // (infantry, tank).
+  // (Airport only), "seaport" (Port). "spaceport" (Launchpad or SpacePort)
+  // Omitted = may be stationed in any colony (infantry, tank).
   // "unitSize" is the population per unit: for "population" it is the divisor for
   // per-worker consumption; for a military unit type it is that unit's MAXIMUM
   // strength (the cap a recruiting building fills a slot of this type up to,
@@ -225,7 +225,7 @@
     // Consumption per year per worker:
     //    energy: 4.5 kWh * 1000 people / 1 G WHr = 4.5 energy units
     //    food:   1 t * 1000 people / 1 kt = 1 food unit
-    //    goods:  10 t * 1000 people / 1 kt = 10 goods units
+    //    goods:  5 t * 1000 people / 1 kt = 5 goods units
     //    materials: 14 t * 1000 people / 1 kt = 14 materials units (used to build infrastructure and by factories)
     //    water:  100 kL * 1000 people / 1 G L = 0.1 water units
     //    wealth: $80M / $10 / 1M = ¤8 credits units
@@ -233,69 +233,110 @@
     // population costPerYear is per "unitSize/worker" population
     "population": { "name": "Population", "unitSize": 1000, "speed": 5,
         "buildCost": { },
-        "costPerYear": { "food": 1, "goods": 10, "energy": 4.5, "water": 0.1, "wealth": 8 }
+        "costPerYear": { "food": 1, "goods": 5, "energy": 4.5, "water": 0.1, "wealth": 8 }
     },
-    "infantry": { "name": "Infantry", "unitSize": 1000, "speed": 8,
-        "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
-        "costPerYear": { "food": 1, "goods": 10, "energy": 6, "water": 0.1, "wealth": 10 },
+    // Batallion 1000 service men, 100 APC, cost is per battalion
+    // Stryker M1126 cost is $5M = 0.5 credits for 10 soldiers
+    // Weight is 19 t, 100 * 19 / 1000 = 1.9 goods
+    "infantry": { "name": "Infantry", "unitSize": 1000, "speed": 6,
+        "buildCost": { "food": 0, "goods": 1.9, "energy": 5, "water": 0, "wealth": 50 },
+        "costPerYear": { "food": 1, "goods": 5, "energy": 5, "water": 0.1, "wealth": 10 },
         "strength": { "attack":  1, "defense": 1, "hp": 5 },
         "prerequisite": {
           "population": 3
         }
       },
-    // Tank batallion 500 service men, 50 tanks
-    "tank": { "name": "Armored", "unitSize": 500, "speed": 4,
-        "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
-        "costPerYear": { "food": 2, "goods": 12, "energy": 2, "water": 0.1, "wealth": 2 },
-        "strength": { "attack":  3, "defense": 3, "hp": 15 },
+    // Tank batallion 500 service men, 50 tanks, cost is per battalion
+    // M1 Tank cost is $10M, batallion cost is 50 * 1 = 50 credits
+    // Weight is 65 t = 50 * 65 / 1000 = 3.25 goods
+    // Attack 15 / Defence 25 / HP 50
+    "tank": { "name": "Armored", "unitSize": 500, "speed": 6,
+        "buildCost": { "food": 0, "goods": 3.25, "energy": 8, "water": 0, "wealth": 50 },
+        "costPerYear": { "food": 0.5, "goods": 10, "energy": 10, "water": 0.1, "wealth": 20 },
+        "strength": { "attack":  15, "defense": 25, "hp": 50 },
         "prerequisite": {
-          "population": 8,
+          "population": 6,
           "bonusType": [ "iron" ]
         }
     },
-    // Fighter squadron 300 service men, 20 aircraft
+    // Fighter squadron 300 service men, 20 aircraft, cost is per squadron
+    // F-35 cost is $100M, squadron cost is 20 * 10 = 200 credits
+    // Weight is 30 t = 20 * 30 / 1000 = 0.6 goods
+    // Attack 30 / Defence 10 / HP 20
     "fighter": { "name": "Fighter", "unitSize": 300, "speed": 16, "station": "airbase",
-        "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
-        "costPerYear": { "food": 1, "goods": 20, "energy": 1, "water": 0.1, "wealth": 1 },
-        "strength": { "attack":  3, "defense": 3, "hp": 6 },
+        "buildCost": { "food": 0, "goods": 1, "energy": 2.5, "water": 0, "wealth": 200 },
+        "costPerYear": { "food": 0.5, "goods": 10, "energy": 25, "water": 0.1, "wealth": 25 },
+        "strength": { "attack": 35, "defense": 10, "hp": 20 },
         "range": 20,
         "prerequisite": {
-          "population": 12,
-          "bonusType": [ "titanium", "crystal" ]
+          "population": 10,
+          "bonusType": [ "aluminum", "crystal" ]
         }
     },
-    // Bomber squadron 300 service men, 10 bombers
+    // Bomber squadron 300 service men, 10 bombers, cost is per squadron
+    // B-2 bomber cost is $1.5B, squadron cost is 10 * 150 = 1500 credits
+    // Weight is 150 t = 10 * 150 / 1000 = 1.5 goods
+    // Attack 80 / Defence 3 / HP 15
     "bomber": { "name": "Bomber", "unitSize": 300, "speed": 12, "station": "airport",
-        "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
-        "costPerYear": { "food": 2, "goods": 15, "energy": 2, "water": 0.1, "wealth": 2 },
-        "strength": { "attack":  5, "defense": 1, "hp": 4 },
+        "buildCost": { "food": 0, "goods": 1.5, "energy": 4, "water": 0, "wealth": 1500 },
+        "costPerYear": { "food": 0.5, "goods": 10, "energy": 10, "water": 0.1, "wealth": 20 },
+        "strength": { "attack": 80, "defense": 3, "hp": 15 },
         "range": 40,
         "prerequisite": {
           "population": 12,
-          "bonusType": [ "titanium", "crystal" ]
+          "bonusType": [ "aluminum", "titanium", "crystal" ]
         }
     },
     // Single cruiser/destroyer 300 service men, 10 ballistic missiles
-    // Escort group: cruisers/destroyers, a submarine, and a supply ship.
+    // Escort group: 3 cruisers/destroyers, a submarine, and a supply ship.
+    // Cost is per escort group
+    // Arleigh Burke DDG-51 cost is $2.5B = 250 credits
+    // Weight is 9000 t = 3 * 9000 / 1000 = 27 goods
+    // Attack 20 / Defence 35 / HP 90
+    // Virginia-class SSN cost is $4B = 400 credits
+    // Weight is 10,000 t = 1 * 10000 / 1000 = 10 goods
+    // Attack 35 / Defence 22 / HP 80
+    // John Lewis-class T-AO fleet replenishment oiler cost is $1B = 100 credits
+    // Weight is 50,000 t = 1 * 50000 / 1000 = 50 goods
     "escort": { "name": "Escort", "unitSize": 1250, "speed": 4, "station": "seaport",
-        "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
-        "costPerYear": { "food": 1, "goods": 10, "energy": 1, "water": 0.1, "wealth": 1 },
-        "strength": { "attack":  4, "defense": 7, "hp": 20 },
+        "buildCost": { "food": 0, "goods": 87, "energy": 200, "water": 0, "wealth": 1250 },
+        "costPerYear": { "food": 1.25, "goods": 20, "energy": 10, "water": 0.2, "wealth": 20 },
+        "strength": { "attack": 95, "defense": 127, "hp": 260 },
         "prerequisite": {
           "population": 15,
           "bonusType": [ "iron", "crystal" ]
         }
     },
     // Single carrier 6000 service men, 100 aircraft = 5 squadrons
+    // Cost is per carrier
+    // Ford class carrier cost is $10B = 1000 credits
+    // Weight is 100,000 t = 1 * 100000 / 1000 = 100 goods (ship fully loaded)
+    // Attack 8 / Defence 60 / HP 200 (no air wing)
+    // Air wing is 100 * 10 = 1000 credits
+    // 1 air squadron Attack 30 / Defence 10 / HP 20
     "carrier": { "name": "Carrier", "unitSize": 6000, "speed": 6, "station": "seaport",
-        "buildCost": { "food": 0, "goods": 0, "energy": 0, "water": 0, "wealth": 0 },
-        "costPerYear": { "food": 2, "goods": 15, "energy": 2, "water": 0.1, "wealth": 2 },
-        "strength": { "attack":  12, "defense": 5, "hp": 25 },
+        "buildCost": { "food": 0, "goods": 100, "energy": 250, "water": 0, "wealth": 2000 },
+        "costPerYear": { "food": 6, "goods": 40, "energy": 20, "water": 0.6, "wealth": 40 },
+        "strength": { "attack": 158, "defense": 110, "hp": 300 },
         "range": 30,
         "prerequisite": {
           "population": 15,
-          "bonusType": [ "iron", "titanium", "crystal" ]
+          "bonusType": [ "iron", "aluminum", "crystal" ]
         }
+    },
+    // ICBM flight 300 service men, 10 missiles, cost is per flight
+    // ICBM cost is $7.5M, flight cost is 0.75 * 10 = 7.5 credits
+    // Weight is 35 t = 10 * 35 / 1000 = 0.35 goods
+    // Attack 3 / Defence 0 / HP 0.04 per missile
+    "icbm": { "name": "ICBM", "unitSize": 50, "speed": 1000, "station": "spaceport",
+      "buildCost": { "food": 0, "goods": 0.35, "energy": 1, "water": 0, "wealth": 7.5 },
+      "costPerYear": { "food": 0.5, "goods": 10, "energy": 10, "water": 0.1, "wealth": 25 },
+      "strength": { "attack":  30, "defense": 0, "hp": 1 },
+      "range": 1000,
+      "prerequisite": {
+        "population": 18,
+        "bonusType": [ "aluminum", "crystal", "uranium" ]
+      }
     }
   },
 
@@ -445,6 +486,24 @@
         "terrain": ["grassland","hills","forest","jungle","desert","plains"],
         "upgrades": "solar panel",
         "population": 3
+      }
+    },
+    // The Nuclear Reactor is an advanced power generation building. It requires
+    // access to the strategic material uranium.
+    "nuclear reactor": {
+      "code": 39,
+      "name": "Nuclear Reactor",
+      "icon": "buildings/128/nuclear_reactor.png",
+      "symbol": "buildings/icons/bolt_plus.png",
+      "buildCost": { "energy": 500, "material": 250, "wealth": 500, "water": 0.5, "turns": 5 },
+      "costPerYear": { "wealth": 50 },
+      "bonus": { "energy": 5000 },
+      "storage": { "energy": 5000 },
+      "prerequisite": {
+        "building": ["factory"],
+        "terrain": ["grassland","hills","forest","jungle","desert","plains","frozen"],
+        "bonusType": ["uranium"],
+        "population": 15
       }
     },
     "factory": {
@@ -812,6 +871,7 @@
         "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands"],
         "climate": ["tropical","temperate"],
         "network":  ["any"],
+        "other": [ "spaceport" ],
         "population": 8,
         "bonusType": ["aluminum", "titanium", "crystal"]
       }
@@ -831,6 +891,7 @@
         "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands"],
         "climate": ["tropical","temperate"],
         "network":  ["any"],
+        "other": [ "spaceport" ],
         "population": 12,
         "bonusType": ["aluminum", "titanium", "crystal"],
         "upgrades": "launchpad"
@@ -1234,6 +1295,15 @@
       "abundancy": 3,
       "bonusType": "titanium",
       "desc": "Rare mineral lattices that can be processed into exceptionally strong structural mesh."
+    },
+    "Uranium Deposit": {
+      "icon": "terrain_bonus/128/uranium_deposit.png",
+      "bonus": { "material": "1-5", "wealth": "1-5" },
+      "terrain": ["mountain-low","mountain-high"],
+      "other": [ ],
+      "abundancy": 3,
+      "bonusType": "uranium",
+      "desc": "Rare mineral that is used in nuclear reactors and nuclear weapons."
     },
 
     // Energy
@@ -2017,5 +2087,10 @@
   // Color of the previewed overland path when launching a new colony.
   "launchPathColor": { "h": 120, "s": 0.7, "l": 0.45 },
   // A colony's population may not be recruited below this floor by a Barracks.
-  "recruitMinColonyPopulation": 2
+  "recruitMinColonyPopulation": 2,
+  // Maximum hex-cell distance an Outpost may be built OUTSIDE a colony's zone
+  // of control (0 = must be inside the zone; 3 = up to three cells beyond the
+  // border). The cell must still hold a terrain bonus and not lie in another
+  // player's zone of control.
+  "outpostMaxControlDistance": 3
 }

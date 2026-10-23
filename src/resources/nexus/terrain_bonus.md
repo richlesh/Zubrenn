@@ -21,8 +21,9 @@ their gift.
 ### Strategic Resources
 
 Beyond their raw yields, certain deposits provide a **strategic resource** —
-a special material type (such as *iron*, *stone*, *crystal*, *titanium*, or
-*aluminum*) needed to build the most advanced units, buildings, and transport.
+a special material type (such as *iron*, *stone*, *crystal*, *titanium*,
+*aluminum*, or *uranium*) needed to build the most advanced units, buildings,
+and transport.
 A strategic resource counts as **available to your whole Federation** as long as
 **any one** colony is *working* a cell that provides it; it does not have to be
 in the colony doing the building. Several different deposits can provide the same
@@ -37,6 +38,7 @@ what each strategic resource unlocks and which deposits provide it:
 | **Aluminum** | Bauxite Seam | Monorails, Air Field, Airport, Missile Battery; Spaceport, Satellite Network; Nanofactory |
 | **Titanium** | Titanlace Deposit | Fighters, Bombers, Carriers; Spaceport, Satellite Network |
 | **Crystal** | Kinetite Crystals, Sunshard Flats, Quakecrystal Lodes, Celestite Spires | Monorails; Laser Battery, Electro-Magnetic Shield, Plasma Bubble; Fighters, Bombers, Escorts, Carriers; Spaceport, Satellite Network |
+| **Uranium** | Uranium Deposit | ICBMs |
 
 ### Food
 
@@ -211,6 +213,12 @@ Titanlace Deposits form only in the high mountains, where rare mineral lattices 
 <span class="float-right">![bauxite_seam](../terrain_bonus/bauxite_seam.png)</span>
 
 Bauxite Seams are broad beds of aluminium-rich ore exposed across the hills and the low and high mountains — aluminum is the most abundant metal in Zubrenn's crust, just as on Earth, so the seams are common. Smelted into light, corrosion-resistant metal, their output is the backbone of aircraft, launch vehicles, and orbital works. A worked seam is a rich source of material and, crucially, the Federation's supply of **aluminum** — the strategic resource that unlocks Air Fields, Airports, Missile Batteries, and (with titanium and crystal) the Spaceport and Satellite Network.
+
+#### Uranium Deposit
+
+<span class="float-right">![uranium_deposit](../terrain_bonus/uranium_deposit.png)</span>
+
+Uranium Deposits are rare seams of fissile ore buried in the low and high mountains, the hardest strategic resource on Zubrenn to secure. Mined and refined under careful guard, their output feeds reactor cores and the warheads of the most fearsome weapons. A worked deposit is a modest source of material and wealth, but its true value is the Federation's supply of **uranium** — the strategic resource that (with aluminum and crystal) unlocks the **ICBM**, the long-range nuclear missile.
 
 #### Ironcap Mushrooms
 

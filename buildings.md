@@ -27,6 +27,12 @@ Solar Panels are advanced energy collectors — a cheap, quick build with almost
 
 The Solar Farm is the Solar Panel's big sibling — a sprawling array that drinks in far more of the twin stars' light. It is built as an **upgrade of an existing Solar Panel**, raised in its place, and still counts as a Solar Panel for anything that depends on one. A larger, costlier structure than a single panel, it is a powerful source of energy and greatly expands the colony's energy storage. When a colony's industry outgrows what its panels can supply, upgrading a key panel to a Solar Farm keeps the lights on.
 
+### Nuclear Reactor
+
+<img align="right" width="128" src="src/resources/buildings/128/nuclear_reactor.png">
+
+The Nuclear Reactor is the pinnacle of power generation — a hardened fission plant that dwarfs any field of solar panels, pouring out a torrent of energy day or night, in any climate (it may even be raised on the frozen poles). It is a demanding, late‑game build: it requires a **Factory** in the colony, a sizable population, a heavy investment of energy, material, and wealth to construct, and — crucially — a worked source of the strategic resource **uranium** to fuel it. In return a worked Reactor is by far the largest single energy source in the game and adds a vast reserve of energy storage, enough to run the most power‑hungry industry, defenses, and launch facilities a colony can field. For an advanced, uranium‑rich colony, it is what finally lifts the ceiling on everything energy can buy.
+
 ### Farm
  
 <img align="right" width="128" src="src/resources/buildings/128/farm.png">
