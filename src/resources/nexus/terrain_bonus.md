@@ -38,7 +38,7 @@ what each strategic resource unlocks and which deposits provide it:
 | **Aluminum** | Bauxite Seam | Monorails, Air Field, Airport, Missile Battery; Spaceport, Satellite Network; Nanofactory |
 | **Titanium** | Titanlace Deposit | Fighters, Bombers, Carriers; Spaceport, Satellite Network |
 | **Crystal** | Kinetite Crystals, Sunshard Flats, Quakecrystal Lodes, Celestite Spires | Monorails; Laser Battery, Electro-Magnetic Shield, Plasma Bubble; Fighters, Bombers, Escorts, Carriers; Spaceport, Satellite Network |
-| **Uranium** | Uranium Deposit | ICBMs |
+| **Uranium** | Uranium Deposit | Nuclear Reactor, ICBMs |
 
 ### Food
 

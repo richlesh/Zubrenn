@@ -65,6 +65,7 @@ stationed.
 | Bomber | 300 | 5 | 1 | 4 | 4 | 40 | Colony with an **Airport** |
 | Escort | 1,250 | 4 | 7 | 20 | 2 | — | Colony with a **Port** |
 | Carrier | 6,000 | 12 | 5 | 25 | 3 | 30 | Colony with a **Port** |
+| ICBM | 50 | 8 | 0 | 1 | — | Global | Colony with a **Launchpad** or **Spaceport** |
 
 ![](../units/infantry.png)
 
@@ -131,6 +132,20 @@ They are individually
   within its **range of 30** of the nearest coast it can reach by sea from its
   home port — the one naval unit able to assault a shore. Being a fleet, it
   cannot occupy ground; pair it with a land force to take what it batters.
+
+![icbm](../units/icbm.png)
+
+- **ICBM** — an intercontinental ballistic missile: a single nuclear warhead
+  boosted into a suborbital arc and dropped anywhere on the planet. Its range is
+  effectively **global** — it can strike any colony regardless of distance or
+  terrain — and it travels so fast it reaches its target the moment it is
+  launched. It is a pure **one‑shot strike**: a tiny, fragile unit (one warhead,
+  almost no defense) that is expended in the attack, trading a cheap missile for
+  a heavy, long‑range blow against enemy defenses. Building one is a late‑game
+  undertaking — it must be based at a colony with a **Launchpad** or **Spaceport**
+  and requires a worked supply of the strategic metals **aluminum**, **crystal**,
+  and **uranium**. Like all air/space ordnance it cannot occupy ground; it breaks
+  a colony's defenses for a land force to follow.
 
 ### Upkeep
 
