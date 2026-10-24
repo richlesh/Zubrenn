@@ -238,9 +238,10 @@
     // Batallion 1000 service men, 100 APC, cost is per battalion
     // Stryker M1126 cost is $5M = 0.5 credits for 10 soldiers
     // Weight is 19 t, 100 * 19 / 1000 = 1.9 goods
+    // Fuel: ~2,000 gal diesel/APC/yr → 200,000 gal × 40.7 kWh ≈ 8.1 GWh
     "infantry": { "name": "Infantry", "unitSize": 1000, "speed": 6,
         "buildCost": { "food": 0, "goods": 1.9, "energy": 5, "water": 0, "wealth": 50 },
-        "costPerYear": { "food": 1, "goods": 5, "energy": 5, "water": 0.1, "wealth": 10 },
+        "costPerYear": { "food": 1, "goods": 5, "energy": 8, "water": 0.1, "wealth": 10 },
         "strength": { "attack":  1, "defense": 1, "hp": 5 },
         "prerequisite": {
           "population": 3
@@ -250,9 +251,10 @@
     // M1 Tank cost is $10M, batallion cost is 50 * 1 = 50 credits
     // Weight is 65 t = 50 * 65 / 1000 = 3.25 goods
     // Attack 15 / Defence 25 / HP 50
+    // Fuel: ~2,500 gal/tank/yr (turbine idles high) → 125,000 gal × 40.7 kWh ≈ 5.1 GWh
     "tank": { "name": "Armored", "unitSize": 500, "speed": 6,
         "buildCost": { "food": 0, "goods": 3.25, "energy": 8, "water": 0, "wealth": 50 },
-        "costPerYear": { "food": 0.5, "goods": 10, "energy": 10, "water": 0.1, "wealth": 20 },
+        "costPerYear": { "food": 0.5, "goods": 10, "energy": 5, "water": 0.1, "wealth": 20 },
         "strength": { "attack":  15, "defense": 25, "hp": 50 },
         "prerequisite": {
           "population": 6,
@@ -263,9 +265,10 @@
     // F-35 cost is $100M, squadron cost is 20 * 10 = 200 credits
     // Weight is 30 t = 20 * 30 / 1000 = 0.6 goods
     // Attack 30 / Defence 10 / HP 20
+    // Fuel: 1,350 gal/hr × 250 fh/yr × 20 = 6.75M gal × 39.6 kWh ≈ 267 GWh
     "fighter": { "name": "Fighter", "unitSize": 300, "speed": 16, "station": "airbase",
         "buildCost": { "food": 0, "goods": 1, "energy": 2.5, "water": 0, "wealth": 200 },
-        "costPerYear": { "food": 0.5, "goods": 10, "energy": 25, "water": 0.1, "wealth": 25 },
+        "costPerYear": { "food": 0.5, "goods": 15, "energy": 267, "water": 0.1, "wealth": 85 },
         "strength": { "attack": 35, "defense": 10, "hp": 20 },
         "range": 20,
         "prerequisite": {
@@ -277,9 +280,11 @@
     // B-2 bomber cost is $1.5B, squadron cost is 10 * 150 = 1500 credits
     // Weight is 150 t = 10 * 150 / 1000 = 1.5 goods
     // Attack 80 / Defence 3 / HP 15
+    // Fuel: ~1,100 gal/hr × 120 fh/yr × 10 = 1.32M gal × 39.6 kWh ≈ 52 GWh
+    // B-2 O&S is ~$30M/aircraft/yr → 10 bombers ≈ $300M ≈ 30 wealth units
     "bomber": { "name": "Bomber", "unitSize": 300, "speed": 12, "station": "airport",
         "buildCost": { "food": 0, "goods": 1.5, "energy": 4, "water": 0, "wealth": 1500 },
-        "costPerYear": { "food": 0.5, "goods": 10, "energy": 10, "water": 0.1, "wealth": 20 },
+        "costPerYear": { "food": 0.5, "goods": 20, "energy": 52, "water": 0.1, "wealth": 30 },
         "strength": { "attack": 80, "defense": 3, "hp": 15 },
         "range": 40,
         "prerequisite": {
@@ -298,9 +303,13 @@
     // Attack 35 / Defence 22 / HP 80
     // John Lewis-class T-AO fleet replenishment oiler cost is $1B = 100 credits
     // Weight is 50,000 t = 1 * 50000 / 1000 = 50 goods
+    // Fuel: DDG ~71,000 bbl/yr each (MIT) = 2.98M gal × 40.7 kWh ≈ 121 GWh × 3 = 364 GWh
+    //       SSN nuclear ≈ 0; oiler propulsion ~2.1M gal × 40.7 ≈ 85 GWh
+    //       → ~449 GWh total
+    // Wealth: 3 DDG O&S ~$80M each ≈ 24; SSN ~$50M ≈ 5; oiler ~$20M ≈ 2 → ~31
     "escort": { "name": "Escort", "unitSize": 1250, "speed": 4, "station": "seaport",
         "buildCost": { "food": 0, "goods": 87, "energy": 200, "water": 0, "wealth": 1250 },
-        "costPerYear": { "food": 1.25, "goods": 20, "energy": 10, "water": 0.2, "wealth": 20 },
+        "costPerYear": { "food": 1.25, "goods": 25, "energy": 449, "water": 0.2, "wealth": 31 },
         "strength": { "attack": 95, "defense": 127, "hp": 260 },
         "prerequisite": {
           "population": 15,
@@ -314,9 +323,15 @@
     // Attack 8 / Defence 60 / HP 200 (no air wing)
     // Air wing is 100 * 10 = 1000 credits
     // 1 air squadron Attack 30 / Defence 10 / HP 20
+    //   --- Carrier hull (nuclear propulsion = 0 fuel-energy) ---
+    //     goods ~15 | energy ~0 (reactor) | wealth ~70 ($700M/yr O&S Ford-class)
+    //   --- Air wing (100x F-35) ---
+    //     goods ~75 (5 sqns × 15) | energy ~1,337 (5 × 267) | wealth ~425 (5 × 85)
+    //   --- TOTAL ---
+    //     goods 90 | energy 1,337 | wealth 495
     "carrier": { "name": "Carrier", "unitSize": 6000, "speed": 6, "station": "seaport",
         "buildCost": { "food": 0, "goods": 100, "energy": 250, "water": 0, "wealth": 2000 },
-        "costPerYear": { "food": 6, "goods": 40, "energy": 20, "water": 0.6, "wealth": 40 },
+        "costPerYear": { "food": 6, "goods": 90, "energy": 1337, "water": 0.6, "wealth": 495 },
         "strength": { "attack": 158, "defense": 110, "hp": 300 },
         "range": 30,
         "prerequisite": {
@@ -325,13 +340,15 @@
         }
     },
     // ICBM flight 300 service men, 10 missiles, cost is per flight
-    // ICBM cost is $7.5M, flight cost is 0.75 * 10 = 7.5 credits
+    // Minuteman III cost is $7.5M, flight cost is 0.75 * 10 = 7.5 credits
     // Weight is 35 t = 10 * 35 / 1000 = 0.35 goods
     // Attack 3 / Defence 0 / HP 0.04 per missile
-    "icbm": { "name": "ICBM", "unitSize": 50, "speed": 1000, "station": "spaceport",
+    // Silo-based: no propulsion fuel in peacetime; only backup-generator/facility power.
+    // Energy ~2 GWh (support). Wealth: Minuteman sustainment ~$250M/yr per flight-equiv ≈ 25
+    "icbm": { "name": "ICBM", "unitSize": 300, "speed": 1000, "station": "spaceport",
       "buildCost": { "food": 0, "goods": 0.35, "energy": 1, "water": 0, "wealth": 7.5 },
-      "costPerYear": { "food": 0.5, "goods": 10, "energy": 10, "water": 0.1, "wealth": 25 },
-      "strength": { "attack":  30, "defense": 0, "hp": 1 },
+      "costPerYear": { "food": 0.5, "goods": 2, "energy": 2, "water": 0.1, "wealth": 25 },
+      "strength": { "attack": 500, "defense": 0.5, "hp": 1 },
       "range": 1000,
       "prerequisite": {
         "population": 18,
@@ -431,7 +448,7 @@
       "icon": "buildings/128/farm.png",
       "symbol": "buildings/icons/plant.png",
       "buildCost":   { "energy": 10, "material": 20, "wealth": 10, "water": 0.25, "turns": 1 },
-      "costPerYear": { "energy": 0.2, "material": 5, "wealth": 5, "water": 5 },
+      "costPerYear": { "energy": 3, "material": 2, "wealth": 5, "water": 5 },
       "bonus":       { "food": "3x", "wealth": 15 },
       "storage": { "food": 25 },
       "prerequisite": {
@@ -440,9 +457,25 @@
       }
     },
     "agridome": {
-      "code": 24,
+      "code": 41,
       "name": "Agridome",
       "icon": "buildings/128/agridome.png",
+      "symbol": "buildings/icons/plant.png",
+      "buildCost":   { "energy": 25, "material": 50, "wealth": 25, "water": 0.5, "turns": 3 },
+      "costPerYear": { "energy": 6, "goods": 4, "material": 8, "wealth": 12, "water": 12 },
+      "bonus":       { "food": "4.5x", "wealth": 22 },
+      "storage": { "food": 60 },
+      "prerequisite": {
+        "building": ["biodome","solar panel"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+        "upgrades": "farm",
+        "population": 3
+      }
+    },
+    "megafarm": {
+      "code": 24,
+      "name": "Megafarm",
+      "icon": "buildings/128/megafarm.png",
       "symbol": "buildings/icons/plant.png",
       "buildCost":   { "energy": 40, "goods": 20, "material": 80, "wealth": 40, "water": 1, "turns": 5 },
       "costPerYear": { "energy": 10, "goods": 10, "material": 20, "wealth": 20, "water": 20 },
@@ -451,8 +484,8 @@
       "prerequisite": {
         "building": ["biodome","solar farm"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
-        "upgrades": "farm",
-        "population": 5
+        "upgrades": "agridome",
+        "population": 7
       }
     },
     "solar panel": {
@@ -463,7 +496,7 @@
       "buildCost": { "energy": 50, "material": 20, "wealth": 28, "water": 0.25, "turns": 1 },
       "costPerYear": { "wealth": 1 },
       "bonus": { "energy": 200 },
-      "storage": { "energy": 200 },
+      "storage": { "energy": 50 },
       "prerequisite": {
         "building": ["biodome"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands","frozen"]
@@ -477,16 +510,16 @@
       "code": 22,
       "name": "Solar Farm",
       "icon": "buildings/128/solar_farm.png",
-      "symbol": "buildings/icons/bolt_plus.png",
+      "symbol": "buildings/icons/bolt.png",
       "buildCost": { "energy": 250, "material": 100, "wealth": 90, "water": 0.5, "turns": 3 },
       "costPerYear": { "wealth": 5 },
       "bonus": { "energy": 1000 },
-      "storage": { "energy": 2000 },
+      "storage": { "energy": 250 },
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains"],
         "upgrades": "solar panel",
-        "population": 3
+        "population": 5
       }
     },
     // The Nuclear Reactor is an advanced power generation building. It requires
@@ -495,11 +528,12 @@
       "code": 39,
       "name": "Nuclear Reactor",
       "icon": "buildings/128/nuclear_reactor.png",
-      "symbol": "buildings/icons/bolt_plus.png",
-      "buildCost": { "energy": 500, "material": 250, "wealth": 500, "water": 0.5, "turns": 5 },
-      "costPerYear": { "wealth": 50 },
+      "symbol": "buildings/icons/bolt.png",
+      "buildCost": { "energy": 500, "material": 250, "wealth": 700, "water": 0.5, "turns": 5 },
+      "costPerYear": { "wealth": 25 },
       "bonus": { "energy": 5000 },
-      "storage": { "energy": 5000 },
+      "storage": { "energy": 500 },
+      "federationStorage": { "energy": 500 },
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains","frozen"],
@@ -515,7 +549,7 @@
       "buildCost": { "energy": 200, "material": 75, "wealth": 150, "water": 3, "turns": 3 },
       "costPerYear": { "energy": 300, "material": 250, "wealth": 15, "water": 1 },
       "bonus": { "goods": 200, "wealth": 25, "happiness": -0.25 },
-      "storage": { "energy": 25, "goods": 500, "material": 500 },
+      "storage": { "energy": 25, "goods": 200, "material": 250 },
       "prerequisite": {
         "building": ["solar panel"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
@@ -529,7 +563,7 @@
       "buildCost": { "energy": 300, "material": 150, "wealth": 300, "water": 5, "turns": 6 },
       "costPerYear": { "energy": 600, "material": 600, "wealth": 30, "water": 2 },
       "bonus": { "goods": 500, "wealth": 50, "happiness": -0.5 },
-      "storage": { "energy": 50, "goods": 1000, "material": 1200 },
+      "storage": { "energy": 50, "goods": 500, "material": 600 },
       "prerequisite": {
         "building": ["solar farm"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
@@ -543,9 +577,9 @@
       "icon": "buildings/128/nanofactory.png",
       "symbol": "buildings/icons/goods.png",
       "buildCost": { "energy": 600, "material": 300, "wealth": 600, "water": 10, "turns": 10 },
-      "costPerYear": { "energy": 1000, "material": 1000, "wealth": 100, "water": 5 },
-      "bonus": { "goods": 900, "wealth": 200, "happiness": -0.75 },
-      "storage": { "energy": 1000, "goods": 1800, "material": 2000 },
+      "costPerYear": { "energy": 1000, "material": 1000, "wealth": 60, "water": 5 },
+      "bonus": { "goods": 1000, "wealth": 120, "happiness": -0.75 },
+      "storage": { "energy": 100, "goods": 1800, "material": 1000 },
       "prerequisite": {
         "building": ["solar farm", "bank"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
@@ -600,7 +634,7 @@
       "network": { "type": "air", "mustWork": false },
       "icon": "buildings/128/air_field.png",
       "symbol": "buildings/icons/airplane.png",
-      "buildCost": { "energy": 20, "material": 50, "goods": 15, "wealth": 50, "water": 3, "turns": 3 },
+      "buildCost": { "energy": 20, "material": 50, "goods": 15, "wealth": 30, "water": 3, "turns": 3 },
       "costPerYear": { "energy": 50, "goods": 10, "wealth": 10, "water": 0.2 },
       "bonus": { "wealth": 10, "happiness": 0.25 },
       "storage": { "energy": 20, "food": 50, "goods": 100 },
@@ -625,7 +659,7 @@
       "network": { "type": "air", "mustWork": true },
       "icon": "buildings/128/airport.png",
       "symbol": "buildings/icons/airplane.png",
-      "buildCost": { "energy": 60, "material": 120, "goods": 45, "wealth": 200, "water": 8, "turns": 5 },
+      "buildCost": { "energy": 60, "material": 120, "goods": 45, "wealth": 120, "water": 8, "turns": 5 },
       "costPerYear": { "energy": 100, "goods": 20, "wealth": 25, "water": 0.5 },
       "bonus": { "wealth": 25, "happiness": 0.5 },
       "storage": { "energy": 60, "food": 100, "goods": 250 },
@@ -639,6 +673,47 @@
         "bonusType": ["aluminum"]
       },
       "range": 30
+    },
+    "launchpad": {
+      "code": 38,
+      "name": "Launchpad",
+      "network": { "type": "space", "mustWork": false },
+      "icon": "buildings/128/launchpad.png",
+      "symbol": "buildings/icons/rocket.png",
+      "buildCost": { "energy": 5, "material": 10, "goods": 5, "wealth": 30, "water": 1, "turns": 1 },
+      "costPerYear": { "energy": 10, "material": 2, "goods": 2, "wealth": 5, "water": 0.2 },
+      "bonus": { "wealth": 5, "happiness": 0.25 },
+      "storage": { "energy": 10, "goods": 50 },
+      "prerequisite": {
+        "building": ["air field", "factory", "bank"],
+        "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands"],
+        "climate": ["tropical","temperate"],
+        "network":  ["any"],
+        "other": [ "spaceport" ],
+        "population": 8,
+        "bonusType": ["aluminum", "titanium", "crystal"]
+      }
+    },
+    "spaceport": {
+      "code": 14,
+      "name": "Spaceport",
+      "network": { "type": "space", "mustWork": true },
+      "icon": "buildings/128/spaceport.png",
+      "symbol": "buildings/icons/rocket.png",
+      "buildCost": { "energy": 30, "material": 50, "goods": 25, "wealth": 150, "water": 3, "turns": 3 },
+      "costPerYear": { "energy": 100, "material": 10, "goods": 20, "wealth": 20, "water": 0.5 },
+      "bonus": { "wealth": 15, "happiness": 0.25 },
+      "storage": { "energy": 20, "food": 50, "goods": 100 },
+      "prerequisite": {
+        "building": ["air field", "factory", "bank"],
+        "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands"],
+        "climate": ["tropical","temperate"],
+        "network":  ["any"],
+        "other": [ "spaceport" ],
+        "population": 12,
+        "bonusType": ["aluminum", "titanium", "crystal"],
+        "upgrades": "launchpad"
+      }
     },
     "barracks": {
       "code": 7,
@@ -682,7 +757,7 @@
       "icon": "buildings/128/joint_base.png",
       "symbol": "buildings/icons/shield.png",
       "buildCost": { "energy": 60, "material": 60, "wealth": 60, "water": 6, "turns": 8 },
-      "costPerYear": { "energy": 20, "goods": 10, "wealth": 10 },
+      "costPerYear": { "energy": 40, "goods": 20, "wealth": 20 },
       "bonus": { },
       "storage": { "energy": 100, "food": 20, "goods": 40 },
       "units": { "infantry": 5, "tank": 3, "fighter": 3, "bomber": 1 },
@@ -700,8 +775,8 @@
       "name": "Naval Shipyard",
       "icon": "buildings/128/naval_shipyard.png",
       "symbol": "buildings/icons/shield.png",
-      "buildCost": { "energy": 200, "goods": 200, "material": 200, "wealth": 200, "water": 10, "turns": 10 },
-      "costPerYear": { "energy": 100, "goods": 100, "material": 100, "wealth": 100 },
+      "buildCost": { "energy": 250, "goods": 250, "material": 250, "wealth": 250, "water": 12, "turns": 10 },
+      "costPerYear": { "energy": 125, "goods": 125, "material": 125, "wealth": 125 },
       "bonus": { },
       "storage": { "energy": 100, "goods": 100, "material": 100 },
       "units": { "escort": 2, "carrier": 1 },
@@ -775,7 +850,7 @@
       "symbol": "buildings/icons/coin.png",
       "buildCost": { "energy": 5, "material": 10, "wealth": 20, "water": 0.5, "turns": 1 },
       "costPerYear": { "energy": 5, "wealth": 2 },
-      "bonus": { "wealth": 50, "happiness": 0.25 },
+      "bonus": { "wealth": 20, "happiness": 0.25 },
       "storage": { "wealth": 200 },
       "federationStorage": { "wealth": 200 },
       "prerequisite": {
@@ -791,7 +866,7 @@
       "symbol": "buildings/icons/coin.png",
       "buildCost": { "energy": 25, "material": 50, "wealth": 100, "water": 1, "turns": 3 },
       "costPerYear": { "energy": 10, "wealth": 10 },
-      "bonus": { "wealth": 500, "happiness": 0.5 },
+      "bonus": { "wealth": 100, "happiness": 0.5 },
       "storage": { "wealth": 1000 },
       "federationStorage": { "wealth": 1000 },
       "prerequisite": {
@@ -802,22 +877,45 @@
         "upgrades": "bank"
       }
     },
-    // Compressed-Air Storage
+    // Compressed-Air Storage — entry-tier grid energy store (compressed air in
+    // underground caverns; real CAES is ~1-5 GWh/site).
     "caes": {
       "code": 11,
       "name": "CAES",
       "icon": "buildings/128/caes.png",
       "symbol": "buildings/icons/bolt_plus.png",
       "buildCost": { "energy": 15, "material": 25, "goods": 10, "wealth": 25, "water": 1, "turns": 3 },
-      "costPerYear": { "energy": 20, "goods": 1, "wealth": 2 },
+      "costPerYear": { "energy": 5, "goods": 1, "wealth": 2 },
       "bonus": { },
-      "storage": { "energy": 500 },
-      "federationStorage": { "energy": 500 },
+      "storage": { "energy": 150 },
+      "federationStorage": { "energy": 150 },
       "prerequisite": {
         "building": ["solar panel", "bank"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
         "network":  ["any"],
         "population": 3
+      }
+    },
+    // Pumped-Hydro Storage — UPGRADE of CAES: pumps water to an elevated or
+    // underground reservoir and recovers energy through turbines on release.
+    // Grid storage's largest real technology (~10-30 GWh/site, e.g. Bath County
+    // ~24 GWh); here the capstone energy store. Needs water to pump (river).
+    "pumped hydro": {
+      "code": 42,
+      "name": "Pumped Hydro",
+      "icon": "buildings/128/pumped_hydro.png",
+      "symbol": "buildings/icons/bolt_plus.png",
+      "buildCost": { "energy": 75, "material": 125, "goods": 50, "wealth": 125, "water": 3, "turns": 6 },
+      "costPerYear": { "energy": 25, "goods": 5, "wealth": 10 },
+      "bonus": { },
+      "storage": { "energy": 500 },
+      "federationStorage": { "energy": 500 },
+      "prerequisite": {
+        "building": ["solar farm", "global bank"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains"],
+        "other": [ "river" ],
+        "network":  ["any"],
+        "population": 10
       }
     },
     // Water Treatment Plant
@@ -845,8 +943,8 @@
       "name": "Desalination",
       "icon": "buildings/128/desalination.png",
       "symbol": "buildings/icons/waterdrop.png",
-      "buildCost":   { "energy": 25, "material": 30, "wealth": 40, "water": 2, "turns": 5 },
-      "costPerYear": { "energy": 50, "material": 30, "goods": 4, "wealth": 5 },
+      "buildCost":   { "energy": 25, "material": 30, "goods": 10, "wealth": 40, "water": 2, "turns": 5 },
+      "costPerYear": { "energy": 35, "material": 30, "goods": 4, "wealth": 5 },
       "bonus":       { "water": 10 },
       "storage":     { "water": 100 },
       "federationStorage": { "water":  100 },
@@ -858,7 +956,7 @@
         "population": 5
       }
     },
-    // Compressed-Air Storage
+    // Reservoir — large-scale strategic water storage (dam-fed, river-adjacent)
     "reservoir": {
       "code": 36,
       "name": "Reservoir",
@@ -875,46 +973,6 @@
         "network":  ["any"],
         "other": [ "river" ],
         "population": 20
-      }
-    },
-    "launchpad": {
-      "code": 38,
-      "name": "Launchpad",
-      "network": { "type": "space", "mustWork": false },
-      "icon": "buildings/128/launchpad.png",
-      "symbol": "buildings/icons/rocket.png",
-      "buildCost": { "energy": 5, "material": 10, "goods": 5, "wealth": 15, "water": 1, "turns": 1 },
-      "costPerYear": { "energy": 10, "material": 2, "goods": 2, "wealth": 5, "water": 0.2 },
-      "bonus": { "wealth": 5, "happiness": 0.25 },
-      "prerequisite": {
-        "building": ["air field", "factory", "bank"],
-        "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands"],
-        "climate": ["tropical","temperate"],
-        "network":  ["any"],
-        "other": [ "spaceport" ],
-        "population": 8,
-        "bonusType": ["aluminum", "titanium", "crystal"]
-      }
-    },
-    "spaceport": {
-      "code": 14,
-      "name": "Spaceport",
-      "network": { "type": "space", "mustWork": true },
-      "icon": "buildings/128/spaceport.png",
-      "symbol": "buildings/icons/rocket.png",
-      "buildCost": { "energy": 30, "material": 50, "goods": 25, "wealth": 75, "water": 3, "turns": 3 },
-      "costPerYear": { "energy": 100, "material": 10, "goods": 20, "wealth": 20, "water": 0.5 },
-      "bonus": { "wealth": 15, "happiness": 0.25 },
-      "storage": { "energy": 20, "food": 50, "goods": 100 },
-      "prerequisite": {
-        "building": ["air field", "factory", "bank"],
-        "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands"],
-        "climate": ["tropical","temperate"],
-        "network":  ["any"],
-        "other": [ "spaceport" ],
-        "population": 12,
-        "bonusType": ["aluminum", "titanium", "crystal"],
-        "upgrades": "launchpad"
       }
     },
     "drone base": {
@@ -937,7 +995,7 @@
       "name": "Satellite Network",
       "icon": "buildings/128/satellite_network.png",
       "symbol": "buildings/icons/drone.png",
-      "buildCost": { "energy": 500, "goods": 1000, "wealth": 500, "water": 5, "turns": 10 },
+      "buildCost": { "energy": 500, "goods": 750, "wealth": 500, "water": 5, "turns": 10 },
       "costPerYear": { "energy": 50, "goods": 50, "wealth": 50 },
       "bonus": { },
       "storage": { },
@@ -956,14 +1014,15 @@
       "icon": "buildings/128/depot.png",
       "symbol": "buildings/icons/crystal_plus.png",
       "buildCost": { "energy": 10, "material": 25, "wealth": 8, "water": 1, "turns": 2 },
-      "costPerYear": { "energy": 5, "wealth": 5 },
+      "costPerYear": { "energy": 5, "wealth": 3 },
       "bonus": { },
       "storage": { "material": 250 },
       "federationStorage": { "material": 250 },
       "prerequisite": {
         "building": ["mine"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
-        "network":  ["any"]
+        "network":  ["any"],
+        "population": 3
       }
     },
     // Mine
@@ -972,8 +1031,8 @@
       "name": "Mine",
       "icon": "buildings/128/mine.png",
       "symbol": "buildings/icons/crystal.png",
-      "buildCost":   { "energy": 5, "material": 5, "wealth": 10, "water": 0.5, "turns": 3 },
-      "costPerYear": { "energy": 50, "goods": 5, "wealth": 5 },
+      "buildCost":   { "energy": 5, "material": 5, "wealth": 15, "water": 0.5, "turns": 3 },
+      "costPerYear": { "energy": 50, "goods": 5, "wealth": 5, "water": 0.2 },
       "bonus":       { "material": "15x", "wealth": "5x", "happiness": -0.25 },
       "storage":     { "material": 250 },
       "federationStorage": { "material": 250 },
@@ -990,7 +1049,7 @@
       "icon": "buildings/128/megamine.png",
       "symbol": "buildings/icons/crystal.png",
       "buildCost":   { "energy": 25, "material": 25, "wealth": 50, "water": 1.5, "turns": 5 },
-      "costPerYear": { "energy": 75, "goods": 25, "wealth": 25 },
+      "costPerYear": { "energy": 100, "goods": 25, "wealth": 25, "water": 0.5 },
       "bonus":       { "material": "25x", "wealth": "10x", "happiness": -0.5 },
       "storage":     { "material": 1500 },
       "federationStorage": { "material": 1500 },
@@ -1039,8 +1098,7 @@
       "symbol": "buildings/icons/shield.png",
       "buildCost":   { "energy": 10, "material": 20, "wealth": 10, "water": 0.25, "turns": 3 },
       "costPerYear": { "energy": 0.2, "wealth": 5 },
-      "bonus":       { "defense": "1" },
-      "hp": 10,
+      "strength": { "attack": 1, "defense": 1, "hp": 10 },
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["land"],
@@ -1054,9 +1112,8 @@
       "icon": "buildings/128/laser_battery.png",
       "symbol": "buildings/icons/shield.png",
       "buildCost":   { "energy": 10, "material": 20, "wealth": 20, "water": 0.25, "turns": 3 },
-      "costPerYear": { "energy": 0.4, "wealth": 5 },
-      "bonus":       { "defense": "2" },
-      "hp": 18,
+      "costPerYear": { "energy": 5, "wealth": 5 },
+      "strength": { "attack": 2, "defense": 2, "hp": 18 },
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["land"],
@@ -1072,8 +1129,7 @@
       "symbol": "buildings/icons/shield.png",
       "buildCost":   { "energy": 20, "material": 40, "wealth": 30, "water": 0.5, "turns": 5 },
       "costPerYear": { "energy": 10, "wealth": 10 },
-      "bonus":       { "defense": "4" },
-      "hp": 35,
+      "strength": { "attack": 4, "defense": 4, "hp": 35 },
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["land"],
@@ -1088,8 +1144,7 @@
       "symbol": "buildings/icons/shield.png",
       "buildCost":   { "energy": 20, "material": 100, "wealth": 100, "water": 1, "turns": 7 },
       "costPerYear": { "energy": 50, "wealth": 50 },
-      "bonus":       { "defense": "8" },
-      "hp": 80,
+      "strength": { "attack": 8, "defense": 8, "hp": 80 },
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["land"],

@@ -1252,19 +1252,25 @@
       const full = unitFullStrength(u) || 1;
       return unitRatedHp(u.type) * (Math.max(0, Number(u.strength) || 0) / full);
     }
-    // A defensive building's HP (health pool) from its top-level config `hp`.
-    // Falls back to its bonus.defense if `hp` is unset (legacy).
+    // A defensive building's HP (health pool) from its config `strength.hp`.
+    // Defensive buildings use the same `strength` combat model as units
+    // (attack/defense/hp); there is no separate top-level `hp` or `bonus.defense`.
     function buildingHp(type) {
-      const bt = buildingType(type) || {};
-      const h = Number(bt.hp);
-      if (Number.isFinite(h) && h > 0) return h;
-      return bonusFlat((bt.bonus || {}).defense);
+      const st = (buildingType(type) || {}).strength || {};
+      const h = Number(st.hp);
+      return Number.isFinite(h) && h > 0 ? h : 0;
     }
     // The flat defense a defensive building (e.g. Missile Battery, Shield)
-    // contributes to its colony — its config bonus.defense (0 if none).
+    // contributes to its colony — its config `strength.defense` (0 if none).
     function buildingDefense(type) {
-      const b = (buildingType(type) || {}).bonus || {};
-      return bonusFlat(b.defense);
+      const st = (buildingType(type) || {}).strength || {};
+      return Number(st.defense) || 0;
+    }
+    // The attack a defensive building deals back in combat — its config
+    // `strength.attack` (0 if none).
+    function buildingAttack(type) {
+      const st = (buildingType(type) || {}).strength || {};
+      return Number(st.attack) || 0;
     }
     // Units currently STATIONED at (not in transit through) a colony's cell,
     // owned by that colony's owner.
@@ -14264,13 +14270,13 @@
       // mitigation). Per hit, damage = max(0, attacker.atk x random - defender.def),
       // subtracted from the defender's HP; a combatant is destroyed at HP <= 0.
       // UNIT hp/atk/def all scale by manpower fraction (effective values); a
-      // DEFENSE building's hp = its config `hp`, def = bonus.defense, and it deals
-      // no damage back. hp0 records the starting pool so surviving units map their
+      // DEFENSE building uses its config `strength` (hp/attack/defense) directly
+      // and can deal damage back via its attack. hp0 records the starting pool so surviving units map their
       // remaining HP fraction back to manpower. HP/def are full each battle (no
       // cross-turn tracking).
       const atkC = attackers.map((u) => { const h = unitEffHp(u) || 0.0001; return { unit: u, hp: h, hp0: h, atk: unitEffAttack(u), def: unitEffDefense(u), building: false }; });
       const defUnitC = defenderUnits.map((u) => { const h = unitEffHp(u) || 0.0001; return { unit: u, hp: h, hp0: h, atk: unitEffAttack(u), def: unitEffDefense(u), building: false }; });
-      const defBldgC = defenseBuildings.map((b) => { const h = buildingHp(b.type) || 0.0001; return { building: b, hp: h, hp0: h, atk: 0, def: buildingDefense(b.type) }; });
+      const defBldgC = defenseBuildings.map((b) => { const h = buildingHp(b.type) || 0.0001; return { building: b, hp: h, hp0: h, atk: buildingAttack(b.type), def: buildingDefense(b.type) }; });
       const defenders = defUnitC.concat(defBldgC);
       const rnd = () => 1 + (Math.random() * 2 - 1) * cfg.randomness; // [1-r, 1+r]
       const report = [];
@@ -14313,9 +14319,21 @@
       // Single-use attackers (prerequisite.other "useOnce", e.g. the ICBM) are
       // EXPENDED the moment they attack: force them to zero strength so they are
       // removed from the game, win or lose. They never settle or retreat.
+      // The weapon is consumed, but its CREW is returned to the unit's HOME
+      // colony population (next economy pass clamps/overflows as usual). Attrition
+      // never applies to useOnce units (an ICBM takes no return-fire before it is
+      // expended), so the FULL unit strength (its unitSize) is always returned. If
+      // the home colony no longer exists, the crew is simply lost.
       let atkExpended = 0;
       for (const c of atkC) {
         if (c.unit && unitUsesOnce(c.unit.type) && (Number(c.unit.strength) || 0) > 0) {
+          const returning = Math.max(0, unitFullStrength(c.unit) || 0);
+          const home = unitHomeColony(c.unit);
+          if (home && returning > 0) {
+            const owned = ensureOwned(home);
+            owned.population = (Number(owned.population) || 0) + returning;
+            home.population = owned.population;            // keep legacy mirror in sync
+          }
           c.unit.strength = 0;
           atkExpended++;
         }

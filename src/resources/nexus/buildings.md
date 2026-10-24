@@ -54,6 +54,12 @@ The Farm is the mainstay food‑production facility for your colony. It can be b
 
 The Agridome is the Farm's industrial successor — a sealed, climate‑controlled growing complex that squeezes far more food from the same ground. It is built as an **upgrade of an existing Farm**, raised in its place, and still counts as a Farm for anything that depends on one. It requires a **Biodome** and a **Solar Farm** in the colony and a colony population of at least 5,000. Its yield *scales with the richness of its cell*, multiplying that tile's food several times over, and it brings a healthy stream of wealth besides. A major build with a heavy, broad upkeep — power, goods, material, wealth, and a large thirst for water — it is how a maturing colony turns a productive farm tile into a breadbasket.
 
+### Megafarm
+
+<span class="float-right">![megafarm](../buildings/megafarm.png)</span>
+
+The Megafarm is the Agridome scaled up to industrial agriculture — a vast, fully automated growing complex that wrings still more food from the land. It is built as an **upgrade of an existing Agridome**, raised in its place, and still counts as a Farm (and Agridome) for anything that depends on one. It requires a **Biodome** and a **Solar Farm** in the colony and a colony population of at least 7,000. Like the Agridome, its yield *scales with the richness of its cell*, multiplying that tile's food many times over, and it brings a strong stream of wealth besides, with added food storage to match. It is a costly build with a heavy, broad upkeep — power, goods, material, wealth, and a large thirst for water — and is how a mature colony turns its best farmland into the heart of its food supply.
+
 ### Aquafarm
 
 <span class="float-right">![aquafarm](../buildings/aquafarm.png)</span>
@@ -170,6 +176,12 @@ The Global Bank is the Bank elevated to a world financial center — a central c
 <span class="float-right">![caes](../buildings/caes.png)</span>
 
 The Compressed‑Air Energy Storage (CAES) is an advanced energy‑storage facility. It requires a **Bank** before it can be built. A modest build with light upkeep, it greatly expands how much energy a colony can bank — letting energy‑hungry industry ride out shortfalls.
+
+### Pumped Hydro
+
+<span class="float-right">![pumped_hydro](../buildings/pumped_hydro.png)</span>
+
+Pumped Hydro is the largest energy store a colony can field — a pair of reservoirs that bank power by pumping water uphill and release it on demand by letting it fall back through turbines. It must be built on habitable land **beside a river or canal** (its upper and lower basins) and is a late‑game undertaking: it requires a **Solar Farm** and a **Global Bank** in the colony and a transport link to another of your colonies, with a colony population of at least 10,000. A major, costly build with a steady upkeep, it produces no energy of its own — its value is storage: it **massively** expands both the colony's and the Federation's energy reserves, the strategic buffer that lets a power‑hungry civilization ride out shortfalls and store a renewable surplus.
 
 ### Water Treatment Plant
 
