@@ -49,11 +49,12 @@ with alien AI opponents for resources.
   `federationStorage`). The Federation **treasury** is its owned Wealth. The
   earliest-founded surviving colony is the **capital**; only colonies network-
   connected to the capital can draw from (or overflow into) the Federation pool.
-- **Happiness & growth** — each colony accumulates **happiness** (owned) from its
-  food balance, buildings, and terrain, clamped to ±its happiness storage.
-  Population grows each turn by a percentage = the sum of `bonus.population`
-  values on its worked cells/buildings plus a happiness bonus (positive happiness
-  grows the population, negative shrinks it). Federation happiness is the
+- **Happiness & growth** — each colony accumulates **happiness** (owned), a
+  morale level that reflects how well the colony is provisioned and developed,
+  clamped to ±its happiness storage. Each turn the population grows or shrinks by
+  a percentage drawn from the growth bonuses of its worked cells and buildings
+  together with its current happiness: a well-run, happy colony grows, while a
+  struggling, unhappy one shrinks. Federation happiness is the
   population-weighted average of its colonies.
 - **Prerequisites** — some buildings require others first (e.g. a Factory needs
   a Solar Panel in the colony).
@@ -233,7 +234,7 @@ without code changes:
 - `zoneOfControlSize` — population thresholds that expand a colony's control radius.
 - Economy constants: `unitCosts.population` (per-1,000-colonist consumption of
   each resource, with `unitSize`), `happinessGrowthPerUnit` and
-  `maxHappinessGrowthBonus` (how food/terrain/building happiness converts to a
+  `maxHappinessGrowthBonus` (how a colony's happiness converts to a
   population-growth bonus, capped), `riverAdjacentBonus` and `seaAdjacentBonus`
   (per-resource yields for cells beside a river/canal or the sea), and
   `federationTaxRate` (per-colony happiness penalty funding the Federation).
@@ -255,14 +256,16 @@ without code changes:
   including zeros). Set to `false` to disable.
 
 **Population growth:** population is one of the seven resources. Each turn a
-colony's growth **percentage** is the sum of the `bonus.population` values on its
-worked cells, terrain bonuses, and worked buildings, **plus** a happiness term
-(`happinessRate × happinessGrowthPerUnit`, capped at `maxHappinessGrowthBonus`,
-expressed in percentage points and added when happiness is positive, subtracted
-when negative). The new population is `population × percentage ÷ 100`. Happiness
-itself (owned, clamped to ±the colony's happiness storage) accumulates from the
-food balance (`netFood` = food produced − colonists' consumption), building and
-terrain happiness, and the Federation tax penalty.
+colony's growth **percentage** combines the growth bonuses contributed by its
+worked cells, terrain bonuses, and worked buildings with a term driven by the
+colony's current **happiness** (positive happiness adds to growth, negative
+happiness subtracts), and the new population is the current population scaled by
+that percentage. Happiness itself (owned, clamped to ±the colony's happiness
+storage) accumulates from how well the colony is provisioned — chiefly its food
+balance and the other staple resources — together with building and terrain
+morale effects and the Federation tax. The exact factors, weights, and caps are
+config-driven and may change between versions; the current formula is captured
+in the generated summary below.
 
 A plain-language summary of these rules is generated in
 [`src/resources/system_prompt.md`](src/resources/system_prompt.md), which is

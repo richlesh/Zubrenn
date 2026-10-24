@@ -342,7 +342,11 @@ body.dark #viewloc-cancel { background: #3a3a3c; color: #e0e0e0; }
 
 /* Reusable notification toast/dialog. */
 #notify-overlay {
-  position: fixed; z-index: 10005; top: 24px; left: 0; right: 0;
+  /* Highest layer: user notices must stay readable ABOVE everything, including
+     the AI-turn glass pane (#aiturn-overlay, z 10007) and all modal dialogs.
+     The overlay itself is pointer-events:none (only the small dialog pill is
+     clickable), so sitting on top never blocks interaction with what's below. */
+  position: fixed; z-index: 10070; top: 24px; left: 0; right: 0;
   display: flex; justify-content: center;
   pointer-events: none; /* only the dialog itself is clickable */
 }

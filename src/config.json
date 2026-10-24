@@ -86,7 +86,7 @@
       "icon": "Just Add Bison.png",
       "color": { "h": 90, "s": 0.583, "l": 0.52 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 1, "material": 2 },
+      "bonus": { "food": 1, "material": 3 },
       "roadCostPerTile": { "energy": 10, "material": 150, "water": 0.3, "wealth": 10, "turns": 0.75 },
       "monorailCostPerTile": { "energy": 5, "material": 50, "water": 0.1, "wealth": 10, "turns": 0.75 },
       "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
@@ -97,7 +97,7 @@
       "icon": "Shrub Cover.png",
       "color": { "h": 120, "s": 1, "l": 0.3 },
       "movement": [4, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "food": 0.5, "material": 5 },
+      "bonus": { "food": 0.5, "material": 4 },
       "roadCostPerTile": { "energy": 10, "material": 150, "water": 0.3, "wealth": 10, "turns": 1 },
       "monorailCostPerTile": { "energy": 5, "material": 50, "water": 0.1, "wealth": 10, "turns": 1 },
       "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 3 }
@@ -119,7 +119,7 @@
       "icon": "Slush.png",
       "color": { "h": 60, "s": 0.6, "l": 0.469 },
       "movement": [2, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "material": 1 },
+      "bonus": { "material": 1, "wealth": 1  },
       "roadCostPerTile": { "energy": 10, "material": 150, "water": 0.3, "wealth": 10, "turns": 0.5 },
       "monorailCostPerTile": { "energy": 5, "material": 50, "water": 0.1, "wealth": 10, "turns": 0.5 },
       "canalCostPerEdge": { "energy": 10, "material": 10, "water": 1, "wealth": 30, "turns": 2 }
@@ -130,7 +130,7 @@
       "icon": "Dense Pine Forest.png",
       "color": { "h": 120, "s": 0.818, "l": 0.275 },
       "movement": [4, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "material": 2 },
+      "bonus": { "material": 4, "wealth": 2 },
       "roadCostPerTile": { "energy": 10, "material": 150, "water": 0.3, "wealth": 10, "turns": 1.5 },
       "monorailCostPerTile": { "energy": 5, "material": 50, "water": 0.1, "wealth": 10, "turns": 1.5 }
       // canals are disallowed
@@ -141,7 +141,7 @@
       "icon": "Age of the Canyon.png",
       "color": { "h": 30, "s": 0.333, "l": 0.225 },
       "movement": [5, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "material": 3 },
+      "bonus": { "material": 5, "wealth": 3  },
       "roadCostPerTile": { "energy": 10, "material": 150, "water": 0.3, "wealth": 10, "turns": 2 },
       "monorailCostPerTile": { "energy": 5, "material": 50, "water": 0.1, "wealth": 10, "turns": 2 }
       // canals are disallowed
@@ -418,9 +418,9 @@
       "startPopulation": 1,
       "buildCost": { "material": 200, "wealth": 100, "water": 2, "turns": 3 },
       "costPerYear": { },
-      "bonus": { "energy": 50, "food": 5, "goods": 30, "material": 30, "water": 5, "wealth": 50, "happiness": 0.5, "population": 1 },
-      "storage": { "energy": 75, "food": 10, "goods": 250, "material": 250, "water": 5, "wealth": 250, "happiness": 25, "population": 10 },
-      "federationStorage": { "energy": 200, "food": 20, "goods": 200, "material": 200, "water":  5, "wealth": 200 },
+      "bonus": { "energy": 10, "food": 2, "goods": 10, "material": 10, "water": 1, "wealth": 20, "happiness": 0.5, "population": 1 },
+      "storage": { "energy": 100, "food": 10, "goods": 25, "material": 25, "water": 2, "wealth": 250, "happiness": 25, "population": 10 },
+      "federationStorage": { "energy": 50, "food": 10, "goods": 25, "material": 25, "water":  2, "wealth": 250 },
       "prerequisite": {
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","frozen","plains","wetlands"],
         "other": [ "intelligence" ]
@@ -450,7 +450,7 @@
       "buildCost":   { "energy": 10, "material": 20, "wealth": 10, "water": 0.25, "turns": 1 },
       "costPerYear": { "energy": 3, "material": 2, "wealth": 5, "water": 5 },
       "bonus":       { "food": "3x", "wealth": 15 },
-      "storage": { "food": 25 },
+      "storage": { "energy": 5, "food": 20, "water": 2 },
       "prerequisite": {
         "building": ["biodome","solar panel"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
@@ -464,7 +464,7 @@
       "buildCost":   { "energy": 25, "material": 50, "wealth": 25, "water": 0.5, "turns": 3 },
       "costPerYear": { "energy": 6, "goods": 4, "material": 8, "wealth": 12, "water": 12 },
       "bonus":       { "food": "4.5x", "wealth": 22 },
-      "storage": { "food": 60 },
+      "storage": { "energy": 10, "food": 40, "water": 4 },
       "prerequisite": {
         "building": ["biodome","solar panel"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
@@ -480,7 +480,7 @@
       "buildCost":   { "energy": 40, "goods": 20, "material": 80, "wealth": 40, "water": 1, "turns": 5 },
       "costPerYear": { "energy": 10, "goods": 10, "material": 20, "wealth": 20, "water": 20 },
       "bonus":       { "food": "6x", "wealth": 30 },
-      "storage": { "food": 100 },
+      "storage": { "energy": 20, "food": 80, "water": 6 },
       "prerequisite": {
         "building": ["biodome","solar farm"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
@@ -497,6 +497,7 @@
       "costPerYear": { "wealth": 1 },
       "bonus": { "energy": 200 },
       "storage": { "energy": 50 },
+      "federationStorage": { "energy": 50 },
       "prerequisite": {
         "building": ["biodome"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands","frozen"]
@@ -515,11 +516,34 @@
       "costPerYear": { "wealth": 5 },
       "bonus": { "energy": 1000 },
       "storage": { "energy": 250 },
+      "federationStorage": { "energy": 250 },
       "prerequisite": {
         "building": ["factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains"],
         "upgrades": "solar panel",
         "population": 5
+      }
+    },
+    // The Wind Farm is a standalone utility-scale power source (not an upgrade):
+    // a field of turbines. Comparable annual output to a Solar Farm but with a
+    // distinct cost profile (steel-heavy turbines, higher moving-part O&M) and a
+    // preference for open, exposed terrain (hills, plains, grassland, coast)
+    // rather than the Solar Farm's sun-favoring set. 2026 US onshore wind basis:
+    // ~$1.5M/MW capex, ~40% capacity factor (~3.5 GWh/MW-yr), ~$40k/MW-yr O&M.
+    "wind farm": {
+      "code": 43,
+      "name": "Wind Farm",
+      "icon": "buildings/128/wind_farm.png",
+      "sea_icon": "buildings/128/wind_farm_sea.png",
+      "symbol": "buildings/icons/bolt.png",
+      "buildCost": { "energy": 150, "material": 120, "wealth": 100, "water": 0.25, "turns": 3 },
+      "costPerYear": { "wealth": 6 },
+      "bonus": { "energy": 1000 },
+      "prerequisite": {
+        "building": ["factory"],
+        "terrain": ["sea","grassland","hills","plains","mountain-low"],
+        "population": 5,
+        "other": [ "shallow" ]
       }
     },
     // The Nuclear Reactor is an advanced power generation building. It requires
@@ -541,6 +565,65 @@
         "population": 15
       }
     },
+    // Mine
+    "mine": {
+      "code": 17,
+      "name": "Mine",
+      "icon": "buildings/128/mine.png",
+      "symbol": "buildings/icons/crystal.png",
+      "buildCost":   { "energy": 5, "material": 5, "wealth": 15, "water": 0.5, "turns": 3 },
+      "costPerYear": { "energy": 50, "goods": 5, "wealth": 5, "water": 0.2 },
+      "bonus":       { "material": "30x", "wealth": "5x", "happiness": -0.25 },
+      "storage":     { "energy": 50, "material": 100 },
+      "federationStorage": { "material": 100 },
+      "prerequisite": {
+        "building": ["solar panel"],
+        "terrain":  ["grassland", "hills", "forest", "jungle", "plains", "mountain-low", "mountain-high"],
+        "other":    []
+      }
+    },
+    // Solar Salt Works — a desert-only extraction works that evaporates mineral
+    // brine in solar ponds to recover salts, potash, and lithium. Low-impact
+    // (passive solar evaporation) vs the rock Mine, hence a small happiness
+    // penalty; high wealth yield (lithium/trade-salts). Requires a Lithium
+    // Brine Deposit (bonusType "lithium") and an arid, dry desert cell.
+    "salt works": {
+      "code": 44,
+      "name": "Solar Salt Works",
+      "icon": "buildings/128/salt_works.png",
+      "symbol": "buildings/icons/crystal.png",
+      "buildCost":   { "energy": 5, "material": 10, "wealth": 15, "water": 1, "turns": 3 },
+      "costPerYear": { "energy": 20, "goods": 3, "wealth": 5, "water": 0.3 },
+      "bonus":       { "material": "10x", "wealth": "8x", "happiness": -0.15 },
+      "storage":     { "material": 250 },
+      "federationStorage": { "material": 250 },
+      "prerequisite": {
+        "building": ["solar panel"],
+        "terrain":  ["desert"],
+        "climate":  ["tropical", "temperate"],
+        "population": 3,
+        "bonusType": ["lithium"]
+      }
+    },
+    // Megamine
+    "megamine": {
+      "code": 34,
+      "name": "Megamine",
+      "icon": "buildings/128/megamine.png",
+      "symbol": "buildings/icons/crystal.png",
+      "buildCost":   { "energy": 25, "material": 25, "wealth": 50, "water": 1.5, "turns": 5 },
+      "costPerYear": { "energy": 100, "goods": 25, "wealth": 25, "water": 0.5 },
+      "bonus":       { "material": "90x", "wealth": "20x", "happiness": -0.5 },
+      "storage":     { "energy": 100, "material": 300 },
+      "federationStorage": { "material": 300 },
+      "prerequisite": {
+        "building": ["solar farm"],
+        "terrain":  ["grassland", "hills", "forest", "jungle", "plains", "mountain-low", "mountain-high"],
+        "other":    [],
+        "upgrades": "mine"
+      }
+    },
+    
     "factory": {
       "code": 4,
       "name": "Factory",
@@ -549,7 +632,8 @@
       "buildCost": { "energy": 200, "material": 75, "wealth": 150, "water": 3, "turns": 3 },
       "costPerYear": { "energy": 300, "material": 250, "wealth": 15, "water": 1 },
       "bonus": { "goods": 200, "wealth": 25, "happiness": -0.25 },
-      "storage": { "energy": 25, "goods": 200, "material": 250 },
+      "storage": { "energy": 100, "goods": 200, "material": 150 },
+      "federationStorage": { "goods": 200 },
       "prerequisite": {
         "building": ["solar panel"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"]
@@ -563,7 +647,8 @@
       "buildCost": { "energy": 300, "material": 150, "wealth": 300, "water": 5, "turns": 6 },
       "costPerYear": { "energy": 600, "material": 600, "wealth": 30, "water": 2 },
       "bonus": { "goods": 500, "wealth": 50, "happiness": -0.5 },
-      "storage": { "energy": 50, "goods": 500, "material": 600 },
+      "storage": { "energy": 200, "goods": 500, "material": 300 },
+      "federationStorage": { "goods": 500 },
       "prerequisite": {
         "building": ["solar farm"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
@@ -579,7 +664,8 @@
       "buildCost": { "energy": 600, "material": 300, "wealth": 600, "water": 10, "turns": 10 },
       "costPerYear": { "energy": 1000, "material": 1000, "wealth": 60, "water": 5 },
       "bonus": { "goods": 1000, "wealth": 120, "happiness": -0.75 },
-      "storage": { "energy": 100, "goods": 1800, "material": 1000 },
+      "storage": { "energy": 300, "goods": 1000, "material": 600 },
+      "federationStorage": { "goods": 1000 },
       "prerequisite": {
         "building": ["solar farm", "bank"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
@@ -619,7 +705,7 @@
       "costPerYear": { "energy": 20, "goods": 10,"wealth": 15, "water": 0.2 },
       "bonus": { "food": 10, "wealth": 15, "worker": 1 },
       "storage": { "food": 30, "goods": 300, "material": 300 },
-      "federationStorage": { "food": 50, "goods": 500, "material": 500 },
+      "federationStorage": { "food": 50, "goods": 600, "material": 600 },
       "prerequisite": {
         "building": ["solar farm", "factory", "bank"],
         "terrain":  ["sea"],
@@ -826,6 +912,23 @@
         "population": 3
       }
     },
+    "depot": {
+      "code": 16,
+      "name": "Materials Depot",
+      "icon": "buildings/128/depot.png",
+      "symbol": "buildings/icons/crystal_plus.png",
+      "buildCost": { "energy": 10, "material": 25, "wealth": 8, "water": 1, "turns": 2 },
+      "costPerYear": { "energy": 5, "wealth": 3 },
+      "bonus": { },
+      "storage": { "material": 250 },
+      "federationStorage": { "material": 250 },
+      "prerequisite": {
+        "building": ["mine"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
+        "network":  ["any"],
+        "population": 3
+      }
+    },
     "warehouse": {
       "code": 9,
       "name": "Warehouse",
@@ -986,7 +1089,8 @@
       "storage": { },
       "prerequisite": {
         "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands","mountain-low"],
-        "other": [ "anywhere", "federation", "intelligence" ]
+        "other": [ "anywhere", "federation", "intelligence" ],
+        "maxCount": 3
       },
       "visibility": 16
     },
@@ -1007,58 +1111,6 @@
         "bonusType": ["aluminum", "titanium", "crystal"]
       },
       "visibility": "world"
-    },
-    "depot": {
-      "code": 16,
-      "name": "Materials Depot",
-      "icon": "buildings/128/depot.png",
-      "symbol": "buildings/icons/crystal_plus.png",
-      "buildCost": { "energy": 10, "material": 25, "wealth": 8, "water": 1, "turns": 2 },
-      "costPerYear": { "energy": 5, "wealth": 3 },
-      "bonus": { },
-      "storage": { "material": 250 },
-      "federationStorage": { "material": 250 },
-      "prerequisite": {
-        "building": ["mine"],
-        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
-        "network":  ["any"],
-        "population": 3
-      }
-    },
-    // Mine
-    "mine": {
-      "code": 17,
-      "name": "Mine",
-      "icon": "buildings/128/mine.png",
-      "symbol": "buildings/icons/crystal.png",
-      "buildCost":   { "energy": 5, "material": 5, "wealth": 15, "water": 0.5, "turns": 3 },
-      "costPerYear": { "energy": 50, "goods": 5, "wealth": 5, "water": 0.2 },
-      "bonus":       { "material": "15x", "wealth": "5x", "happiness": -0.25 },
-      "storage":     { "material": 250 },
-      "federationStorage": { "material": 250 },
-      "prerequisite": {
-        "building": ["solar panel"],
-        "terrain":  ["land"],
-        "other":    []
-      }
-    },
-    // Megamine
-    "megamine": {
-      "code": 34,
-      "name": "Megamine",
-      "icon": "buildings/128/megamine.png",
-      "symbol": "buildings/icons/crystal.png",
-      "buildCost":   { "energy": 25, "material": 25, "wealth": 50, "water": 1.5, "turns": 5 },
-      "costPerYear": { "energy": 100, "goods": 25, "wealth": 25, "water": 0.5 },
-      "bonus":       { "material": "25x", "wealth": "10x", "happiness": -0.5 },
-      "storage":     { "material": 1500 },
-      "federationStorage": { "material": 1500 },
-      "prerequisite": {
-        "building": ["solar farm"],
-        "terrain":  ["land"],
-        "other":    [],
-        "upgrades": "mine"
-      }
     },
     // housing habitat
     "habitat": {
@@ -1227,7 +1279,7 @@
     },
     "Veyra Pods": {
       "icon": "terrain_bonus/128/veyra_pods.png",
-      "bonus": { "food": "15-30" },
+      "bonus": { "food": "12-20" },
       "terrain": ["grassland","hills", "plains"],
       "climate": ["tropical", "temperate", "subpolar"],
       "other": [ ],
@@ -1244,7 +1296,7 @@
     },
     "Morrowback Herds": {
       "icon": "terrain_bonus/128/morrowback_herds.png",
-      "bonus": { "food": "20-40" },
+      "bonus": { "food": "12-24" },
       "terrain": ["grassland","hills","plains"],
       "climate": ["tropical", "temperate"],
       "other": [ ],
@@ -1253,7 +1305,7 @@
     },
     "Bugalo Grazing Range": {
       "icon": "terrain_bonus/128/bugalo_range.png",
-      "bonus": { "food": "20-40", "wealth": 5, "happiness": 0.25 },
+      "bonus": { "food": "12-24", "wealth": 5, "happiness": 0.25 },
       "terrain": ["grassland","hills","plains"],
       "climate": ["temperate"],
       "other": [ ],
@@ -1328,7 +1380,7 @@
     },
     "Threadstone Seam": {
       "icon": "terrain_bonus/128/threadstone_seam.png",
-      "bonus": { "material": "50-75" },
+      "bonus": { "material": "25-45" },
       "terrain": ["land"],
       "other": [ ],
       "abundancy": 8,
@@ -1337,7 +1389,7 @@
     },
     "Bauxite Seam": {
       "icon": "terrain_bonus/128/bauxite_seam.png",
-      "bonus": { "material": "50-75" },
+      "bonus": { "material": "25-45" },
       "terrain": ["hills","mountain-low","mountain-high"],
       "other": [ ],
       "abundancy": 8,
@@ -1355,7 +1407,7 @@
     },
     "Gravalloy Veins": {
       "icon": "terrain_bonus/128/gravalloy_vein.png",
-      "bonus": { "material": "50-75", "wealth": "5-10" },
+      "bonus": { "material": "35-55", "wealth": "5-10" },
       "terrain": ["mountain-low","mountain-high"],
       "other": [ ],
       "abundancy": 2,
@@ -1380,7 +1432,16 @@
       "bonusType": "uranium",
       "desc": "Rare mineral that is used in nuclear reactors and nuclear weapons."
     },
-
+    "Lithium Brine Deposit": {
+      "icon": "terrain_bonus/128/lithium_brine_deposit.png",
+      "bonus": { "material": "10-20", "wealth": "10-15" },
+      "terrain": ["desert"],
+      "climate": ["tropical", "temperate"],
+      "other": [ "dry" ],
+      "abundancy": 3,
+      "bonusType": "lithium",
+      "desc": "Mineral-rich brine beneath arid salt flats. Solar evaporation concentrates lithium and potash, prized for batteries and grid-scale energy storage."
+    },
     // Energy
     "Tidal Dynamo Basin": {
       "icon": "terrain_bonus/128/tidal_dynamo.png",
@@ -1669,7 +1730,7 @@
     },
     "Thundergrass Prairie": {
       "icon": "terrain_bonus/128/thundergrass_prairie.png",
-      "bonus": { "food": "20-40" },
+      "bonus": { "food": "12-24" },
       "terrain": ["grassland","plains"],
       "climate": ["temperate", "subpolar"],
       "other": [ ],
@@ -1732,7 +1793,7 @@
     },
     "Quakecrystal Lodes": {
       "icon": "terrain_bonus/128/quakecrystal_lodes.png",
-      "bonus": { "material": "50-75", "energy": "100-300" },
+      "bonus": { "material": "35-55", "energy": "100-300" },
       "terrain": ["mountain-low","mountain-high"],
       "other": [ ],
       "abundancy": 0.5,
@@ -1999,6 +2060,13 @@
   // [-foodHappinessCap, +foodHappinessCap] before it folds into the happiness
   // rate, so an extreme surplus or deficit can't dominate morale.
   "foodHappinessCap": 5,
+  // Cap on the per-turn happiness PENALTY (percentage points) from a shortage of
+  // each non-food resource (energy, goods, water, wealth): when a colony's net
+  // per-year rate for one of these is negative, that shortfall folds into the
+  // happiness rate as a negative term clamped to [-shortageHappinessCap, 0], so
+  // no single resource shortage can dominate morale. Food is handled separately
+  // by foodHappinessCap (which also rewards a surplus).
+  "shortageHappinessCap": 5,
   // Population thresholds that expand a colony's zone-of-control radius: the
   // index of the highest threshold a colony's population meets is its ring size
   // (index+1 = radius). Reaching level 7 (>=7,000 population) grants +1 radius.
@@ -2144,7 +2212,7 @@
 
   // Default Federation tax rate (happiness cost per colony that funds the
   // Federation treasury); the New Game/Federation UI can override per game.
-  "federationTaxRate": 0,
+  "federationTaxRate": 2,
   // Minimum colony population required to launch (found) a new colony.
   "foundColonyMinPopulation": 3,
   // Colonists transferred from the host colony to a newly founded colony.

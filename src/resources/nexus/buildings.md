@@ -41,7 +41,13 @@ The Solar Farm is the Solar Panel's big sibling — a sprawling array that drink
 <span class="float-right">![nuclear_reactor](../buildings/nuclear_reactor.png)</span>
 
 The Nuclear Reactor is the pinnacle of power generation — a hardened fission plant that dwarfs any field of solar panels, pouring out a torrent of energy day or night, in any climate (it may even be raised on the frozen poles). It is a demanding, late‑game build: it requires a **Factory** in the colony, a sizable population, a heavy investment of energy, material, and wealth to construct, and — crucially — a worked source of the strategic resource **uranium** to fuel it. In return a worked Reactor is by far the largest single energy source in the game and adds a vast reserve of energy storage, enough to run the most power‑hungry industry, defenses, and launch facilities a colony can field. For an advanced, uranium‑rich colony, it is what finally lifts the ceiling on everything energy can buy.
- 
+
+### Wind Farm
+
+<span class="float-right">![wind_farm](../buildings/wind_farm.png)</span>
+
+The Wind Farm is a utility‑scale field of turbines — a standalone power source (not an upgrade of anything) whose annual output rivals a Solar Farm's, but with its own character. Where the Solar Farm wants sun‑drenched ground, the Wind Farm wants open, exposed terrain: it may be raised on grassland, plains, hills, and the low mountains — and, uniquely among energy buildings, **offshore** on a colony's shallow‑sea tiles. It requires a **Factory** in the colony and a population of at least 5,000. Its construction is steel‑heavy (a large material cost), but once standing it runs on almost nothing — a light wealth upkeep for its moving parts. A worked Wind Farm is a strong, steady source of energy and adds energy storage for the colony and the Federation besides. For a windswept coast, plain, or ridge, it is the renewable complement to the Solar Farm.
+
 ### Farm
 
 <span class="float-right">![farm](../buildings/farm.png)</span>
@@ -77,6 +83,12 @@ The Mine is the colony's dedicated material producer, carving ore and stone stra
 <span class="float-right">![megamine](../buildings/megamine.png)</span>
 
 The Megamine is the Mine scaled up to heavy extraction — a vast open‑pit and deep‑shaft complex that tears material from the ground on a scale no single Mine can match. It is built as an **upgrade of an existing Mine**, raised in its place, and still counts as a Mine for anything that depends on one. It requires a **Solar Farm** in the colony. Like the Mine, its yield *scales with how mineral‑rich the cell beneath it is* — on the richest ground it multiplies that tile's material enormously — and it brings a healthy stream of wealth besides, with large material storage to match. It is a costly build with a voracious appetite for energy and goods to keep its machinery and crews running, and the scarred land weighs a little on morale. When a colony's Factories outgrow what its Mines can supply, upgrading a key Mine to a Megamine is how its material output takes off.
+
+### Solar Salt Works
+
+<span class="float-right">![salt_works](../buildings/salt_works.png)</span>
+
+The Solar Salt Works is a desert extraction works that lets the twin suns do the mining — pumping mineral brine into shallow evaporation ponds and harvesting the salts, potash, and **lithium** left behind as the water boils away. Unlike a rock Mine, it tears up no ground, so it weighs only lightly on morale. It is a cheap, quick build requiring only a **Solar Panel** in the colony and a small population, and it may be raised **only on a dry desert tile in a tropical or temperate climate that holds a Lithium Brine Deposit** — the brine it lives on. Its yield *scales with the richness of that deposit*, multiplying the tile's material many times over and bringing a strong stream of wealth (the lithium and trade‑salts are valuable), with material storage for the colony and Federation besides. Running the pumps costs a steady trickle of energy and water. For an arid colony sitting on a brine flat, the Salt Works turns a worthless salt pan into a profitable works.
 
 ### Factory
 

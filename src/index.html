@@ -1795,17 +1795,31 @@
     function bridgeCostVal() { return (CONFIG.bridge && CONFIG.bridge.buildCost) || _emptyCost(); }
 
     // Cost to build a ROAD segment between adjacent cells (from)->(to):
-    //   average of the road build cost of FROM and TO. If the shared edge is a
-    //   river, add one bridge cost (a single river-bridge segment).
+    //   average of the road build cost of FROM and TO, plus a BRIDGE surcharge
+    //   when the shared edge must be bridged. A bridge is needed when THIS border
+    //   is a river/canal (edge-precise) OR when the segment touches a SEA tile
+    //   (a sea crossing). Charging the sea bridge here — matching the bridge the
+    //   build step actually lays (see _applyBuiltSegment) — makes route planning
+    //   prefer land routes over sea bridges unless a crossing is unavoidable.
+    //   (A one-tile sea crossing steps land->sea then sea->land, so both borders
+    //   touch sea and each adds a bridge cost — a double-span bridge, matching
+    //   seaBridgeCost.)
     function roadSegmentCost(fx, fy, tx, ty) {
       const cost = _avgCost(roadCostAt(fx, fy), roadCostAt(tx, ty));
-      // Bridge surcharge only when THIS border is a river/canal (edge-precise).
-      if (borderIsRiverSegment(fx, fy, tx, ty)) _addCost(cost, bridgeCostVal(), 1);
+      if (borderIsRiverSegment(fx, fy, tx, ty) || terrainAt(fx, fy) === 1 || terrainAt(tx, ty) === 1) {
+        _addCost(cost, bridgeCostVal(), 1);
+      }
       return cost;
     }
-    // Cost to build a MONORAIL segment between adjacent cells (avg of FROM/TO).
+    // Cost to build a MONORAIL segment between adjacent cells (avg of FROM/TO),
+    // plus a BRIDGE surcharge on a SEA crossing so monorail route planning also
+    // prefers land over sea bridges unless unavoidable.
     function monorailSegmentCost(fx, fy, tx, ty) {
-      return _avgCost(monorailCostAt(fx, fy), monorailCostAt(tx, ty));
+      const cost = _avgCost(monorailCostAt(fx, fy), monorailCostAt(tx, ty));
+      if (terrainAt(fx, fy) === 1 || terrainAt(tx, ty) === 1) {
+        _addCost(cost, bridgeCostVal(), 1);
+      }
+      return cost;
     }
     // Cost to build a CANAL segment on the edge between adjacent cells (avg).
     function canalSegmentCost(fx, fy, tx, ty) {
@@ -6700,6 +6714,18 @@
       const foodHappCap = (cfg.foodHappinessCap != null) ? cfg.foodHappinessCap : 5;
       const foodHappiness = Math.max(-foodHappCap, Math.min(foodHappCap, netFood));
       if (foodHappiness >= 0) happinessPos += foodHappiness; else happinessNeg += foodHappiness;
+      // Shortage of the other staple resources (energy, goods, water, wealth)
+      // also hurts morale: when a colony's net per-year rate for one of these is
+      // negative, that shortfall folds in as a NEGATIVE happiness term (surplus
+      // of these does NOT add happiness — only food rewards a surplus). Each term
+      // is clamped to [-shortageHappinessCap, 0] so one shortage can't dominate.
+      const shortageCap = (cfg.shortageHappinessCap != null) ? cfg.shortageHappinessCap : 5;
+      let shortageHappiness = 0;
+      for (const res of ['energy', 'goods', 'water', 'wealth']) {
+        const net = b.net[res] || 0;
+        if (net < 0) shortageHappiness += Math.max(-shortageCap, net);
+      }
+      if (shortageHappiness < 0) happinessNeg += shortageHappiness;
       // Happiness from worked cells' terrain + terrain-bonus (e.g. Wetlands, or
       // happiness-granting resource deposits), split by sign.
       const terrainHappiness = b.terrainHappiness || 0;
@@ -6718,6 +6744,7 @@
       // that colonyStats returns as rateBreakdown.
       b.breakdown.happiness = {};
       if (foodHappiness) b.breakdown.happiness['Food balance'] = foodHappiness;
+      if (shortageHappiness) b.breakdown.happiness['Resource shortage'] = shortageHappiness;
       const bldgHappiness = bFactors.pos + bFactors.neg;
       if (bldgHappiness) b.breakdown.happiness['Buildings'] = bldgHappiness;
       if (terrainHappiness) b.breakdown.happiness['Terrain'] = terrainHappiness;
@@ -6731,11 +6758,12 @@
       // Population growth (new model): the per-turn delta is a PERCENT (×100
       // scale) = sum of config `bonus.population` over worked cells + buildings
       // (colonyPopPercent) PLUS the happiness growth bonus in percentage points
-      // (±happBonus×100, sign by stored-happiness polarity: happy grows,
-      // unhappy shrinks). growthRate is kept as a FRACTION (percent/100) so the
+      // (±happBonus×100, sign by the colony's NET happiness rate this turn: a net
+      // POSITIVE happiness grows the population, a net NEGATIVE happiness shrinks
+      // it). growthRate is kept as a FRACTION (percent/100) so the
       // existing `pct(growthRate)` displays still show a percentage.
       const popPercentBonus = colonyPopPercent(col);                 // percent points from config
-      const happinessPercent = (storedHappiness >= 0 ? happBonus : -happBonus) * 100; // percent points
+      const happinessPercent = (happinessRate >= 0 ? happBonus : -happBonus) * 100; // percent points
       let popDeltaPercent = popPercentBonus + happinessPercent;      // total percent/yr
       let rate = popDeltaPercent / 100;                              // fraction/yr
       if (rate < -0.5) { rate = -0.5; popDeltaPercent = -50; }
@@ -7254,6 +7282,9 @@
         // false, i.e. the Port); otherwise any sea-network hub (Dock or Port) counts.
         if (requireSeaport) { if (!buildingAllowsDeepSea(b.type)) continue; }
         else if (!buildingInNetwork(b.type, 'sea')) continue;
+        // A sea hub sitting on a freshwater (landlocked) lake tile anchors no sea
+        // route: a lake belongs to the river/canal network, not the sea network.
+        if (isFreshwaterLakeCell(b.x, b.y)) continue;
         const d = hexDistance(colony.x, colony.y, b.x, b.y);
         if (d <= radius && d < bestDist) { bestDist = d; best = b; }
       }
@@ -7272,9 +7303,17 @@
       const bDock = colonyDockCell(b, false);
       if (!bDock) return false;
       const deep = (seaDeep !== undefined) ? seaDeep : (ownerSeaMode(owner) >= 2);
-      const cellOk = deep
+      // Freshwater (landlocked) lake tiles belong to the river/canal network, NOT
+      // the sea network: they never count as traversable sea, even for a Port's
+      // deep-sea reach. (The endpoint dock cells are already filtered against lakes
+      // by colonyDockCell, so a lake dock can't anchor a sea route either.)
+      const baseOk = deep
         ? ((x, y) => waterOk(x, y) || terrainAt(x, y) === WATER)
         : waterOk;
+      const cellOk = (x, y) => {
+        if (terrainAt(x, y) === WATER && isFreshwaterLakeCell(x, y)) return false;
+        return baseOk(x, y);
+      };
       return _pathExists(aDock, bDock, owner, cellOk);
     }
     // Air-network reach for a colony. An air hub is any building whose config
@@ -7856,7 +7895,7 @@
       let guard = 0;
       while ((cur.x !== bx || cur.y !== by) && guard++ < 500) {
         const curIsSea = terrainAt(cur.x, cur.y) === 1;
-        let best = null, bestD = Infinity, bestC = Infinity;
+        let best = null, bestD = Infinity, bestSea = Infinity, bestC = Infinity;
         for (const n of hexNeighborsRenderer(cur.x, cur.y)) {
           const nx = wxf(n.x), ny = n.y;
           if (ny < 0 || ny >= gameState.map.terrain.length) continue;
@@ -7875,10 +7914,19 @@
           const d = hexDistance(nx, ny, bx, by);
           if (d > bestD) continue;
           const c = _cartesianDist2To(nx, ny, bx, by);
-          // Primary key: hex distance (keeps the path shortest). Secondary key:
-          // straight-line distance to the target (straightens ties).
-          if (d < bestD || (d === bestD && c < bestC)) {
-            bestD = d; bestC = c; best = { x: nx, y: ny };
+          // A step that touches a sea tile needs a bridge; prefer to avoid it so
+          // the route takes an all-land path when one of equal length exists.
+          // The target is exempt (a path may legitimately terminate on sea).
+          const seaStep = (terrainAt(nx, ny) === 1 && !(nx === bx && ny === by)) ? 1 : 0;
+          // Ordered tie-break (each never lengthens the path, which is pinned by
+          // the hex-distance primary key):
+          //   1) hex distance to target (keeps the path shortest),
+          //   2) avoid sea crossings (prefer land over a sea bridge),
+          //   3) straight-line distance to the target (straightens remaining ties).
+          if (d < bestD
+              || (d === bestD && seaStep < bestSea)
+              || (d === bestD && seaStep === bestSea && c < bestC)) {
+            bestD = d; bestSea = seaStep; bestC = c; best = { x: nx, y: ny };
           }
         }
         if (!best) break;
@@ -8743,6 +8791,18 @@
     // yearly upkeep are paid from the Federation pool, not a colony), and it is
     // randomly idled when the Federation can't cover its upkeep.
     function buildingIsFederation(type) { return buildingHasOther(type, 'federation'); }
+    // How many buildings of type `type` the `owner` currently has — counting
+    // both operational ones and any still in transit (being delivered/built), so
+    // an in-flight build counts against a per-type build cap. `type` and the
+    // stored `b.type` are both the config `code`.
+    function ownerBuildingCount(type, owner) {
+      const want = Number(type);
+      let n = 0;
+      for (const b of (gameState.buildings || [])) {
+        if (b.owner === owner && Number(b.type) === want) n++;
+      }
+      return n;
+    }
     // `intelligence`: gathers intel on rival colonies within its `visibility`
     // (Euclidean) range while active.
     function buildingIsIntelligence(type) { return buildingHasOther(type, 'intelligence'); }
@@ -8937,6 +8997,9 @@
       // Federation buildings require an established Federation: the owner must
       // have founded a second colony before any can be built.
       if (buildingIsFederation(type) && !federationEstablished(owner)) return false;
+      // Per-type build cap: at most `maxCount` of this building type may exist
+      // (or be under construction) at one time for this owner.
+      if (pre.maxCount != null && ownerBuildingCount(type, owner) >= Number(pre.maxCount)) return false;
       // For `anywhere` buildings outside every zone, prerequisites (required
       // buildings, network, city size) are evaluated against the nearest colony
       // — the same colony that pays for and owns the build.
@@ -8998,6 +9061,9 @@
       }
       if (buildingIsFederation(type) && !federationEstablished(owner)) {
         missing.push("an established Federation (a second colony)");
+      }
+      if (pre.maxCount != null && ownerBuildingCount(type, owner) >= Number(pre.maxCount)) {
+        missing.push(`no more than ${Number(pre.maxCount)} ${improvementName(type)}${Number(pre.maxCount) === 1 ? '' : 's'} at one time`);
       }
       for (const t of missingBonusTypes(pre.bonusType, col)) {
         missing.push(`a worked source of ${t}`);
@@ -11904,6 +11970,34 @@
     function showCantBuildExplanation(type, x, y) {
       const bt = buildingType(type) || {};
       const name = bt.name || ("Type " + type);
+      // The Biodome (type 1) is launched as a NEW colony from an existing one,
+      // not placed like a normal building, so its requirements are the
+      // colony-launch rules (population threshold + the biodome's resource cost)
+      // rather than the generic placement/prerequisite checks.
+      if (type === 1) {
+        const bio = (gameState.buildings || []).find(
+          (bb) => bb.x === x && bb.y === y && bb.owner === 'human' && bb.type === 1 && !bb.inTransit) || null;
+        const lines = [];
+        if (!bio) {
+          lines.push(`<strong>Launch from:</strong> a new colony can only be launched from one of your own colonies.`);
+        } else {
+          const minPop = ((CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3) * popUnitSize();
+          if (!((bio.population || 0) > minPop)) {
+            lines.push(`<strong>Population:</strong> this colony needs more than ${minPop.toLocaleString()} colonists to launch a new colony (it has ${Math.floor(bio.population || 0).toLocaleString()}).`);
+          }
+          if (!canAffordBuildingAt(1, bio.x, bio.y, 'human')) {
+            const short = buildingShortfallAt(1, bio.x, bio.y, 'human');
+            lines.push(`<strong>Needs:</strong> ${esc(short || "more resources")}.`);
+          }
+        }
+        const colonists = (((CONFIG.foundColonyPopulationTransfer != null) ? CONFIG.foundColonyPopulationTransfer : 1) * popUnitSize()).toLocaleString();
+        lines.push(`<strong>Launch cost:</strong> ${esc(buildingCostLabel(1))} + ${colonists} colonists.`);
+        if (lines.length === 1) lines.unshift(`A new colony can be launched from here now.`);
+        showChoiceDialog(`Why can't I launch a new colony?`,
+          lines.map((l) => `<div style="margin:4px 0">${l}</div>`).join(''),
+          [{ value: 'ok', label: 'OK' }]);
+        return;
+      }
       const place = canPlaceTypeAt(type, x, y, 'human');
       const lines = [];
       if (!place.ok) {
@@ -12221,6 +12315,11 @@
       if (ctxCantBuild && ctxCantBuildSub && isHumanTurn() && hex) {
         ctxCantBuildSub.innerHTML = "";
         const cantTypes = [];
+        // On the player's OWN biodome, "Launch Colony" is offered by ctxEstablish
+        // only when population and resources allow. When it can't be launched,
+        // list the Biodome (type 1) here so the player can see WHY (population
+        // threshold / resource shortfall) instead of the option silently vanishing.
+        if (ownBio && !_ctxFromColonyView && ctxEstablish.dataset.mode !== 'launch') cantTypes.push(1);
         for (const type of buildingTypeCodes()) {
           if (type === 1) continue;
           const place = canPlaceTypeAt(type, hex.x, hex.y, 'human');

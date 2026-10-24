@@ -224,6 +224,12 @@ Ironcap Mushrooms sprout in the shaded loam of forests and jungles across the tr
 
 Saltglass Pans spread across the baked floors of the deep desert, vast evaporite flats left behind by ancient seas. Beneath the crust lie layered industrial minerals, and within it grow sheets of naturally fused translucent salt — "saltglass" — prized by traders for ornament and precision optics. Harvesting is simple: the sun does the refining, and crews need only cut and haul. A worked pan is a good source of material with a little wealth besides, turning the emptiest wastes into a working quarry and a trade good at once.
 
+#### Lithium Brine Deposit
+
+<img align="right" width="128" src="src/resources/terrain_bonus/128/lithium_brine_deposit.png">
+
+A Lithium Brine Deposit lies beneath the arid salt flats of the deep desert, pockets of mineral-rich brine trapped under a dry crust. Left to the sun, the brine concentrates into lithium and potash — the stuff of batteries and grid-scale energy storage — alongside valuable trade-salts. The deposit is what a **Solar Salt Works** is built on: raise one here and solar evaporation does the extraction, turning the brine into a steady flow of material and wealth. A worked deposit is a good source of material and wealth together, making an otherwise barren pan one of the desert's most profitable finds.
+
 #### Quakecrystal Lodes
 
 <img align="right" width="128" src="src/resources/terrain_bonus/128/quakecrystal_lodes.png">

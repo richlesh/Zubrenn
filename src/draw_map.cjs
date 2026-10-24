@@ -369,6 +369,7 @@ class HexMap {
     this.underConstructionColor = opts.underConstructionColor || { h: 0, s: 0, l: 0.5 };
     this.buildingIcons = {};                  // type -> loaded Image
     this.symbolIcons = {};                    // type -> loaded "symbol" Image (Area-of-Control view)
+    this.buildingSeaIcons = {};               // type -> loaded "sea_icon" Image (used when built on a sea tile)
     this.aiCount = opts.aiCount || 0;         // number of AI players (for control colors)
     this.controlMode = false;                 // Area-of-Control view toggle
     this.controlRadius = opts.controlRadius || 2; // fallback radius
@@ -857,6 +858,11 @@ class HexMap {
       const bt = this._buildingTypeByCode(type);
       return (bt && bt.symbol) ? bt.symbol : null;
     };
+    // An optional sea-specific icon, used when the building sits on a sea tile.
+    const seaIconFor = (type) => {
+      const bt = this._buildingTypeByCode(type);
+      return (bt && bt.sea_icon) ? bt.sea_icon : null;
+    };
     // Codes to load: each entry's numeric code (fallback to the key when the
     // config is still numeric-keyed).
     const codesToLoad = this.buildingTypes
@@ -892,6 +898,18 @@ class HexMap {
         });
         simg.src = `${resRoot}/${sym}`;
         promises.push(sp);
+      }
+      // Also load the optional sea-specific icon, if configured. Used only when
+      // the building is placed on a sea tile; otherwise the normal icon is used.
+      const seaFile = seaIconFor(type);
+      if (seaFile) {
+        const seaImg = new Image();
+        const seap = new Promise((resolve) => {
+          seaImg.onload = () => { this.buildingSeaIcons[t] = seaImg; this._draw(); resolve(); };
+          seaImg.onerror = () => resolve(); // missing sea icon -> fall back to the normal icon
+        });
+        seaImg.src = `${resRoot}/${seaFile}`;
+        promises.push(seap);
       }
     }
 
@@ -1517,10 +1535,15 @@ class HexMap {
       for (const ox of offsets) {
         const cx = c.x + ox, cy = c.y;
         // In the Area-of-Control view, prefer the building's simpler `symbol`
-        // icon when one is loaded; otherwise use its normal icon.
+        // icon when one is loaded. Otherwise use its map icon: when the building
+        // sits on a sea tile and a `sea_icon` is loaded for its type, use that;
+        // otherwise fall back to the normal icon.
+        const onSea = this.terrain && this.terrain[b.y] && this.terrain[b.y][b.x] === 1;
         const icon = (this.controlMode && this.symbolIcons[b.type])
           ? this.symbolIcons[b.type]
-          : this.buildingIcons[b.type];
+          : ((onSea && this.buildingSeaIcons[b.type])
+              ? this.buildingSeaIcons[b.type]
+              : this.buildingIcons[b.type]);
         // Under construction / in transit (not yet operational) -> draw dimmed.
         const underConstruction =
           (b.inTransit === true) ||

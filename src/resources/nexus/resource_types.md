@@ -90,11 +90,11 @@ pooled Wealth — the lifeblood of taxation, maintenance, and expansion.
 <span class="float-right">![happiness](../resource_types/happiness.png)</span>
 
 **Happiness** (abbreviated **H**, measured as a percentage, **%**) is a colony's
-morale. It accumulates from the colony's food balance together with the effects
-of certain buildings (Banks and Barracks lift it; Factories weigh it down) and
-terrain bonuses, and is reduced by the Federation tax rate. Positive happiness
-grows the population while negative happiness shrinks it, so morale is the dial
-between a thriving, expanding colony and one in decline.
+morale. It reflects how well the colony is provisioned and developed — how
+reliably its people are fed and supplied, and the civic and industrial character
+of what you build around them. Positive happiness grows the population while
+negative happiness shrinks it, so morale is the dial between a thriving,
+expanding colony and one in decline.
 
 #### Population
 
