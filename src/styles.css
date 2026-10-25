@@ -820,9 +820,8 @@ body.dark #trades-table tbody tr:nth-child(even) { background: rgba(255,255,255,
 #trades-table .stat-note { color: #888; font-style: italic; }
 #trades-table button.trade-cancel { background: #c0392b; color: #fff; padding: 2px 8px; font-size: 11px; }
 #trades-close { background: #0a84ff; color: #fff; }
-#trades-buy, #trades-sell { background: #0a84ff; color: #fff; }
-/* Visible press/hover feedback for dialog action buttons (Trades Buy/Sell/Done
-   and the other .work-row buttons), which previously gave no click response. */
+/* Buy/Sell are secondary actions — keep the neutral default button look so only
+   the primary "Done" button is blue (matches the other dialogs). */
 .work-row button:hover { filter: brightness(1.12); }
 .work-row button:active { filter: brightness(0.85); transform: translateY(1px); }
 
@@ -977,6 +976,8 @@ body.dark #diplomacy-table tbody tr:nth-child(even) { background: rgba(255,255,2
 #diplomacy-table button:hover { filter: brightness(1.12); }
 #diplomacy-table button:active { filter: brightness(0.85); transform: translateY(1px); }
 #diplomacy-close { background: #0a84ff; color: #fff; }
+/* Primary "Done" buttons are blue across all these dialogs. */
+#colonies-close, #rankings-close { background: #0a84ff; color: #fff; }
 /* Status column may hold a war/peace label plus one or two pact chips with a
    cancel button each — let it wrap instead of forcing horizontal scroll. */
 #diplomacy-table td.diplo-status { white-space: normal; }
