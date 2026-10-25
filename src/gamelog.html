@@ -49,6 +49,9 @@
     .log-year:first-child { border-top: none; margin-top: 0; padding-top: 0; }
     body.light .log-year { color: #a66400; border-top-color: #d0d0d0; }
     .log-msg { margin: 1px 0 1px 10px; white-space: pre-wrap; word-break: break-word; }
+    /* Military-battle messages stand out in red. */
+    .log-msg.log-battle { color: #ff5a4d; font-weight: 600; }
+    body.light .log-msg.log-battle { color: #c0392b; }
     #empty { color: #777; padding: 10px; font-style: italic; }
   </style>
 </head>
@@ -99,6 +102,7 @@
       } else if (entry.kind === "message") {
         const d = document.createElement("div");
         d.className = "log-msg";
+        if (entry.style === "battle") d.classList.add("log-battle");
         d.textContent = String(entry.text == null ? "" : entry.text);
         append(d);
       }

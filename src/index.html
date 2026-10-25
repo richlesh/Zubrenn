@@ -4042,6 +4042,12 @@
           try { if (typeof currentYear === "function") this.year(currentYear()); } catch (e) {}
           _enqueue({ kind: "message", text: String(text) });
         },
+        // A military-battle message — styled red in the Game Log window.
+        battle(text) {
+          if (text == null) return;
+          try { if (typeof currentYear === "function") this.year(currentYear()); } catch (e) {}
+          _enqueue({ kind: "message", text: String(text), style: "battle" });
+        },
         // Clear flushes immediately (and drops any queued entries) so the buffer
         // resets right away on a new game/load.
         clear() {
@@ -16984,7 +16990,7 @@
         const atkNm = ownerDisplayName(attackerOwner);
         const tgtNm = targetBio.name || 'a colony';
         const outcome = attackerWon ? 'succeeded' : 'was repelled';
-        try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(`Battle: ${atkNm}'s ${sf.name} attacked ${tgtNm} — the attack ${outcome} (attacker lost ${atkLost}, defender lost ${defUnitLost} unit${defUnitLost === 1 ? '' : 's'} + ${defBldgLost} defense${defBldgLost === 1 ? '' : 's'}).`); } catch (e) {}
+        try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.battle(`Battle: ${atkNm}'s ${sf.name} attacked ${tgtNm} — the attack ${outcome} (attacker lost ${atkLost}, defender lost ${defUnitLost} unit${defUnitLost === 1 ? '' : 's'} + ${defBldgLost} defense${defBldgLost === 1 ? '' : 's'}).`); } catch (e) {}
       }
       if (attackerWon) {
         finishWonBattle(targetBio, survivors, sf, lines, attackerOwner);
