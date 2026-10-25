@@ -1633,6 +1633,12 @@
     function bonusIsPristine(tb) {
       return !!(tb && Array.isArray(tb.other) && tb.other.includes('pristine'));
     }
+    // Display name of a PRISTINE terrain bonus at (x,y), or null if the cell has
+    // none. Used to warn the player before a building/colony destroys it.
+    function pristineBonusNameAt(x, y) {
+      const tb = bonusDefAt(x, y);
+      return bonusIsPristine(tb) ? (tb.name || 'A pristine feature') : null;
+    }
     // If the cell holds a PRISTINE terrain bonus, remove it from the game for
     // good (it cannot coexist with a building). Returns the destroyed bonus's
     // display name, or null if nothing was destroyed. Safe to call on any cell.
@@ -8668,6 +8674,16 @@
       _foundHoverPath = null; if (hexMap) hexMap.setOverlay(null);
       const name = await openLaunchNameDialog();
       if (name == null) { cancelFoundColony(); return; } // cancelled
+      // Warn before launching onto a PRISTINE feature — when the colony arrives
+      // it destroys the feature permanently. Let the player cancel.
+      const pristine = pristineBonusNameAt(tx, ty);
+      if (pristine) {
+        const go = await new Promise((resolve) => showConfirm(
+          `${pristine} is a pristine feature — the colony will DESTROY it permanently when it arrives at ${tx},${ty}. Launch anyway?`,
+          () => resolve(true),
+          { title: 'Destroy pristine feature?', okLabel: 'Launch Anyway', cancelLabel: 'Cancel', onCancel: () => resolve(false) }));
+        if (!go) { cancelFoundColony(); return; }
+      }
       const rec = launchColony(host, tx, ty, 'human', name || 'Colony');
       cancelFoundColony();
       if (rec) {
@@ -14790,20 +14806,33 @@
       const hex = nameTarget; closeNameDialog();
       const human = gameState.players && gameState.players[0];
       if (!human || (human.modules || 0) <= 0) return; // no colony module available
-      placeColony(hex.x, hex.y, 'human', name);
-      human.modules -= 1;      // consume the colony module
-      human.placed = true;
-      _roundHadAction = true;
-      // Let the player assign their first worker in the new colony, then advance
-      // the turn once they close the work dialog.
-      const newCol = gameState.buildings.find((b) => b.type === 1 && b.x === hex.x && b.y === hex.y);
-      if (newCol) {
-        _advanceAfterWorkModal = true;
-        // Center the large map on the new colony as its detail dialog opens.
-        if (hexMap) hexMap.centerOnCell(newCol.x, newCol.y);
-        openWorkModal(newCol);
+      const doPlace = () => {
+        placeColony(hex.x, hex.y, 'human', name);
+        human.modules -= 1;      // consume the colony module
+        human.placed = true;
+        _roundHadAction = true;
+        // Let the player assign their first worker in the new colony, then advance
+        // the turn once they close the work dialog.
+        const newCol = gameState.buildings.find((b) => b.type === 1 && b.x === hex.x && b.y === hex.y);
+        if (newCol) {
+          _advanceAfterWorkModal = true;
+          // Center the large map on the new colony as its detail dialog opens.
+          if (hexMap) hexMap.centerOnCell(newCol.x, newCol.y);
+          openWorkModal(newCol);
+        } else {
+          advanceTurn();
+        }
+      };
+      // Warn before founding on a PRISTINE feature — placing a colony destroys
+      // it permanently. Let the player cancel and pick another tile.
+      const pristine = pristineBonusNameAt(hex.x, hex.y);
+      if (pristine) {
+        showConfirm(
+          `${pristine} is a pristine feature — founding a colony here will DESTROY it permanently. Found the colony anyway?`,
+          doPlace,
+          { title: 'Destroy pristine feature?', okLabel: 'Found Anyway', cancelLabel: 'Cancel' });
       } else {
-        advanceTurn();
+        doPlace();
       }
     }
 
@@ -15590,7 +15619,7 @@
         okBtn.onclick = null; cancelBtn.onclick = null;
       };
       const doContinue = () => { close(); if (typeof onContinue === "function") onContinue(); };
-      const doCancel = () => { close(); };
+      const doCancel = () => { close(); if (opts && typeof opts.onCancel === "function") opts.onCancel(); };
       const onKey = (e) => {
         if (e.key === "Enter") { e.preventDefault(); doContinue(); }
         else if (e.key === "Escape") { e.preventDefault(); doCancel(); }
