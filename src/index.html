@@ -7151,6 +7151,13 @@
         const vs = edgeVertices(ax, ay, bx, by);
         if (vs.length === 2) link(vs[0], vs[1]);
       }
+      // A freshwater lake acts as a river: ring every lake cell's corner
+      // vertices together so rivers feeding the same lake share one vertex
+      // component. This MUST match the resource-sharing graph (_connGlobalGraphs),
+      // which already does this — otherwise the status dialog would omit a
+      // "River" link between colonies that are, in fact, connected through a
+      // freshwater lake.
+      addFreshwaterLakeVertexLinks(link);
       // Map each colony's corner vertices for target detection.
       const vertexOwner = new Map(); // vkey -> colony (other colonies only)
       for (const b of others) for (const vk of cellCornerKeys(b.x, b.y)) vertexOwner.set(vk, b);
