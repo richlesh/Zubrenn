@@ -39,17 +39,13 @@
         <div class="bldg-panel-title">Strategic Resources</div>
         <div id="strategic-list"></div>
       </div>
+      <div id="resources-panel">
+        <div class="bldg-panel-title">Resources</div>
+        <div id="resources-list"></div>
+      </div>
       <div id="buildings-panel">
-        <div class="bldg-cols">
-          <div class="bldg-col">
-            <div class="bldg-panel-title">Buildings</div>
-            <div id="buildings-list"></div>
-          </div>
-          <div class="bldg-col">
-            <div class="bldg-panel-title">Resources</div>
-            <div id="resources-list"></div>
-          </div>
-        </div>
+        <div class="bldg-panel-title">Buildings</div>
+        <div id="buildings-list"></div>
       </div>
       <div id="instructions">
         <ul>
@@ -293,6 +289,11 @@
       <input id="fed-taxrate" type="range" min="0" max="20" step="0.5" value="5">
         <div class="hint">Taxation lowers morale: <span id="fed-happen">−5</span> happiness per year to every colony.</div>
       </div>
+      <div class="fed-field">
+        <label for="fed-roadcrews">Road crews: <span id="fed-roadcrews-val">3</span> working in parallel</label>
+        <input id="fed-roadcrews" type="range" min="0" max="20" step="1" value="3">
+        <div class="hint">Federation crews rebuild failed road/monorail segments (0 = off). Each repair costs the segment's normal build cost and takes its normal build time (longer on hard terrain). <span id="fed-roadcrews-cost"></span> <span id="fed-roadcrews-pending"></span></div>
+      </div>
       <table id="federation-proj">
         <thead><tr><th>End of turn</th><th>Credits</th></tr></thead>
         <tbody>
@@ -348,14 +349,90 @@
   <div id="diplomacy-overlay" hidden>
     <div id="diplomacy-dialog">
       <h2>Diplomacy</h2>
-      <div class="hint">How each alien species currently regards you, from -100 (hostile) to +100 (friendly). Razing colonies lowers their opinion of you.</div>
+      <div class="hint">How each alien species currently regards you (−100 hostile … +100 friendly) and your current standing. Attacking either way starts a war; sue for peace or propose pacts to change your standing.</div>
       <div id="diplomacy-table-wrap">
         <table id="diplomacy-table">
-          <thead><tr><th>Species</th><th>Opinion of You</th></tr></thead>
+          <thead><tr><th>Species</th><th>Opinion</th><th>Status</th><th></th></tr></thead>
           <tbody id="diplomacy-body"></tbody>
         </table>
       </div>
       <div class="work-row"><button id="diplomacy-close">Done</button></div>
+    </div>
+  </div>
+  <!-- Trades: active trade deals (partner, resource, payment/yr, years left). -->
+  <div id="trades-overlay" hidden>
+    <div id="trades-dialog">
+      <h2>Trades</h2>
+      <div class="hint">Active trade deals. Each grants access to a resource or happiness bonus in exchange for a yearly wealth payment, for a set number of years. A deal ends if either party attacks the other, or if their colonies lose their transport connection.</div>
+      <div id="trades-table-wrap">
+        <table id="trades-table">
+          <thead><tr><th>Partner</th><th>Direction</th><th>Resource</th><th>Payment/yr</th><th>Years left</th><th></th></tr></thead>
+          <tbody id="trades-body"></tbody>
+        </table>
+      </div>
+      <div class="work-row"><button id="trades-buy">Propose Buy…</button><button id="trades-sell">Propose Sell…</button><button id="trades-close">Done</button></div>
+    </div>
+  </div>
+  <!-- AI trade offer popup: alien portrait + the proposed deal + accept/decline. -->
+  <div id="offer-overlay" hidden>
+    <div id="offer-dialog">
+      <h2 id="offer-title">Trade Offer</h2>
+      <div id="offer-body">
+        <img id="offer-portrait" alt="" width="128" height="128">
+        <div id="offer-text"></div>
+      </div>
+      <div class="work-row">
+        <button id="offer-accept">Accept</button>
+        <button id="offer-decline">Decline</button>
+      </div>
+    </div>
+  </div>
+  <!-- Propose Trade: player-initiated offer to a connected alien. -->
+  <div id="propose-overlay" hidden>
+    <div id="propose-dialog">
+      <div id="propose-main">
+        <h2>Propose Trade</h2>
+        <div class="hint">Offer to buy access to a strategic resource, or a yearly amount of a basic resource, from an alien whose colonies are transport-connected to yours. They may accept, decline, or counter with their own price.</div>
+        <div class="propose-row"><label for="propose-partner">Alien</label><select id="propose-partner"></select></div>
+        <div class="propose-row"><label for="propose-resource">Resource</label><select id="propose-resource"></select></div>
+        <div class="propose-row" id="propose-qty-row" hidden><label for="propose-qty">Amount per year</label><input id="propose-qty" type="number" min="0" step="1" value="0"></div>
+        <div class="propose-row"><label for="propose-amount">Payment per year (¤)</label><input id="propose-amount" type="number" min="0" step="1" value="0"></div>
+        <div class="propose-row"><label for="propose-years">Years</label><input id="propose-years" type="number" min="1" max="20" step="1" value="5"></div>
+        <div id="propose-note" class="hint"></div>
+        <div class="work-row">
+          <button id="propose-send">Propose</button>
+          <button id="propose-cancel">Cancel</button>
+        </div>
+      </div>
+      <div id="propose-portrait-panel">
+        <div id="propose-portrait-name"></div>
+        <img id="propose-portrait" alt="">
+        <img id="propose-resimg" class="resimg" alt="">
+      </div>
+    </div>
+  </div>
+  <!-- Propose Sell: player-initiated offer to SELL access/resources to an alien. -->
+  <div id="sell-overlay" hidden>
+    <div id="sell-dialog">
+      <div id="sell-main">
+        <h2>Propose Sell</h2>
+        <div class="hint">Offer to sell an alien access to a strategic resource you control, or a yearly amount of a basic resource you can spare. Strategic resources the selected alien likely needs are highlighted. They may accept, decline, or counter.</div>
+        <div class="propose-row"><label for="sell-partner">Alien</label><select id="sell-partner"></select></div>
+        <div class="propose-row"><label for="sell-resource">Resource</label><select id="sell-resource"></select></div>
+        <div class="propose-row" id="sell-qty-row" hidden><label for="sell-qty">Amount per year</label><input id="sell-qty" type="number" min="0" step="1" value="0"></div>
+        <div class="propose-row"><label for="sell-amount">Payment per year (¤)</label><input id="sell-amount" type="number" min="0" step="1" value="0"></div>
+        <div class="propose-row"><label for="sell-years">Years</label><input id="sell-years" type="number" min="1" max="20" step="1" value="5"></div>
+        <div id="sell-note" class="hint"></div>
+        <div class="work-row">
+          <button id="sell-send">Propose</button>
+          <button id="sell-cancel">Cancel</button>
+        </div>
+      </div>
+      <div id="sell-portrait-panel">
+        <div id="sell-portrait-name"></div>
+        <img id="sell-portrait" alt="">
+        <img id="sell-resimg" class="resimg" alt="">
+      </div>
     </div>
   </div>
   <script>
@@ -871,6 +948,8 @@
       turn: 0,         // turn counter (Year = startingYear + turn)
       currentPlayer: 0, // index into players[]
       opinion: null,   // diplomacy matrix: { "fromIdx->toIdx": value in [-100,100] }, 0 = neutral
+      relations: null, // per-pair war/pact status: { "i|j": { war, warStartTurn, nonAggressionUntil, freeTravelUntil } }
+      pacts: null,     // active diplomatic pacts (per-year priced): [{ id, kind, a, b, payer, payee, resource, amountPerYear, years, remaining }]
       playerName: "Human", // editable human player name (saved)
       // Player (human) accumulated resources and last per-year production rates.
       resources: { material: 0, goods: 0, food: 0, energy: 0, wealth: 0 },
@@ -905,6 +984,11 @@
         turn: gameState.turn || 0,
         currentPlayer: gameState.currentPlayer || 0,
         opinion: gameState.opinion || null,
+        trades: gameState.trades || [],
+        _tradeSeq: gameState._tradeSeq || 0,
+        relations: gameState.relations || null,
+        pacts: gameState.pacts || [],
+        _pactSeq: gameState._pactSeq || 0,
         resources: gameState.resources || { material: 0, food: 0, energy: 0, wealth: 0 },
         rates: gameState.rates || { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 },
         playerName: gameState.playerName || "Human",
@@ -943,6 +1027,11 @@
         })),
         transportRemovals: (tr.transportRemovals || []).map((r) => ({
           x: r.x, y: r.y, owner: r.owner, turnsLeft: r.turnsLeft,
+        })),
+        edgeBuiltYear: (tr.edgeBuiltYear && typeof tr.edgeBuiltYear === 'object') ? { ...tr.edgeBuiltYear } : {},
+        pendingRepairs: (tr.pendingRepairs || []).map((r) => ({
+          kind: r.kind, ek: r.ek, failedYear: r.failedYear,
+          _started: !!r._started, turnsNeeded: r.turnsNeeded, accrued: r.accrued,
         })),
       };
     }
@@ -1753,6 +1842,11 @@
       // protect young segments from upkeep decay. A plain object (not a Map) so it
       // serializes with save files. Keyed the same as tr.roadEdges/monorailEdges.
       tr.edgeBuiltYear = (tr.edgeBuiltYear && typeof tr.edgeBuiltYear === 'object') ? tr.edgeBuiltYear : {};
+      // Road/monorail segments that FAILED (upkeep decay or catastrophic
+      // failure) and are queued for Federation road-crew rebuilding. Each entry:
+      // { kind:'road'|'monorail', ek:'x1,y1|x2,y2', failedYear }. Repaired or
+      // manually rebuilt segments are removed from this queue.
+      tr.pendingRepairs = Array.isArray(tr.pendingRepairs) ? tr.pendingRepairs : [];
       return tr;
     }
     function edgeKey(x1, y1, x2, y2) {
@@ -2687,6 +2781,7 @@
     function inForeignControl(x, y, owner) {
       for (const b of gameState.buildings) {
         if (b.type !== 1 || b.owner === owner) continue;
+        if (hasFreeTravel(owner, b.owner)) continue;   // free-travel pact: not foreign to routing
         if (hexDistance(b.x, b.y, x, y) <= colonyControlRadius(b)) return true;
       }
       return false;
@@ -2762,6 +2857,29 @@
       }
       _riverBorderEdges = out;
       return out;
+    }
+    // River/canal connectivity runs along cell-border VERTICES. A FRESHWATER LAKE
+    // is a body of open water (not border segments), so rivers that flow into the
+    // same lake would otherwise sit in separate vertex components — breaking the
+    // "connected by river" relation between colonies on different inflowing
+    // branches. This links every freshwater-lake cell's corner vertices together
+    // (and, since adjacent lake cells share corners, unifies the whole lake into
+    // one vertex blob), so a river edge touching the lake shore joins it and all
+    // rivers feeding the lake share a single component. `link(u, v)` is the
+    // caller's vertex-adjacency add. Caches nothing (cheap: lakes are small and
+    // the lake set is already cached).
+    function addFreshwaterLakeVertexLinks(link) {
+      const lakeCells = _ensureFreshwaterLakes();
+      if (!lakeCells || !lakeCells.size) return;
+      for (const k of lakeCells) {
+        const [lx, ly] = k.split(',').map(Number);
+        if (!Number.isFinite(lx) || !Number.isFinite(ly)) continue;
+        const corners = cellCornerKeys(lx, ly);
+        // Link the cell's corners in a ring so all six are in one component.
+        for (let i = 0; i < corners.length; i++) {
+          link(corners[i], corners[(i + 1) % corners.length]);
+        }
+      }
     }
     // Whether the specific shared border between adjacent cells is a river or
     // canal SEGMENT (edge-precise — not merely adjacent to a river cell).
@@ -3967,6 +4085,13 @@
       // delta -> borrow -> idle -> clamp happiness/disband -> federation overflow
       // -> federation happiness. Returns per-colony colonyStats for snapshots.
       const statsByCol = applyEconomyTurn(gameState.turn || 0);
+      // Settle active trade deals for the year: pay wealth consumer -> provider,
+      // decrement the remaining term, suspend deals whose parties are no longer
+      // transport-connected, and expire deals that reach zero years. Runs after
+      // the economy so each party's federation wealth pool exists to pay from.
+      settleTradesForYear(gameState.turn || 0);
+      // Charge/advance diplomatic pacts (non-aggression, free-travel) for the year.
+      settlePactsForYear();
       // The turn the Federation is first established, its pooled stores start at
       // ZERO — it inherits nothing. (This turn's colony overflow is cleared;
       // subsequent turns accumulate normally.)
@@ -4361,6 +4486,12 @@
         const tb = bonusDefAt(b.x, b.y);
         if (tb) addBt(tb.bonusType);
       }
+      // Strategic resources the human has via an active trade deal (consumer).
+      for (const t of ensureTrades()) {
+        if (t.consumer === 'human' && t.category === 'strategic' && t.remaining > 0 && t._active !== false) {
+          addBt(t.key);
+        }
+      }
       // Alphabetical; display with a capitalized first letter (bonusTypes are
       // lowercase config keys like "iron", "aluminum").
       const names = [...have].sort((a, b) => a.localeCompare(b));
@@ -4386,7 +4517,11 @@
       stopIdleWatch();        // the human's turn is over; drop any idle warning
       // Federation economy for the player whose turn is ENDING: collect taxes
       // and pay road/monorail/canal maintenance (shortfall -> segment decay).
-      {
+      // Wrapped in try/catch so an error in the economy can NEVER freeze the
+      // whole game (a thrown error here previously aborted advanceTurn entirely,
+      // breaking both End Turn and auto-end). Turn processing continues even if
+      // the Federation step fails; the error is logged for diagnosis.
+      try {
         const ending = players[gameState.currentPlayer];
         if (ending && ending.placed) {
           const owner = ending.kind === 'human' ? 'human' : ending.id;
@@ -4406,14 +4541,19 @@
                 const nm = (types[k] && types[k].name) ? types[k].name : k;
                 shortBits.push(`${_fmtCredits(amt)} ${nm}`);
               }
-              const shortMsg = shortBits.length
-                ? ` Short: ${shortBits.join(', ')}.`
-                : '';
-              notify(`Not enough Federation resources to fund the transportation network — ${parts.join(' and ')} fell into disrepair.${shortMsg}`);
+              const shortMsg = shortBits.length ? ` Short: ${shortBits.join(', ')}.` : '';
+              // Game Log only (NOT a blocking dialog): a per-turn disrepair dialog
+              // would pause the turn for 5s each year and stall auto turn end.
+              try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(`Underfunded transportation network — ${parts.join(' and ')} fell into disrepair.${shortMsg}`); } catch (e) {}
             }
+            // Road-crew progress is recorded per-segment in the Game Log by the
+            // repair pass (dispatched / finished). No per-turn summary DIALOG here
+            // — it would block the turn for 5s each year and break auto turn end.
             if (typeof updatePlayerPanel === 'function') updatePlayerPanel();
           }
         }
+      } catch (e) {
+        console.error('[advanceTurn] Federation economy step failed (continuing):', e);
       }
       gameState.currentPlayer++;
       let roundCompleted = false;
@@ -4630,7 +4770,10 @@
     // then starts watching for idleness. The auto-end warning is NOT shown up
     // front — only after the player has been idle for IDLE_MS.
     function startHumanTurn() {
-      _skipAutoEndThisTurn = false;
+      // Reset the per-turn auto-end skip — UNLESS a trade offer is still pending
+      // or on screen (offers are queued during the preceding AI phase), so the
+      // player always gets to accept/decline before the turn can auto-end.
+      _skipAutoEndThisTurn = (_offerShowing || _offerQueue.length > 0);
       hideAITurnOverlay();     // the AI phase is over — remove the glass pane
       _clearTurnStartTimers();
       stopIdleWatch();
@@ -4954,8 +5097,12 @@
     // (operational) buildings in the colony's control (the biodome always
     // counts) — worked or not, since an unworked building still provides its
     // storage capacity. Stored happiness is clamped per colony to ± this value.
+    // Each building TYPE contributes its happiness storage at most ONCE — having
+    // several of the same building (or multiple Habitats) does not stack the cap
+    // (which previously produced inflated caps like ±185%).
     function colonyHappinessStorage(col) {
       const control = new Set(colonyControlCells(col).map((c) => cellKey(c.x, c.y)));
+      const seenTypes = new Set();
       let sum = 0;
       for (const b of gameState.buildings) {
         if (b.owner !== col.owner) continue;
@@ -4963,6 +5110,8 @@
         // The colony's own biodome always counts; other buildings must be in control.
         if (b.type !== 1 && !control.has(cellKey(b.x, b.y))) continue;
         if (b.type === 1 && !(b.x === col.x && b.y === col.y)) continue;
+        if (seenTypes.has(b.type)) continue;   // once per building type
+        seenTypes.add(b.type);
         sum += bldgStorage(b.type).happiness;
       }
       return sum;
@@ -5691,20 +5840,24 @@
         // nothing, and a pristine bonus destroyed by a building is already gone.
         const tb = bonusDefAt(wx, wy);
         if (tb && tb.bonus) {
-          production.food += tb.bonus.food || 0;
-          production.material += tb.bonus.material || 0;
-          production.goods += tb.bonus.goods || 0;
-          production.energy += tb.bonus.energy || 0;
-          production.wealth += tb.bonus.wealth || 0;
-          production.water += tb.bonus.water || 0;
-          terrainHappiness += tb.bonus.happiness || 0;
-          growthBonus += tb.bonus.growth || 0;
-          addBreak('food', 'Resource deposits', tb.bonus.food || 0);
-          addBreak('material', 'Resource deposits', tb.bonus.material || 0);
-          addBreak('goods', 'Resource deposits', tb.bonus.goods || 0);
-          addBreak('energy', 'Resource deposits', tb.bonus.energy || 0);
-          addBreak('wealth', 'Resource deposits', tb.bonus.wealth || 0);
-          addBreak('water', 'Resource deposits', tb.bonus.water || 0);
+          // Leasing: if this owner has traded away a share of this bonus name via
+          // an 'Other Resources' deal, every one of its deposits of that name
+          // yields only the remaining fraction (0 if fully leased out).
+          const lf = (typeof leasedYieldFraction === 'function') ? leasedYieldFraction(col.owner, tb.name) : 1;
+          production.food += (tb.bonus.food || 0) * lf;
+          production.material += (tb.bonus.material || 0) * lf;
+          production.goods += (tb.bonus.goods || 0) * lf;
+          production.energy += (tb.bonus.energy || 0) * lf;
+          production.wealth += (tb.bonus.wealth || 0) * lf;
+          production.water += (tb.bonus.water || 0) * lf;
+          terrainHappiness += (tb.bonus.happiness || 0) * lf;
+          growthBonus += (tb.bonus.growth || 0) * lf;
+          addBreak('food', 'Resource deposits', (tb.bonus.food || 0) * lf);
+          addBreak('material', 'Resource deposits', (tb.bonus.material || 0) * lf);
+          addBreak('goods', 'Resource deposits', (tb.bonus.goods || 0) * lf);
+          addBreak('energy', 'Resource deposits', (tb.bonus.energy || 0) * lf);
+          addBreak('wealth', 'Resource deposits', (tb.bonus.wealth || 0) * lf);
+          addBreak('water', 'Resource deposits', (tb.bonus.water || 0) * lf);
         }
       }
       // Buildings contribute production + upkeep ONLY when their cell is worked.
@@ -5733,12 +5886,17 @@
         needs.wealth += up.wealth;
         growthBonus += bo.growth;
         // Net building contribution per resource (production bonus − upkeep).
-        addBreak('food', 'Buildings', bo.food);
-        addBreak('material', 'Buildings', bo.material - up.material);
-        addBreak('goods', 'Buildings', bo.goods - up.goods);
-        addBreak('energy', 'Buildings', bo.energy - up.energy);
-        addBreak('water', 'Buildings', bo.water - up.water);
-        addBreak('wealth', 'Buildings', bo.wealth - up.wealth);
+        addBreak('food', 'Building production', bo.food);
+        addBreak('material', 'Building production', bo.material);
+        addBreak('goods', 'Building production', bo.goods);
+        addBreak('energy', 'Building production', bo.energy);
+        addBreak('water', 'Building production', bo.water);
+        addBreak('wealth', 'Building production', bo.wealth);
+        addBreak('material', 'Building upkeep', -up.material);
+        addBreak('goods', 'Building upkeep', -up.goods);
+        addBreak('energy', 'Building upkeep', -up.energy);
+        addBreak('water', 'Building upkeep', -up.water);
+        addBreak('wealth', 'Building upkeep', -up.wealth);
       }
       // Unworked resource deposits in the colony's zone of control: some deposits
       // (e.g. Seals, Whales, Old Growth Forest, Coral Reefs) grant their
@@ -5802,20 +5960,21 @@
         if (!host || host !== col) continue;        // credit only this colony's outposts
         const otb = bonusDefAt(ob.x, ob.y);
         if (!otb || !otb.bonus) continue;
-        production.food += otb.bonus.food || 0;
-        production.material += otb.bonus.material || 0;
-        production.goods += otb.bonus.goods || 0;
-        production.energy += otb.bonus.energy || 0;
-        production.wealth += otb.bonus.wealth || 0;
-        production.water += otb.bonus.water || 0;
-        outpostHappiness += otb.bonus.happiness || 0;
-        growthBonus += otb.bonus.growth || 0;
-        addBreak('food', 'Outpost', otb.bonus.food || 0);
-        addBreak('material', 'Outpost', otb.bonus.material || 0);
-        addBreak('goods', 'Outpost', otb.bonus.goods || 0);
-        addBreak('energy', 'Outpost', otb.bonus.energy || 0);
-        addBreak('wealth', 'Outpost', otb.bonus.wealth || 0);
-        addBreak('water', 'Outpost', otb.bonus.water || 0);
+        const olf = (typeof leasedYieldFraction === 'function') ? leasedYieldFraction(col.owner, otb.name) : 1;
+        production.food += (otb.bonus.food || 0) * olf;
+        production.material += (otb.bonus.material || 0) * olf;
+        production.goods += (otb.bonus.goods || 0) * olf;
+        production.energy += (otb.bonus.energy || 0) * olf;
+        production.wealth += (otb.bonus.wealth || 0) * olf;
+        production.water += (otb.bonus.water || 0) * olf;
+        outpostHappiness += (otb.bonus.happiness || 0) * olf;
+        growthBonus += (otb.bonus.growth || 0) * olf;
+        addBreak('food', 'Outpost', (otb.bonus.food || 0) * olf);
+        addBreak('material', 'Outpost', (otb.bonus.material || 0) * olf);
+        addBreak('goods', 'Outpost', (otb.bonus.goods || 0) * olf);
+        addBreak('energy', 'Outpost', (otb.bonus.energy || 0) * olf);
+        addBreak('wealth', 'Outpost', (otb.bonus.wealth || 0) * olf);
+        addBreak('water', 'Outpost', (otb.bonus.water || 0) * olf);
       }
       // Throttle pass: deferred throttleable buildings (Factories) run at a
       // CAPACITY FRACTION f in [0,1] rather than all-or-nothing, so a resource
@@ -5874,12 +6033,17 @@
           // A factory adds goods output but also draws goods upkeep; the NET goods
           // it adds to the pool consumes shared headroom for the next factory.
           goodsRoom = Math.max(0, goodsRoom - Math.max(0, (bo.goods - up.goods) * f));
-          addBreak('food', 'Buildings', bo.food * f);
-          addBreak('material', 'Buildings', (bo.material - up.material) * f);
-          addBreak('goods', 'Buildings', (bo.goods - up.goods) * f);
-          addBreak('energy', 'Buildings', (bo.energy - up.energy) * f);
-          addBreak('water', 'Buildings', (bo.water - up.water) * f);
-          addBreak('wealth', 'Buildings', (bo.wealth - up.wealth) * f);
+          addBreak('food', 'Building production', bo.food * f);
+          addBreak('material', 'Building production', bo.material * f);
+          addBreak('goods', 'Building production', bo.goods * f);
+          addBreak('energy', 'Building production', bo.energy * f);
+          addBreak('water', 'Building production', bo.water * f);
+          addBreak('wealth', 'Building production', bo.wealth * f);
+          addBreak('material', 'Building upkeep', -up.material * f);
+          addBreak('goods', 'Building upkeep', -up.goods * f);
+          addBreak('energy', 'Building upkeep', -up.energy * f);
+          addBreak('water', 'Building upkeep', -up.water * f);
+          addBreak('wealth', 'Building upkeep', -up.wealth * f);
         }
       }
       // Wealth income also includes derived income (10% of surplus food+material).
@@ -6026,6 +6190,8 @@
         const vs = edgeVertices(ax, ay, bx, by);
         if (vs.length === 2) link(vs[0], vs[1]);
       }
+      // Bridge rivers that flow into the same freshwater lake (see helper).
+      addFreshwaterLakeVertexLinks(link);
       // Flood the vertex graph into components.
       const vComp = new Map();
       let vc = 0;
@@ -6194,6 +6360,8 @@
           const vs = edgeVertices(ax, ay, bx, by);
           if (vs.length === 2) link(vs[0], vs[1]);
         }
+        // Bridge rivers that flow into the same freshwater lake (see helper).
+        addFreshwaterLakeVertexLinks(link);
         if (vAdj.size) {
           const vComp = new Map(); let vc = 0;
           for (const v of vAdj.keys()) {
@@ -6405,6 +6573,13 @@
         const cols = colsAll.slice().sort((a, z) =>
           ((z.seq || 0) - (a.seq || 0)));
         const maxByCol = new Map();
+        // War weariness: advance (or reset) this Federation's years-at-war count
+        // once per turn. While at war it rises by 1/year (feeding the war-weariness
+        // happiness penalty in colonyStats); at peace it resets to 0.
+        {
+          const fed = federationOf(owner);
+          if (fed) fed.yearsAtWar = ownerIsAtWar(owner) ? ((Number(fed.yearsAtWar) || 0) + 1) : 0;
+        }
 
         // --- Step 1: compute delta, add to owned (all colonies first). --------
         for (const col of cols) {
@@ -6875,27 +7050,39 @@
     // Excludes the happiness growth bonus (added by colonyStats). Returns a
     // percentage: new population = owned.population * (this + happiness×100)/100.
     function colonyPopPercent(col) {
-      let pct = 0;
+      // BASE = terrain base.population on worked cells + the Biodome's own
+      // bonus.population (the colony's inherent growth). BUILDINGS = every OTHER
+      // worked building's bonus.population, counted ONCE PER BUILDING TYPE (a
+      // building's population bonus applies once per city no matter how many of
+      // that type are worked — e.g. a 0.25 Habitat bonus counts once even with
+      // several Habitats). Terrain bonuses carry no population value, so they are
+      // not included.
+      let base = 0;
+      let buildings = 0;
       const homeKey = cellKey(col.x, col.y);
       const cap = workCap(col);
       const extras = (col.worked || []).filter((k) => k !== homeKey).slice(0, cap);
       const worked = [homeKey, ...extras];
       const workedSet = new Set(worked);
-      // Terrain base + terrain-bonus population on each worked cell.
+      // Terrain base population on each worked cell.
       for (const k of worked) {
         const [wx, wy] = k.split(",").map(Number);
         const tt = (terrainTypeById(terrainAt(wx, wy))) || {};
-        pct += readResMap(tt.bonus).population;
-        const tb = bonusDefAt(wx, wy);
-        if (tb && tb.bonus) pct += readResMap(tb.bonus).population;
+        base += readResMap(tt.bonus).population;
       }
-      // Worked buildings' bonus.population (biodome always worked).
+      // Worked buildings' bonus.population: the Biodome (type 1) folds into BASE;
+      // every other building type contributes once.
+      const seenTypes = new Set();
       for (const b of colonyBuildings(col)) {
         if (!workedSet.has(cellKey(b.x, b.y))) continue;
         const def = buildingType(b.type) || {};
-        pct += readResMap(def.bonus).population;
+        const p = readResMap(def.bonus).population;
+        if (b.type === 1) { base += p; continue; }   // Biodome -> Base
+        if (seenTypes.has(b.type)) continue;          // once per other building type
+        seenTypes.add(b.type);
+        buildings += p;
       }
-      return pct;
+      return { base, buildings };
     }
 
     // Compute a colony's CURRENT per-year budget/happiness/growth for the stats
@@ -6914,14 +7101,34 @@
       const consumption = b.consumption;
       const netFood = b.net.food;
 
-      // Decompose the happiness rate into positive factors (Happiness) and
-      // negative factors (Unhappiness). Factors: food balance (surplus positive /
-      // shortfall negative), building happiness bonuses (e.g. Barracks/Bank +,
-      // Factory −), and the Federation tax penalty (always negative, −taxRate).
-      const bFactors = happinessFactorsInControl(col, control);
-      const taxPenalty = federationTaxRateOf(col.owner); // >= 0
-      let happinessPos = bFactors.pos;
-      let happinessNeg = bFactors.neg; // negative or 0
+      // ---- Buildings happiness: ONCE PER UPGRADE FAMILY ---------------------
+      // Each building type's happiness counts a single time regardless of how
+      // many of it (or of its upgrade family) are operational in the zone of
+      // control — e.g. two Air Fields + an Airport count once. Positive and
+      // negative contributions are summed separately.
+      let bldgHappPos = 0, bldgHappNeg = 0;
+      {
+        // Depth in the upgrade chain (0 = base), so within a family we can pick
+        // the MOST-UPGRADED present building deterministically.
+        const upDepth = (type) => { let d = 0, cur = type, g = 0; for (;;) { const up = buildingUpgradesCode(cur); if (up == null || up === cur || g++ > 20) break; cur = up; d++; } return d; };
+        // One representative per family: the deepest (most-upgraded) operational
+        // building in control. Its happiness counts once for the whole family.
+        const famRep = new Map(); // familyRoot -> { depth, happiness }
+        for (const bb of gameState.buildings) {
+          if (bb.type === 1 || bb.owner !== col.owner) continue;
+          if (!control.has(cellKey(bb.x, bb.y))) continue;
+          if (!isOperational(bb)) continue;
+          const fam = buildingFamilyRoot(bb.type);
+          const d = upDepth(bb.type);
+          const prev = famRep.get(fam);
+          if (!prev || d > prev.depth) famRep.set(fam, { depth: d, happiness: bldgNet(bb.type).happiness || 0 });
+        }
+        for (const { happiness: h } of famRep.values()) {
+          if (h > 0) bldgHappPos += h; else if (h < 0) bldgHappNeg += h;
+        }
+      }
+      let happinessPos = bldgHappPos;
+      let happinessNeg = bldgHappNeg; // negative or 0
       // Food surplus/shortage contributes to happiness, but its effect is capped
       // to +/- foodHappinessCap (happiness is a percent; default +/-5%) so a huge
       // surplus or deficit can't dominate the colony's morale.
@@ -6949,14 +7156,62 @@
         if (net < 0 && (stored[res] || 0) <= 0) shortageHappiness += Math.max(-shortageCap, net);
       }
       if (shortageHappiness < 0) happinessNeg += shortageHappiness;
-      // Happiness from worked cells' terrain + terrain-bonus (e.g. Wetlands, or
-      // happiness-granting resource deposits), split by sign.
-      const terrainHappiness = b.terrainHappiness || 0;
+      // ---- Terrain happiness: ONCE PER TERRAIN TYPE in the zone of control ---
+      // Each distinct terrain type present in the colony's control area adds its
+      // base happiness a single time (e.g. Wetlands morale counts once no matter
+      // how many Wetlands tiles the colony controls).
+      let terrainHappiness = 0;
+      {
+        const seenTerr = new Set();
+        for (const c of colonyControlCells(col)) {
+          const t = terrainAt(c.x, c.y);
+          if (seenTerr.has(t)) continue;
+          seenTerr.add(t);
+          terrainHappiness += terrainProd(t).happiness || 0;
+        }
+      }
       if (terrainHappiness >= 0) happinessPos += terrainHappiness; else happinessNeg += terrainHappiness;
-      // Happiness from outpost cells' deposits (shown as its own breakdown line).
-      const outpostHappiness = b.outpostHappiness || 0;
-      if (outpostHappiness >= 0) happinessPos += outpostHappiness; else happinessNeg += outpostHappiness;
+      // ---- Terrain Bonus happiness: SUM over worked cells + this colony's
+      // operational outposts (resource-deposit morale, e.g. Hot Springs). --------
+      let terrainBonusHappiness = 0;
+      {
+        const homeKey = cellKey(col.x, col.y);
+        const cap = workCap(col);
+        const extras = (col.worked || []).filter((k) => k !== homeKey).slice(0, cap);
+        for (const k of [homeKey, ...extras]) {
+          const [wx, wy] = k.split(",").map(Number);
+          const tb = bonusDefAt(wx, wy);
+          if (tb && tb.bonus) terrainBonusHappiness += tb.bonus.happiness || 0;
+        }
+        for (const ob of (gameState.buildings || [])) {
+          if (ob.owner !== col.owner || ob.type === 1 || ob.inTransit) continue;
+          if (!isOperational(ob) || !buildingHasOther(ob.type, 'outpost')) continue;
+          const host = buildColonyAt(ob.x, ob.y, ob.owner, ob.type);
+          if (!host || host !== col) continue;
+          const otb = bonusDefAt(ob.x, ob.y);
+          if (otb && otb.bonus) terrainBonusHappiness += otb.bonus.happiness || 0;
+        }
+      }
+      if (terrainBonusHappiness >= 0) happinessPos += terrainBonusHappiness; else happinessNeg += terrainBonusHappiness;
+      // ---- Trade & Federation Tax: scaled by this colony's share of the
+      // Federation population (city population / federation population). A larger
+      // member of the Federation feels proportionally more of the shared trade
+      // morale and tax burden. ------------------------------------------------
+      const fedPop = ownerFederationPopulation(col.owner);
+      const popShare = fedPop > 0 ? ((col.population || 0) / fedPop) : 1;
+      // Trade happiness (owner-wide deals), scaled by this colony's share of the
+      // Federation population (a larger member feels proportionally more).
+      const tradeHappiness = (tradeHappinessBonusFor(col.owner) || 0) * popShare;
+      if (tradeHappiness > 0) happinessPos += tradeHappiness;
+      // Federation tax penalty (>= 0): a FLAT per-colony morale cost — the same
+      // rate hits every colony identically, NOT scaled by population.
+      const taxPenalty = (federationTaxRateOf(col.owner) || 0);
       if (taxPenalty > 0) happinessNeg -= taxPenalty;
+      // ---- War weariness: grows the longer the Federation stays at war. -------
+      const warPerYear = (cfg.warWearinessPerYear != null) ? cfg.warWearinessPerYear : 0.005;
+      const warMax = (cfg.maxWarWeariness != null) ? cfg.maxWarWeariness : 0.15;
+      const warWeariness = Math.min(warMax, warPerYear * fedYearsAtWar(col.owner)) * 100; // happiness points
+      if (warWeariness > 0) happinessNeg -= warWeariness;
       const happinessRate = happinessPos + happinessNeg;
       // Itemized happiness components for the Resources-panel hover tooltip.
       // These four signed values reconcile to happinessRate (they are exactly
@@ -6968,11 +7223,13 @@
       b.breakdown.happiness = {};
       if (foodHappiness) b.breakdown.happiness['Food balance'] = foodHappiness;
       if (shortageHappiness) b.breakdown.happiness['Resource shortage'] = shortageHappiness;
-      const bldgHappiness = bFactors.pos + bFactors.neg;
+      const bldgHappiness = bldgHappPos + bldgHappNeg;          // net, once per upgrade family
       if (bldgHappiness) b.breakdown.happiness['Buildings'] = bldgHappiness;
       if (terrainHappiness) b.breakdown.happiness['Terrain'] = terrainHappiness;
-      if (outpostHappiness) b.breakdown.happiness['Outpost'] = outpostHappiness;
-      if (taxPenalty > 0) b.breakdown.happiness['Federation tax'] = -taxPenalty;
+      if (terrainBonusHappiness) b.breakdown.happiness['Terrain Bonus'] = terrainBonusHappiness;
+      if (tradeHappiness > 0) b.breakdown.happiness['Trade'] = tradeHappiness;
+      if (taxPenalty > 0) b.breakdown.happiness['Federation Tax'] = -taxPenalty;
+      if (warWeariness > 0) b.breakdown.happiness['War Weariness'] = -warWeariness;
       const happinessCap = colonyHappinessStorage(col);
       // Show the stored total as it WILL be after clamping next turn.
       const storedHappiness = Math.max(-happinessCap, Math.min(happinessCap, col.storedHappiness || 0));
@@ -6985,10 +7242,18 @@
       // POSITIVE happiness grows the population, a net NEGATIVE happiness shrinks
       // it). growthRate is kept as a FRACTION (percent/100) so the
       // existing `pct(growthRate)` displays still show a percentage.
-      const popPercentBonus = colonyPopPercent(col);                 // percent points from config
+      const popParts = colonyPopPercent(col);                        // { base, buildings } percent points
+      const popPercentBonus = popParts.base + popParts.buildings;    // total percent points
       const happinessPercent = (happinessRate >= 0 ? happBonus : -happBonus) * 100; // percent points
       let popDeltaPercent = popPercentBonus + happinessPercent;      // total percent/yr
       let rate = popDeltaPercent / 100;                              // fraction/yr
+      // City-size growth drag: a larger city grows more slowly (lower birth rates
+      // from affluence and crowding). The adjustment is a growth-rate FRACTION:
+      //   adjustment = cityGrowthRateAdjustment × city population
+      // (cityGrowthRateAdjustment is negative, so this subtracts from the rate).
+      const citySizeAdj = ((cfg.cityGrowthRateAdjustment != null) ? cfg.cityGrowthRateAdjustment : 0) * (col.population || 0);
+      rate += citySizeAdj;
+      popDeltaPercent = rate * 100;                                  // keep the %-scale value in sync
       if (rate < -0.5) { rate = -0.5; popDeltaPercent = -50; }
       // Whether the colony is over budget: any resource shortfall exceeds its
       // current storage.
@@ -7020,16 +7285,17 @@
         stored, caps, over,
         rateBreakdown: b.breakdown,
         happinessCap,
-        // Breakdown of the growth rate (fractions that sum to growthRate before
-        // the -0.5 floor):
-        //  - buildings: config population bonus from worked cells+buildings
-        //    (bonus.population, incl. biodome/terrain), as a fraction.
-        //  - happiness: happiness-driven bonus in fraction terms (happy +, unhappy -).
-        //  - base: retained for display compatibility (0 in the new model; the
-        //    biodome's contribution is part of `buildings`).
-        growthBase: 0,
+        // Breakdown of the growth rate (all FRACTIONS; they sum to growthRate
+        // before the -0.5 floor):
+        //  - base:       terrain base.population on worked cells + the Biodome's
+        //                own population growth (the colony's inherent growth).
+        //  - buildings:  other buildings' bonus.population (once per building type).
+        //  - happiness:  the happiness-driven growth term (happy +, unhappy -).
+        //  - population: the city-size drag (cityGrowthRateAdjustment × pop).
+        growthBase: popParts.base / 100,
+        growthBuildings: popParts.buildings / 100,
         growthHappiness: happinessPercent / 100,
-        growthBuildings: popPercentBonus / 100,
+        growthPopulation: citySizeAdj,
       };
     }
     // odd-q offset neighbors within N rings of (x,y) as a de-duped list.
@@ -7323,6 +7589,9 @@
       const wxf = (x) => wrap ? ((x % W) + W) % W : x;
       for (const b of gameState.buildings) {
         if (b.type !== 1 || b.owner === owner || b.inTransit) continue;
+        // A FREE-TRAVEL pact opens the partner's territory: their control cells
+        // no longer block this owner's routing / colony-launch paths.
+        if (hasFreeTravel(owner, b.owner)) continue;
         for (const c of colonyControlCells(b)) {
           set.add(c.y * W + wxf(c.x));
         }
@@ -9036,6 +9305,54 @@
       const e = buildingType(up);
       return (e && typeof e.code === 'number') ? e.code : null;
     }
+    // The building-type CODE that `type` is declared EQUIVALENT TO via its
+    // top-level config `equivalentTo` (a lowercase building NAME, e.g. Grid
+    // Storage -> "caes"), or null. A building with this attribute satisfies any
+    // prerequisite that requires the equivalent building, exactly as if it were
+    // one. (May be a single name or an array; the first entry is resolved.)
+    function buildingEquivalentCode(type) {
+      const bt = buildingType(type) || {};
+      let eq = bt.equivalentTo;
+      if (Array.isArray(eq)) eq = eq[0];
+      if (!eq || typeof eq !== 'string') return null;
+      const e = buildingType(eq);
+      return (e && typeof e.code === 'number') ? e.code : null;
+    }
+    // The ROOT code of a building type's upgrade family: follow prerequisite
+    // `upgrades` down the chain to the base building (e.g. Airport -> Air Field,
+    // Port -> Dock; a base building returns its own code). Used to count a
+    // happiness/other effect ONCE PER UPGRADE FAMILY (two Air Fields + an Airport
+    // count as one).
+    function buildingFamilyRoot(type) {
+      let cur = type, guard = 0;
+      for (;;) {
+        const up = buildingUpgradesCode(cur);
+        if (up == null || up === cur || guard++ > 20) break;
+        cur = up;
+      }
+      return cur;
+    }
+    // A Federation's current years-at-war counter (ticked by the economy turn;
+    // 0 when at peace). Read-only accessor for the happiness breakdown.
+    function fedYearsAtWar(owner) {
+      const fed = federationOf(owner);
+      const n = fed && Number(fed.yearsAtWar);
+      return (Number.isFinite(n) && n > 0) ? n : 0;
+    }
+    // Whether the owner is AT WAR with any other owner (persistent per-pair war
+    // status; war begins when either side attacks the other — see setWar). Used
+    // by war weariness and the economy's years-at-war tick.
+    function ownerIsAtWar(owner) {
+      return ownerAtWarWithAny(owner);
+    }
+    // The owner's total Federation population (sum of its colonies' populations).
+    function ownerFederationPopulation(owner) {
+      let sum = 0;
+      for (const b of (gameState.buildings || [])) {
+        if (b.type === 1 && b.owner === owner && !b.inTransit) sum += (b.population || 0);
+      }
+      return sum;
+    }
     // The owner's operational (or under-construction) building standing on cell
     // (x,y), or null. Used by the upgrades rule to find the building to replace.
     function ownerBuildingAt(x, y, owner) {
@@ -9272,6 +9589,11 @@
         present.add(b.type);
         let up = buildingUpgradesCode(b.type);
         while (up != null && !present.has(up)) { present.add(up); up = buildingUpgradesCode(up); }
+        // A building declared `equivalentTo` another ALSO satisfies that
+        // building's requirement (e.g. Grid Storage counts as CAES). Add the
+        // equivalent code and follow its upgrade chain just like a real one.
+        let eq = buildingEquivalentCode(b.type);
+        while (eq != null && !present.has(eq)) { present.add(eq); eq = buildingUpgradesCode(eq); }
       }
       let codes = buildings.map((p) => { const e = buildingType(p); return e ? e.code : p; });
       // Small inland freshwater lakes (1–3 cells) are too small to host a Dock,
@@ -9310,6 +9632,9 @@
           present.add(b.type);
           let up = buildingUpgradesCode(b.type);
           while (up != null && !present.has(up)) { present.add(up); up = buildingUpgradesCode(up); }
+          // `equivalentTo` also satisfies the equivalent building's requirement.
+          let eq = buildingEquivalentCode(b.type);
+          while (eq != null && !present.has(eq)) { present.add(eq); eq = buildingUpgradesCode(eq); }
         }
       }
       let codes = buildings.map((p) => { const e = buildingType(p); return e ? e.code : p; });
@@ -9436,6 +9761,15 @@
       if (typeof player.federation.treasury !== 'number' || !isFinite(player.federation.treasury)) player.federation.treasury = 0;
       if (typeof player.federation.taxRate !== 'number' || !isFinite(player.federation.taxRate)) player.federation.taxRate = federationDefaultTaxRate();
       player.federation.taxRate = Math.max(0, Math.min(20, player.federation.taxRate));
+      // Road-crew capacity: how many failed road/monorail segments the
+      // Federation rebuilds per year (player-set via the Federation dialog
+      // slider). Defaults to the config capacityPerTurn; clamped 0..20.
+      {
+        const crews = (CONFIG.federation && CONFIG.federation.roadCrews) || {};
+        const dflt = (crews.capacityPerTurn != null) ? crews.capacityPerTurn : 0;
+        if (typeof player.federation.roadCrews !== 'number' || !isFinite(player.federation.roadCrews)) player.federation.roadCrews = dflt;
+        player.federation.roadCrews = Math.max(0, Math.min(20, Math.round(player.federation.roadCrews)));
+      }
       // Federation-wide DEFAULT MANAGER applied to each NEWLY-settled colony (not
       // to existing colonies). Valid values match the Colony Detail dropdown.
       const _MGRS = ['none', 'growth', 'production', 'energy', 'wealth', 'military'];
@@ -9549,6 +9883,13 @@
         if (!host || !groupKeys.has(_colonyKey(host))) continue;
         const tb = bonusDefAt(b.x, b.y);
         addBt(tb && tb.bonusType);
+      }
+      // Trade access: strategic bonusTypes the colony's owner consumes via an
+      // active trade deal count as available (as if they controlled the deposit).
+      for (const t of ensureTrades()) {
+        if (t.consumer === col.owner && t.category === 'strategic' && t.remaining > 0 && t._active !== false) {
+          addBt(t.key);
+        }
       }
       return out;
     }
@@ -9696,6 +10037,9 @@
       const touched = new Set();
       for (let i = 0; i < n; i++) {
         const ek = edges[i];
+        queueSegmentRepair(kind, ek);   // remember it for Federation road crews
+        // Game-log (no dialog) the disrepair with a clickable location.
+        try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(`A ${kind} segment fell into disrepair at ${_segLabel(ek)} (unfunded maintenance).`); } catch (e) {}
         edgeSet.delete(ek);
         delete tr.edgeBuiltYear[ek];
         const [a, b] = ek.split("|");
@@ -9723,9 +10067,32 @@
     // Remove ONE specific road/monorail segment edge: drop it from its edge set
     // and the built-year map, remove any incident bridge no longer backed by a
     // segment, and prune either endpoint cell left with no incident edge of this
-    // kind. kind: 'road' | 'monorail'.
-    function _removeSegmentEdge(kind, ek) {
+    // A human-readable location label for a segment edge key "x1,y1|x2,y2",
+    // using the first endpoint's lat/long (notify/gameLog auto-link lat/long).
+    function _segLabel(ek) {
+      try {
+        const [a] = String(ek).split('|');
+        const [x, y] = a.split(',').map(Number);
+        if (Number.isFinite(x) && Number.isFinite(y)) return cellLatLonLabel(x, y);
+      } catch (e) {}
+      return 'an unknown location';
+    }
+    // Queue a FAILED road/monorail segment for Federation road-crew rebuilding.
+    // Dedups by (kind, ek); drops the oldest entries beyond the configured
+    // maxBacklog so a long outage doesn't grow the queue without bound.
+    function queueSegmentRepair(kind, ek) {
       const tr = ensureTransport();
+      const pr = tr.pendingRepairs;
+      if (pr.some((r) => r.kind === kind && r.ek === ek)) return;
+      pr.push({ kind, ek, failedYear: currentYear() });
+      const crews = (CONFIG.federation && CONFIG.federation.roadCrews) || {};
+      const maxBacklog = (crews.maxBacklog != null) ? crews.maxBacklog : 200;
+      if (pr.length > maxBacklog) pr.splice(0, pr.length - maxBacklog); // drop oldest
+    }
+    // kind. kind: 'road' | 'monorail'.
+    function _removeSegmentEdge(kind, ek, recordRepair) {
+      const tr = ensureTransport();
+      if (recordRepair && (tr.roadEdges.has(ek) || tr.monorailEdges.has(ek))) queueSegmentRepair(kind, ek);
       const edgeSet = kind === 'monorail' ? tr.monorailEdges : tr.roadEdges;
       const cellSet = kind === 'monorail' ? tr.monorails : tr.roads;
       if (!edgeSet.has(ek)) return false;
@@ -9770,9 +10137,11 @@
           if (Math.random() >= FAIL_CHANCE) continue; // per-turn failure probability
           const [a] = ek.split("|");
           const [ax, ay] = a.split(",").map(Number);
-          if (_removeSegmentEdge(kind, ek)) {
+          if (_removeSegmentEdge(kind, ek, true)) {
             anyFailed = true;
-            notify(`A ${kind} segment failed catastrophically at ${cellLatLonLabel(ax, ay)}.`);
+            // Game Log only (no blocking dialog), so repeated failures never
+            // interrupt auto turn end.
+            try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(`A ${kind} segment failed catastrophically at ${cellLatLonLabel(ax, ay)}.`); } catch (e) {}
           }
         }
       }
@@ -9796,6 +10165,7 @@
       const fed = ensureFederation(player);
       const cols = playerColonies(owner);
       if (cols.length === 0) return null; // no federation without colonies
+      const tr = ensureTransport();   // transport network (for road-crew repairs)
 
       // 1) Collect taxes.
       const tax = federationTaxFor(owner, fed.taxRate);
@@ -9880,8 +10250,86 @@
       if ((destroyedRoads || destroyedMono) && hexMap && typeof hexMap.setTransport === 'function') {
         hexMap.setTransport(ensureTransport());
       }
+      // 3) Road crews: rebuild FAILED segments (decay or catastrophic) from the
+      //    pending-repair queue, oldest first. `capacity` crews work in parallel,
+      //    one segment each. A repair costs the NORMAL terrain/type build cost of
+      //    the segment (bridge included, × costMultiplier), charged ONCE when a
+      //    crew starts it, and takes the segment's build TIME (the terrain's
+      //    `turns` for that transport type, × turnsMultiplier) to finish — so a
+      //    mountain monorail takes longer to rebuild than a grassland road. The
+      //    road/monorail network is human-built, so crews only run for the human
+      //    Federation. `repaired` counts segments FINISHED this turn.
+      let repaired = 0;
+      if (owner === 'human') {
+        const crews = (CONFIG.federation && CONFIG.federation.roadCrews) || {};
+        const capacity = (typeof fed.roadCrews === 'number') ? fed.roadCrews
+          : ((crews.capacityPerTurn != null) ? crews.capacityPerTurn : 0);
+        const mult = (typeof crews.costMultiplier === 'number' && crews.costMultiplier >= 0) ? crews.costMultiplier : 1;
+        const turnsMult = (typeof crews.turnsMultiplier === 'number' && crews.turnsMultiplier > 0) ? crews.turnsMultiplier : 1;
+        const pr = tr.pendingRepairs || [];
+        if (capacity > 0 && pr.length) {
+          const segRawCost = (entry, ax, ay, bx, by) => entry.kind === 'monorail'
+            ? monorailSegmentCost(ax, ay, bx, by)
+            : roadSegmentCost(ax, ay, bx, by);
+          const resCostOf = (raw) => {
+            const out = {};
+            for (const k of MAINT_RESOURCE_KEYS) out[k] = Math.max(0, (raw[k] || 0) * mult);
+            return out;
+          };
+          const canAfford = (cost) => {
+            for (const k of MAINT_RESOURCE_KEYS) {
+              if ((cost[k] || 0) > (owned[k] || 0) + 1e-9) return false;
+            }
+            return true;
+          };
+          const keep = [];
+          let crewsUsed = 0;   // segments WORKED this turn (started or continued), capped at capacity
+          for (const entry of pr) {
+            if (!entry || !entry.ek) continue; // drop malformed
+            const existsSet = entry.kind === 'monorail' ? tr.monorailEdges : tr.roadEdges;
+            if (existsSet.has(entry.ek)) continue;             // already rebuilt by hand -> drop
+            const [a, b] = String(entry.ek).split('|');
+            const [ax, ay] = a.split(',').map(Number);
+            const [bx, by] = b.split(',').map(Number);
+            if (!Number.isFinite(ax) || !Number.isFinite(bx)) continue; // malformed -> drop
+            // No crew free this turn: keep the entry as-is (preserving any
+            // in-progress accrual) for a later turn.
+            if (crewsUsed >= capacity) { keep.push(entry); continue; }
+            // Start a not-yet-started repair: charge its resource cost ONCE and
+            // record the build time to finish. If unaffordable, leave queued
+            // (unstarted) for a richer turn without consuming a crew-slot.
+            if (!entry._started) {
+              const raw = segRawCost(entry, ax, ay, bx, by);
+              const cost = resCostOf(raw);
+              if (!canAfford(cost)) { keep.push(entry); continue; }
+              for (const k of MAINT_RESOURCE_KEYS) owned[k] = Math.max(0, (owned[k] || 0) - (cost[k] || 0));
+              entry._started = true;
+              entry.turnsNeeded = Math.max(1, Math.ceil((Number(raw.turns) || 1) * turnsMult));
+              entry.accrued = 0;
+              try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(`A road crew was dispatched to rebuild a ${entry.kind} segment at ${_segLabel(entry.ek)} (est. ${entry.turnsNeeded} year${entry.turnsNeeded === 1 ? '' : 's'}).`); } catch (e) {}
+            }
+            // Work one year on this segment (a crew is occupied).
+            crewsUsed++;
+            entry.accrued = (entry.accrued || 0) + 1;
+            if (entry.accrued >= entry.turnsNeeded) {
+              _applyBuiltSegment(entry.kind, ax, ay, bx, by);   // finished
+              repaired++;
+              try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(`A road crew finished rebuilding a ${entry.kind} segment at ${_segLabel(entry.ek)}.`); } catch (e) {}
+            } else {
+              keep.push(entry);                                 // still under repair
+            }
+          }
+          tr.pendingRepairs = keep;
+          fed.treasury = owned.wealth; // keep the legacy mirror in sync after spending
+          if (repaired > 0) {
+            if (typeof invalidateColonyConnectivity === 'function') invalidateColonyConnectivity();
+            if (hexMap && typeof hexMap.setTransport === 'function') hexMap.setTransport(ensureTransport());
+          }
+        }
+      }
+      const inProgress = (tr.pendingRepairs || []).filter((r) => r && r._started).length;
       const maintObj = federationMaintenance(owner);
-      return { tax, maintenance: maintObj.total, treasury: fed.treasury, destroyedRoads, destroyedMono, shortfalls };
+      return { tax, maintenance: maintObj.total, treasury: fed.treasury, destroyedRoads, destroyedMono, repaired, inProgress, pendingRepairs: (tr.pendingRepairs || []).length, shortfalls };
     }
 
     // ---- AI turn -----------------------------------------------------------
@@ -9967,6 +10415,10 @@
           // strikes. Runs for every placed AI, even if it had no economic action.
           try { if (aiMilitaryStep(pi)) _roundHadAction = true; }
           catch (e) { console.error("[ai] military step failed:", e); }
+          // Trade: the AI may extend a trade offer to the human (popup) and/or
+          // auto-settle deals with other AIs, driven by its species traits.
+          try { aiMaybeTrade(pi); }
+          catch (e) { console.error("[ai] trade step failed:", e); }
         }
       } catch (err) {
         console.error("[ai] aiTakeTurn error for player " + pi + ":", err);
@@ -12486,6 +12938,76 @@
         adjustOpinion(i, targetIdx, delta);
       }
     }
+    // --- Diplomacy: per-pair relations (war status + pacts) ------------------
+    // gameState.relations maps an UNORDERED owner-index pair "i|j" (i<j) to a
+    // record { war, warStartTurn, nonAggressionUntil, freeTravelUntil }. Owners
+    // are the same ids used on buildings/units ('human' or an AI index), resolved
+    // to indices via ownerToIndex. "war starts with an attack by any side" — an
+    // attack calls setWar(); suing for peace calls makePeace(); pacts are granted
+    // for a term (expiry turn). Missing pairs read as peace with no pacts.
+    function relKey(a, b) {
+      const ia = ownerToIndex(a), ib = ownerToIndex(b);
+      const lo = Math.min(ia, ib), hi = Math.max(ia, ib);
+      return `${lo}|${hi}`;
+    }
+    function ensureRelations() {
+      if (!gameState.relations || typeof gameState.relations !== 'object') gameState.relations = {};
+      return gameState.relations;
+    }
+    function relationOf(a, b) {
+      const ia = ownerToIndex(a), ib = ownerToIndex(b);
+      if (ia < 0 || ib < 0 || ia === ib) return null;
+      const rels = ensureRelations();
+      const k = relKey(a, b);
+      if (!rels[k] || typeof rels[k] !== 'object') {
+        rels[k] = { war: false, warStartTurn: 0, nonAggressionUntil: 0, freeTravelUntil: 0 };
+      }
+      const r = rels[k];
+      if (typeof r.war !== 'boolean') r.war = !!r.war;
+      for (const f of ['warStartTurn', 'nonAggressionUntil', 'freeTravelUntil']) {
+        if (typeof r[f] !== 'number' || !Number.isFinite(r[f])) r[f] = 0;
+      }
+      return r;
+    }
+    // Two owners are at war when their relation record's war flag is set.
+    function areAtWar(a, b) { const r = relationOf(a, b); return !!(r && r.war); }
+    // A pact is active when its expiry turn is in the future (>= current turn).
+    function hasNonAggression(a, b) { const r = relationOf(a, b); return !!(r && r.nonAggressionUntil > (gameState.turn || 0)); }
+    function hasFreeTravel(a, b) { const r = relationOf(a, b); return !!(r && r.freeTravelUntil > (gameState.turn || 0)); }
+    // Start a war between two owners (idempotent). Records the start turn.
+    function setWar(a, b) {
+      const r = relationOf(a, b);
+      if (!r || r.war) return;
+      r.war = true; r.warStartTurn = gameState.turn || 0;
+      // War voids any non-aggression pact between the two.
+      r.nonAggressionUntil = 0;
+    }
+    // End a war between two owners (peace).
+    function makePeace(a, b) {
+      const r = relationOf(a, b);
+      if (!r) return;
+      r.war = false; r.warStartTurn = 0;
+    }
+    // Grant a pact ('nonAggression' | 'freeTravel') until the given turn.
+    function grantPact(a, b, kind, untilTurn) {
+      const r = relationOf(a, b);
+      if (!r) return;
+      const t = Math.max(gameState.turn || 0, Number(untilTurn) || 0);
+      if (kind === 'nonAggression') r.nonAggressionUntil = t;
+      else if (kind === 'freeTravel') r.freeTravelUntil = t;
+    }
+    // Whether `owner` is at war with ANY other owner (used by war weariness).
+    function ownerAtWarWithAny(owner) {
+      const io = ownerToIndex(owner);
+      if (io < 0) return false;
+      const players = gameState.players || [];
+      for (let i = 0; i < players.length; i++) {
+        if (i === io) continue;
+        const r = relationOf(owner, indexToOwner(i));
+        if (r && r.war) return true;
+      }
+      return false;
+    }
     // Resolve a player index to a display name ("You" for the human).
     function playerDisplayName(idx) {
       const p = (gameState.players || [])[idx];
@@ -12496,7 +13018,727 @@
     function cellHasBuilding(x, y) {
       return gameState.buildings.some((b) => b.x === x && b.y === y);
     }
-    // When true, the menu was opened from the colony work window: suppress all
+
+    // =======================================================================
+    // TRADE SYSTEM
+    // -----------------------------------------------------------------------
+    // Players (human + AI) negotiate per-year access to strategic resources
+    // (terrain-bonus `bonusType`), ordinary resources, or happiness-granting
+    // terrain bonuses. A deal: the PROVIDER grants the CONSUMER access while the
+    // CONSUMER pays `amountPerYear` wealth/yr for `years` years. A deal requires
+    // the two parties' colonies to be transport-connected (checked each year).
+    // Deals auto-cancel if either party attacks the other. AI willingness and
+    // pricing are driven by its 8-axis species traits and map-wide scarcity.
+    // gameState.trades = [{ id, provider, consumer, category, key,
+    //   amountPerYear, years, remaining, startTurn }]
+    // category: 'strategic' | 'resource' | 'happiness'
+    // provider/consumer are OWNER strings ('human' or an AI species id).
+    // =======================================================================
+    function ensureTrades() {
+      if (!Array.isArray(gameState.trades)) gameState.trades = [];
+      return gameState.trades;
+    }
+    // Owner identity model: the HUMAN's owner is the string 'human'; an AI's
+    // owner is its player INDEX (number), which equals players[idx].id. Buildings
+    // carry .owner accordingly (placeColony stores the index for AIs).
+    // Owner -> player index (0 for human).
+    function ownerToIndex(owner) {
+      if (owner === 'human') return 0;
+      const n = Number(owner);
+      return Number.isInteger(n) ? n : -1;
+    }
+    // Player index -> owner value used on buildings/colonies/units.
+    function indexToOwner(idx) {
+      const p = (gameState.players || [])[idx];
+      if (!p) return null;
+      return p.kind === 'human' ? 'human' : idx;
+    }
+    // The 8-axis traits for an owner (AI species), or null for the human.
+    function ownerTraits(owner) {
+      const idx = ownerToIndex(owner);
+      const p = (gameState.players || [])[idx];
+      if (!p || p.kind === 'human') return null;
+      const sp = (CONFIG && CONFIG.ai && CONFIG.ai.species && CONFIG.ai.species[p.name]) || null;
+      return (sp && sp.traits) || null;
+    }
+    function ownerDisplayName(owner) {
+      const idx = ownerToIndex(owner);
+      return idx >= 0 ? playerDisplayName(idx) : String(owner);
+    }
+
+    // All distinct owners that currently have at least one placed colony.
+    function activeOwners() {
+      const set = new Set();
+      for (const b of (gameState.buildings || [])) {
+        if (b.type === 1 && !b.inTransit) set.add(b.owner);
+      }
+      return [...set];
+    }
+
+    // Map-wide scarcity of a strategic bonusType: fraction of all bonus cells
+    // that carry it (0 = absent/rare, up to 1). Lower fraction => scarcer =>
+    // pricier. Returns a scarcity MULTIPLIER in ~[1, 3]: common ~1x, rare ~3x.
+    function bonusTypeScarcity(bt) {
+      const bonuses = (gameState.map && gameState.map.bonuses) || {};
+      let total = 0, withBt = 0;
+      for (const k of Object.keys(bonuses)) {
+        const name = bonuses[k] && bonuses[k].name;
+        if (!name) continue;
+        total++;
+        const def = (CONFIG && CONFIG.terrainBonus && CONFIG.terrainBonus[name]) || null;
+        if (!def) continue;
+        const defBt = def.bonusType;
+        const has = Array.isArray(defBt) ? defBt.includes(bt) : defBt === bt;
+        if (has) withBt++;
+      }
+      if (total === 0) return 2; // unknown map => middling
+      const frac = withBt / total;
+      // frac 0 -> 3x (very scarce), frac 0.1 -> ~1.5x, frac >=0.2 -> ~1x.
+      return Math.max(1, Math.min(3, 1 + (0.12 - Math.min(0.12, frac)) * (2 / 0.12)));
+    }
+
+    // The set of strategic bonusTypes an owner NATIVELY controls (worked cells
+    // of their colonies, or covered by their operational outposts).
+    function ownerNativeBonusTypes(owner) {
+      const have = new Set();
+      const add = (bt) => {
+        if (!bt) return;
+        if (Array.isArray(bt)) { for (const t of bt) if (t) have.add(String(t)); }
+        else have.add(String(bt));
+      };
+      for (const b of (gameState.buildings || [])) {
+        if (b.owner !== owner || b.inTransit) continue;
+        if (b.type === 1) {
+          for (const k of (b.worked || [])) {
+            const [cx, cy] = String(k).split(",").map(Number);
+            if (!Number.isFinite(cx)) continue;
+            const tb = bonusDefAt(cx, cy);
+            if (tb) add(tb.bonusType);
+          }
+        } else if (isOperational(b) && buildingHasOther(b.type, 'outpost')) {
+          const tb = bonusDefAt(b.x, b.y);
+          if (tb) add(tb.bonusType);
+        }
+      }
+      return have;
+    }
+
+    // The set of strategic bonusTypes an owner has ACCESS to: natively
+    // controlled PLUS any granted via an active trade where it is the consumer.
+    function ownerAvailableBonusTypes(owner) {
+      const have = ownerNativeBonusTypes(owner);
+      for (const t of ensureTrades()) {
+        if (t.consumer === owner && t.category === 'strategic' && t.remaining > 0 && t._active !== false) {
+          have.add(String(t.key));
+        }
+      }
+      return have;
+    }
+
+    // Happiness-granting terrain bonuses an owner natively controls, as a map
+    // name -> happiness amount (positive). Used to price happiness trades and
+    // to grant the happiness bonus to a consumer.
+    function ownerHappinessBonuses(owner) {
+      return out;
+    }
+
+    // The bonus object (resource yields) of one of `owner`'s deposits of the
+    // given bonus NAME — used to value an 'other' lease. Returns null if none.
+    function providerDepositBonus(owner, name) {
+      for (const b of (gameState.buildings || [])) {
+        if (b.owner !== owner || b.inTransit) continue;
+        const cells = b.type === 1 ? (b.worked || [])
+          : (isOperational(b) && buildingHasOther(b.type, 'outpost') ? [b.x + ',' + b.y] : []);
+        for (const k of cells) {
+          const [cx, cy] = String(k).split(',').map(Number);
+          if (!Number.isFinite(cx)) continue;
+          const tb = bonusDefAt(cx, cy);
+          if (tb && tb.name === name && tb.bonus) return tb.bonus;
+        }
+      }
+      return null;
+    }
+    // --- 'Other Resources' (terrain-bonus) leasing --------------------------
+    // Count of an owner's terrain-bonus DEPOSITS by bonus NAME, across its
+    // colonies' worked cells and operational outpost cells (the deposits it
+    // actually exploits). Returns Map(name -> count). Used for the Other
+    // Resources trade list (xN) and the lease-fraction math.
+    function ownerBonusNameCounts(owner) {
+      const counts = new Map();
+      const seen = new Set();
+      const add = (x, y) => {
+        const key = x + ',' + y;
+        if (seen.has(key)) return; seen.add(key);
+        const tb = bonusDefAt(x, y);
+        if (tb && tb.name) counts.set(tb.name, (counts.get(tb.name) || 0) + 1);
+      };
+      for (const b of (gameState.buildings || [])) {
+        if (b.owner !== owner || b.inTransit) continue;
+        if (b.type === 1) {
+          for (const k of (b.worked || [])) {
+            const [cx, cy] = String(k).split(',').map(Number);
+            if (Number.isFinite(cx)) add(cx, cy);
+          }
+        } else if (isOperational(b) && buildingHasOther(b.type, 'outpost')) {
+          add(b.x, b.y);
+        }
+      }
+      return counts;
+    }
+    // How many of `owner`'s deposits of bonus `name` are currently LEASED OUT
+    // via active 'other' trades where the owner is the PROVIDER.
+    function ownerLeasedCount(owner, name) {
+      let k = 0;
+      for (const t of ensureTrades()) {
+        if (t.category === 'other' && t.provider === owner && t.key === name
+            && t.remaining > 0 && t._active !== false) k++;
+      }
+      return k;
+    }
+    // The REMAINING yield fraction (0..1) each of `owner`'s deposits of bonus
+    // `name` contributes after leasing: (N - K) / N, where N = deposits owned and
+    // K = deposits leased out. If K >= N the fraction is 0; if the owner has no
+    // such deposit (N == 0) there is nothing to scale, so returns 1.
+    function leasedYieldFraction(owner, name) {
+      if (!name) return 1;
+      const N = ownerBonusNameCounts(owner).get(name) || 0;
+      if (N <= 0) return 1;
+      const K = ownerLeasedCount(owner, name);
+      return Math.max(0, (N - K)) / N;
+    }
+    // For a CONSUMER of 'other' deals: the extra yield FRACTION of a given bonus
+    // name they receive = (leased count) / (provider's deposit count), summed
+    // across their active 'other' deals of that name. Also returns the provider
+    // so the consumer can source the actual bonus values. Returns a list of
+    // { name, provider, shareFraction } for every 'other' deal this owner consumes.
+    function consumerLeasedShares(owner) {
+      const out = [];
+      for (const t of ensureTrades()) {
+        if (t.category !== 'other' || t.consumer !== owner) continue;
+        if (!(t.remaining > 0) || t._active === false) continue;
+        const N = ownerBonusNameCounts(t.provider).get(t.key) || 0;
+        const share = N > 0 ? (1 / N) : 0;   // one leased deposit's share of the provider's total
+        if (share > 0) out.push({ name: t.key, provider: t.provider, shareFraction: share });
+      }
+      return out;
+    }
+
+    // Cross-owner transport connectivity: is at least one PROVIDER colony
+    // connected (any mode) to at least one CONSUMER colony? Reuses the same
+    // connectivity matrix primitives but across owners by testing each pair.
+    function ownersTradeConnected(a, b) {
+      const colsA = (gameState.buildings || []).filter((x) => x.type === 1 && !x.inTransit && x.owner === a);
+      const colsB = (gameState.buildings || []).filter((x) => x.type === 1 && !x.inTransit && x.owner === b);
+      if (!colsA.length || !colsB.length) return false;
+      for (const ca of colsA) {
+        for (const cb of colsB) {
+          if (_tradeRouteExists(ca, cb)) return true;
+        }
+      }
+      return false;
+    }
+    // A transport route (road, monorail, sea, or air) between two colonies of
+    // DIFFERENT owners. Because a player CANNOT build transport inside a foreign
+    // colony's zone of control, a trade route is considered to connect when the
+    // network reaches the PARTNER COLONY'S ZONE OF CONTROL (the boundary each
+    // side can build up to) — not the partner's exact biodome tile. A convoy may
+    // cross either party's control; only a THIRD owner's control blocks it.
+    function _tradeRouteExists(a, b) {
+      // Air: either colony within the other's air range (uses their own hubs).
+      if (coloniesAirLinked(a, b)) return true;
+      const W = gameState.map.terrain[0].length, H = gameState.map.terrain.length;
+      const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
+      const wx = (x) => wrap ? ((x % W) + W) % W : x;
+      const key = (x, y) => y * W + wx(x);
+      const parties = new Set([a.owner, b.owner]);
+      // Blocked if inside a THIRD owner's control radius.
+      const thirdPartyControl = (x, y) => {
+        for (const col of gameState.buildings) {
+          if (col.type !== 1 || col.inTransit) continue;
+          if (parties.has(col.owner)) continue;
+          if (hexDistance(col.x, col.y, x, y) <= colonyControlRadius(col)) return true;
+        }
+        return false;
+      };
+      // Goal: a cell within the PARTNER colony b's zone of control (inclusive).
+      const bRadius = colonyControlRadius(b);
+      const inPartnerControl = (x, y) => hexDistance(b.x, b.y, x, y) <= bRadius;
+      // BFS from colony a over cells traversable by `cellOk`. Succeeds when the
+      // frontier reaches b's control zone. The start (a) and any cell inside a's
+      // OWN control zone are traversable without needing a network cell (you can
+      // always move within your own territory to where your network begins);
+      // outside both parties' control, only network cells are traversable.
+      const aRadius = colonyControlRadius(a);
+      const inOwnControl = (x, y) => hexDistance(a.x, a.y, x, y) <= aRadius;
+      const reaches = (cellOk) => {
+        const start = key(a.x, a.y);
+        const seen = new Set([start]);
+        let frontier = [{ x: wx(a.x), y: a.y }];
+        while (frontier.length) {
+          const next = [];
+          for (const c of frontier) {
+            if (inPartnerControl(c.x, c.y)) return true;   // reached b's zone
+            for (const nb of hexNeighborsRenderer(c.x, c.y)) {
+              const nx = wx(nb.x), ny = nb.y;
+              if (ny < 0 || ny >= H) continue;
+              const nk = key(nx, ny);
+              if (seen.has(nk)) continue;
+              if (inPartnerControl(nx, ny)) { seen.add(nk); next.push({ x: nx, y: ny }); continue; }
+              if (thirdPartyControl(nx, ny)) continue;
+              // Traversable if it's a network cell, or lies within our own control
+              // (we can reach our network's start from our colony across our land).
+              if (!cellOk(nx, ny) && !inOwnControl(nx, ny)) continue;
+              seen.add(nk); next.push({ x: nx, y: ny });
+            }
+          }
+          frontier = next;
+        }
+        return false;
+      };
+      if (reaches((x, y) => hasMonorail(x, y))) return true;
+      if (reaches((x, y) => hasRoad(x, y))) return true;
+      // Sea: both colonies need a Dock/Port and a water route between them. The
+      // route runs dock-to-dock (docks sit at each colony's own coastal edge).
+      const aDock = colonyDockCell(a, false), bDock = colonyDockCell(b, false);
+      if (aDock && bDock) {
+        const isWaterRoute = (x, y) => {
+          const terr = terrainAt(x, y);
+          if (terr === 7 || terr === 8 || terr === 9) return false;
+          if (terr === 1) return true;                         // any sea tile
+          const xx = wx(x);
+          if (riverSegmentSet().has(y * W + xx)) return true;
+          if (gameState.transport && gameState.transport.canals) {
+            for (const nb of hexNeighborsRenderer(x, y)) if (hasCanalEdge(x, y, nb.x, nb.y)) return true;
+          }
+          return false;
+        };
+        const start = key(aDock.x, aDock.y), goal = key(bDock.x, bDock.y);
+        const seen = new Set([start]);
+        let frontier = [{ x: wx(aDock.x), y: aDock.y }];
+        while (frontier.length) {
+          const next = [];
+          for (const c of frontier) {
+            if (key(c.x, c.y) === goal) return true;
+            for (const nb of hexNeighborsRenderer(c.x, c.y)) {
+              const nx = wx(nb.x), ny = nb.y;
+              if (ny < 0 || ny >= H) continue;
+              const nk = key(nx, ny);
+              if (seen.has(nk)) continue;
+              const isEndpoint = (nk === goal || nk === start);
+              if (!isEndpoint && thirdPartyControl(nx, ny)) continue;
+              if (!isEndpoint && !isWaterRoute(nx, ny)) continue;
+              seen.add(nk); next.push({ x: nx, y: ny });
+            }
+          }
+          frontier = next;
+        }
+      }
+      return false;
+    }
+
+    // --- Trade economy settlement (called each year after applyEconomyTurn) --
+    // For each active deal: require the parties still be connected; transfer
+    // amountPerYear wealth from consumer to provider; decrement remaining;
+    // expire at 0. Access (strategic/happiness) is read live via
+    // ownerAvailableBonusTypes / tradeHappinessBonusFor during the turn.
+    function settleTradesForYear(turnNo) {
+      const trades = ensureTrades();
+      if (!trades.length) return;
+      // Pre-measure each seller's current spare per basic resource (BEFORE any
+      // deliveries this year distort it). Concurrent deals for the same
+      // (seller,resource) draw down this shared pool so a seller can't deliver
+      // more than it can spare in total.
+      const sparePool = new Map(); // key `${seller}|${res}` -> remaining spare
+      const spareKey = (s, r) => `${s}|${r}`;
+      for (const t of trades) {
+        if (t.category === 'resource' && BASIC_TRADE_RESOURCES.includes(t.key)) {
+          const k = spareKey(t.provider, t.key);
+          if (!sparePool.has(k)) sparePool.set(k, spareSurplusOf(t.provider, t.key));
+        }
+      }
+      const kept = [];
+      for (const t of trades) {
+        const connected = ownersTradeConnected(t.provider, t.consumer);
+        t._active = connected;              // suspended (no access, no payment) if not connected
+        if (connected && t.remaining > 0) {
+          const payer = federationOwnedOf(t.consumer);
+          const payee = federationOwnedOf(t.provider);
+          const fullAmt = Math.max(0, Number(t.amountPerYear) || 0);
+          let payFraction = 1;             // 1 = full payment; reduced for short deliveries
+          // Basic-resource deals deliver goods and AUTO-REDUCE: if the seller can
+          // no longer spare the agreed quantity, deliver only what's left in its
+          // shared spare pool this year and scale the payment proportionally. The
+          // deal's agreed amountQuantity is preserved, so it recovers in a later
+          // year if the seller's surplus returns.
+          if (t.category === 'resource' && BASIC_TRADE_RESOURCES.includes(t.key)) {
+            const agreed = Math.max(0, Number(t.amountQuantity) || 0);
+            const k = spareKey(t.provider, t.key);
+            const avail = Math.max(0, sparePool.get(k) || 0);
+            const delivered = Math.min(agreed, avail);
+            sparePool.set(k, avail - delivered);
+            payFraction = agreed > 0 ? (delivered / agreed) : 0;
+            if (delivered > 0) {
+              payee[t.key] = (payee[t.key] || 0) - delivered;   // provider delivers
+              payer[t.key] = (payer[t.key] || 0) + delivered;   // consumer receives
+            }
+            t._lastDelivered = Math.round(delivered * 100) / 100;
+          }
+          // 'Other Resources' (terrain-bonus) deals: the consumer receives ONE
+          // leased deposit's worth of the bonus's RESOURCE yield each year,
+          // transferred from the provider's pool (the provider's own deposits are
+          // already reduced in colonyBudget via leasedYieldFraction). Happiness/
+          // growth components are morale/rate effects, not pooled resources, so
+          // only the storable resource components transfer here.
+          if (t.category === 'other') {
+            const bo = providerDepositBonus(t.provider, t.key);
+            if (bo) {
+              for (const rk of ['energy', 'food', 'material', 'goods', 'water', 'wealth']) {
+                const v = (typeof bo[rk] === 'number' && Number.isFinite(bo[rk])) ? bo[rk] : 0;
+                if (v) { payee[rk] = (payee[rk] || 0) - v; payer[rk] = (payer[rk] || 0) + v; }
+              }
+            }
+          }
+          const amt = Math.round(fullAmt * payFraction * 100) / 100;
+          payer.wealth = (payer.wealth || 0) - amt;
+          payee.wealth = (payee.wealth || 0) + amt;
+          t._lastPaid = amt;
+          t.remaining -= 1;
+        }
+        if (t.remaining > 0) kept.push(t);
+      }
+      gameState.trades = kept;
+    }
+
+    // Total happiness an owner gains from happiness-trade deals it consumes.
+    function tradeHappinessBonusFor(owner) {
+      let sum = 0;
+      for (const t of ensureTrades()) {
+        if (t.consumer === owner && t.category === 'happiness' && t.remaining > 0 && t._active !== false) {
+          sum += Number(t.amountHappiness) || 0;
+        }
+      }
+      return sum;
+    }
+
+    // Cancel all trade deals between two owners (either direction). Called when
+    // one attacks the other.
+    function cancelTradesBetween(a, b) {
+      const trades = ensureTrades();
+      let n = 0;
+      gameState.trades = trades.filter((t) => {
+        const match = (t.provider === a && t.consumer === b) || (t.provider === b && t.consumer === a);
+        if (match) n++;
+        return !match;
+      });
+      return n;
+    }
+    // ---- Diplomatic pacts ---------------------------------------------------
+    // Active, priced, time-limited pacts between two owners. Peace is applied
+    // instantly (a one-time payment that clears war) and is NOT stored here;
+    // non-aggression and free-travel are ongoing pacts that charge per year and
+    // keep their relation expiry turn extended while they run. A pact entry:
+    //   { id, kind:'nonAggression'|'freeTravel', a, b, payer, payee,
+    //     resource, amountPerYear, years, remaining, startTurn }
+    function ensurePacts() {
+      if (!Array.isArray(gameState.pacts)) gameState.pacts = [];
+      return gameState.pacts;
+    }
+    const PACT_RESOURCES = ['energy', 'food', 'material', 'goods', 'water', 'wealth'];
+    // Apply an accepted diplomatic DEAL. For 'peace' it charges the one-time
+    // price (payer -> payee, from the Federation pools) and ends the war. For
+    // 'nonAggression'/'freeTravel' it records an ongoing pact (first year charged
+    // immediately) and grants the pact for its term. Returns true on success.
+    function applyPactDeal(deal) {
+      if (!deal) return false;
+      const { kind, a, b } = deal;
+      const payer = deal.payer, payee = deal.payee;
+      const res = PACT_RESOURCES.includes(deal.resource) ? deal.resource : 'wealth';
+      const payOnce = (amt) => {
+        if (!(amt > 0)) return;
+        const from = federationOwnedOf(payer), to = federationOwnedOf(payee);
+        const pay = Math.min(amt, Math.max(0, from[res] || 0));
+        from[res] = Math.max(0, (from[res] || 0) - pay);
+        to[res] = (to[res] || 0) + pay;
+        // Keep legacy treasury mirror current when paying in wealth.
+        if (res === 'wealth') {
+          const fp = federationOf(payer), tp = federationOf(payee);
+          if (fp) fp.treasury = from.wealth; if (tp) tp.treasury = to.wealth;
+        }
+      };
+      if (kind === 'peace') {
+        payOnce(Math.max(0, Number(deal.amountTotal) || 0));
+        makePeace(a, b);
+        return true;
+      }
+      if (kind === 'nonAggression' || kind === 'freeTravel') {
+        const years = Math.max(1, Math.floor(Number(deal.years) || 1));
+        const amt = Math.max(0, Number(deal.amountPerYear) || 0);
+        payOnce(amt);                                  // first year up front
+        grantPact(a, b, kind, (gameState.turn || 0) + years);
+        ensurePacts().push({
+          id: (gameState._pactSeq = (gameState._pactSeq || 0) + 1),
+          kind, a, b, payer, payee, resource: res,
+          amountPerYear: amt, years, remaining: years, startTurn: gameState.turn || 0,
+        });
+        return true;
+      }
+      return false;
+    }
+    // Charge ongoing pacts their per-year price and advance/expire them. Called
+    // once per economy year. A pact whose payer can't cover the price is dropped
+    // (the relation expiry is left to lapse). Peace is one-time and not here.
+    function settlePactsForYear() {
+      const pacts = ensurePacts();
+      if (!pacts.length) return;
+      const kept = [];
+      for (const p of pacts) {
+        // The first year was paid at creation; charge each SUBSEQUENT year.
+        if (p.remaining <= 1) { continue; }            // term complete (expiry already set)
+        const res = PACT_RESOURCES.includes(p.resource) ? p.resource : 'wealth';
+        const from = federationOwnedOf(p.payer), to = federationOwnedOf(p.payee);
+        const amt = Math.max(0, Number(p.amountPerYear) || 0);
+        if (amt > 0 && (from[res] || 0) < amt - 1e-9) {
+          // Payer defaulted: the pact lapses (its relation expiry runs out).
+          continue;
+        }
+        if (amt > 0) {
+          from[res] = Math.max(0, (from[res] || 0) - amt);
+          to[res] = (to[res] || 0) + amt;
+          if (res === 'wealth') { const fp = federationOf(p.payer), tp = federationOf(p.payee); if (fp) fp.treasury = from.wealth; if (tp) tp.treasury = to.wealth; }
+        }
+        p.remaining -= 1;
+        // Keep the relation's pact expiry aligned with the remaining term.
+        grantPact(p.a, p.b, p.kind, (gameState.turn || 0) + p.remaining);
+        kept.push(p);
+      }
+      gameState.pacts = kept;
+    }
+
+    // --- AI trade willingness & pricing (trait- and scarcity-driven) --------
+    // Willingness 0..1 that AI `owner` will SELL access to `category`/`key` to
+    // `toOwner`. Driven by traits (commerce/diplomacy raise it; aggression and
+    // low commerce lower willingness to sell STRATEGIC resources) and by the
+    // AI's opinion of the counterparty.
+    function aiTradeWillingness(owner, toOwner, category, key) {
+      const tr = ownerTraits(owner);
+      if (!tr) return 0;                       // only AIs sell via this path
+      const commerce = tr.commerce || 3;       // 1 isolationist .. 5 trader
+      const diplomacy = tr.diplomacy || 3;     // 1 blunt .. 5 diplomatic
+      const aggression = tr.aggression || 3;   // 1 peaceful .. 5 aggressive
+      const cooperation = tr.cooperation || 3; // 1 independent .. 5 collectivist
+      // Base from commerce/diplomacy (traders & diplomats deal readily).
+      let w = 0.12 * commerce + 0.06 * diplomacy + 0.04 * cooperation; // ~0.22..1.1
+      // Militaristic races guard STRATEGIC resources (used for weapons/reactors).
+      if (category === 'strategic') w -= 0.12 * (aggression - 1);      // up to -0.48
+      // Opinion of the counterparty shifts willingness (+/- up to ~0.3).
+      const fromIdx = ownerToIndex(owner), toIdx = ownerToIndex(toOwner);
+      if (fromIdx >= 0 && toIdx >= 0) w += (getOpinion(fromIdx, toIdx) / 100) * 0.3;
+      return Math.max(0, Math.min(1, w));
+    }
+    // Suggested wealth/yr price for a deal, from base value x scarcity x trait
+    // markup. Strategic resources cost more; scarce ones more still; stern,
+    // low-commerce, high-aggression sellers charge a premium.
+    function aiTradePrice(owner, category, key) {
+      const tr = ownerTraits(owner) || { commerce: 3, aggression: 3 };
+      let base;
+      if (category === 'strategic') base = 8 * bonusTypeScarcity(key);  // scarcer => pricier
+      else if (category === 'happiness') base = 6;
+      else if (category === 'other') base = 7;                          // terrain-bonus lease
+      else base = 4;                                                    // ordinary resource
+      // Trait markup: shrewd traders (high commerce) price keenly but not cheap;
+      // aggressive/isolationist sellers demand a premium.
+      const markup = 1 + 0.10 * ((tr.aggression || 3) - 3) + 0.06 * (3 - (tr.commerce || 3));
+      return Math.max(1, Math.round(base * Math.max(0.5, markup)));
+    }
+    // Default deal term (years) an AI offers, biased by risk (reckless = longer
+    // commitments) and expansionism; clamped to a sane band.
+    function aiTradeYears(owner) {
+      const tr = ownerTraits(owner) || { risk: 3 };
+      return Math.max(3, Math.min(15, 5 + ((tr.risk || 3) - 3) * 2));
+    }
+
+    // Build the list of candidate offers an AI `owner` could make to `toOwner`
+    // this turn: strategic resources and happiness bonuses the AI controls that
+    // the counterparty lacks, filtered by willingness, priced per traits/scarcity.
+    function aiCandidateOffers(owner, toOwner) {
+      const offers = [];
+      if (!ownersTradeConnected(owner, toOwner)) return offers;  // must be connectable
+      const theyHave = ownerAvailableBonusTypes(toOwner);
+      // Strategic resources the AI controls that the counterparty lacks.
+      const mine = ownerNativeBonusTypes(owner);
+      for (const bt of mine) {
+        if (theyHave.has(bt)) continue;
+        const w = aiTradeWillingness(owner, toOwner, 'strategic', bt);
+        if (w < 0.4) continue;                                   // unwilling
+        offers.push({
+          provider: owner, consumer: toOwner, category: 'strategic', key: bt,
+          amountPerYear: aiTradePrice(owner, 'strategic', bt), years: aiTradeYears(owner),
+          willingness: w,
+        });
+      }
+      // Happiness bonuses the AI controls.
+      const happ = ownerHappinessBonuses(owner);
+      for (const [name, amt] of happ) {
+        const w = aiTradeWillingness(owner, toOwner, 'happiness', name);
+        if (w < 0.45) continue;
+        offers.push({
+          provider: owner, consumer: toOwner, category: 'happiness', key: name,
+          amountHappiness: amt,
+          amountPerYear: aiTradePrice(owner, 'happiness', name), years: aiTradeYears(owner),
+          willingness: w,
+        });
+      }
+      // Highest willingness first.
+      offers.sort((a, b) => b.willingness - a.willingness);
+      return offers;
+    }
+
+    // Create/activate a trade deal from an accepted offer.
+    function createTrade(offer) {
+      const trades = ensureTrades();
+      const deal = {
+        id: (gameState._tradeSeq = (gameState._tradeSeq || 0) + 1),
+        provider: offer.provider, consumer: offer.consumer,
+        category: offer.category, key: offer.key,
+        amountPerYear: Math.max(0, Number(offer.amountPerYear) || 0),
+        years: Math.max(1, Number(offer.years) || 1),
+        remaining: Math.max(1, Number(offer.years) || 1),
+        startTurn: gameState.turn || 0,
+        _active: true,
+      };
+      if (offer.category === 'happiness') deal.amountHappiness = Number(offer.amountHappiness) || 0;
+      if (offer.category === 'resource') deal.amountQuantity = Math.max(0, Number(offer.amountQuantity) || 0);
+      trades.push(deal);
+      return deal;
+    }
+
+    // The resources/bonuses an AI `seller` could sell the human (buyer): its
+    // native strategic bonusTypes and happiness bonuses that the human does not
+    // already have access to, each with the seller's asking price and term.
+    // Returns [{ category, key, amountPerYear, years, amountHappiness? }].
+    function tradableFromAI(seller) {
+      const out = [];
+      if (seller === 'human') return out;
+      const theyHaveAlready = ownerAvailableBonusTypes('human');
+      for (const bt of ownerNativeBonusTypes(seller)) {
+        if (theyHaveAlready.has(bt)) continue;
+        out.push({ category: 'strategic', key: bt,
+          amountPerYear: aiTradePrice(seller, 'strategic', bt), years: aiTradeYears(seller) });
+      }
+      for (const [name, amt] of ownerHappinessBonuses(seller)) {
+        out.push({ category: 'happiness', key: name, amountHappiness: amt,
+          amountPerYear: aiTradePrice(seller, 'happiness', name), years: aiTradeYears(seller) });
+      }
+      return out;
+    }
+
+    // The five basic (ordinary) tradable resources.
+    const BASIC_TRADE_RESOURCES = ['energy', 'food', 'goods', 'material', 'water'];
+    // All distinct strategic bonusTypes defined anywhere in the terrain-bonus
+    // ruleset (e.g. iron, aluminum, uranium, lithium, …), sorted. Computed from
+    // config so new strategic resources appear automatically.
+    function allStrategicBonusTypes() {
+      const set = new Set();
+      const defs = (CONFIG && CONFIG.terrainBonus) || {};
+      for (const name of Object.keys(defs)) {
+        const bt = defs[name].bonusType;
+        if (!bt) continue;
+        (Array.isArray(bt) ? bt : [bt]).forEach((t) => { if (t) set.add(String(t)); });
+      }
+      return [...set].sort((a, b) => a.localeCompare(b));
+    }
+    // The per-year amount of a BASIC resource an owner can SPARE: the sum, over
+    // its colonies, of each colony's positive net production rate for that
+    // resource (production beyond its own consumption — the surplus it is
+    // currently overflowing/wasting). Clamped to >= 0.
+    function spareSurplusOf(owner, res) {
+      if (!BASIC_TRADE_RESOURCES.includes(res)) return 0;
+      let sum = 0;
+      for (const b of (gameState.buildings || [])) {
+        if (b.type !== 1 || b.owner !== owner || b.inTransit) continue;
+        let st = null;
+        try { st = colonyStats(b); } catch (e) { st = null; }
+        const net = st && st.delta ? Number(st.delta[res]) : 0;
+        if (Number.isFinite(net) && net > 0) sum += net;
+      }
+      return Math.max(0, Math.round(sum * 100) / 100);
+    }
+
+    // Evaluate a PLAYER-INITIATED proposal to buy `offer` (provider = AI seller,
+    // consumer = 'human') for the player's offered amountPerYear/years. Returns
+    // { decision:'accept'|'decline'|'counter', counter? } where counter is a
+    // full offer object the AI would accept instead. Logic: the seller must be
+    // willing (traits/opinion gate, same as unsolicited offers); if willing and
+    // the player's price meets the AI's ask (within tolerance) it ACCEPTS; if
+    // willing but underpaid it COUNTERS at its asking price; otherwise DECLINES.
+    function aiEvaluateProposal(seller, offer) {
+      const tr = ownerTraits(seller);
+      if (!tr) return { decision: 'decline' };
+      const willing = aiTradeWillingness(seller, 'human', offer.category, offer.key);
+      // Unwilling sellers (e.g. a militaristic race guarding strategic resources)
+      // refuse outright.
+      if (willing < 0.35) return { decision: 'decline' };
+      const ask = aiTradePrice(seller, offer.category, offer.key);
+      const offered = Math.max(0, Number(offer.amountPerYear) || 0);
+      // A more willing seller accepts a slightly lower price (up to ~15% under
+      // ask at max willingness); a barely-willing one wants full ask.
+      const tolerance = ask * (0.15 * willing);
+      if (offered >= ask - tolerance) {
+        return { decision: 'accept' };
+      }
+      // Counter at the ask price, meeting the player's requested term (clamped).
+      const years = Math.max(1, Math.min(20, Number(offer.years) || aiTradeYears(seller)));
+      const counter = {
+        provider: seller, consumer: 'human', category: offer.category, key: offer.key,
+        amountPerYear: ask, years,
+      };
+      if (offer.category === 'happiness') counter.amountHappiness = Number(offer.amountHappiness) || 0;
+      if (offer.category === 'resource') counter.amountQuantity = Math.max(0, Number(offer.amountQuantity) || 0);
+      return { decision: 'counter', counter };
+    }
+
+    // Evaluate a PLAYER-INITIATED SELL offer (provider = 'human', consumer = AI
+    // buyer): the player offers to sell the buyer access/resources for the
+    // player's asked amountPerYear. Returns { decision, counter? }. The AI buys
+    // if it WANTS the item and the price is acceptable. It won't pay more than
+    // its own valuation (aiTradePrice) scaled up slightly by willingness; if the
+    // player overprices, the AI COUNTERS at what it will pay. Strategic: the
+    // buyer only wants resources it does NOT already have. Basic: a willing
+    // trader will buy spare goods it can use.
+    function aiEvaluateSell(buyer, offer) {
+      const tr = ownerTraits(buyer);
+      if (!tr) return { decision: 'decline' };
+      // Does the buyer want this?
+      if (offer.category === 'strategic') {
+        if (ownerAvailableBonusTypes(buyer).has(offer.key)) return { decision: 'decline' }; // already has it
+      }
+      // Interest/willingness: commerce & diplomacy drive buying; opinion of the
+      // seller shifts it. Strategic acquisitions appeal more to expansionist/
+      // industrial species.
+      const commerce = tr.commerce || 3, diplomacy = tr.diplomacy || 3;
+      let want = 0.10 * commerce + 0.05 * diplomacy;
+      if (offer.category === 'strategic') want += 0.05 * ((tr.industry || 3) - 1) + 0.04 * ((tr.expansionism || 3) - 1);
+      const bIdx = ownerToIndex(buyer), hIdx = ownerToIndex('human');
+      if (bIdx >= 0 && hIdx >= 0) want += (getOpinion(bIdx, hIdx) / 100) * 0.3;
+      want = Math.max(0, Math.min(1, want));
+      if (want < 0.35) return { decision: 'decline' };
+      // Price the buyer is willing to pay: its base valuation, nudged up to
+      // ~+15% when very eager.
+      const valuation = aiTradePrice(buyer, offer.category, offer.key);
+      const ceiling = Math.round(valuation * (1 + 0.15 * want));
+      const asked = Math.max(0, Number(offer.amountPerYear) || 0);
+      if (asked <= ceiling) return { decision: 'accept' };
+      // Overpriced: counter at the buyer's valuation (what it will actually pay).
+      const years = Math.max(1, Math.min(20, Number(offer.years) || aiTradeYears(buyer)));
+      const counter = {
+        provider: 'human', consumer: buyer, category: offer.category, key: offer.key,
+        amountPerYear: valuation, years,
+      };
+      if (offer.category === 'resource') counter.amountQuantity = Math.max(0, Number(offer.amountQuantity) || 0);
+      if (offer.category === 'happiness') counter.amountHappiness = Math.max(0, Number(offer.amountHappiness) || 0);
+      return { decision: 'counter', counter };
+    }
+
     // routing/launch options (Establish/Launch Colony, Road, Monorail, Canal,
     // Remove Transportation/Canal) and refresh the work modal after an action.
     let _ctxFromColonyView = false;
@@ -12602,7 +13844,7 @@
           ? gameState.buildings.find((bb) => bb.x === hex.x && bb.y === hex.y
               && bb.type === 1 && !bb.inTransit && bb.owner !== 'human')
           : null;
-        if (enemyBio && anyEligibleStrikeUnit(enemyBio)) {
+        if (enemyBio && anyEligibleStrikeUnit(enemyBio) && !hasNonAggression('human', enemyBio.owner)) {
           ctxAttack.textContent = `Launch Attack on ${enemyBio.name || 'colony'}`;
           ctxAttack.classList.remove("disabled");
           ctxAttack.hidden = false;
@@ -13265,7 +14507,6 @@
       const sign = (n) => (n > 0 ? "+" : "");
       const cls = (n) => (n > 0 ? "stat-pos" : (n < 0 ? "stat-neg" : ""));
       const pct = (r) => `${sign(r * 100)}${nf(r * 100, 2)}%/yr`;
-      const growLabel = s.storedHappiness < 0 ? "declining" : "growing";
       // Per-colony stored resources (each colony holds its own budget).
       const res = ensureOwned(col); // unified 7-resource owned pool
       const overNote = s.over && s.over.length
@@ -13373,6 +14614,81 @@
         `<div class="stat-sec">Buildings <span class="stat-hint">(per-year bonus)</span></div>`,
         ...(bldgRows.length ? bldgRows.map((r) => r.html) : [`<div class="stat-note">No buildings yet.</div>`]),
       ];
+      // Terrain Resources section: terrain-bonus deposits this colony is actually
+      // exploiting — those on its WORKED cells, plus those covered by its
+      // OUTPOSTS (which expose a deposit with no worker). Listed like Buildings:
+      // "Name (xN) abbrev:value, …", alphabetical, duplicates collapsed.
+      const terrEntries = [];
+      {
+        // Worked cells (home + capped extras), matching the economy's worked set.
+        const homeKey = cellKey(col.x, col.y);
+        const cap = workCap(col);
+        const extras = (col.worked || []).filter((k) => k !== homeKey).slice(0, cap);
+        const workedCells = [homeKey, ...extras];
+        const seenCell = new Set();
+        const addDeposit = (wx, wy, viaOutpost) => {
+          const tb = bonusDefAt(wx, wy);
+          if (!tb || !tb.name) return;
+          const bo = tb.bonus || {};
+          const parts = [];
+          const ab = (key, fb) => (RT[key] && RT[key].abbrev != null ? RT[key].abbrev : fb);
+          const num = (v) => (typeof v === 'number' && Number.isFinite(v)) ? v : 0;
+          if (num(bo.energy)) parts.push(`${ab('energy','E')}:${sign(bo.energy)}${nf(bo.energy,0)}`);
+          if (num(bo.food)) parts.push(`${ab('food','F')}:${sign(bo.food)}${nf(bo.food,0)}`);
+          if (num(bo.goods)) parts.push(`${ab('goods','G')}:${sign(bo.goods)}${nf(bo.goods,0)}`);
+          if (num(bo.material)) parts.push(`${ab('material','M')}:${sign(bo.material)}${nf(bo.material,0)}`);
+          if (num(bo.water)) parts.push(`${ab('water','W')}:${sign(bo.water)}${nf(bo.water,0)}`);
+          if (num(bo.wealth)) parts.push(`${ab('wealth','¤')}:${sign(bo.wealth)}${nf(bo.wealth,0)}`);
+          if (num(bo.growth)) parts.push(`${ab('population','P')}:${sign(bo.growth*100)}${nf(bo.growth*100,2)}%`);
+          if (num(bo.happiness)) parts.push(`${ab('happiness','H')}:${sign(bo.happiness)}${nf(bo.happiness,0)}`);
+          terrEntries.push({
+            name: tb.name,
+            state: viaOutpost ? ` <span class="stat-hint">(outpost)</span>` : '',
+            detail: parts.length ? parts.join(', ') : 'no bonuses',
+          });
+        };
+        for (const k of workedCells) {
+          const ci = parseCellKey(k);
+          if (!ci || !Number.isFinite(ci.x)) continue;
+          const ck = cellKey(ci.x, ci.y);
+          if (seenCell.has(ck)) continue; seenCell.add(ck);
+          addDeposit(ci.x, ci.y, false);
+        }
+        // Outposts hosted by this colony expose their cell's deposit (no worker).
+        for (const ob of (gameState.buildings || [])) {
+          if (ob.owner !== col.owner || ob.type === 1 || ob.inTransit) continue;
+          if (!isOperational(ob) || !buildingHasOther(ob.type, 'outpost')) continue;
+          const host = buildColonyAt(ob.x, ob.y, ob.owner, ob.type);
+          if (!host || host !== col) continue;
+          const ck = cellKey(ob.x, ob.y);
+          if (seenCell.has(ck)) continue; seenCell.add(ck);
+          addDeposit(ob.x, ob.y, true);
+        }
+      }
+      terrEntries.sort((a, b) => {
+        const n = String(a.name).localeCompare(String(b.name));
+        if (n !== 0) return n;
+        if (a.state !== b.state) return a.state < b.state ? -1 : 1;
+        return a.detail < b.detail ? -1 : (a.detail > b.detail ? 1 : 0);
+      });
+      const terrRows = [];
+      for (const e of terrEntries) {
+        const key = `${e.name}|${e.state}|${e.detail}`;
+        const prev = terrRows.length ? terrRows[terrRows.length - 1] : null;
+        if (prev && prev._key === key) {
+          prev._count += 1;
+          prev.html = `<div class="stat-row bldg-row"><span>${e.name}${e.state} (x${prev._count})</span><span>${e.detail}</span></div>`;
+        } else {
+          terrRows.push({
+            _key: key, _count: 1,
+            html: `<div class="stat-row bldg-row"><span>${e.name}${e.state}</span><span>${e.detail}</span></div>`,
+          });
+        }
+      }
+      const terrainResourcesSection = [
+        `<div class="stat-sec">Terrain Resources <span class="stat-hint">(worked &amp; outpost deposits)</span></div>`,
+        ...(terrRows.length ? terrRows.map((r) => r.html) : [`<div class="stat-note">No terrain deposits worked.</div>`]),
+      ];
       // Network section: colonies DIRECTLY connected to this one, with the
       // connection type(s) right-aligned (road/monorail/river/sea/air). A colony
       // linked by more than one modality lists them all (e.g. "River, Air").
@@ -13415,11 +14731,12 @@
         `<h3>Statistics</h3>`,
         `<div class="stat-sec">Population</div>`,
         `<div class="stat-row"><span>Population</span><span>${nf(Math.round(s.population))}</span></div>`,
-        `<div class="stat-row"><span>Per-year change</span><span class="${cls(s.popDelta)}">${sign(s.popDelta)}${nf(Math.round(s.popDelta))} (${growLabel})</span></div>`,
+        `<div class="stat-row"><span>Per-year change</span><span class="${cls(s.popDelta)}">${sign(s.popDelta)}${nf(Math.round(s.popDelta))}</span></div>`,
         `<div class="stat-row"><span>Growth rate</span><span class="${cls(s.growthRate)}">${pct(s.growthRate)}</span></div>`,
         `<div class="stat-row stat-subrow"><span>Base</span><span class="${cls(s.growthBase)}">${pct(s.growthBase)}</span></div>`,
         `<div class="stat-row stat-subrow"><span>Happiness</span><span class="${cls(s.growthHappiness)}">${pct(s.growthHappiness)}</span></div>`,
         `<div class="stat-row stat-subrow"><span>Buildings</span><span class="${cls(s.growthBuildings)}">${pct(s.growthBuildings)}</span></div>`,
+        `<div class="stat-row stat-subrow"><span>Population</span><span class="${cls(s.growthPopulation)}">${pct(s.growthPopulation)}</span></div>`,
         `<div class="stat-sec">Resources <span class="stat-hint">(stored / cap · rate)</span></div>`,
         `<div class="stat-row"><span>${resName("energy")}</span><span>${resVal("energy", res.energy)} / ${resVal("energy", s.caps.energy)} <span class="${cls(s.energy)} rate-link" data-res="energy" title="Click for a full breakdown">${sign(s.energy)}${nf(s.energy, 1)}/yr</span></span></div>`,
         `<div class="stat-row"><span>${resName("food")}</span><span>${resVal("food", res.food)} / ${resVal("food", s.caps.food)} <span class="${cls(s.netFood)} rate-link" data-res="food" title="Click for a full breakdown">${sign(s.netFood)}${nf(s.netFood, 1)}/yr</span></span></div>`,
@@ -13429,6 +14746,7 @@
         `<div class="stat-row"><span>${resName("wealth")}</span><span>${resVal("wealth", res.wealth)} / ${resVal("wealth", s.caps.wealth)} <span class="${cls(s.wealthRate)} rate-link" data-res="wealth" title="Click for a full breakdown">${sign(s.wealthRate)}${nf(s.wealthRate, 1)}/yr</span></span></div>`,
         `<div class="stat-row"><span>Happiness</span><span>${fmtHappiness(s.storedHappiness)} / ±${fmtHappiness(s.happinessCap)} <span class="${cls(s.happinessRate)} rate-link" data-res="happiness" title="Click for a full breakdown">${sign(s.happinessRate)}${nf(s.happinessRate, 1)}/yr</span></span></div>`,
         overNote,
+        ...terrainResourcesSection,
         ...buildingsSection,
         ...networkSection,
         ...militarySection,
@@ -14303,6 +15621,7 @@
     // ---- View Federation dialog ---------------------------------------------
     const federationOverlay = document.getElementById("federation-overlay");
     const fedTaxRate = document.getElementById("fed-taxrate");
+    const fedRoadCrews = document.getElementById("fed-roadcrews");
     function _humanPlayer() {
       return (gameState.players || []).find((p) => p && p.kind === 'human') || null;
     }
@@ -14347,6 +15666,31 @@
 
       const rate = parseFloat(fedTaxRate.value) || 0;
       document.getElementById("fed-taxrate-val").textContent = String(rate);
+      // Road-crews slider: value label, per-segment cost, and current backlog.
+      {
+        const crewsVal = document.getElementById("fed-roadcrews-val");
+        if (crewsVal && fedRoadCrews) crewsVal.textContent = String(parseInt(fedRoadCrews.value, 10) || 0);
+        const crews = (CONFIG.federation && CONFIG.federation.roadCrews) || {};
+        const costEl = document.getElementById("fed-roadcrews-cost");
+        if (costEl) {
+          const cm = (typeof crews.costMultiplier === 'number') ? crews.costMultiplier : 1;
+          const tm = (typeof crews.turnsMultiplier === 'number') ? crews.turnsMultiplier : 1;
+          const bits = [];
+          if (cm !== 1) bits.push(`cost ×${cm}`);
+          if (tm !== 1) bits.push(`time ×${tm}`);
+          costEl.textContent = bits.length ? `(${bits.join(', ')})` : '';
+        }
+        const pendEl = document.getElementById("fed-roadcrews-pending");
+        if (pendEl) {
+          const list = (gameState.transport && gameState.transport.pendingRepairs) || [];
+          const inProg = list.filter((r) => r && r._started).length;
+          const waiting = list.length - inProg;
+          const parts = [];
+          if (inProg > 0) parts.push(`${inProg} under repair`);
+          if (waiting > 0) parts.push(`${waiting} awaiting a crew`);
+          pendEl.textContent = parts.length ? parts.join(', ') + '.' : '';
+        }
+      }
       // Default-manager-for-new-colonies dropdown reflects the saved value.
       {
         const dm = document.getElementById("fed-default-manager");
@@ -14428,6 +15772,7 @@
       // Snap the saved rate to the nearest 0.5 within [0,20] for the slider.
       const snapped = Math.max(0, Math.min(20, Math.round(fed.taxRate * 2) / 2));
       fedTaxRate.value = String(snapped);
+      if (fedRoadCrews) fedRoadCrews.value = String(Math.max(0, Math.min(20, Math.round(fed.roadCrews != null ? fed.roadCrews : 0))));
       renderFederation();
       federationOverlay.hidden = false;
     }
@@ -14436,6 +15781,12 @@
     fedTaxRate.addEventListener("input", () => {
       const player = _humanPlayer();
       if (player) ensureFederation(player).taxRate = parseFloat(fedTaxRate.value) || 0;
+      renderFederation();
+    });
+    // Moving the road-crews slider commits the per-year repair capacity.
+    if (fedRoadCrews) fedRoadCrews.addEventListener("input", () => {
+      const player = _humanPlayer();
+      if (player) ensureFederation(player).roadCrews = Math.max(0, Math.min(20, parseInt(fedRoadCrews.value, 10) || 0));
       renderFederation();
     });
     // Changing the default manager commits it immediately. It applies ONLY to
@@ -14697,6 +16048,20 @@
         if (d < rallyDist) { rallyDist = d; rally = m.colony; }
       }
       if (!rally) return;
+      // A NON-AGGRESSION pact forbids attacking: abort the strike if one is
+      // active between the attacker and the target's owner.
+      const _atk0 = members[0] && members[0].unit && members[0].unit.owner;
+      if (_atk0 != null && targetCol && targetCol.owner != null && _atk0 !== targetCol.owner
+          && hasNonAggression(_atk0, targetCol.owner)) {
+        if (_atk0 === 'human') notify(`A non-aggression pact with ${ownerDisplayName(targetCol.owner)} forbids attacking them.`);
+        return;
+      }
+      // War starts the moment an attack is committed: set war between the
+      // attacking owner and the target colony's owner (per-pair, persistent).
+      const _attacker = members[0] && members[0].unit && members[0].unit.owner;
+      if (_attacker != null && targetCol && targetCol.owner != null && _attacker !== targetCol.owner) {
+        setWar(_attacker, targetCol.owner);
+      }
       const sfId = `sf${Date.now()}-${_strikeForceSeq}`;
       for (const m of members) {
         const u = m.unit;
@@ -14873,6 +16238,19 @@
       // The attacking player (strike-force owner); 'human' shows dialogs, AIs
       // resolve silently with a notification.
       const attackerOwner = members.length ? members[0].owner : (survivors[0] && survivors[0].owner);
+      // Attacking another player breaks all trade deals between the two parties
+      // (strategic/resource/happiness access and its payments stop immediately),
+      // and sharply lowers how the defender regards the attacker — which in turn
+      // makes the defender less willing to trade with them in future
+      // (aiTradeWillingness reads opinion). Applied whether the attack wins or not.
+      if (attackerOwner && defenderOwner && attackerOwner !== defenderOwner) {
+        const cancelled = cancelTradesBetween(attackerOwner, defenderOwner);
+        const aIdx = ownerToIndex(attackerOwner), dIdx = ownerToIndex(defenderOwner);
+        if (aIdx >= 0 && dIdx >= 0) adjustOpinion(dIdx, aIdx, -40);
+        if (cancelled > 0 && (attackerOwner === 'human' || defenderOwner === 'human')) {
+          notify(`${cancelled} trade deal${cancelled === 1 ? '' : 's'} cancelled by the attack.`);
+        }
+      }
       const humanInvolved = attackerOwner === 'human' || defenderOwner === 'human';
       // Compose a battle report.
       const lines = [];
@@ -15005,23 +16383,638 @@
       if (!body) return;
       body.innerHTML = '';
       const players = gameState.players || [];
+      const turn = gameState.turn || 0;
       for (let i = 0; i < players.length; i++) {
         if (i === 0) continue;                     // skip the human themself
-        const op = getOpinion(i, 0);               // player i's opinion of the human (index 0)
+        const owner = indexToOwner(i);
+        if (owner == null) continue;
+        const op = getOpinion(i, 0);               // their opinion of the human
         const tr = document.createElement('tr');
         const nameTd = document.createElement('td'); nameTd.textContent = playerDisplayName(i);
         const opTd = document.createElement('td'); opTd.className = 'num';
         opTd.textContent = `${op > 0 ? '+' : ''}${nf(op, 0)}`;
-        tr.appendChild(nameTd); tr.appendChild(opTd); body.appendChild(tr);
+        // Status text: war/peace plus any active pacts (with years remaining).
+        const rel = relationOf('human', owner) || {};
+        const bits = [];
+        bits.push(rel.war ? 'At War' : 'Peace');
+        if (rel.nonAggressionUntil > turn) bits.push(`Non-Aggression (${rel.nonAggressionUntil - turn}y)`);
+        if (rel.freeTravelUntil > turn) bits.push(`Free Travel (${rel.freeTravelUntil - turn}y)`);
+        const statTd = document.createElement('td');
+        statTd.textContent = bits.join(', ');
+        if (rel.war) statTd.className = 'stat-neg';
+        // Actions depend on current standing.
+        const actTd = document.createElement('td');
+        const addBtn = (label, onClick) => {
+          const btn = document.createElement('button');
+          btn.textContent = label; btn.style.marginLeft = '4px';
+          btn.addEventListener('click', onClick);
+          actTd.appendChild(btn);
+        };
+        if (rel.war) {
+          addBtn('Sue for Peace', () => openPactComposer('peace', owner));
+        } else {
+          if (!(rel.nonAggressionUntil > turn)) addBtn('Non-Aggression', () => openPactComposer('nonAggression', owner));
+          if (!(rel.freeTravelUntil > turn)) addBtn('Free Travel', () => openPactComposer('freeTravel', owner));
+        }
+        tr.appendChild(nameTd); tr.appendChild(opTd); tr.appendChild(statTd); tr.appendChild(actTd);
+        body.appendChild(tr);
       }
       if (!body.children.length) {
         const tr = document.createElement('tr'); const td = document.createElement('td');
-        td.colSpan = 2; td.className = 'stat-note'; td.textContent = 'No other species yet.';
+        td.colSpan = 4; td.className = 'stat-note'; td.textContent = 'No other species yet.';
         tr.appendChild(td); body.appendChild(tr);
       }
     }
     function openDiplomacy() { renderDiplomacy(); const o = document.getElementById('diplomacy-overlay'); if (o) o.hidden = false; }
     function closeDiplomacy() { const o = document.getElementById('diplomacy-overlay'); if (o) o.hidden = true; }
+    // ---- Diplomatic pact composer ------------------------------------------
+    // A small modal to compose a peace / non-aggression / free-travel offer to
+    // `owner`: choose the resource to pay, the amount (one-time TOTAL for peace;
+    // per-year for pacts), and the term in years (pacts only). Confirming routes
+    // the deal through proposePactToOwner (AI verdict wired in Stage C; for now
+    // player proposals take effect immediately via applyPactDeal).
+    function openPactComposer(kind, owner) {
+      const titleMap = { peace: 'Sue for Peace', nonAggression: 'Propose Non-Aggression Pact', freeTravel: 'Propose Free-Travel Pact' };
+      const isPeace = (kind === 'peace');
+      const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const overlay = document.createElement('div');
+      overlay.className = 'overlay';
+      overlay.style.position = 'fixed'; overlay.style.inset = '0';
+      overlay.style.background = 'rgba(0,0,0,0.5)';
+      overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
+      overlay.style.zIndex = '10071';
+      const dlg = document.createElement('div');
+      dlg.className = 'dialog';
+      dlg.style.background = 'var(--panel-bg, #222)'; dlg.style.color = 'var(--panel-fg, #eee)';
+      dlg.style.padding = '16px 20px'; dlg.style.borderRadius = '8px'; dlg.style.minWidth = '320px';
+      dlg.style.boxShadow = '0 6px 30px rgba(0,0,0,0.6)';
+      const resOpts = PACT_RESOURCES.map((r) => `<option value="${r}"${r === 'wealth' ? ' selected' : ''}>${r.charAt(0).toUpperCase() + r.slice(1)}</option>`).join('');
+      dlg.innerHTML =
+        `<h2 style="margin-top:0">${esc(titleMap[kind] || 'Diplomacy')} — ${esc(ownerDisplayName(owner))}</h2>` +
+        `<div class="hint" style="margin-bottom:10px">${isPeace
+          ? 'A one-time payment to end the war.'
+          : 'A per-year payment for the agreed term. ' + (kind === 'freeTravel' ? 'Allows routing and resource sharing through each other\u2019s territory.' : 'Neither side may attack the other while it is active.')}</div>` +
+        `<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;">` +
+        `<label>Pay <select id="pact-res">${resOpts}</select></label>` +
+        `<label>${isPeace ? 'Total' : '/ year'} <input id="pact-amt" type="number" min="0" step="1" value="50" style="width:90px"></label>` +
+        (isPeace ? '' : `<label>for <input id="pact-years" type="number" min="1" step="1" value="5" style="width:60px"> years</label>`) +
+        `</div>`;
+      const row = document.createElement('div');
+      row.style.marginTop = '14px'; row.style.display = 'flex'; row.style.gap = '8px'; row.style.justifyContent = 'flex-end';
+      const close = () => { if (overlay.parentNode) document.body.removeChild(overlay); };
+      const cancelBtn = document.createElement('button'); cancelBtn.textContent = 'Cancel';
+      cancelBtn.addEventListener('click', close);
+      const sendBtn = document.createElement('button'); sendBtn.textContent = isPeace ? 'Offer Peace' : 'Send Offer';
+      sendBtn.addEventListener('click', () => {
+        const res = (document.getElementById('pact-res') || {}).value || 'wealth';
+        const amt = Math.max(0, Number((document.getElementById('pact-amt') || {}).value) || 0);
+        const yearsEl = document.getElementById('pact-years');
+        const years = isPeace ? 0 : Math.max(1, Math.floor(Number(yearsEl && yearsEl.value) || 1));
+        const deal = isPeace
+          ? { kind: 'peace', a: 'human', b: owner, payer: 'human', payee: owner, resource: res, amountTotal: amt }
+          : { kind, a: 'human', b: owner, payer: 'human', payee: owner, resource: res, amountPerYear: amt, years };
+        close();
+        proposePactToOwner(deal, owner);
+      });
+      row.appendChild(cancelBtn); row.appendChild(sendBtn);
+      dlg.appendChild(row); overlay.appendChild(dlg); document.body.appendChild(overlay);
+    }
+    // Route a human-proposed pact to the AI owner for a verdict. Stage B: the
+    // proposal is accepted immediately (so pacts/effects can be exercised). Stage
+    // C replaces this with a personality-driven accept/decline (and counter).
+    function proposePactToOwner(deal, owner) {
+      const ok = applyPactDeal(deal);
+      if (ok) {
+        const verb = deal.kind === 'peace' ? 'agrees to peace' : (deal.kind === 'freeTravel' ? 'accepts the free-travel pact' : 'accepts the non-aggression pact');
+        notify(`${ownerDisplayName(owner)} ${verb}.`);
+      } else {
+        notify(`The offer to ${ownerDisplayName(owner)} could not be completed.`);
+      }
+      renderDiplomacy();
+      try { refreshAll(); } catch (e) {}
+    }
+
+    // ---- Trades: view + AI offer popup -------------------------------------
+    // Alien portrait path for an owner. The AI owner is a player index; its
+    // species name is players[idx].name. Images live at resources/aliens/128/
+    // <name>.png with spaces mapped to underscores (apostrophes preserved),
+    // e.g. "Vorn Kesh" -> "Vorn_Kesh.png".
+    function ownerPortraitSrc(owner) {
+      const idx = ownerToIndex(owner);
+      const p = (gameState.players || [])[idx];
+      if (!p || p.kind === 'human' || !p.name) return '';
+      return `resources/aliens/128/${String(p.name).replace(/ /g, '_')}.png`;
+    }
+    // Candidate resource-type image paths for a basic resource or strategic
+    // bonusType, tried in order. Icons live under resources/resource_types/ —
+    // some in the 128/ subfolder (the basics), some in the root (user-supplied
+    // strategic icons). We try 128/ first, then the root.
+    function resourceTypeImageCandidates(key) {
+      if (!key) return [];
+      const k = String(key).toLowerCase();
+      return [
+        `resources/resource_types/128/${k}.png`,
+        `resources/resource_types/${k}.png`,
+      ];
+    }
+    // Point an <img> at a resource-type image, trying each candidate path and
+    // hiding the image only if none load.
+    function setResImg(imgEl, key) {
+      if (!imgEl) return;
+      const candidates = resourceTypeImageCandidates(key);
+      imgEl.style.visibility = 'hidden';
+      if (!candidates.length) { imgEl.removeAttribute('src'); return; }
+      let i = 0;
+      imgEl.onload = () => { imgEl.style.visibility = 'visible'; };
+      imgEl.onerror = () => {
+        i += 1;
+        if (i < candidates.length) imgEl.src = candidates[i];
+        else { imgEl.style.visibility = 'hidden'; imgEl.removeAttribute('src'); }
+      };
+      imgEl.src = candidates[0];
+    }
+    // Human-readable name of what a deal conveys.
+    function tradeResourceLabel(t) {
+      const cap = (s) => s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : s;
+      if (t.category === 'strategic') return `${cap(t.key)} (strategic)`;
+      if (t.category === 'happiness') return `${t.key} (+${nf(t.amountHappiness || 0, 2)} happiness)`;
+      if (t.category === 'resource') return `${cap(t.key)} (${nf(t.amountQuantity || 0, 1)}/yr)`;
+      if (t.category === 'other') return `${t.key} (terrain lease)`;
+      return `${cap(t.key)} (resource)`;
+    }
+    function renderTrades() {
+      const body = document.getElementById('trades-body');
+      if (!body) return;
+      body.innerHTML = '';
+      const trades = ensureTrades();
+      for (const t of trades) {
+        const humanParty = (t.provider === 'human') ? 'provider' : (t.consumer === 'human' ? 'consumer' : null);
+        const partner = humanParty === 'provider' ? t.consumer : (humanParty === 'consumer' ? t.provider : `${t.provider} ↔ ${t.consumer}`);
+        const direction = humanParty === 'provider' ? 'You sell → them'
+          : (humanParty === 'consumer' ? 'They sell → you' : 'AI ↔ AI');
+        const tr = document.createElement('tr');
+        const mk = (txt, cls) => { const td = document.createElement('td'); if (cls) td.className = cls; td.textContent = txt; return td; };
+        tr.appendChild(mk(ownerDisplayName(partner)));
+        tr.appendChild(mk(direction));
+        // Resource label; for a basic-resource deal that under-delivered last
+        // year (seller couldn't spare the full agreed amount), note the reduced
+        // delivery so the player sees the auto-reduction.
+        let resLabel = tradeResourceLabel(t);
+        if (t.category === 'resource' && t._lastDelivered != null && t._lastDelivered < (Number(t.amountQuantity) || 0) - 1e-9) {
+          resLabel += ` — delivered ${nf(t._lastDelivered, 1)} (seller short)`;
+        }
+        tr.appendChild(mk(resLabel));
+        // Payment; show last-paid amount if it was proportionally reduced.
+        let payTxt = `¤${nf(t.amountPerYear || 0, 0)}`;
+        if (t._lastPaid != null && t._lastPaid < (Number(t.amountPerYear) || 0) - 1e-9) {
+          payTxt = `¤${nf(t._lastPaid, 0)} (was ¤${nf(t.amountPerYear || 0, 0)})`;
+        }
+        tr.appendChild(mk(payTxt, 'num'));
+        tr.appendChild(mk(`${t.remaining}${t._active === false ? ' (suspended)' : ''}`, 'num'));
+        const actTd = document.createElement('td');
+        const btn = document.createElement('button');
+        btn.className = 'trade-cancel'; btn.textContent = 'Cancel';
+        btn.addEventListener('click', () => {
+          gameState.trades = ensureTrades().filter((x) => x.id !== t.id);
+          renderTrades(); try { refreshAll(); } catch (e) {}
+        });
+        actTd.appendChild(btn); tr.appendChild(actTd);
+        body.appendChild(tr);
+      }
+      if (!body.children.length) {
+        const tr = document.createElement('tr'); const td = document.createElement('td');
+        td.colSpan = 6; td.className = 'stat-note'; td.textContent = 'No active trade deals.';
+        tr.appendChild(td); body.appendChild(tr);
+      }
+    }
+    function openTrades() { renderTrades(); const o = document.getElementById('trades-overlay'); if (o) o.hidden = false; }
+    function closeTrades() { const o = document.getElementById('trades-overlay'); if (o) o.hidden = true; }
+
+    // ---- Propose Trade (player-initiated) ----------------------------------
+    // Connected AI owners the human could trade with (at least one colony pair
+    // transport-connected). Returns owner values (AI player indices).
+    function proposablePartners() {
+      const out = [];
+      for (const o of activeOwners()) {
+        if (o === 'human') continue;
+        if (!ownerTraits(o)) continue;            // AI only
+        if (ownersTradeConnected('human', o)) out.push(o);
+      }
+      // Sort alphabetically by the alien's display name for the dropdown.
+      out.sort((a, b) => ownerDisplayName(a).localeCompare(ownerDisplayName(b)));
+      return out;
+    }
+    // Rebuild the resource <select> for the chosen partner: ALL strategic
+    // bonusTypes first (grayed-out + unselectable when the human already has the
+    // resource or an active trade for it), then the five basic resources (always
+    // selectable). Also refreshes the alien portrait. Prefills amount/qty for the
+    // first selectable option.
+    function proposeRefreshResources() {
+      const partnerSel = document.getElementById('propose-partner');
+      const resSel = document.getElementById('propose-resource');
+      const note = document.getElementById('propose-note');
+      if (!partnerSel || !resSel) return;
+      const seller = partnerSel.value === 'human' ? 'human' : Number(partnerSel.value);
+      // Portrait.
+      const portrait = document.getElementById('propose-portrait');
+      const pname = document.getElementById('propose-portrait-name');
+      if (portrait) { const src = ownerPortraitSrc(seller); portrait.src = src; portrait.style.visibility = src ? 'visible' : 'hidden'; }
+      if (pname) pname.textContent = ownerDisplayName(seller);
+      // Resources the human already has access to (native + active trades).
+      const humanHas = ownerAvailableBonusTypes('human');
+      const cap = (s) => s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : s;
+      resSel.innerHTML = '';
+      const items = [];              // parallel descriptors by option index
+      // --- Strategic bonusTypes (all of them; grayed when already held) ---
+      const stratGroup = document.createElement('optgroup'); stratGroup.label = 'Strategic';
+      for (const bt of allStrategicBonusTypes()) {
+        const owned = humanHas.has(bt);
+        const sellerHas = ownerNativeBonusTypes(seller).has(bt);
+        const opt = document.createElement('option');
+        const idx = items.length;
+        opt.value = String(idx);
+        opt.textContent = cap(bt) + (owned ? ' (you already have)' : (sellerHas ? '' : ' (seller lacks)'));
+        // Unselectable if the human already has it, OR the seller doesn't control it.
+        opt.disabled = owned || !sellerHas;
+        stratGroup.appendChild(opt);
+        items.push({ category: 'strategic', key: bt, selectable: !opt.disabled });
+      }
+      resSel.appendChild(stratGroup);
+      // --- Basic resources (always selectable) ---
+      const basicGroup = document.createElement('optgroup'); basicGroup.label = 'Basic resources';
+      for (const res of BASIC_TRADE_RESOURCES) {
+        const opt = document.createElement('option');
+        const idx = items.length;
+        opt.value = String(idx);
+        opt.textContent = cap(res);
+        basicGroup.appendChild(opt);
+        items.push({ category: 'resource', key: res, selectable: true });
+      }
+      resSel.appendChild(basicGroup);
+      // --- Other resources: terrain-bonus deposits the seller controls (xN) ---
+      {
+        const otherGroup = document.createElement('optgroup'); otherGroup.label = 'Other resources';
+        const counts = ownerBonusNameCounts(seller);
+        const names = [...counts.keys()].sort((a, b) => a.localeCompare(b));
+        for (const nm of names) {
+          const opt = document.createElement('option');
+          const idx = items.length;
+          opt.value = String(idx);
+          opt.textContent = `${nm} (x${counts.get(nm)})`;
+          otherGroup.appendChild(opt);
+          items.push({ category: 'other', key: nm, selectable: true });
+        }
+        if (names.length) resSel.appendChild(otherGroup);
+      }
+      resSel._items = items;
+      // Select the first SELECTABLE option.
+      const firstSel = items.findIndex((it) => it.selectable);
+      if (firstSel >= 0) resSel.value = String(firstSel);
+      if (note) note.textContent = '';
+      proposePrefill();
+    }
+    // Fill the payment and (for basic resources) the quantity field from the
+    // chosen option. Strategic = access only (no quantity). Basic = prefill the
+    // quantity with the seller's current spare surplus.
+    function proposePrefill() {
+      const partnerSel = document.getElementById('propose-partner');
+      const resSel = document.getElementById('propose-resource');
+      const amount = document.getElementById('propose-amount');
+      const years = document.getElementById('propose-years');
+      const qtyRow = document.getElementById('propose-qty-row');
+      const qty = document.getElementById('propose-qty');
+      const items = (resSel && resSel._items) || [];
+      const it = items[Number(resSel && resSel.value)] || null;
+      const seller = partnerSel ? (partnerSel.value === 'human' ? 'human' : Number(partnerSel.value)) : null;
+      setResImg(document.getElementById('propose-resimg'), it && it.key);
+      if (!it || seller == null) { if (qtyRow) qtyRow.hidden = true; return; }
+      if (it.category === 'resource') {
+        // Basic resource: show quantity prefilled with the seller's spare surplus.
+        if (qtyRow) qtyRow.hidden = false;
+        const spare = spareSurplusOf(seller, it.key);
+        if (qty) { qty.value = String(spare); qty.max = String(spare); }
+        if (amount) amount.value = String(aiTradePrice(seller, 'resource', it.key));
+      } else {
+        // Strategic or Other (terrain-bonus lease): access only, no quantity.
+        if (qtyRow) qtyRow.hidden = true;
+        if (amount) amount.value = String(aiTradePrice(seller, it.category, it.key));
+      }
+      if (years) years.value = String(aiTradeYears(seller));
+    }
+    function openPropose() {
+      const partnerSel = document.getElementById('propose-partner');
+      const note = document.getElementById('propose-note');
+      if (!partnerSel) return;
+      partnerSel.innerHTML = '';
+      const partners = proposablePartners();
+      if (!partners.length) {
+        const opt = document.createElement('option');
+        opt.value = ''; opt.textContent = '(no connected aliens)'; partnerSel.appendChild(opt);
+        if (note) note.textContent = 'No alien is transport-connected to your colonies. Build roads, docks, or air fields to reach them.';
+        const resSel = document.getElementById('propose-resource');
+        if (resSel) resSel.innerHTML = '';
+      } else {
+        for (const o of partners) {
+          const opt = document.createElement('option');
+          opt.value = String(o); opt.textContent = ownerDisplayName(o);
+          partnerSel.appendChild(opt);
+        }
+        proposeRefreshResources();
+      }
+      const ov = document.getElementById('propose-overlay'); if (ov) ov.hidden = false;
+    }
+    function closePropose() { const o = document.getElementById('propose-overlay'); if (o) o.hidden = true; }
+    // Submit the player's proposal: the AI accepts, declines, or counters.
+    function submitProposal() {
+      const partnerSel = document.getElementById('propose-partner');
+      const resSel = document.getElementById('propose-resource');
+      const amount = document.getElementById('propose-amount');
+      const years = document.getElementById('propose-years');
+      const note = document.getElementById('propose-note');
+      if (!partnerSel || !partnerSel.value || !resSel || !resSel.value) return;
+      const seller = Number(partnerSel.value);
+      const items = resSel._items || [];
+      const base = items[Number(resSel.value)];
+      if (!base) return;
+      // Guard: parties must still be connected at the moment of proposing.
+      if (!ownersTradeConnected('human', seller)) {
+        if (note) note.textContent = 'You are no longer connected to that alien.';
+        return;
+      }
+      const offer = {
+        provider: seller, consumer: 'human', category: base.category, key: base.key,
+        amountPerYear: Math.max(0, Math.round(Number(amount && amount.value) || 0)),
+        years: Math.max(1, Math.min(20, Math.round(Number(years && years.value) || 1))),
+      };
+      if (base.category === 'happiness') offer.amountHappiness = base.amountHappiness;
+      if (base.category === 'resource') {
+        // Basic resource: carry the per-year quantity, clamped to what the seller
+        // can actually spare right now.
+        const qtyEl = document.getElementById('propose-qty');
+        const spare = spareSurplusOf(seller, base.key);
+        let q = Math.max(0, Number(qtyEl && qtyEl.value) || 0);
+        if (q > spare) q = spare;
+        if (q <= 0) { if (note) note.textContent = `${ownerDisplayName(seller)} has no ${base.key} to spare right now.`; return; }
+        offer.amountQuantity = Math.round(q * 100) / 100;
+      }
+      const verdict = aiEvaluateProposal(seller, offer);
+      if (verdict.decision === 'accept') {
+        createTrade(offer);
+        closePropose();
+        try { refreshAll(); } catch (e) {}
+        notify(`${ownerDisplayName(seller)} accepted your trade proposal.`);
+        openTrades();
+      } else if (verdict.decision === 'counter') {
+        closePropose();
+        // Present the AI's counter as a standard offer popup (accept/decline).
+        notify(`${ownerDisplayName(seller)} countered your proposal.`);
+        queueTradeOffer(verdict.counter);
+      } else {
+        if (note) note.textContent = `${ownerDisplayName(seller)} declined — they will not trade that right now.`;
+      }
+    }
+
+    // ---- Propose Sell (player-initiated: you are the PROVIDER) --------------
+    // Rebuild the sell resource menu for the chosen buyer: ALL strategic
+    // bonusTypes YOU control (strategic ones the buyer LACKS — and thus likely
+    // needs — are highlighted; ones you don't control are disabled), then the 5
+    // basic resources (always selectable, prefilled with YOUR spare). Updates
+    // the buyer portrait + resource image.
+    function sellRefreshResources() {
+      const partnerSel = document.getElementById('sell-partner');
+      const resSel = document.getElementById('sell-resource');
+      const note = document.getElementById('sell-note');
+      if (!partnerSel || !resSel) return;
+      const buyer = partnerSel.value === 'human' ? 'human' : Number(partnerSel.value);
+      const portrait = document.getElementById('sell-portrait');
+      const pname = document.getElementById('sell-portrait-name');
+      if (portrait) { const src = ownerPortraitSrc(buyer); portrait.src = src; portrait.style.visibility = src ? 'visible' : 'hidden'; }
+      if (pname) pname.textContent = ownerDisplayName(buyer);
+      const mine = ownerNativeBonusTypes('human');           // strategic I control
+      const buyerHas = ownerAvailableBonusTypes(buyer);      // what the buyer already has
+      const cap = (s) => s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : s;
+      resSel.innerHTML = '';
+      const items = [];
+      const stratGroup = document.createElement('optgroup'); stratGroup.label = 'Strategic';
+      for (const bt of allStrategicBonusTypes()) {
+        const iHave = mine.has(bt);
+        const buyerNeeds = iHave && !buyerHas.has(bt);        // I can offer it AND they lack it
+        const opt = document.createElement('option');
+        const idx = items.length;
+        opt.value = String(idx);
+        opt.textContent = cap(bt) + (!iHave ? ' (you lack)' : (buyerNeeds ? ' — they need this' : ' (they have)'));
+        opt.disabled = !iHave;                                // can only sell what you control
+        if (buyerNeeds) opt.className = 'opt-need';           // highlight
+        stratGroup.appendChild(opt);
+        items.push({ category: 'strategic', key: bt, selectable: !opt.disabled, need: buyerNeeds });
+      }
+      resSel.appendChild(stratGroup);
+      const basicGroup = document.createElement('optgroup'); basicGroup.label = 'Basic resources';
+      for (const res of BASIC_TRADE_RESOURCES) {
+        const opt = document.createElement('option');
+        const idx = items.length;
+        opt.value = String(idx); opt.textContent = cap(res);
+        basicGroup.appendChild(opt);
+        items.push({ category: 'resource', key: res, selectable: true });
+      }
+      resSel.appendChild(basicGroup);
+      // --- Other resources: terrain-bonus deposits YOU (human) control (xN);
+      //     ones the buyer lacks are highlighted as likely-wanted. ---
+      {
+        const otherGroup = document.createElement('optgroup'); otherGroup.label = 'Other resources';
+        const mineCounts = ownerBonusNameCounts('human');
+        const buyerCounts = ownerBonusNameCounts(buyer);
+        const names = [...mineCounts.keys()].sort((a, b) => a.localeCompare(b));
+        for (const nm of names) {
+          const buyerNeeds = !buyerCounts.has(nm);
+          const opt = document.createElement('option');
+          const idx = items.length;
+          opt.value = String(idx);
+          opt.textContent = `${nm} (x${mineCounts.get(nm)})` + (buyerNeeds ? ' — they need this' : '');
+          if (buyerNeeds) opt.className = 'opt-need';
+          otherGroup.appendChild(opt);
+          items.push({ category: 'other', key: nm, selectable: true, need: buyerNeeds });
+        }
+        if (names.length) resSel.appendChild(otherGroup);
+      }
+      resSel._items = items;
+      // Prefer the first HIGHLIGHTED (needed) strategic option, else first selectable.
+      let pick = items.findIndex((it) => it.need);
+      if (pick < 0) pick = items.findIndex((it) => it.selectable);
+      if (pick >= 0) resSel.value = String(pick);
+      if (note) note.textContent = '';
+      sellPrefill();
+    }
+    function sellPrefill() {
+      const resSel = document.getElementById('sell-resource');
+      const amount = document.getElementById('sell-amount');
+      const years = document.getElementById('sell-years');
+      const qtyRow = document.getElementById('sell-qty-row');
+      const qty = document.getElementById('sell-qty');
+      const items = (resSel && resSel._items) || [];
+      const it = items[Number(resSel && resSel.value)] || null;
+      setResImg(document.getElementById('sell-resimg'), it && it.key);
+      if (!it) { if (qtyRow) qtyRow.hidden = true; return; }
+      // Price suggestion uses the human's own asking valuation for the resource.
+      if (it.category === 'resource') {
+        if (qtyRow) qtyRow.hidden = false;
+        const spare = spareSurplusOf('human', it.key);        // what I can spare
+        if (qty) { qty.value = String(spare); qty.max = String(spare); }
+        if (amount) amount.value = String(aiTradePrice('human', 'resource', it.key) || 4);
+      } else {
+        if (qtyRow) qtyRow.hidden = true;
+        if (amount) amount.value = String(aiTradePrice('human', it.category, it.key) || 8);
+      }
+      if (years) years.value = '5';
+    }
+    function openSell() {
+      const partnerSel = document.getElementById('sell-partner');
+      const note = document.getElementById('sell-note');
+      if (!partnerSel) return;
+      partnerSel.innerHTML = '';
+      const partners = proposablePartners();
+      if (!partners.length) {
+        const opt = document.createElement('option');
+        opt.value = ''; opt.textContent = '(no connected aliens)'; partnerSel.appendChild(opt);
+        if (note) note.textContent = 'No alien is transport-connected to your colonies. Build roads, docks, or air fields to reach them.';
+        const resSel = document.getElementById('sell-resource'); if (resSel) resSel.innerHTML = '';
+      } else {
+        for (const o of partners) {
+          const opt = document.createElement('option');
+          opt.value = String(o); opt.textContent = ownerDisplayName(o);
+          partnerSel.appendChild(opt);
+        }
+        sellRefreshResources();
+      }
+      const ov = document.getElementById('sell-overlay'); if (ov) ov.hidden = false;
+    }
+    function closeSell() { const o = document.getElementById('sell-overlay'); if (o) o.hidden = true; }
+    function submitSell() {
+      const partnerSel = document.getElementById('sell-partner');
+      const resSel = document.getElementById('sell-resource');
+      const amount = document.getElementById('sell-amount');
+      const years = document.getElementById('sell-years');
+      const note = document.getElementById('sell-note');
+      if (!partnerSel || !partnerSel.value || !resSel || !resSel.value) return;
+      const buyer = Number(partnerSel.value);
+      const items = resSel._items || [];
+      const base = items[Number(resSel.value)];
+      if (!base || base.selectable === false) return;
+      if (!ownersTradeConnected('human', buyer)) { if (note) note.textContent = 'You are no longer connected to that alien.'; return; }
+      const offer = {
+        provider: 'human', consumer: buyer, category: base.category, key: base.key,
+        amountPerYear: Math.max(0, Math.round(Number(amount && amount.value) || 0)),
+        years: Math.max(1, Math.min(20, Math.round(Number(years && years.value) || 1))),
+      };
+      if (base.category === 'resource') {
+        const qtyEl = document.getElementById('sell-qty');
+        const spare = spareSurplusOf('human', base.key);
+        let q = Math.max(0, Number(qtyEl && qtyEl.value) || 0);
+        if (q > spare) q = spare;
+        if (q <= 0) { if (note) note.textContent = `You have no ${base.key} to spare right now.`; return; }
+        offer.amountQuantity = Math.round(q * 100) / 100;
+      }
+      const verdict = aiEvaluateSell(buyer, offer);
+      if (verdict.decision === 'accept') {
+        createTrade(offer); closeSell(); try { refreshAll(); } catch (e) {}
+        notify(`${ownerDisplayName(buyer)} accepted your offer to sell.`);
+        openTrades();
+      } else if (verdict.decision === 'counter') {
+        const c = verdict.counter;
+        const label = tradeResourceLabel(c);
+        closeSell();
+        showChoiceDialog('Counter-Offer',
+          `<div><strong>${esc(ownerDisplayName(buyer))}</strong> will buy <strong>${esc(label)}</strong> from you, but only at <strong>¤${nf(c.amountPerYear,0)}/yr</strong> for ${c.years} years (you asked more).</div>`,
+          [{ value: 'accept', label: 'Accept counter' }, { value: 'no', label: 'Decline' }]
+        ).then((v) => { if (v === 'accept') { createTrade(c); try { refreshAll(); } catch (e) {} openTrades(); } });
+      } else {
+        if (note) note.textContent = `${ownerDisplayName(buyer)} is not interested in buying that right now.`;
+      }
+    }
+
+    // Pending AI offers to the human, shown one at a time.
+    let _offerQueue = [];
+    let _offerShowing = false;
+    function queueTradeOffer(offer) { _offerQueue.push(offer); showNextOffer(); }
+    function showNextOffer() {
+      if (_offerShowing) return;
+      const offer = _offerQueue.shift();
+      if (!offer) return;
+      const overlay = document.getElementById('offer-overlay');
+      if (!overlay) return;
+      _offerShowing = true;
+      // A trade offer needs the player's decision, so cancel this turn's
+      // auto-end (same mechanism as "Let me handle it") — the turn won't
+      // auto-advance until the player accepts or declines.
+      _skipAutoEndThisTurn = true;
+      stopIdleWatch();
+      const title = document.getElementById('offer-title');
+      const portrait = document.getElementById('offer-portrait');
+      const text = document.getElementById('offer-text');
+      const from = offer.provider;
+      if (title) title.textContent = `Trade Offer from ${ownerDisplayName(from)}`;
+      if (portrait) { const src = ownerPortraitSrc(from); portrait.src = src; portrait.style.visibility = src ? 'visible' : 'hidden'; }
+      const resLabel = tradeResourceLabel(offer);
+      if (text) text.innerHTML =
+        `<p><strong>${esc(ownerDisplayName(from))}</strong> offers you access to <strong>${esc(resLabel)}</strong>.</p>` +
+        `<p>In return you would pay <strong>¤${nf(offer.amountPerYear, 0)} per year</strong> for <strong>${offer.years} years</strong> ` +
+        `(total ¤${nf(offer.amountPerYear * offer.years, 0)}).</p>` +
+        `<p class="hint">A transport connection between your colonies and theirs is required each year; the deal pauses if it is lost and cancels if either side attacks.</p>`;
+      overlay.hidden = false;
+      const accept = document.getElementById('offer-accept');
+      const decline = document.getElementById('offer-decline');
+      const close = (accepted) => {
+        overlay.hidden = true; _offerShowing = false;
+        accept.onclick = null; decline.onclick = null;
+        if (accepted) { createTrade(offer); try { refreshAll(); } catch (e) {} }
+        else {
+          // Declining nudges the AI's opinion of you down a little.
+          const fIdx = ownerToIndex(from), hIdx = ownerToIndex('human');
+          if (fIdx >= 0 && hIdx >= 0) adjustOpinion(fIdx, hIdx, -3);
+        }
+        setTimeout(showNextOffer, 50);
+      };
+      accept.onclick = () => close(true);
+      decline.onclick = () => close(false);
+    }
+
+    // Called during an AI player's turn: the AI may extend a trade offer to the
+    // human (queued as a popup) and may auto-settle deals with other AIs.
+    function aiMaybeTrade(aiOwner) {
+      if (!aiOwner || aiOwner === 'human') return;
+      const tr = ownerTraits(aiOwner);
+      if (!tr) return;
+      // Chance to initiate scales with commerce (traders deal often).
+      const chance = 0.04 + 0.05 * ((tr.commerce || 3) - 1); // commerce1 ~0.04 .. commerce5 ~0.24
+      // --- Offer to the human ---
+      if (Math.random() < chance) {
+        // Don't stack duplicate live offers/deals for the same resource.
+        const existing = new Set(ensureTrades()
+          .filter((t) => t.provider === aiOwner && t.consumer === 'human')
+          .map((t) => `${t.category}:${t.key}`));
+        const offers = aiCandidateOffers(aiOwner, 'human')
+          .filter((o) => !existing.has(`${o.category}:${o.key}`));
+        if (offers.length) queueTradeOffer(offers[0]);  // best (highest willingness) first
+      }
+      // --- AI-to-AI deals: auto-accept the single best mutually-beneficial one ---
+      for (const other of activeOwners()) {
+        if (other === aiOwner || other === 'human') continue;
+        const otr = ownerTraits(other);
+        if (!otr) continue;
+        const already = ensureTrades().some((t) =>
+          (t.provider === aiOwner && t.consumer === other) || (t.provider === other && t.consumer === aiOwner));
+        if (already) continue;
+        if (Math.random() > 0.15) continue;             // occasional AI-AI deals
+        const offers = aiCandidateOffers(aiOwner, other);
+        // The buyer (other) accepts if its commerce/opinion make it willing.
+        for (const o of offers) {
+          const buyerWill = 0.1 * (otr.commerce || 3);
+          const oIdx = ownerToIndex(other), aIdx = ownerToIndex(aiOwner);
+          const opinionOk = (oIdx >= 0 && aIdx >= 0) ? getOpinion(oIdx, aIdx) >= -10 : true;
+          if (buyerWill >= 0.3 && opinionOk) { createTrade(o); break; }
+        }
+      }
+    }
 
     function renderMilitary() {
       const units = humanUnits().slice().sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -15073,6 +17066,18 @@
     // Diplomacy screen (View menu + close + backdrop).
     ipcRenderer.on("view-diplomacy", openDiplomacy);
     document.getElementById("diplomacy-close").addEventListener("click", closeDiplomacy);
+    ipcRenderer.on("view-trades", openTrades);
+    { const el = document.getElementById("trades-close"); if (el) el.addEventListener("click", closeTrades); }
+    { const el = document.getElementById("trades-buy"); if (el) el.addEventListener("click", openPropose); }
+    { const el = document.getElementById("trades-sell"); if (el) el.addEventListener("click", openSell); }
+    { const el = document.getElementById("propose-cancel"); if (el) el.addEventListener("click", closePropose); }
+    { const el = document.getElementById("propose-send"); if (el) el.addEventListener("click", submitProposal); }
+    { const el = document.getElementById("propose-partner"); if (el) el.addEventListener("change", proposeRefreshResources); }
+    { const el = document.getElementById("propose-resource"); if (el) el.addEventListener("change", proposePrefill); }
+    { const el = document.getElementById("sell-cancel"); if (el) el.addEventListener("click", closeSell); }
+    { const el = document.getElementById("sell-send"); if (el) el.addEventListener("click", submitSell); }
+    { const el = document.getElementById("sell-partner"); if (el) el.addEventListener("change", sellRefreshResources); }
+    { const el = document.getElementById("sell-resource"); if (el) el.addEventListener("change", sellPrefill); }
     const _diploOverlay = document.getElementById("diplomacy-overlay");
     if (_diploOverlay) _diploOverlay.addEventListener("click", (e) => { if (e.target === _diploOverlay) closeDiplomacy(); });
     document.addEventListener("keydown", (e) => {
@@ -15204,6 +17209,11 @@
         turn: (extra && extra.turn) != null ? extra.turn : 0,
         currentPlayer: (extra && extra.currentPlayer) != null ? extra.currentPlayer : 0,
         opinion: (extra && extra.opinion) || null,
+        trades: (extra && Array.isArray(extra.trades)) ? extra.trades : [],
+        _tradeSeq: (extra && extra._tradeSeq) || 0,
+        relations: (extra && extra.relations) || null,
+        pacts: (extra && Array.isArray(extra.pacts)) ? extra.pacts : [],
+        _pactSeq: (extra && extra._pactSeq) || 0,
         resources: (extra && extra.resources) || { material: 0, food: 0, energy: 0, wealth: 0 },
         rates: (extra && extra.rates) || { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 },
         playerName: (extra && (extra.playerName || (extra.players && extra.players[0] && extra.players[0].kind === 'human' && extra.players[0].name))) || gameState.playerName || "Human",
@@ -15660,6 +17670,11 @@
             players: payload.players || null,
             turn: payload.turn || 0, currentPlayer: payload.currentPlayer || 0,
             opinion: payload.opinion || null,
+            trades: payload.trades || [],
+            _tradeSeq: payload._tradeSeq || 0,
+            relations: payload.relations || null,
+            pacts: payload.pacts || [],
+            _pactSeq: payload._pactSeq || 0,
             resources: payload.resources, rates: payload.rates,
             playerName: payload.playerName,
             transport: payload.transport || null,

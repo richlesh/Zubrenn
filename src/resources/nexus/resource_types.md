@@ -106,3 +106,83 @@ civilization. The number of tiles a colony can work scales with its population,
 and population itself grows or shrinks each turn according to **Happiness** and
 the growth bonuses of its worked cells and buildings. Nurture your population and
 the rest of the economy follows.
+
+## Strategic Resources
+
+Beyond the eight everyday resources, the planet holds **strategic resources** —
+special materials found only in certain **terrain bonuses**. Unlike the stockpiled
+commodities, a strategic resource is not banked or traded by the tonne; it is
+either **available** to you or not. A strategic resource counts as available while
+at least one terrain bonus carrying it is **worked by one of your colonies** or
+covered by one of your **Outposts**. Many advanced buildings and military units
+can only be built while you hold the strategic resources they demand (shown in the
+**Strategic Resources** panel on the main screen). There are seven:
+
+#### Aluminum
+
+<span class="float-right">![population](../resource_types/aluminum.png)</span>
+
+A light, strong structural metal, smelted from **Bauxite Seams**. Aluminum is the
+workhorse of flight and space: it is required for the **Air Field** and **Airport**,
+the **Launchpad** and **Spaceport**, the **Satellite Network**, and the **Missile
+Battery** — and for building **Fighters**, **Bombers**, **Carriers**, and **ICBMs**.
+Few civilizations get far into the air or orbit without it.
+
+#### Crystal
+
+<span class="float-right">![population](../resource_types/crystal.png)</span>
+
+Piezoelectric and superconductive crystals, harvested from **Kinetite Crystals**,
+**Sunshard Flats**, **Quakecrystal Lodes**, and **Celestite Spires**. Crystal is the
+heart of advanced electronics and directed energy: it is required for the
+**Nanofactory**, the **Launchpad** and **Spaceport**, the **Satellite Network**, and
+the energy defenses (**Laser Battery**, **Electro-Magnetic Shield**, **Plasma
+Bubble**) — and for **Fighters**, **Bombers**, **Escorts**, **Carriers**, and
+**ICBMs**.
+
+#### Iron
+
+<span class="float-right">![population](../resource_types/iron.png)</span>
+
+A dense, abundant metal ore, mined from **Ferric Strata Veins**, **Starfall Alloy
+Craters**, **Gravalloy Veins**, and gathered from **Ironcap Mushrooms**. Iron is the
+backbone of heavy ground and naval forces: it is required to build **Armored**
+(tank) battalions, **Escorts**, and **Carriers**. Common enough that most colonies
+can find a vein, it is the first strategic resource a militarizing empire secures.
+
+#### Lithium
+
+<span class="float-right">![population](../resource_types/lithium.png)</span>
+
+A battery metal concentrated in the **Lithium Brine Deposit** of arid salt flats.
+Lithium powers large-scale energy storage: it is required for the **Solar Salt
+Works** (which extracts it) and for **Grid Storage**, the utility-scale battery
+bank. Lithium is also required for the **Satellite Network**.  A colony that means to bank its surplus power needs a worked lithium source.
+
+#### Stone
+
+<span class="float-right">![population](../resource_types/stone.png)</span>
+
+Quarried construction aggregate, cut from **Fossilized Chitin Reefs** and
+**Threadstone Seams**. Stone is the strategic resource of overland infrastructure:
+a worked stone source is required to build **Roads** and **Monorails**. Without it,
+a colony cannot pave the overland transport network that links it to its neighbors.
+
+#### Titanium
+
+<span class="float-right">![population](../resource_types/titanium.png)</span>
+
+An exceptionally strong, lightweight structural metal, refined from **Titanlace
+Deposits** and salvaged from a **Buried Starship Hull**. Titanium is reserved for
+the most demanding builds: it is required for the **Launchpad** and **Spaceport**,
+the **Satellite Network**, and for building **Fighters** and **Bombers**. Rare, and the mark of a
+mature space-age civilization.
+
+#### Uranium
+
+<span class="float-right">![population](../resource_types/uranium.png)</span>
+
+A rare fissile mineral found in the **Uranium Deposit**. Uranium is the fuel of the
+atomic age: it is required to build and run the **Nuclear Reactor** and to arm the
+**ICBM**. A worked uranium source is the gateway to the largest power plant and the
+most fearsome weapon on the planet.

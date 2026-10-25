@@ -273,7 +273,7 @@
         "range": 20,
         "prerequisite": {
           "population": 10,
-          "bonusType": [ "aluminum", "crystal" ]
+          "bonusType": [ "aluminum", "crystal", "titanium" ]
         }
     },
     // Bomber squadron 300 service men, 10 bombers, cost is per squadron
@@ -289,7 +289,7 @@
         "range": 40,
         "prerequisite": {
           "population": 12,
-          "bonusType": [ "aluminum", "titanium", "crystal" ]
+          "bonusType": [ "aluminum", "crystal", "titanium" ]
         }
     },
     // Single cruiser/destroyer 300 service men, 10 ballistic missiles
@@ -563,7 +563,8 @@
         "terrain": ["grassland","hills","forest","jungle","desert","plains","frozen"],
         "bonusType": ["uranium"],
         "population": 15
-      }
+      },
+      "equivalentTo": "solar farm"
     },
     // Mine
     "mine": {
@@ -603,7 +604,8 @@
         "climate":  ["tropical", "temperate"],
         "population": 3,
         "bonusType": ["lithium"]
-      }
+      },
+      "equivalentTo": "mine"
     },
     // Megamine
     "megamine": {
@@ -1022,7 +1024,8 @@
         "other": [ "river" ],
         "network":  ["any"],
         "population": 10
-      }
+      },
+      "equivalentTo": "caes"
     },
     // Grid energy storage (batteries)
     "grid storage": {
@@ -1042,7 +1045,8 @@
         "network":  ["any"],
         "bonusType": ["lithium"],
         "population": 10
-      }
+      },
+      "equivalentTo": "caes"
     },
     // Water Treatment Plant
     "wtp": {
@@ -1080,7 +1084,8 @@
         "other":    ["sea"],
         "network":  ["any"],
         "population": 5
-      }
+      },
+      "equivalentTo": "wtp"
     },
     // Reservoir — large-scale strategic water storage (dam-fed, river-adjacent)
     "reservoir": {
@@ -1131,7 +1136,7 @@
         "building": ["nanofactory", "spaceport"],
         "other": [ "federation", "intelligence" ],
         "population": 15,
-        "bonusType": ["aluminum", "titanium", "crystal"]
+        "bonusType": ["aluminum", "crystal", "lithium", "titanium"]
       },
       "visibility": "world"
     },
@@ -2081,6 +2086,18 @@
   "happinessGrowthPerUnit": 0.001,
   // Hard cap on the happiness-derived growth-rate bonus (per turn).
   "maxHappinessGrowthBonus": 0.01,
+  // Cities growth rate slows as they get larger because of decreased birth rates
+  // due to affluence and crowding.
+  // adjustment = cityGrowthRateAdjustment * city population
+  "cityGrowthRateAdjustment": -1e-7,
+  // War weariness: the longer a Federation stays at war, the unhappier its
+  // colonies become. Each year at war adds warWearinessPerYear to a running
+  // weariness (reset to 0 when the Federation is at peace), capped at
+  // maxWarWeariness. The result is applied as a NEGATIVE happiness factor
+  // (×100 to the happiness-point scale the other factors use), so e.g.
+  // 0.005/yr -> 0.5 happiness points per year, capped at 0.15 -> 15 points.
+  "warWearinessPerYear": 0.005,
+  "maxWarWeariness": 0.15,
   // Reserved happiness tuning constant (currently read for happiness clamping).
   "happinessCap": 20,
   // Cap on the per-turn happiness contribution (percentage points) from a
@@ -2095,6 +2112,7 @@
   // no single resource shortage can dominate morale. Food is handled separately
   // by foodHappinessCap (which also rewards a surplus).
   "shortageHappinessCap": 5,
+
   // Population thresholds that expand a colony's zone-of-control radius: the
   // index of the highest threshold a colony's population meets is its ring size
   // (index+1 = radius). Reaching level 7 (>=7,000 population) grants +1 radius.
@@ -2165,6 +2183,26 @@
       "bonusType": ["stone", "crystal", "aluminum"]
     },
     "catastrophicFailure": { "rate": 0.001, "minAge": 50 }
+  },
+
+  // Federation-wide policies. `roadCrews` funds automatic rebuilding of
+  // road/monorail segments that FAILED (from upkeep decay or catastrophic
+  // failure). `capacityPerTurn` crews work in PARALLEL (one failed segment
+  // each). A repair costs the segment's NORMAL terrain- and type-aware build
+  // cost (bridge included, × `costMultiplier`), charged once when a crew starts
+  // it, and takes the segment's build TIME to finish — the terrain's `turns`
+  // for that transport type × `turnsMultiplier` (so a mountain monorail takes
+  // more years to rebuild than a grassland road). Segments the Federation can't
+  // afford to START stay queued. `maxBacklog` caps the pending queue (oldest
+  // failures beyond it are dropped and must be rebuilt by hand). Set
+  // capacityPerTurn to 0 (or the dialog slider to 0) to disable crews.
+  "federation": {
+    "roadCrews": {
+      "capacityPerTurn": 3,
+      "costMultiplier": 1.0,
+      "turnsMultiplier": 1.0,
+      "maxBacklog": 200
+    }
   },
 
   // Natural river network settings:

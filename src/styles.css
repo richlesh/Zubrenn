@@ -144,25 +144,26 @@ body.dark #player-panel .player-name input { background: #3a3a3c; color: #e0e0e0
 body.dark #player-panel .player-rate { color: #6d9; }
 
 /* Buildings panel (below player panel). */
-#buildings-panel {
+/* Right-panel info boxes, stacked top-to-bottom: Strategic Resources, then
+   Resources, then Buildings. They share one look; the uniform spacing between
+   them comes from the #right_panel flex `gap` (no extra margins, so every gap
+   is equal). */
+#strategic-panel, #resources-panel, #buildings-panel {
   border: 1px solid gray; background: #eee; color: #1e1e1e;
   font: 12px Calibri, sans-serif; padding: 6px 8px; border-radius: 4px;
 }
+body.dark #strategic-panel,
+body.dark #resources-panel,
 body.dark #buildings-panel { background: #2c2c2e; color: #ddd; border-color: #444; }
+#strategic-panel .bldg-panel-title,
+#resources-panel .bldg-panel-title,
 #buildings-panel .bldg-panel-title { font-weight: 700; margin-bottom: 4px; }
+#strategic-panel .bldg-stat,
+#resources-panel .bldg-stat,
 #buildings-panel .bldg-stat { font-variant-numeric: tabular-nums; }
-#buildings-panel .bldg-cols { display: flex; gap: 12px; }
-#buildings-panel .bldg-col { flex: 1 1 0; min-width: 0; }
+#strategic-panel .bldg-none,
+#resources-panel .bldg-none,
 #buildings-panel .bldg-none { color: #999; font-style: italic; }
-#strategic-panel {
-  border: 1px solid gray; background: #eee; color: #1e1e1e;
-  font: 12px Calibri, sans-serif; padding: 6px 8px; border-radius: 4px;
-  margin-bottom: 8px;
-}
-body.dark #strategic-panel { background: #2c2c2e; color: #ddd; border-color: #444; }
-#strategic-panel .bldg-panel-title { font-weight: 700; margin-bottom: 4px; }
-#strategic-panel .bldg-stat { font-variant-numeric: tabular-nums; }
-#strategic-panel .bldg-none { color: #999; font-style: italic; }
 body.dark #buildings-panel .bldg-none { color: #888; }
 
 
@@ -791,3 +792,141 @@ body.dark .work-manager { color: #ccc; }
   border: 1px solid #0a84ff; border-radius: 4px; background: #fff; color: #1e1e1e;
 }
 body.dark #military-table .mil-name-input { background: #1e1e1e; color: #e0e0e0; border-color: #4da3ff; }
+
+/* Trades view (active trade deals) — mirrors the Military overlay. */
+#trades-overlay {
+  position: fixed; z-index: 10004; inset: 0;
+  background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+}
+#trades-overlay[hidden] { display: none; }
+#trades-dialog {
+  background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
+  width: 640px; max-width: 92vw; max-height: 90vh; display: flex; flex-direction: column;
+}
+body.dark #trades-dialog { background: #2c2c2e; color: #e0e0e0; }
+#trades-dialog h2 { font-size: 15px; margin-bottom: 6px; }
+#trades-dialog .hint { font-size: 11px; color: #888; margin-bottom: 10px; }
+#trades-table-wrap { overflow: auto; flex: 1 1 auto; min-height: 0; }
+#trades-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+#trades-table th, #trades-table td { padding: 5px 9px; text-align: left; white-space: nowrap; }
+#trades-table td.num, #trades-table th.num { text-align: right; }
+#trades-table thead th {
+  position: sticky; top: 0; background: #e6e6ea; border-bottom: 2px solid #bbb; user-select: none;
+}
+body.dark #trades-table thead th { background: #3a3a3c; border-bottom-color: #555; }
+#trades-table tbody tr:nth-child(even) { background: rgba(0,0,0,0.04); }
+body.dark #trades-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.05); }
+#trades-table .stat-note { color: #888; font-style: italic; }
+#trades-table button.trade-cancel { background: #c0392b; color: #fff; padding: 2px 8px; font-size: 11px; }
+#trades-close { background: #0a84ff; color: #fff; }
+
+/* AI trade offer popup (alien portrait + the proposed deal). */
+#offer-overlay {
+  position: fixed; z-index: 10006; inset: 0;
+  background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+}
+#offer-overlay[hidden] { display: none; }
+#offer-dialog {
+  background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
+  width: 440px; max-width: 92vw; display: flex; flex-direction: column;
+}
+body.dark #offer-dialog { background: #2c2c2e; color: #e0e0e0; }
+#offer-dialog h2 { font-size: 15px; margin-bottom: 10px; }
+#offer-body { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 12px; }
+#offer-portrait { border-radius: 8px; flex: 0 0 auto; background: #0002; object-fit: cover; }
+#offer-text { font-size: 13px; line-height: 1.5; }
+#offer-accept { background: #0a84ff; color: #fff; }
+#offer-decline { background: #c0392b; color: #fff; }
+
+/* Propose Trade dialog (player-initiated offer). */
+#propose-overlay {
+  position: fixed; z-index: 10006; inset: 0;
+  background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+}
+#propose-overlay[hidden] { display: none; }
+#propose-dialog {
+  background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
+  max-width: 92vw; display: flex; flex-direction: row; align-items: stretch; gap: 16px;
+}
+body.dark #propose-dialog { background: #2c2c2e; color: #e0e0e0; }
+#propose-main { width: 420px; max-width: 70vw; display: flex; flex-direction: column; }
+/* Right-side square panel: alien caption + portrait on top, resource image below. */
+#propose-portrait-panel, #sell-portrait-panel {
+  flex: 0 0 auto; align-self: stretch; width: 200px;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px;
+  background: #0001; border-radius: 8px; overflow: hidden; padding: 10px;
+}
+body.dark #propose-portrait-panel, body.dark #sell-portrait-panel { background: #0003; }
+#propose-portrait, #sell-portrait { width: 100%; aspect-ratio: 1/1; object-fit: contain; border-radius: 6px; }
+#propose-portrait-name, #sell-portrait-name { font-size: 12px; color: #666; text-align: center; font-weight: 600; }
+body.dark #propose-portrait-name, body.dark #sell-portrait-name { color: #ccc; }
+.resimg { width: 72px; height: 72px; object-fit: contain; margin-top: 4px; }
+#propose-dialog h2, #sell-dialog h2 { font-size: 15px; margin-bottom: 8px; }
+#propose-dialog .hint, #sell-dialog .hint { font-size: 11px; color: #888; margin-bottom: 10px; }
+.propose-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.propose-row[hidden] { display: none; }
+.propose-row label { font-size: 12px; color: #666; flex: 0 0 auto; }
+body.dark .propose-row label { color: #aaa; }
+.propose-row select, .propose-row input {
+  flex: 1 1 auto; max-width: 240px; background: #fff; color: #1e1e1e;
+  border: 1px solid #ccc; border-radius: 6px; padding: 5px 8px; font-size: 13px;
+}
+body.dark .propose-row select, body.dark .propose-row input {
+  background: #3a3a3c; color: #e0e0e0; border-color: #555;
+}
+.propose-row select option:disabled { color: #bbb; }
+body.dark .propose-row select option:disabled { color: #666; }
+/* Highlighted (needed/offerable) strategic option in the resource menu. */
+.propose-row select option.opt-need { color: #0a7d32; font-weight: 700; }
+body.dark .propose-row select option.opt-need { color: #4ade80; }
+#propose-note, #sell-note { min-height: 14px; }
+#propose-send, #sell-send { background: #0a84ff; color: #fff; }
+#propose-cancel, #sell-cancel { background: #ddd; color: #1e1e1e; }
+body.dark #propose-cancel, body.dark #sell-cancel { background: #3a3a3c; color: #e0e0e0; }
+
+/* Sell dialog shares the propose layout. */
+#sell-overlay {
+  position: fixed; z-index: 10006; inset: 0;
+  background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+}
+#sell-overlay[hidden] { display: none; }
+#sell-dialog {
+  background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
+  max-width: 92vw; display: flex; flex-direction: row; align-items: stretch; gap: 16px;
+}
+body.dark #sell-dialog { background: #2c2c2e; color: #e0e0e0; }
+#sell-main { width: 420px; max-width: 70vw; display: flex; flex-direction: column; }
+
+/* Form Strike Force modal — a large dialog (~90% of the window) whose unit
+   list scrolls when there are more units than fit. Header (title + hint),
+   the Name row, and the Attack/Cancel row stay fixed; #strike-body scrolls. */
+#strike-overlay {
+  position: fixed; z-index: 10005; inset: 0;
+  background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+}
+#strike-overlay[hidden] { display: none; }
+#strike-dialog {
+  background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
+  width: 90vw; height: 90vh; max-width: 90vw; max-height: 90vh;
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+}
+body.dark #strike-dialog { background: #2c2c2e; color: #e0e0e0; }
+#strike-dialog h2 { font-size: 15px; margin-bottom: 4px; flex: 0 0 auto; }
+#strike-hint { font-size: 12px; color: #666; margin-bottom: 10px; flex: 0 0 auto; }
+body.dark #strike-hint { color: #aaa; }
+/* The Name row and the Attack/Cancel row stay fixed at top/bottom. */
+#strike-dialog .work-row { flex: 0 0 auto; }
+/* Scroll pane: takes the remaining dialog height and scrolls when the unit
+   list is taller than the clamped dialog. */
+#strike-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  margin: 8px 0; padding-right: 4px;
+}
+#strike-attack { background: #0a84ff; color: #fff; }
+#strike-cancel { background: #ddd; color: #1e1e1e; }
+body.dark #strike-cancel { background: #3a3a3c; color: #e0e0e0; }
