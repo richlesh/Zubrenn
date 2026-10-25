@@ -848,6 +848,13 @@ body.dark #offer-dialog { background: #2c2c2e; color: #e0e0e0; }
 #offer-text { font-size: 13px; line-height: 1.5; }
 #offer-accept { background: #0a84ff; color: #fff; }
 #offer-decline { background: #c0392b; color: #fff; }
+/* Clear keyboard-focus indication: a thicker orange outline so the player can
+   see which button Enter will activate (Tab moves between Accept/Decline). */
+#offer-dialog button:focus,
+#offer-dialog button:focus-visible {
+  outline: 3px solid #ff8c1a;
+  outline-offset: 2px;
+}
 
 /* Propose Trade dialog (player-initiated offer). */
 #propose-overlay {

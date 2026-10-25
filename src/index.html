@@ -17805,9 +17805,11 @@
       overlay.hidden = false;
       const accept = document.getElementById('offer-accept');
       const decline = document.getElementById('offer-decline');
+      let _offerKeyHandler = null;
       const close = (accepted) => {
         overlay.hidden = true; _offerShowing = false;
         accept.onclick = null; decline.onclick = null;
+        if (_offerKeyHandler) { document.removeEventListener('keydown', _offerKeyHandler, true); _offerKeyHandler = null; }
         if (accepted) {
           if (offer.diplo && offer.deal) { applyPactDeal(offer.deal); try { renderDiplomacy(); } catch (e) {} }
           else { createTrade(offer); }
@@ -17822,6 +17824,25 @@
       };
       accept.onclick = () => close(true);
       decline.onclick = () => close(false);
+      // Keyboard: Enter activates the FOCUSED button (Accept is the default, so
+      // Enter accepts; Tab to Decline then Enter declines). Escape declines.
+      // Capture-phase + stopPropagation so the global Enter handler can't end the
+      // turn while an offer is on screen. The press is animated for feedback.
+      _offerKeyHandler = (e) => {
+        if (overlay.hidden) return;
+        if (e.key === 'Enter') {
+          e.preventDefault(); e.stopPropagation();
+          const focused = document.activeElement;
+          const btn = (focused === decline) ? decline : accept;   // default: Accept
+          if (typeof animateButtonClick === 'function') animateButtonClick(btn); else btn.click();
+        } else if (e.key === 'Escape') {
+          e.preventDefault(); e.stopPropagation();
+          if (typeof animateButtonClick === 'function') animateButtonClick(decline); else decline.click();
+        }
+      };
+      document.addEventListener('keydown', _offerKeyHandler, true);
+      // Default focus on Accept so Enter accepts immediately and Tab moves to Decline.
+      try { accept.focus(); } catch (e) {}
     }
 
     // Called during an AI player's turn: the AI may extend a trade offer to the
