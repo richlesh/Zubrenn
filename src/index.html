@@ -10764,6 +10764,10 @@
           // strikes. Runs for every placed AI, even if it had no economic action.
           try { if (aiMilitaryStep(pi)) _roundHadAction = true; }
           catch (e) { console.error("[ai] military step failed:", e); }
+          // Transport: connect the AI's own colonies by road/monorail so they
+          // can share resources and defend each other overland.
+          try { if (aiTransportStep(pi)) _roundHadAction = true; }
+          catch (e) { console.error("[ai] transport step failed:", e); }
           // Trade: the AI may extend a trade offer to the human (popup) and/or
           // auto-settle deals with other AIs, driven by its species traits.
           try { aiMaybeTrade(pi); }
@@ -11315,6 +11319,43 @@
         const name = `${(gameState.players[pi] && gameState.players[pi].name) || 'AI'} Strike Force ${_strikeForceSeq}`;
         launchStrikeForce(name, target, members);
         return true;                                     // one strike per AI turn
+      }
+      return false;
+    }
+
+    // Connect an AI's own colonies by road/monorail. If two of its colonies are
+    // not yet land-linked (no road/monorail path between them), and the source
+    // colony has no road/monorail plan already in progress, lay a route from the
+    // source toward the nearest unconnected sibling. Construction is incremental
+    // and paid per-turn by the source colony (planTransport); if it can't afford
+    // a segment the plan just pauses — so this is safe to issue speculatively.
+    // One new plan per AI per turn. Industrial species (industry>=4) prefer the
+    // faster monorail; others build cheaper roads.
+    function aiTransportStep(pi) {
+      const p = gameState.players && gameState.players[pi];
+      if (!p || p.kind !== 'ai' || !p.placed) return false;
+      const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi && !b.inTransit);
+      if (myColonies.length < 2) return false;           // nothing to connect
+      const landOk = (x, y) => cellHasTransport(x, y);
+      const kind = (aiTraitsOf(pi).industry >= 4) ? 'monorail' : 'road';
+      for (const src of myColonies) {
+        // Skip if this colony already has a road/monorail plan under way.
+        if (colonyTransportPlan(src)) continue;
+        // Nearest sibling this colony is NOT already land-connected to.
+        let target = null, bestD = Infinity;
+        for (const other of myColonies) {
+          if (other === src) continue;
+          if (_pathExists(src, other, pi, landOk)) continue;   // already road/monorail-linked
+          const d = hexDistance(src.x, src.y, other.x, other.y);
+          if (d < bestD) { bestD = d; target = other; }
+        }
+        if (!target) continue;
+        const path = hexLinePath(src.x, src.y, target.x, target.y);
+        if (!Array.isArray(path) || path.length < 2) continue;
+        // Don't route through a THIRD owner's control (greedy walker stops short).
+        if (!pathReachesTarget(path, target.x, target.y)) continue;
+        const plan = planTransport(pi, kind, src, path);
+        if (plan) return true;                            // one plan per AI per turn
       }
       return false;
     }
