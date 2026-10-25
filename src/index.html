@@ -9323,6 +9323,7 @@
         const mine = gameState.colonies.filter((c) => c.owner === 'human').length;
         nameInput.value = "Colony " + (mine + 1);
         nameOverlay.hidden = false;
+        markNameDefaultButton();
         setTimeout(() => { nameInput.focus(); nameInput.select(); }, 30);
       });
     }
@@ -14787,14 +14788,26 @@
       const mine = gameState.colonies.filter((c) => c.owner === 'human').length;
       nameInput.value = "Colony " + (mine + 1);
       nameOverlay.hidden = false;
+      markNameDefaultButton();
       nameInput.focus(); nameInput.select();
     }
     function closeNameDialog() {
       nameOverlay.hidden = true; nameTarget = null;
+      const okBtn = document.getElementById("name-ok"); if (okBtn) okBtn.classList.remove("is-default");
       if (_launchNaming) { _launchNaming = false; const r = _launchNameResolve; _launchNameResolve = null; if (r) r(null); }
     }
     document.getElementById("name-cancel").addEventListener("click", closeNameDialog);
     document.getElementById("name-ok").addEventListener("click", confirmName);
+    // Highlight Establish as the DEFAULT (what Enter triggers) when the dialog
+    // opens, via an .is-default orange ring. While the name input is focused the
+    // default stays on Establish; Tabbing onto a button shows that button's own
+    // focus ring instead (and Enter then triggers it).
+    function markNameDefaultButton() {
+      const okBtn = document.getElementById("name-ok");
+      const cancelBtn = document.getElementById("name-cancel");
+      if (okBtn) okBtn.classList.add("is-default");
+      if (cancelBtn) cancelBtn.classList.remove("is-default");
+    }
     // Keyboard in the Establish Colony dialog: Enter activates the FOCUSED button
     // (Cancel if Tabbed to it, else Establish — the default). From the text input
     // Enter establishes. Escape cancels. The button press is animated.
@@ -14802,6 +14815,15 @@
       const _nameDlg = document.getElementById("name-dialog");
       const _nameOk = document.getElementById("name-ok");
       const _nameCancel = document.getElementById("name-cancel");
+      // Keep the .is-default ring on Establish only while it would be the Enter
+      // target: drop it the moment either button is focused (its own :focus ring
+      // takes over), restore it when focus returns to the input.
+      if (_nameDlg) {
+        _nameDlg.addEventListener("focusin", (e) => {
+          if (e.target === _nameOk || e.target === _nameCancel) { _nameOk.classList.remove("is-default"); }
+          else if (e.target === nameInput && _nameOverlayOpen()) { _nameOk.classList.add("is-default"); }
+        });
+      }
       (_nameDlg || nameInput).addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
@@ -14817,6 +14839,7 @@
         }
       });
     }
+    function _nameOverlayOpen() { return nameOverlay && !nameOverlay.hidden; }
     async function confirmName() {
       // Launch-naming path: resolve the pending promise with the entered name.
       if (_launchNaming) {

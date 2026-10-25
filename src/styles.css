@@ -321,9 +321,12 @@ body.dark #name-dialog input { background: #3a3a3c; color: #e0e0e0; border-color
 body.dark #name-cancel { background: #3a3a3c; color: #e0e0e0; }
 #name-ok { background: #0a84ff; color: #fff; }
 /* Clear keyboard-focus indication (matches the offer dialog): a thicker orange
-   outline so the player sees which button Enter will activate. */
+   outline so the player sees which button Enter will activate. `.is-default`
+   gives the same ring to the Establish button while the dialog's text input is
+   focused, marking it as the Enter default. */
 #name-dialog button:focus,
-#name-dialog button:focus-visible {
+#name-dialog button:focus-visible,
+#name-dialog button.is-default {
   outline: 3px solid #ff8c1a;
   outline-offset: 2px;
 }
