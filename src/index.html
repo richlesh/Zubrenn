@@ -11170,48 +11170,89 @@
       const p = gameState.players && gameState.players[pi];
       if (!p || p.kind !== 'ai' || !p.placed) return false;
       const aggression = aiTraitsOf(pi).aggression;
-      const aggressive = aggression >= 4;
+      const aggressive = aggression >= 3;          // 3-5: build up & attack
       let acted = false;
       const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi && !b.inTransit);
+      if (!myColonies.length) return false;
 
-      // --- (1) Build one military/defense building this turn. ----------------
-      // Preference order by personality: aggressive -> offense first; others ->
-      // defense first. Only codes that exist in config are considered.
-      const offense = ['army base', 'barracks'].map(_bldgCode).filter((c) => c != null);
+      const offense = ['joint base', 'army base', 'barracks'].map(_bldgCode).filter((c) => c != null);
+      // Defense buildings, strongest first (so upgrades are preferred when eligible).
       const defense = ['plasma bubble', 'shield', 'laser battery', 'missile battery'].map(_bldgCode).filter((c) => c != null);
-      const buildOrder = aggressive ? offense.concat(defense) : defense.concat(offense);
-      let builtThisTurn = false;
-      for (const col of myColonies) {
-        if (builtThisTurn) break;
+
+      // Place `type` in `col` on its best empty control cell and work it if there
+      // is spare capacity. Returns true if built.
+      const tryBuildInColony = (col, type) => {
         ensureWorked(col);
         const homeKey = cellKey(col.x, col.y);
         const cap = workCap(col);
-        const control = colonyControlCells(col);
-        const empties = control.filter((c) => cellKey(c.x, c.y) !== homeKey
+        const empties = colonyControlCells(col).filter((c) => cellKey(c.x, c.y) !== homeKey
           && !gameState.buildings.some((b) => b.x === c.x && b.y === c.y));
-        if (!empties.length) continue;
-        for (const type of buildOrder) {
-          // Skip if the colony already has this building (one is enough per turn).
-          const already = gameState.buildings.some((b) => b.type === type && b.owner === pi
-            && hexDistance(col.x, col.y, b.x, b.y) <= colonyControlRadius(col));
-          if (already) continue;
-          let placed = false;
-          for (const spot of empties) {
-            if (!canPlaceTypeAt(type, spot.x, spot.y, pi).ok) continue;
-            if (!hasPrerequisitesAt(type, spot.x, spot.y, pi)) continue;
-            if (!canAffordBuildingAt(type, spot.x, spot.y, pi)) continue;
-            placeBuilding(spot.x, spot.y, pi, type);
-            // Work its cell so it recruits (military) or defends (buildings count
-            // only when worked), if there's spare capacity.
-            if (col.worked.filter((k) => k !== homeKey).length < cap) col.worked.push(cellKey(spot.x, spot.y));
-            placed = true; acted = true; builtThisTurn = true;
-            break;
-          }
-          if (placed) break;
+        for (const spot of empties) {
+          if (!canPlaceTypeAt(type, spot.x, spot.y, pi).ok) continue;
+          if (!hasPrerequisitesAt(type, spot.x, spot.y, pi)) continue;
+          if (!canAffordBuildingAt(type, spot.x, spot.y, pi)) continue;
+          placeBuilding(spot.x, spot.y, pi, type);
+          // Work it so it defends/recruits (both only count when worked).
+          if (col.worked.filter((k) => k !== homeKey).length < cap) col.worked.push(cellKey(spot.x, spot.y));
+          return true;
+        }
+        return false;
+      };
+      const colonyHasAnyOf = (col, codes) => codes.some((type) => gameState.buildings.some((b) =>
+        b.type === type && b.owner === pi && !b.inTransit
+        && hexDistance(col.x, col.y, b.x, b.y) <= colonyControlRadius(col)));
+
+      // --- (1) EVERY AI: a defensive emplacement in EVERY colony that lacks one.
+      // Build at most one defense building per colony per turn (affordability /
+      // eligibility — population, factory, aluminum/crystal deposits — naturally
+      // gate which colonies qualify; those that can't are covered by stationed
+      // defenders in step 3).
+      for (const col of myColonies) {
+        if (colonyHasAnyOf(col, defense)) continue;            // already defended by a battery/shield
+        for (const type of defense) {                          // strongest eligible first
+          if (tryBuildInColony(col, type)) { acted = true; break; }
         }
       }
 
-      // --- (2) Aggressive species: launch one strike at the nearest enemy. ----
+      // --- (2) EVERY AI: a recruiting base in EVERY colony that lacks one, so
+      // each city can raise its own defenders. Aggressive species also pursue the
+      // stronger offense upgrades (joint/army base) to build up more military.
+      const recruitOrder = aggressive ? offense : offense.slice().reverse(); // aggressive: strongest first
+      for (const col of myColonies) {
+        if (colonyHasAnyOf(col, offense)) {
+          // Aggressive: try to UPGRADE an existing base to field more units.
+          if (aggressive) { for (const type of offense) { if (!colonyHasAnyOf(col, [type]) && tryBuildInColony(col, type)) { acted = true; break; } } }
+          continue;
+        }
+        for (const type of recruitOrder) {
+          if (tryBuildInColony(col, type)) { acted = true; break; }
+        }
+      }
+
+      // --- (3) EVERY AI: station defenders in weakly-defended colonies by
+      // deploying an idle, full-strength unit from a better-defended colony.
+      // "At least station military there from another colony."
+      const MIN_DEF = 1;                                        // a colony wants >=1 defensive strength
+      for (const col of myColonies) {
+        if (colonyDefenseStrength(col) >= MIN_DEF) continue;    // already defended
+        // Find an idle full-strength unit elsewhere whose home colony keeps some
+        // defense after it leaves, that can station here.
+        let moved = false;
+        for (const src of myColonies) {
+          if (src === col || moved) continue;
+          for (const u of colonyStationedUnits(src)) {
+            if (u.strikeForce || u.inTransit) continue;
+            if (!colonyCanStation(col, u.type)) continue;       // destination lacks the facility
+            // Don't strip the source's own defense below MIN_DEF.
+            if (colonyDefenseStrength(src) - unitEffDefense(u) < MIN_DEF) continue;
+            if (deployUnit(u, col) != null) { acted = true; moved = true; break; }
+          }
+        }
+      }
+
+      // --- (4) AGGRESSIVE (3-5): launch a strike at the nearest enemy colony
+      // (AI or human). Higher aggression launches more readily; aiLaunchStrike
+      // already only commits a force strong enough to win.
       if (aggressive) {
         if (aiLaunchStrike(pi)) acted = true;
       }
