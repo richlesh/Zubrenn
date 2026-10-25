@@ -1509,6 +1509,7 @@
     // terrain grid and cached (sea tiles never change in-game).
     let _lakeCacheTerrain = null;      // terrain-grid identity the cache was built for
     let _freshwaterLakeSet = null;     // Set of "x,y" keys that are freshwater-lake sea tiles
+    let _freshwaterLakeSize = null;    // Map "x,y" -> the cell's freshwater-lake component size (tiles)
     function freshwaterLakeMaxTiles() {
       const v = CONFIG && CONFIG.freshwaterLakeMaxTiles;
       return (typeof v === 'number' && v > 0) ? v : 300;
@@ -1518,6 +1519,7 @@
       if (t === _lakeCacheTerrain && _freshwaterLakeSet) return _freshwaterLakeSet;
       _lakeCacheTerrain = t;
       _freshwaterLakeSet = new Set();
+      _freshwaterLakeSize = new Map();
       if (!t || !t.length) return _freshwaterLakeSet;
       const H = t.length, W = t[0].length;
       const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
@@ -1553,7 +1555,10 @@
           }
           // Enclosed (never reached an edge) AND small enough -> freshwater lake.
           if (!open && comp.length <= maxTiles) {
-            for (const c of comp) _freshwaterLakeSet.add(key(c.x, c.y));
+            for (const c of comp) {
+              _freshwaterLakeSet.add(key(c.x, c.y));
+              _freshwaterLakeSize.set(key(c.x, c.y), comp.length);
+            }
           }
         }
       }
@@ -1572,6 +1577,14 @@
     function isFreshwaterLakeCell(x, y) {
       if (terrainAt(x, y) !== WATER) return false;
       return _ensureFreshwaterLakes().has(_lakeKey(x, y));
+    }
+    // Size (in tiles) of the freshwater-lake component the cell belongs to, or 0
+    // if the cell is not a freshwater-lake sea tile.
+    function freshwaterLakeSizeAt(x, y) {
+      if (terrainAt(x, y) !== WATER) return 0;
+      _ensureFreshwaterLakes();
+      const n = _freshwaterLakeSize ? _freshwaterLakeSize.get(_lakeKey(x, y)) : 0;
+      return (typeof n === 'number' && n > 0) ? n : 0;
     }
     // True if the cell ITSELF is a freshwater source: non-zero terrain base
     // water, a terrain-bonus with non-zero water, or a freshwater-lake sea tile.
@@ -3909,6 +3922,16 @@
       }
       if (_removed) {
         const gone = gameState.buildings.filter((b) => b._delete);
+        // A removed MILITARY BASE disbands its units: destroy them and return
+        // their personnel to the colony that hosts the base (its controlling
+        // colony, same owner). Do this before the buildings are dropped so the
+        // slot links are still intact.
+        for (const g of gone) {
+          if (!Array.isArray(g.unitIds) || !g.unitIds.length) continue;
+          const host = colonyControlling(g.x, g.y, g.owner)
+            || gameState.buildings.find((bb) => bb.type === 1 && bb.owner === g.owner && bb.x === g.x && bb.y === g.y && !bb.inTransit);
+          disbandBaseUnits(g, host || null);
+        }
         gameState.buildings = gameState.buildings.filter((b) => !b._delete);
         // Deselect any worked cells that pointed at removed buildings.
         for (const g of gone) {
@@ -4947,6 +4970,23 @@
     function isBuildingWorked(col, b) {
       return col.worked && col.worked.includes(cellKey(b.x, b.y));
     }
+    // UI label for a THROTTLEABLE building (config `throttle: true`, e.g. a
+    // Factory): " (idle)" when its cell is not worked, otherwise " (N%)" — the
+    // capacity fraction it is currently able to run at, from the economy. Returns
+    // "" for non-throttleable buildings. The fraction is recorded per cell on the
+    // colony by colonyBudget; recompute via colonyStats if it isn't cached yet.
+    function factoryThrottleLabel(b) {
+      if (!b || !(buildingType(b.type) || {}).throttle) return "";
+      const col = colonyControlling(b.x, b.y, b.owner);
+      if (!col) return "";
+      if (!isBuildingWorked(col, b)) return " (idle)";
+      const key = cellKey(b.x, b.y);
+      if (!col._throttleByCell || col._throttleByCell[key] == null) {
+        try { colonyStats(col); } catch (e) {}
+      }
+      const f = (col._throttleByCell && col._throttleByCell[key] != null) ? col._throttleByCell[key] : 1;
+      return ` (${Math.round(Math.max(0, Math.min(1, f)) * 100)}%)`;
+    }
 
     // --- Military recruitment --------------------------------------------------
     // A recruiting building (Barracks, Army Base, ...) fields a data-driven set
@@ -5054,21 +5094,26 @@
       const floor = ((CONFIG && CONFIG.recruitMinColonyPopulation != null) ? CONFIG.recruitMinColonyPopulation : 2) * popUnitSize();
       if (!Array.isArray(b.unitIds)) b.unitIds = [];
       let total = 0;
+      const owned = ensureOwned(col);
+      const pop = Math.max(0, Math.floor(owned.population || 0));
+      let available = Math.max(0, pop - floor);                     // shared colony floor
+      if (available <= 0) return 0;
+      // Phase 1 — gather this turn's eligible slots and how many colonists each
+      // WANTS: min(per-turn rate, remaining room to its cap). A slot is eligible
+      // only if it recruits here (positive rate), its strategic-resource gate is
+      // met, and its unit (if any) is home and below cap. Each slot records its
+      // resolved/created-later unit via its index.
+      const reqs = [];
       for (let i = 0; i < slots.length; i++) {
         const slotType = slots[i];
-        // Per-turn recruit rate for THIS slot's unit type (data-driven map).
         const rate = buildingRecruitRate(b.type, slotType);
         if (rate <= 0) continue;                                    // this type doesn't recruit here
         // Strategic-resource gate: a unit type may require one or more
         // prerequisite.bonusType resources (e.g. tank -> "iron"). Every required
-        // bonusType must be available from a worked terrain-bonus cell in the
-        // owner's colonies, or the slot cannot recruit.
+        // bonusType must be available from a worked terrain-bonus cell.
         const _uPre = (CONFIG && CONFIG.units && CONFIG.units[slotType] && CONFIG.units[slotType].prerequisite) || null;
         if (_uPre && !bonusTypesMet(_uPre.bonusType, col)) continue;
-        // Each slot's unit caps at its unit type's unitSize (e.g. infantry 1000,
-        // tank 500) — the data-driven max strength per unit type.
         const cap = unitMaxStrength(slotType);
-        // Resolve (or lazily create) this slot's stationed unit.
         let unit = findUnitById(b.unitIds[i]);
         if (unit && unit.owner !== col.owner) unit = null;          // stale link
         if (unit && unit.type !== slotType) unit = null;            // slot retyped (config change)
@@ -5078,24 +5123,50 @@
         // slot; recruiting resumes only if it is back at this colony's cell.
         if (unit && (unit.x !== col.x || unit.y !== col.y)) continue;
         const current = unit ? (Number(unit.strength) || 0) : 0;
-        const room = cap - current;
-        if (room <= 0) continue;                                    // slot unit already at cap
-        const owned = ensureOwned(col);
-        const pop = Math.max(0, Math.floor(owned.population || 0));
-        const available = Math.max(0, pop - floor);                 // shared colony floor
-        const take = Math.min(rate, room, available);
-        if (take <= 0) break;                                       // no colonists left to give any slot
-        // Create the unit on first successful recruit so empty slots don't
-        // clutter the roster. Its full strength is its unit type's unitSize.
-        if (!unit) { unit = createUnit(slotType, col.owner, col, cap); b.unitIds[i] = unit.id; }
-        // Keep fullStrength in sync with the unit type's unitSize (config may change).
-        if (Number.isFinite(cap)) unit.fullStrength = cap;
-        owned.population -= take;                                    // deduct from the colony
-        col.population = owned.population;                           // keep legacy mirror in sync
-        unit.strength = current + take;                             // add to the slot unit
+        const room = (Number.isFinite(cap) ? cap : Infinity) - current;
+        const want = Math.max(0, Math.min(rate, room));
+        if (want <= 0) continue;                                    // at cap / nothing wanted
+        reqs.push({ i, slotType, cap, current, unit, want });
+      }
+      if (!reqs.length) return 0;
+      // Phase 2 — allocate the available colonists FAIRLY across all wanting
+      // slots (so e.g. a Joint Base's tank/fighter/bomber slots recruit ALONGSIDE
+      // its infantry, instead of infantry — which come first in slot order —
+      // draining the shared pool each turn). If supply covers every want, each
+      // gets its full want; otherwise each gets a proportional share, with any
+      // rounding remainder handed out one-per-slot in order.
+      const totalWant = reqs.reduce((s, r) => s + r.want, 0);
+      const alloc = new Array(reqs.length).fill(0);
+      if (available >= totalWant) {
+        for (let j = 0; j < reqs.length; j++) alloc[j] = reqs[j].want;
+      } else {
+        let assigned = 0;
+        for (let j = 0; j < reqs.length; j++) {
+          const a = Math.floor(reqs[j].want * available / totalWant);
+          alloc[j] = a; assigned += a;
+        }
+        // Distribute the rounding remainder one colonist at a time to slots that
+        // still want more, in slot order.
+        let remainder = available - assigned;
+        for (let j = 0; j < reqs.length && remainder > 0; j++) {
+          if (alloc[j] < reqs[j].want) { alloc[j] += 1; remainder -= 1; }
+        }
+      }
+      // Phase 3 — apply: create units lazily for slots that actually receive
+      // colonists, add strength, and deduct the shared population once.
+      for (let j = 0; j < reqs.length; j++) {
+        const take = alloc[j];
+        if (take <= 0) continue;
+        const r = reqs[j];
+        let unit = r.unit;
+        if (!unit) { unit = createUnit(r.slotType, col.owner, col, r.cap); b.unitIds[r.i] = unit.id; }
+        if (Number.isFinite(r.cap)) unit.fullStrength = r.cap;      // keep in sync with config unitSize
+        unit.strength = r.current + take;
         if (!unit.inTransit) { unit.x = col.x; unit.y = col.y; }    // pin home unit to its colony
         total += take;
       }
+      owned.population -= total;                                    // deduct from the colony once
+      col.population = owned.population;                            // keep legacy mirror in sync
       return total;
     }
 
@@ -5230,6 +5301,31 @@
         }
         if (b.unitId === u.id) b.unitId = null; // legacy single-unit link
       }
+    }
+    // Disband all units stationed at (homed to) a military base `building`: each
+    // unit is DESTROYED, and its personnel (current strength) are re-absorbed
+    // into `hostColony`'s population when a host colony is given (base removed, or
+    // colony captured — the garrison becomes civilians of the colony). When
+    // hostColony is null (e.g. the colony is razed) the units are simply
+    // destroyed with nowhere to return to. Clears the building's slot links.
+    function disbandBaseUnits(building, hostColony) {
+      if (!building || !Array.isArray(building.unitIds)) return 0;
+      let returned = 0;
+      const ids = building.unitIds.slice();
+      for (const uid of ids) {
+        const u = findUnitById(uid);
+        if (!u) continue;
+        const men = Math.max(0, Number(u.strength) || 0);
+        if (hostColony && men > 0) {
+          const owned = ensureOwned(hostColony);
+          owned.population = (Number(owned.population) || 0) + men;
+          hostColony.population = owned.population;   // keep legacy mirror in sync
+          returned += men;
+        }
+        destroyUnit(u);
+      }
+      building.unitIds = [];
+      return returned;
     }
     // Drop any units whose strength has fallen to 0 (destroyed). Returns the
     // removed units (for notifications). Units are created lazily with strength
@@ -5565,11 +5661,17 @@
         }
       }
       // Buildings contribute production + upkeep ONLY when their cell is worked.
+      // Throttleable buildings (config `throttle: true`, e.g. Factories) are
+      // DEFERRED to a second pass below: they run at a capacity fraction based on
+      // the energy/material actually available after everything else, so they
+      // scale down instead of forcing the colony to idle a worked cell (a Mine).
+      const throttleBuildings = [];
       for (const b of colonyBuildings(col)) {
         if (!workedSet.has(cellKey(b.x, b.y))) continue; // idle: no produce, no upkeep
         // Federation buildings are funded by the Federation pool, not the
         // colony — their upkeep/production never touch a colony's budget.
         if (buildingIsFederation(b.type)) continue;
+        if ((buildingType(b.type) || {}).throttle) { throttleBuildings.push(b); continue; }
         const bo = bldgBonusAt(b.type, b.x, b.y), up = bldgUpkeep(b.type);
         production.food += bo.food;
         production.material += bo.material;
@@ -5667,6 +5769,71 @@
         addBreak('energy', 'Outpost', otb.bonus.energy || 0);
         addBreak('wealth', 'Outpost', otb.bonus.wealth || 0);
         addBreak('water', 'Outpost', otb.bonus.water || 0);
+      }
+      // Throttle pass: deferred throttleable buildings (Factories) run at a
+      // CAPACITY FRACTION f in [0,1] rather than all-or-nothing, so a resource
+      // shortfall throttles the Factory instead of idling a worked cell (a Mine).
+      // Model B "available" for a resource = the colony's own stored reserve PLUS
+      // everything else's net production of it this turn (production − needs so
+      // far, before these factories draw). f is the smaller of
+      // availEnergy / factory energy upkeep and availMaterial / factory material
+      // upkeep, clamped to [0,1]. Each factory's scaled draw is folded into the
+      // running totals so a second factory sees what the first one left. Both the
+      // factory's output (bonus) and its upkeep scale by f.
+      {
+        const stored = ensureStored(col);
+        // Record each throttleable building's capacity fraction (keyed by its
+        // cell) so the UI (map hover + colony panel) can show its % production.
+        col._throttleByCell = {};
+        // Goods headroom: how many goods units the colony can absorb WITHOUT
+        // waste = goods it still needs this turn that its own non-factory output
+        // hasn't covered, PLUS free local goods storage (cap − stored), PLUS free
+        // Federation goods-pool storage (only when connected to the capital, since
+        // overflow routes there). Factory goods output is throttled so it never
+        // exceeds this, instead of producing goods that would overflow and be
+        // discarded. The headroom is consumed as each factory adds goods.
+        const goodsCap = (colonyMaxStorage(col).goods) || 0;
+        const freeLocalGoods = Math.max(0, goodsCap - (stored.goods || 0));
+        let freeFedGoods = 0;
+        if (colonyConnectedToCapital(col, resourceShareMode('goods'))) {
+          const fed = federationOwnedOf(col.owner);
+          const fedMax = federationMaxStorage(col.owner);
+          freeFedGoods = Math.max(0, (fedMax.goods || 0) - (fed.goods || 0));
+        }
+        let goodsRoom = Math.max(0, needs.goods - production.goods) + freeLocalGoods + freeFedGoods;
+        for (const b of throttleBuildings) {
+          const bo = bldgBonusAt(b.type, b.x, b.y), up = bldgUpkeep(b.type);
+          const availEnergy = Math.max(0, (stored.energy || 0) + production.energy - needs.energy);
+          const availMaterial = Math.max(0, (stored.material || 0) + production.material - needs.material);
+          let f = 1;
+          if (up.energy > 0) f = Math.min(f, availEnergy / up.energy);
+          if (up.material > 0) f = Math.min(f, availMaterial / up.material);
+          // Demand/storage cap: don't produce more goods than can be absorbed.
+          if (bo.goods > 0) f = Math.min(f, goodsRoom / bo.goods);
+          f = Math.max(0, Math.min(1, f));
+          col._throttleByCell[cellKey(b.x, b.y)] = f;
+          production.food += bo.food * f;
+          production.material += bo.material * f;
+          production.goods += bo.goods * f;
+          production.energy += bo.energy * f;
+          production.water += bo.water * f;
+          production.wealth += bo.wealth * f;
+          needs.material += up.material * f;
+          needs.goods += up.goods * f;
+          needs.energy += up.energy * f;
+          needs.water += up.water * f;
+          needs.wealth += up.wealth * f;
+          growthBonus += (bo.growth || 0) * f;
+          // A factory adds goods output but also draws goods upkeep; the NET goods
+          // it adds to the pool consumes shared headroom for the next factory.
+          goodsRoom = Math.max(0, goodsRoom - Math.max(0, (bo.goods - up.goods) * f));
+          addBreak('food', 'Buildings', bo.food * f);
+          addBreak('material', 'Buildings', (bo.material - up.material) * f);
+          addBreak('goods', 'Buildings', (bo.goods - up.goods) * f);
+          addBreak('energy', 'Buildings', (bo.energy - up.energy) * f);
+          addBreak('water', 'Buildings', (bo.water - up.water) * f);
+          addBreak('wealth', 'Buildings', (bo.wealth - up.wealth) * f);
+        }
       }
       // Wealth income also includes derived income (10% of surplus food+material).
       const derivedWealth = Math.max(0, production.food - needs.food) * 0.1
@@ -6712,18 +6879,27 @@
       // to +/- foodHappinessCap (happiness is a percent; default +/-5%) so a huge
       // surplus or deficit can't dominate the colony's morale.
       const foodHappCap = (cfg.foodHappinessCap != null) ? cfg.foodHappinessCap : 5;
-      const foodHappiness = Math.max(-foodHappCap, Math.min(foodHappCap, netFood));
+      let foodHappiness = Math.max(-foodHappCap, Math.min(foodHappCap, netFood));
+      // A shortage only hurts morale if there is NO stockpile to draw on: while
+      // the colony still has food in storage, a negative food balance does not
+      // reduce happiness. (A surplus still adds happiness as normal.)
+      if (foodHappiness < 0 && (stored.food || 0) > 0) foodHappiness = 0;
       if (foodHappiness >= 0) happinessPos += foodHappiness; else happinessNeg += foodHappiness;
       // Shortage of the other staple resources (energy, goods, water, wealth)
-      // also hurts morale: when a colony's net per-year rate for one of these is
-      // negative, that shortfall folds in as a NEGATIVE happiness term (surplus
-      // of these does NOT add happiness — only food rewards a surplus). Each term
-      // is clamped to [-shortageHappinessCap, 0] so one shortage can't dominate.
+      // also hurts morale, BUT only when the colony has no stockpile of that
+      // resource to fall back on: a negative net rate folds in as a NEGATIVE
+      // happiness term ONLY when stored is <= 0 (while any remains in storage the
+      // shortage is cushioned and does not reduce happiness). Surplus of these
+      // does NOT add happiness — only food rewards a surplus. Each term is clamped
+      // to [-shortageHappinessCap, 0] so one shortage can't dominate.
       const shortageCap = (cfg.shortageHappinessCap != null) ? cfg.shortageHappinessCap : 5;
       let shortageHappiness = 0;
       for (const res of ['energy', 'goods', 'water', 'wealth']) {
         const net = b.net[res] || 0;
-        if (net < 0) shortageHappiness += Math.max(-shortageCap, net);
+        // A shortage of this resource only hurts morale when the colony has NO
+        // positive stockpile of it: while any remains in storage, a negative net
+        // rate does not reduce happiness.
+        if (net < 0 && (stored[res] || 0) <= 0) shortageHappiness += Math.max(-shortageCap, net);
       }
       if (shortageHappiness < 0) happinessNeg += shortageHappiness;
       // Happiness from worked cells' terrain + terrain-bonus (e.g. Wetlands, or
@@ -7530,9 +7706,19 @@
       // building of the upgraded type on this cell. Remove it immediately (the
       // upgrade pays its own build cost) so the new building takes the cell.
       const _upgradeCode = buildingUpgradesCode(type);
+      let _carriedUnitIds = null;   // recruiting-building unit links carried across an upgrade
       if (_upgradeCode != null) {
         const prior = ownerBuildingAt(x, y, owner);
         if (prior && prior.type === _upgradeCode) {
+          // Carry the prior (recruiting) building's stationed units over to the
+          // upgraded building so they aren't orphaned: e.g. a Barracks's infantry
+          // transfers to the Army Base, and an Army Base's infantry+tank to the
+          // Joint Base. They are re-linked to the matching slots of the upgraded
+          // building's (data-driven) unit layout below, leaving the extra new
+          // slots free to recruit.
+          if (Array.isArray(prior.unitIds) && prior.unitIds.length) {
+            _carriedUnitIds = prior.unitIds.slice();
+          }
           gameState.buildings = gameState.buildings.filter((b) => b !== prior);
           // Keep worked-cell references: the cell stays worked, now by the new
           // building (same x,y), so no deselect needed. Refresh connectivity in
@@ -7559,6 +7745,31 @@
       const rec = { x, y, type, owner, ownerName: species, improvement: improvementName(type),
                     turnsRemaining: turns };
       gameState.buildings.push(rec);
+      // Transfer any units carried over from the building this upgrade replaced:
+      // link each existing unit into the FIRST free slot of the upgraded layout
+      // whose slot type matches the unit's type (data-driven via buildingUnitSlots).
+      // Extra slots (the capacity the upgrade adds) stay empty for recruiting.
+      if (_carriedUnitIds && _carriedUnitIds.length) {
+        const _newSlots = buildingUnitSlots(type);              // ordered slot unit-types
+        rec.unitIds = new Array(_newSlots.length).fill(null);
+        const _used = new Array(_newSlots.length).fill(false);
+        for (const uid of _carriedUnitIds) {
+          const u = findUnitById(uid);
+          if (!u) continue;
+          // Find the first unused slot of the same unit type.
+          let placed = false;
+          for (let s = 0; s < _newSlots.length; s++) {
+            if (_used[s] || _newSlots[s] !== u.type) continue;
+            rec.unitIds[s] = uid; _used[s] = true; placed = true;
+            // Keep the unit homed at this (same) cell as its base.
+            u.homeX = x; u.homeY = y;
+            break;
+          }
+          // If no matching slot exists in the new layout (shouldn't happen for a
+          // superset upgrade), the unit simply keeps its current home coords.
+          if (!placed) { u.homeX = x; u.homeY = y; }
+        }
+      }
       bumpControlGen();   // a new building can change which cells are controlled
       bumpPlaceGen();     // ...and changes placement validity (occupancy, cap)
       // Building on a pristine-bonus tile destroys that bonus permanently.
@@ -9015,7 +9226,17 @@
         let up = buildingUpgradesCode(b.type);
         while (up != null && !present.has(up)) { present.add(up); up = buildingUpgradesCode(up); }
       }
-      const codes = buildings.map((p) => { const e = buildingType(p); return e ? e.code : p; });
+      let codes = buildings.map((p) => { const e = buildingType(p); return e ? e.code : p; });
+      // Small inland freshwater lakes (1–3 cells) are too small to host a Dock,
+      // so the DOCK building prerequisite is WAIVED for buildings placed on such
+      // a lake tile (e.g. an Aquafarm, or anything else that requires a Dock).
+      // Other prerequisites still apply. A Port satisfies a Dock requirement
+      // normally, so this only matters when no Dock/Port exists.
+      const _dockCodeReq = _bldgCode('dock');
+      if (_dockCodeReq != null && codes.includes(_dockCodeReq)) {
+        const sz = freshwaterLakeSizeAt(x, y);
+        if (sz > 0 && sz <= 3) codes = codes.filter((t) => t !== _dockCodeReq);
+      }
       if (!codes.every((t) => present.has(t))) return false;
       if (!networkRequirementMet(col, pre.network)) return false;
       if (!citySizeMet(col, pre.citySize)) return false;
@@ -9044,7 +9265,14 @@
           while (up != null && !present.has(up)) { present.add(up); up = buildingUpgradesCode(up); }
         }
       }
-      const codes = buildings.map((p) => { const e = buildingType(p); return e ? e.code : p; });
+      let codes = buildings.map((p) => { const e = buildingType(p); return e ? e.code : p; });
+      // Mirror hasPrerequisitesAt: the Dock requirement is waived on a small
+      // (1–3 cell) inland freshwater lake, so don't report Dock as missing there.
+      const _dockCodeReq = _bldgCode('dock');
+      if (_dockCodeReq != null && codes.includes(_dockCodeReq)) {
+        const sz = freshwaterLakeSizeAt(x, y);
+        if (sz > 0 && sz <= 3) codes = codes.filter((t) => t !== _dockCodeReq);
+      }
       const missing = codes.filter((t) => !present.has(t)).map((t) => improvementName(t));
       if (!networkRequirementMet(col, pre.network)) {
         // A network requirement is always a connection to ANOTHER of the
@@ -11286,6 +11514,136 @@
       }
       return acted;
     }
+    // Manager step (managed colonies only): free up workers that are being
+    // wasted, so managerAssignWorkers can reassign them to more useful cells.
+    // Two cases, each applied greedily one cell at a time and ONLY as far as
+    // necessary (recomputing after each idle), and NEVER if idling would create
+    // or worsen a resource shortfall (push any resource's net below 0 / more
+    // negative):
+    //   1. A worked Factory (throttleable building) whose capacity fraction is
+    //      strictly below 10% — it produces almost nothing while occupying a
+    //      worker/cell, so idle it to give another cell a chance.
+    //   2. A worked producer cell where >= 80% of its summed energy/goods/
+    //      material/water output is WASTED (overflows beyond the colony's local
+    //      storage plus any connected Federation room). Food is intentionally
+    //      excluded (banked food surplus feeds population growth).
+    // "Idle" here only removes the cell from col.worked (it does not demolish any
+    // building), so prerequisites are unaffected. Home and Habitat cells are
+    // never idled (Habitats are re-forced worked by ensureHabitatsWorked anyway).
+    function managerIdleWasteful(col) {
+      ensureWorked(col);
+      const homeKey = cellKey(col.x, col.y);
+      const habCode = _bldgCode('habitat');
+      const WASTE_RES = ['energy', 'goods', 'material', 'water']; // skip food & wealth
+      const ALL_RES = ['energy', 'food', 'material', 'goods', 'water', 'wealth'];
+      let idled = 0;
+
+      // Net rates snapshot for all resources at the current worked state.
+      const netSnapshot = () => {
+        const s = colonyStats(col);
+        return { energy: s.energy || 0, food: s.food || 0, material: s.material || 0,
+                 goods: s.goods || 0, water: s.water || 0, wealth: s.wealthRate || 0 };
+      };
+      // Summed WASTE across WASTE_RES at the current worked state: production that
+      // would overflow beyond local storage and any connected Federation room.
+      const summedWaste = () => {
+        const s = colonyStats(col);
+        const stored = s.stored || {}, caps = s.caps || {};
+        const fedOwned = federationOwnedOf(col.owner);
+        const fedMax = federationMaxStorage(col.owner);
+        let total = 0;
+        for (const R of WASTE_RES) {
+          const overLocal = Math.max(0, (stored[R] || 0) + (s[R] || 0) - (caps[R] || 0));
+          let fedRoom = 0;
+          if (colonyConnectedToCapital(col, resourceShareMode(R))) {
+            fedRoom = Math.max(0, (fedMax[R] || 0) - (fedOwned[R] || 0));
+          }
+          total += Math.max(0, overLocal - fedRoom);
+        }
+        return total;
+      };
+      // Summed POSITIVE net of WASTE_RES (a cell's contribution = the drop here
+      // when it is idled).
+      const summedPosProd = () => {
+        const s = colonyStats(col);
+        let total = 0;
+        for (const R of WASTE_RES) total += Math.max(0, s[R] || 0);
+        return total;
+      };
+      // Idling must not create or worsen a shortfall: after idling, no resource's
+      // net may drop below min(0, its net before) (beyond a tiny epsilon).
+      const noNewShortfall = (before, after) => {
+        for (const R of ALL_RES) {
+          const floor = Math.min(0, before[R]);
+          if ((after[R]) < floor - 1e-6) return false;
+        }
+        return true;
+      };
+      // The non-home, non-Habitat worked cells eligible to be idled.
+      const eligibleWorked = () => col.worked.filter((k) => {
+        if (k === homeKey) return false;
+        if (habCode != null) {
+          const c = parseCellKey(k);
+          const b = ownerBuildingAt(c.x, c.y, col.owner);
+          if (b && b.type === habCode) return false;
+        }
+        return true;
+      });
+      // Remove a worked cell key (returns a restore function).
+      const idleKey = (k) => {
+        const idx = col.worked.indexOf(k);
+        if (idx < 0) return () => {};
+        col.worked.splice(idx, 1);
+        return () => { if (!col.worked.includes(k)) col.worked.splice(idx, 0, k); };
+      };
+
+      // --- Case 1: Factories throttled below 10% ---------------------------
+      // Recompute each pass (idling changes the picture). col._throttleByCell is
+      // (re)populated by colonyStats.
+      for (;;) {
+        colonyStats(col); // refresh col._throttleByCell
+        const byCell = col._throttleByCell || {};
+        const before = netSnapshot();
+        let victim = null;
+        for (const k of eligibleWorked()) {
+          const f = byCell[k];
+          if (f == null || f >= 0.10) continue;    // not a throttleable cell, or >= 10%
+          const restore = idleKey(k);
+          const after = netSnapshot();
+          restore();
+          if (noNewShortfall(before, after)) { victim = k; break; }
+        }
+        if (!victim) break;
+        idleKey(victim);
+        idled++;
+      }
+
+      // --- Case 2: worked producers that are >= 80% wasted -----------------
+      for (;;) {
+        const wasteBefore = summedWaste();
+        if (wasteBefore <= 1e-6) break;            // nothing being wasted
+        const prodBefore = summedPosProd();
+        const before = netSnapshot();
+        let bestKey = null, bestRemoved = 0;
+        for (const k of eligibleWorked()) {
+          const restore = idleKey(k);
+          const wasteAfter = summedWaste();
+          const prodAfter = summedPosProd();
+          const after = netSnapshot();
+          restore();
+          const wasteRemoved = wasteBefore - wasteAfter;   // >= 0 when idling cuts waste
+          const prodRemoved = prodBefore - prodAfter;      // the cell's WASTE_RES output
+          if (prodRemoved <= 1e-6) continue;               // cell produces none of these
+          if (wasteRemoved / prodRemoved < 0.8) continue;  // < 80% of its output wasted
+          if (!noNewShortfall(before, after)) continue;    // would create/worsen a shortfall
+          if (wasteRemoved > bestRemoved) { bestRemoved = wasteRemoved; bestKey = k; }
+        }
+        if (!bestKey) break;
+        idleKey(bestKey);
+        idled++;
+      }
+      return idled;
+    }
     // Run the manager for one colony at the start of the player's turn: assign
     // idle workers, then auto-build when the queue is low. Returns true if the
     // manager took any action (so the caller can skip the attention prompt).
@@ -11301,6 +11659,9 @@
         return true;   // handled (a managed small colony)
       }
       const needs = colonyNeeds(col);
+      // First free up workers wasted on throttled Factories or heavily-wasted
+      // producers, so the assignment below can place them on better cells.
+      const freed = managerIdleWasteful(col);
       const assigned = managerAssignWorkers(col, manager, needs);
       // A Habitat only provides population storage when worked, and must always
       // be worked — force it (freeing a lower-value worker if at capacity).
@@ -11313,7 +11674,7 @@
       // unwarranted surplus to make room for a needed one (built next turn once
       // the removal completes).
       const repurposed = built ? false : managerRepurpose(col, manager, needs2);
-      if (assigned || built || repurposed) {
+      if (freed || assigned || built || repurposed) {
         if (hexMap) hexMap.setBuildings(gameState.buildings);
       }
       return true; // a managed colony is handled regardless of whether it acted
@@ -12888,31 +13249,46 @@
         if (bo.wealth) parts.push(`${ab("wealth", "¤")}:${sign(bo.wealth)}${nf(bo.wealth, 0)}`);
         if (bo.growth) parts.push(`${ab("population", "P")}:${sign(bo.growth * 100)}${nf(bo.growth * 100, 2)}%`);
         if (bo.happiness) parts.push(`${ab("happiness", "H")}:${sign(bo.happiness)}${nf(bo.happiness, 0)}`);
-        // Recruiting buildings (Barracks, Army Base) show each declared unit
-        // SLOT: a filled slot reads "1st: 600/1000" (its type is in the Type
-        // column; "(deployed)" when away in transit); an empty slot shows the
-        // slot's unit type and zero strength, e.g. "Infantry: 0/1000".
+        // Military unit slots render as ONE LINE PER UNIT (collected separately
+        // from the resource-bonus parts), each showing the unit's full name
+        // (ordinal + type, e.g. "1st Infantry", "2nd Armored", "1st Fighter") and
+        // its personnel strength / max strength (the unit type's unitSize).
+        const unitLines = [];
         if (buildingRecruits(b.type)) {
           const _slots = buildingUnitSlots(b.type);
           const _ids = Array.isArray(b.unitIds) ? b.unitIds : [];
-          // Empty-slot label uses the config unit-type name via typeLabel.
-          const _label = (t) => typeLabel(t);
-          // Each slot caps at its unit type's unitSize (per-type max strength).
           const _capStrOf = (t) => { const c = unitMaxStrength(t); return Number.isFinite(c) ? `/${nf(c, 0)}` : ""; };
           for (let _i = 0; _i < _slots.length; _i++) {
-            const _capStr = _capStrOf(_slots[_i]);
+            const _slotType = _slots[_i];
+            const _capStr = _capStrOf(_slotType);
             const _unit = findUnitById(_ids[_i]);
             if (_unit) {
+              // Full name = (possibly renamed) ordinal + its own type label, so
+              // the unit's type (Infantry / Armored / Fighter / Bomber) is always
+              // visible even in the colony panel.
+              const _nm = unitDisplayName(_unit);
               const _str = `${nf(Number(_unit.strength) || 0, 0)}${_capStr}`;
-              parts.push(`${_unit.name}: ${_str}${_unit.inTransit ? " (deployed)" : ""}`);
+              unitLines.push(`${_nm}: ${_str}${_unit.inTransit ? " (deployed)" : ""}`);
             } else {
-              parts.push(`${_label(_slots[_i])}: 0${_capStr}`);
+              // Empty slot: show the slot's unit type and zero strength.
+              unitLines.push(`${typeLabel(_slotType)}: 0${_capStr}`);
             }
           }
         }
         const worked = isBuildingWorked(col, b);
-        const state = b.type === 1 ? "" : (worked ? "" : ` <span class="stat-neg">(idle)</span>`);
-        const detail = parts.length ? parts.join(", ") : "no bonuses";
+        let state = b.type === 1 ? "" : (worked ? "" : ` <span class="stat-neg">(idle)</span>`);
+        // Throttleable buildings (Factories) show their current capacity % when
+        // worked (idle ones already show "(idle)" above).
+        if (worked && (buildingType(b.type) || {}).throttle) {
+          const key = cellKey(b.x, b.y);
+          const f = (col._throttleByCell && col._throttleByCell[key] != null) ? col._throttleByCell[key] : 1;
+          const pct = Math.round(Math.max(0, Math.min(1, f)) * 100);
+          state = ` (${pct}%)`;
+        }
+        // Resource bonuses stay comma-joined on one line; military units each get
+        // their own line beneath (joined by <br>) so they don't wrap together.
+        const resLine = parts.length ? parts.join(", ") : (unitLines.length ? "" : "no bonuses");
+        const detail = [resLine, ...unitLines].filter((s) => s !== "").join("<br>");
         bldgEntries.push({
           isBiodome: b.type === 1,
           name: improvementName(b.type),
@@ -14526,6 +14902,14 @@
       const others = (gameState.buildings || []).filter((b) =>
         b !== targetBio && b.type !== 1 && !b.inTransit &&
         b.owner === targetBio.owner && hexDistance(targetBio.x, targetBio.y, b.x, b.y) <= radius);
+      // The captured colony's garrison does NOT serve the conqueror: every unit
+      // homed at one of the colony's military bases is destroyed and its
+      // personnel re-absorbed into the colony's population (which then flips to
+      // the new owner along with the colony). Done before ownership flips so the
+      // soldiers land in this colony's population.
+      for (const b of others) {
+        if (Array.isArray(b.unitIds) && b.unitIds.length) disbandBaseUnits(b, targetBio);
+      }
       const frac = cfg.captureDestroyMin + Math.random() * Math.max(0, cfg.captureDestroyMax - cfg.captureDestroyMin);
       const destroyCount = Math.round(others.length * frac);
       // Random selection.
@@ -14546,6 +14930,9 @@
       for (const b of (gameState.buildings || [])) {
         if (b.inTransit) continue;
         if (b.owner === targetBio.owner && (b === targetBio || hexDistance(targetBio.x, targetBio.y, b.x, b.y) <= radius)) {
+          // A razed colony is destroyed outright — its military units are
+          // destroyed with no colony left to re-absorb their personnel.
+          if (b.type !== 1 && Array.isArray(b.unitIds) && b.unitIds.length) disbandBaseUnits(b, null);
           b._delete = true;
         }
       }
@@ -14911,6 +15298,28 @@
         cellBonus: (x, y) => {
           const tb = bonusDefAt(x, y);
           return tb ? { name: tb.name, desc: tb.desc || '' } : null;
+        },
+        // Extra text appended to the hovered tile's BUILDING line, e.g. a
+        // Factory's current throttle " (67%)" / " (idle)".
+        buildingSuffix: (x, y) => {
+          const bb = (gameState.buildings || []).find((z) => z.x === x && z.y === y && !z.inTransit);
+          return bb ? factoryThrottleLabel(bb) : "";
+        },
+        // Capacity fraction (0..1) for a throttleable building at (x,y), for the
+        // green throttle bar drawn under its icon; null if the building isn't
+        // throttleable. An idle (unworked) throttleable building reads 0.
+        throttleFrac: (x, y) => {
+          const bb = (gameState.buildings || []).find((z) => z.x === x && z.y === y && !z.inTransit);
+          if (!bb || !(buildingType(bb.type) || {}).throttle) return null;
+          const col = colonyControlling(bb.x, bb.y, bb.owner);
+          if (!col) return null;
+          if (!isBuildingWorked(col, bb)) return 0;
+          const key = cellKey(bb.x, bb.y);
+          if (!col._throttleByCell || col._throttleByCell[key] == null) {
+            try { colonyStats(col); } catch (e) {}
+          }
+          const f = (col._throttleByCell && col._throttleByCell[key] != null) ? col._throttleByCell[key] : 1;
+          return Math.max(0, Math.min(1, f));
         }
       });
       hexMap.start();

@@ -387,6 +387,8 @@ class HexMap {
     this.onColonyDblClick = opts.onColonyDblClick || null; // (building) => void
     this.cellInfo = opts.cellInfo || null;    // (x,y) => "E:.. F:.. M:.. W:.. H:.." string
     this.cellBonus = opts.cellBonus || null;  // (x,y) => { name, desc } | null for the hover tooltip
+    this.buildingSuffix = opts.buildingSuffix || null; // (x,y) => extra text appended to the building line (e.g. factory throttle %)
+    this.throttleFrac = opts.throttleFrac || null; // (x,y) => 0..1 capacity fraction for a throttleable building, or null
     this.freshwaterAt = opts.freshwaterAt || null; // (x,y) => bool: a freshwater-lake SEA tile (display only)
     // Air links to draw in Area-of-Control view: array of { x1,y1,x2,y2 } cell
     // pairs (map coords) connecting air-linked colonies. Light-blue straight
@@ -1581,6 +1583,34 @@ class HexMap {
           ctx.stroke();
           ctx.restore();
         }
+        // Throttle bar: for an OPERATIONAL throttleable building (e.g. a Factory),
+        // draw a thin bar across the BOTTOM of its icon whose green fill grows
+        // left -> right with the building's current capacity (0% .. 100%). The
+        // fraction is supplied by the host (throttleFrac hook); null means the
+        // building isn't throttleable (or not operational) and gets no bar.
+        if (!underConstruction && this.throttleFrac) {
+          let frac = null;
+          try { frac = this.throttleFrac(b.x, b.y); } catch (e) { frac = null; }
+          if (frac != null && isFinite(frac)) {
+            frac = Math.max(0, Math.min(1, frac));
+            const barW = size * 0.8;                 // 80% of the icon width, centered
+            const barH = Math.max(2, size * 0.1);    // thin bar, min 2px
+            const gap = size * 0.06;                 // small gap above the icon's bottom edge
+            const bx = cx - barW / 2;                // centered horizontally
+            const by = cy + size / 2 - barH - gap;   // overlay the icon near its bottom
+            ctx.save();
+            // Track (empty portion) + border.
+            ctx.fillStyle = 'rgba(0,0,0,0.55)';
+            ctx.fillRect(bx, by, barW, barH);
+            // Green fill proportional to the throttle rate (left -> right).
+            ctx.fillStyle = 'rgb(40,200,60)';
+            ctx.fillRect(bx, by, barW * frac, barH);
+            ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+            ctx.lineWidth = Math.max(1, spacing.y / 48);
+            ctx.strokeRect(bx, by, barW, barH);
+            ctx.restore();
+          }
+        }
         // Name label above the icon with a subtle outline for legibility.
         // Colonies carry their own name. Other buildings normally rely on their
         // icon; but when the icon is MISSING (e.g. a new type without art yet)
@@ -1906,6 +1936,11 @@ class HexMap {
       if (b) {
         const species = b.ownerName || (b.owner === 'human' ? 'You' : 'Alien');
         let building = b.improvement || 'Colony';
+        // Append any building-specific suffix (e.g. a Factory's throttle "(67%)"
+        // or "(idle)") right after the building name, before the transport note.
+        if (this.buildingSuffix) {
+          try { building += (this.buildingSuffix(hex.x, hex.y) || ''); } catch (e) {}
+        }
         // Append the transport improvement on this tile, e.g. "Factory, road".
         if (transportKind) building += ", " + transportKind;
         lines.push(species);   // species controlling

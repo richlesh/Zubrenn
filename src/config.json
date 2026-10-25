@@ -632,6 +632,7 @@
       "buildCost": { "energy": 200, "material": 75, "wealth": 150, "water": 3, "turns": 3 },
       "costPerYear": { "energy": 300, "material": 250, "wealth": 15, "water": 1 },
       "bonus": { "goods": 200, "wealth": 25, "happiness": -0.25 },
+      "throttle": true,
       "storage": { "energy": 100, "goods": 200, "material": 150 },
       "federationStorage": { "goods": 200 },
       "prerequisite": {
@@ -647,6 +648,7 @@
       "buildCost": { "energy": 300, "material": 150, "wealth": 300, "water": 5, "turns": 6 },
       "costPerYear": { "energy": 600, "material": 600, "wealth": 30, "water": 2 },
       "bonus": { "goods": 500, "wealth": 50, "happiness": -0.5 },
+      "throttle": true,
       "storage": { "energy": 200, "goods": 500, "material": 300 },
       "federationStorage": { "goods": 500 },
       "prerequisite": {
@@ -664,6 +666,7 @@
       "buildCost": { "energy": 600, "material": 300, "wealth": 600, "water": 10, "turns": 10 },
       "costPerYear": { "energy": 1000, "material": 1000, "wealth": 60, "water": 5 },
       "bonus": { "goods": 1000, "wealth": 120, "happiness": -0.75 },
+      "throttle": true,
       "storage": { "energy": 300, "goods": 1000, "material": 600 },
       "federationStorage": { "goods": 1000 },
       "prerequisite": {
@@ -1338,7 +1341,7 @@
       "bonus": { "material": "25-50" },
       "terrain": ["hills","mountain-low","mountain-high"],
       "other": [ ],
-      "abundancy": 1,
+      "abundancy": 3,
       "bonusType": "iron",
       "desc": "Banded iron-silicate seams exposed by stellar winds. Common in basalt shelves."
     },
@@ -1372,9 +1375,9 @@
     "Starfall Alloy Crater": {
       "icon": "terrain_bonus/128/starfall_alloy.png",
       "bonus": { "material": "10-30", "wealth": "5-10" },
-      "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","mountain-high"],
+      "terrain": ["land"],
       "other": [ ],
-      "abundancy": 0.25,
+      "abundancy": 2,
       "bonusType": "iron",
       "desc": "Meteoric impact sites rich in rare earths and nickel-iron."
     },
@@ -1853,6 +1856,7 @@
       "terrain": ["desert","frozen","plains"],
       "other": [ ],
       "abundancy": 0.1,
+      "bonusType": "titanium",
       "desc": "The salvage of an ancient crashed vessel: exotic alloys to strip, relics to sell, and a legend to tell."
     },
     "Glyphstone Circle": {
