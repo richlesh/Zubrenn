@@ -5315,11 +5315,18 @@
     // changes). Key on _placeGen (bumped on every placement/removal and by
     // projectColonyRates' temp push/revert) and gameState.turn (covers
     // under-construction buildings becoming operational at a turn boundary).
+    //
+    // The cache lives in a module-level WeakMap keyed by the colony object — NOT
+    // as properties ON the colony — because the cached list holds references to
+    // building objects (including the colony's own biodome, i.e. `col` itself),
+    // which would make the colony circular and break JSON.stringify on save.
+    const _colonyBuildingsCache = new WeakMap(); // col -> { gen, turn, list }
     function colonyBuildings(col) {
       const _gen = (typeof _placeGen === 'number') ? _placeGen : -1;
       const _turn = (typeof gameState !== 'undefined' && gameState) ? gameState.turn : -1;
-      if (col._cbGen === _gen && col._cbTurn === _turn && col._cbList) return col._cbList;
-      const control = new Set(colonyControlCells(col).map((c) => cellKey(c.x, c.y)));
+      const c = _colonyBuildingsCache.get(col);
+      if (c && c.gen === _gen && c.turn === _turn) return c.list;
+      const control = new Set(colonyControlCells(col).map((cc) => cellKey(cc.x, cc.y)));
       const out = [];
       for (const b of gameState.buildings) {
         if (b.owner !== col.owner) continue;
@@ -5330,7 +5337,7 @@
           out.push(b);
         }
       }
-      col._cbGen = _gen; col._cbTurn = _turn; col._cbList = out;
+      _colonyBuildingsCache.set(col, { gen: _gen, turn: _turn, list: out });
       return out;
     }
     // Count of a colony's NON-colony buildings currently under construction
