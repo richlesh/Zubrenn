@@ -657,6 +657,7 @@
       runColonyManager = PROF.wrap('runColonyManager', runColonyManager);
       managerAssignWorkers = PROF.wrap('managerAssignWorkers', managerAssignWorkers);
       managerRepurpose = PROF.wrap('managerRepurpose', managerRepurpose);
+      managerIdleWasteful = PROF.wrap('managerIdleWasteful', managerIdleWasteful);
       managerCellScore = PROF.wrap('managerCellScore', managerCellScore);
       colonyNeeds = PROF.wrap('colonyNeeds', colonyNeeds);
       colonyBuildings = PROF.wrap('colonyBuildings', colonyBuildings);
@@ -675,6 +676,46 @@
       findMovementCostsFrom = PROF.wrap('findMovementCostsFrom', findMovementCostsFrom);
       foreignControlCellSet = PROF.wrap('foreignControlCellSet', foreignControlCellSet);
       launchColony = PROF.wrap('launchColony', launchColony);
+      // Trade / diplomacy / connectivity hot paths (added to hunt AI-turn
+      // bottlenecks). Several of these run INSIDE colonyBudget/colonyStats (per
+      // colony, per turn) and rescan all trades/buildings, or run BFS per
+      // colony pair — prime suspects as the game grows.
+      bonusDefAt = PROF.wrap('bonusDefAt', bonusDefAt);
+      availableBonusTypesFor = PROF.wrap('availableBonusTypesFor', availableBonusTypesFor);
+      leasedYieldFraction = PROF.wrap('leasedYieldFraction', leasedYieldFraction);
+      consumerOtherBonus = PROF.wrap('consumerOtherBonus', consumerOtherBonus);
+      ownerBonusNameCounts = PROF.wrap('ownerBonusNameCounts', ownerBonusNameCounts);
+      ownerLeasedCount = PROF.wrap('ownerLeasedCount', ownerLeasedCount);
+      ownersTradeConnected = PROF.wrap('ownersTradeConnected', ownersTradeConnected);
+      _tradeRouteExists = PROF.wrap('_tradeRouteExists', _tradeRouteExists);
+      colonyConnectivity = PROF.wrap('colonyConnectivity', colonyConnectivity);
+      computeConnectednessMatrix = PROF.wrap('computeConnectednessMatrix', computeConnectednessMatrix);
+      connectedColonies = PROF.wrap('connectedColonies', connectedColonies);
+      aiMaybeTrade = PROF.wrap('aiMaybeTrade', aiMaybeTrade);
+      aiDiplomacyStep = PROF.wrap('aiDiplomacyStep', aiDiplomacyStep);
+      settleTradesForYear = PROF.wrap('settleTradesForYear', settleTradesForYear);
+      settlePactsForYear = PROF.wrap('settlePactsForYear', settlePactsForYear);
+      // LLM turn paths: when an LLM is configured, each AI's turn AWAITS a
+      // network round-trip here. This is usually the real wall-clock cost of a
+      // live turn (the built-in heuristic, aiPlayTurn, is already instrumented
+      // and fast). buildAIContext assembles the prompt payload each turn.
+      aiLLMTurn = PROF.wrap('aiLLMTurn', aiLLMTurn);
+      aiLLMToolTurn = PROF.wrap('aiLLMToolTurn', aiLLMToolTurn);
+      buildAIContext = PROF.wrap('buildAIContext', buildAIContext);
+      // Remaining uninstrumented AI-path functions (to locate residual gap
+      // between aiTakeTurn's total and its wrapped children).
+      aiHasPossibleActions = PROF.wrap('aiHasPossibleActions', aiHasPossibleActions);
+      aiWorkHighestFoodCell = PROF.wrap('aiWorkHighestFoodCell', aiWorkHighestFoodCell);
+      aiChooseColonySite = PROF.wrap('aiChooseColonySite', aiChooseColonySite);
+      canAffordBuildingAt = PROF.wrap('canAffordBuildingAt', canAffordBuildingAt);
+      applyCachedAIPlan = PROF.wrap('applyCachedAIPlan', applyCachedAIPlan);
+      // The REAL built-in AI brain runs here (pre-planning), not aiPlayTurn:
+      // startBackgroundAIPlanning schedules aiPlanBuiltin per AI, and
+      // applyCachedAIPlan applies it. These were uninstrumented, hiding the
+      // built-in turn's true cost.
+      aiPlanBuiltin = PROF.wrap('aiPlanBuiltin', aiPlanBuiltin);
+      applyAIPlan = PROF.wrap('applyAIPlan', applyAIPlan);
+      startBackgroundAIPlanning = PROF.wrap('startBackgroundAIPlanning', startBackgroundAIPlanning);
       /* eslint-enable no-func-assign */
     }
     try { _installProfilers(); } catch (e) { console.error('[PROF] install failed:', e); }
@@ -1192,7 +1233,9 @@
       _notifyShowing = true;
       renderNotifyMessage(item.message);
       notifyOverlay.hidden = false;
-      _notifyTimer = setTimeout(_notifyShowNext, item.ms);
+      // Don't auto-advance while the AI phase is active (the glass pane hides
+      // the banner anyway); the queue resumes when the human's turn starts.
+      if (!aiPhaseActive()) _notifyTimer = setTimeout(_notifyShowNext, item.ms);
     }
     function dismissNotify() { _notifyShowNext(); } // advance / dismiss current
     function notify(message, ms, key) {
@@ -1206,10 +1249,15 @@
       // latest while important one-off messages (AI colonies) stay queued.
       if (key) {
         const i = _notifyQueue.findIndex((n) => n.key === key);
-        if (i >= 0) { _notifyQueue[i] = { message, ms: (ms != null ? ms : 5000), key }; if (!_notifyShowing) _notifyShowNext(); return; }
+        if (i >= 0) { _notifyQueue[i] = { message, ms: (ms != null ? ms : 5000), key }; if (!_notifyShowing && !aiPhaseActive()) _notifyShowNext(); return; }
       }
       _notifyQueue.push({ message, ms: (ms != null ? ms : 5000), key: key || null });
-      if (!_notifyShowing) _notifyShowNext();
+      // During the AI phase, queue silently and DON'T start displaying: the
+      // glass pane covers the window while the AIs play, so banners would be
+      // invisible and their 5s timers would just stall the turn sequence.
+      // The queue is kicked off (and shown one-by-one, dismissable) when the
+      // human's turn begins — see startHumanTurn.
+      if (!_notifyShowing && !aiPhaseActive()) _notifyShowNext();
     }
     notifyDialog.addEventListener("click", dismissNotify);
     window.notify = notify; // expose for reuse
@@ -3651,6 +3699,13 @@
       const wx = (x) => wrap ? ((x % W) + W) % W : x;
       const key = (x, y) => y * W + wx(x);
       const start = key(a.x, a.y), goal = key(b.x, b.y);
+      // Precompute the foreign-controlled cells ONCE (keys match `key()` format:
+      // y*W + wrappedX) and test membership O(1) per visited cell, instead of
+      // calling inForeignControl() — which scanned every colony and computed
+      // colonyControlRadius per cell — on every step of this BFS. This was the
+      // dominant AI-turn cost (millions of colonyControlRadius calls across the
+      // per-colony-pair sea/route BFS runs).
+      const foreign = (owner != null) ? foreignControlCellSet(owner) : null;
       const seen = new Set([start]);
       let frontier = [{ x: wx(a.x), y: a.y }];
       while (frontier.length) {
@@ -3663,7 +3718,7 @@
             const nk = key(nx, ny);
             if (seen.has(nk)) continue;
             const isEndpoint = (nk === goal || nk === start);
-            if (!isEndpoint && inForeignControl(nx, ny, owner)) continue;
+            if (!isEndpoint && foreign && foreign.has(nk)) continue;
             if (!isEndpoint && !cellOk(nx, ny)) continue;
             seen.add(nk); next.push({ x: nx, y: ny });
           }
@@ -4757,6 +4812,11 @@
     // Schedule the next turn step, but only once notifications have cleared, so
     // all processing halts while a notification dialog is displayed.
     function scheduleTurnStep(fn) {
+      // During the AI phase, don't gate on the notification queue: the AIs play
+      // immediately and any messages they emit just stack (shown/dismissable
+      // once the human's turn begins). Outside the AI phase, keep the original
+      // behavior of waiting until notifications clear.
+      if (aiPhaseActive()) { setTimeout(fn, 40); return; }
       onNotificationsIdle(() => setTimeout(fn, 40));
     }
 
@@ -4768,6 +4828,10 @@
     // styles.css) so it keeps running even while the main thread is busy
     // processing AI turns. The pane is torn down when the human's turn starts.
     const aiTurnOverlay = document.getElementById("aiturn-overlay");
+    // True while the AI glass pane is up, i.e. the AIs are taking their turns.
+    // Used to stack notifications silently and run AI turn steps immediately
+    // (see notify / scheduleTurnStep) instead of pausing for 5s per banner.
+    function aiPhaseActive() { return !!(aiTurnOverlay && !aiTurnOverlay.hidden); }
     function showAITurnOverlay() {
       if (!aiTurnOverlay) return;
       if (!aiTurnOverlay.hidden) return;    // already showing (multiple AI turns)
@@ -4895,6 +4959,11 @@
       // player always gets to accept/decline before the turn can auto-end.
       _skipAutoEndThisTurn = (_offerShowing || _offerQueue.length > 0);
       hideAITurnOverlay();     // the AI phase is over — remove the glass pane
+      // The AI phase is done: begin showing any notifications that stacked up
+      // while the AIs played (each now displays for its normal duration and is
+      // click/Enter-dismissable). aiPhaseActive() is false now (pane hidden),
+      // so _notifyShowNext arms the auto-advance timer as usual.
+      if (!_notifyShowing && _notifyQueue.length > 0) _notifyShowNext();
       _clearTurnStartTimers();
       stopIdleWatch();
       // Pre-plan every alien AI's upcoming turn now, in the background, from the
@@ -5239,7 +5308,17 @@
 
     // Operational buildings that belong to a colony: its own biodome plus any
     // of the owner's operational buildings standing on cells in its control.
+    // Cached per colony: the result depends only on the set of operational
+    // buildings and the colony's control cells — NOT on col.worked — yet it is
+    // called hundreds of thousands of times inside the worked-probing manager
+    // loops (colonyStats/colonyBudget call it repeatedly while only col.worked
+    // changes). Key on _placeGen (bumped on every placement/removal and by
+    // projectColonyRates' temp push/revert) and gameState.turn (covers
+    // under-construction buildings becoming operational at a turn boundary).
     function colonyBuildings(col) {
+      const _gen = (typeof _placeGen === 'number') ? _placeGen : -1;
+      const _turn = (typeof gameState !== 'undefined' && gameState) ? gameState.turn : -1;
+      if (col._cbGen === _gen && col._cbTurn === _turn && col._cbList) return col._cbList;
       const control = new Set(colonyControlCells(col).map((c) => cellKey(c.x, c.y)));
       const out = [];
       for (const b of gameState.buildings) {
@@ -5251,6 +5330,7 @@
           out.push(b);
         }
       }
+      col._cbGen = _gen; col._cbTurn = _turn; col._cbList = out;
       return out;
     }
     // Count of a colony's NON-colony buildings currently under construction
@@ -6225,7 +6305,70 @@
     // The result is cached and invalidated whenever transport changes or a new
     // economy tick begins (see invalidateColonyConnectivity()).
     let _colonyGroupsCache = null; // owner -> Map(colonyKey -> groupId)
-    function invalidateColonyConnectivity() { _colonyGroupsCache = null; bumpControlGen(); }
+    // Shared, OWNER/MODE-INDEPENDENT connectivity graphs, rebuilt lazily and
+    // reused across every colonyConnectivity(owner, mode) call: the road+monorail
+    // cell-component map and the river+canal vertex-component map. These depend
+    // only on the (global) transport network — not on any owner or mode — so
+    // computing them once per invalidation instead of once per owner|mode key
+    // removes the dominant AI-turn cost (each full rebuild was ~90ms).
+    let _connGlobalGraph = null;
+    function _connGlobalGraphs() {
+      if (_connGlobalGraph) return _connGlobalGraph;
+      const tr = ensureTransport();
+      // --- road/monorail cell components ---
+      const netCells = new Set([...tr.roads, ...tr.monorails]);
+      const cellComp = new Map();
+      let comp = 0;
+      for (const start of netCells) {
+        if (cellComp.has(start)) continue;
+        const id = comp++;
+        const stack = [start];
+        cellComp.set(start, id);
+        while (stack.length) {
+          const ck = stack.pop();
+          const [cx, cy] = ck.split(",").map(Number);
+          for (const n of hexNeighborsRenderer(cx, cy)) {
+            const nk = cellKeyWrapped(n.x, n.y);
+            if (netCells.has(nk) && !cellComp.has(nk)) { cellComp.set(nk, id); stack.push(nk); }
+          }
+        }
+      }
+      // --- river/canal vertex components ---
+      const vAdj = new Map();
+      const link = (u, v) => {
+        if (!vAdj.has(u)) vAdj.set(u, new Set());
+        if (!vAdj.has(v)) vAdj.set(v, new Set());
+        vAdj.get(u).add(v); vAdj.get(v).add(u);
+      };
+      for (const e of allRiverBorderEdges()) {
+        const vs = edgeVertices(e.a.x, e.a.y, e.b.x, e.b.y);
+        if (vs.length === 2) link(vs[0], vs[1]);
+      }
+      for (const ek of tr.canals) {
+        const [ka, kb] = ek.split("|");
+        const [ax, ay] = ka.split(",").map(Number);
+        const [bx, by] = kb.split(",").map(Number);
+        const vs = edgeVertices(ax, ay, bx, by);
+        if (vs.length === 2) link(vs[0], vs[1]);
+      }
+      addFreshwaterLakeVertexLinks(link);
+      const vComp = new Map();
+      let vc = 0;
+      for (const v of vAdj.keys()) {
+        if (vComp.has(v)) continue;
+        const id = vc++;
+        const stack = [v]; vComp.set(v, id);
+        while (stack.length) {
+          const u = stack.pop();
+          for (const w of (vAdj.get(u) || [])) {
+            if (!vComp.has(w)) { vComp.set(w, id); stack.push(w); }
+          }
+        }
+      }
+      _connGlobalGraph = { cellComp, vComp };
+      return _connGlobalGraph;
+    }
+    function invalidateColonyConnectivity() { _colonyGroupsCache = null; _connGlobalGraph = null; bumpControlGen(); }
     // Which transport-network grouping governs SHARING of a given resource.
     // Land (road/monorail) and river/canal ALWAYS count; the mode name says
     // which of sea / air / space ALSO count:
@@ -6272,25 +6415,13 @@
 
       // ---- road/monorail connectivity ----
       // Build connected components of the road+monorail cell graph, then map
-      // each colony's transport attach-cells to a component id.
+      // each colony's transport attach-cells to a component id. The cell-
+      // component map and the river/canal vertex-component map are OWNER/MODE-
+      // INDEPENDENT (global transport only), so they come from the shared,
+      // per-invalidation cache (built once, not per owner|mode).
       const tr = ensureTransport();
-      const netCells = new Set([...tr.roads, ...tr.monorails]); // cell keys "x,y"
-      const cellComp = new Map();     // cellKey -> component id
-      let comp = 0;
-      for (const start of netCells) {
-        if (cellComp.has(start)) continue;
-        const id = comp++;
-        const stack = [start];
-        cellComp.set(start, id);
-        while (stack.length) {
-          const ck = stack.pop();
-          const [cx, cy] = ck.split(",").map(Number);
-          for (const n of hexNeighborsRenderer(cx, cy)) {
-            const nk = cellKeyWrapped(n.x, n.y);
-            if (netCells.has(nk) && !cellComp.has(nk)) { cellComp.set(nk, id); stack.push(nk); }
-          }
-        }
-      }
+      const _gg = _connGlobalGraphs();
+      const cellComp = _gg.cellComp;  // cellKey -> road/monorail component id
       // The transport components a colony touches: its biodome cell if on the
       // network, plus any hex-neighbour that is.
       const colRoadComps = cols.map((col) => {
@@ -6313,42 +6444,9 @@
       }
 
       // ---- river/canal connectivity ----
-      // Vertex components over existing river/canal border segments.
-      const vAdj = new Map(); // vkey -> Set(vkey)
-      const link = (u, v) => {
-        if (!vAdj.has(u)) vAdj.set(u, new Set());
-        if (!vAdj.has(v)) vAdj.set(v, new Set());
-        vAdj.get(u).add(v); vAdj.get(v).add(u);
-      };
-      // River border segments.
-      for (const e of allRiverBorderEdges()) {
-        const vs = edgeVertices(e.a.x, e.a.y, e.b.x, e.b.y);
-        if (vs.length === 2) link(vs[0], vs[1]);
-      }
-      // Canal segments (edge keys "x1,y1|x2,y2").
-      for (const ek of tr.canals) {
-        const [ka, kb] = ek.split("|");
-        const [ax, ay] = ka.split(",").map(Number);
-        const [bx, by] = kb.split(",").map(Number);
-        const vs = edgeVertices(ax, ay, bx, by);
-        if (vs.length === 2) link(vs[0], vs[1]);
-      }
-      // Bridge rivers that flow into the same freshwater lake (see helper).
-      addFreshwaterLakeVertexLinks(link);
-      // Flood the vertex graph into components.
-      const vComp = new Map();
-      let vc = 0;
-      for (const v of vAdj.keys()) {
-        if (vComp.has(v)) continue;
-        const id = vc++;
-        const stack = [v]; vComp.set(v, id);
-        while (stack.length) {
-          const u = stack.pop();
-          for (const w of (vAdj.get(u) || [])) {
-            if (!vComp.has(w)) { vComp.set(w, id); stack.push(w); }
-          }
-        }
-      }
+      // Vertex components over river/canal border segments — owner/mode-
+      // independent, so taken from the shared per-invalidation cache.
+      const vComp = _gg.vComp;
       // The water components each colony's corner vertices touch.
       const colWaterComps = cols.map((col) => {
         const set = new Set();
@@ -7673,6 +7771,8 @@
     // _controlGen made those temp projections clear it constantly.
     let _placeGen = 0;
     function bumpPlaceGen() { _placeGen++; }
+    // Cache for foreignControlCellSet(owner), keyed by _placeGen (control gen).
+    let _foreignCtrlCache = null;
     function colonyControlRadius(colony) {
       // Hot path: this is called O(cells x colonies) from ownsCell/colonyControlCells,
       // tens of millions of times per AI turn. It depends only on the colony's
@@ -7743,6 +7843,16 @@
       const map = gameState.map;
       const set = new Set();
       if (!map || !map.terrain) return set;
+      // Memoize per (owner, _placeGen): the foreign-control cells are stable for
+      // a given placement generation (control only changes when buildings/
+      // population change, which bumps _placeGen). _pathExists now calls this
+      // once per BFS in a hot per-colony-pair loop, so recomputing it every time
+      // would be O(colonies) × O(pairs); the cache makes it O(colonies) once.
+      if (!_foreignCtrlCache || _foreignCtrlCache.gen !== _placeGen) {
+        _foreignCtrlCache = { gen: _placeGen, byOwner: new Map() };
+      }
+      const cached = _foreignCtrlCache.byOwner.get(owner);
+      if (cached) return cached;
       const W = map.terrain[0].length;
       const wrap = !!(map.meta && map.meta.wrap);
       const wxf = (x) => wrap ? ((x % W) + W) % W : x;
@@ -7755,6 +7865,7 @@
           set.add(c.y * W + wxf(c.x));
         }
       }
+      _foreignCtrlCache.byOwner.set(owner, set);
       return set;
     }
     // --- Per-turn cell-ownership map (perf) ----------------------------------
@@ -9158,16 +9269,30 @@
       return (t && (t.buildCost || t.cost)) || {};
     }
     // The owner's colony (biodome) whose control area contains (x,y), if any.
+    // Cached per placement-generation: control areas depend only on colony
+    // positions/sizes (not on col.worked), so the (owner, cell) -> colony answer
+    // is stable for a given _placeGen. This is invoked per building per worked
+    // cell inside colonyBudget (~200k times a manager phase), so memoizing it
+    // removes an O(colonies x controlCells) scan from each call.
+    let _ctrlingCache = null;   // { gen, map: Map<"owner|x,y", colony|null> }
     function colonyControlling(x, y, owner) {
       // Canonicalize the query column so a neighbour coordinate produced at
       // x = -1 or x = W (e.g. from hexNeighborsRenderer at the seam) matches the
       // canonical control cells, which are stored wrapped via cellsWithin.
       const k = cellKeyWrapped(x, y);
+      if (!_ctrlingCache || _ctrlingCache.gen !== _placeGen) {
+        _ctrlingCache = { gen: _placeGen, map: new Map() };
+      }
+      const mk = owner + '|' + k;
+      const hit = _ctrlingCache.map.get(mk);
+      if (hit !== undefined) return hit;
+      let found = null;
       for (const b of gameState.buildings) {
         if (b.type !== 1 || b.owner !== owner) continue;
-        if (colonyControlCells(b).some((c) => cellKeyWrapped(c.x, c.y) === k)) return b;
+        if (colonyControlCells(b).some((c) => cellKeyWrapped(c.x, c.y) === k)) { found = b; break; }
       }
-      return null;
+      _ctrlingCache.map.set(mk, found);
+      return found;
     }
     // Whether (x,y) is within `dist` hex-cells of one of the owner's controlled
     // cells (dist 0 = the cell itself must be controlled). Used for the outpost
@@ -11810,10 +11935,20 @@
         gameState.buildings.push(rec);
         temp.push(rec);
       }
+      // The buildings list changed: invalidate caches keyed on _placeGen (e.g.
+      // colonyBuildings) so the what-if stats see the temp placement.
+      if (temp.length && typeof bumpPlaceGen === 'function') bumpPlaceGen();
       col.worked = Array.from(new Set([cellKey(col.x, col.y), ...workedKeys]));
+      // Connectivity only changes if a candidate placement is a TRANSPORT HUB
+      // (Dock/Port/Air Field/Airport/Spaceport). For ordinary buildings
+      // (farm/solar/mine/factory/…) the transport network is unchanged, so we
+      // must NOT invalidate the (expensive) connectivity cache — doing so per
+      // candidate per colony forced a full ~2ms graph rebuild on every
+      // colonyStats call and dominated AI-turn time.
+      const _hubPlaced = placements.some((p) => !!buildingNetwork(p.type));
       let rates;
       try {
-        if (typeof invalidateColonyConnectivity === 'function') invalidateColonyConnectivity();
+        if (_hubPlaced && typeof invalidateColonyConnectivity === 'function') invalidateColonyConnectivity();
         const s = colonyStats(col);
         rates = {
           energy: s.delta.energy, food: s.delta.food, goods: s.delta.goods,
@@ -11823,8 +11958,9 @@
       } finally {
         // Revert: remove temp buildings, restore worked.
         gameState.buildings = gameState.buildings.filter((b) => !b._planTemp);
+        if (temp.length && typeof bumpPlaceGen === 'function') bumpPlaceGen();
         col.worked = savedWorked;
-        if (typeof invalidateColonyConnectivity === 'function') invalidateColonyConnectivity();
+        if (_hubPlaced && typeof invalidateColonyConnectivity === 'function') invalidateColonyConnectivity();
       }
       return rates;
     }
@@ -11852,6 +11988,46 @@
     // Compute the best early plan for a colony. Enumerates placements of the
     // foundation buildings over the colony's empty, buildable, non-pristine
     // radius-1 cells; the cells NOT used for a building (up to workCap) are the
+    // True if a building type's output is INDEPENDENT of the cell it sits on —
+    // i.e. none of its `bonus` entries is a multiplier ("Nx") that resolves
+    // against the cell's base+feature yield. Flat-only buildings (e.g. Solar
+    // Panel {energy:200}, Factory {goods:200}) produce the same wherever they
+    // stand, so two equivalent candidate cells are interchangeable for them.
+    // Memoized per type (config is static during a game).
+    const _cellIndepCache = new Map();
+    function bldgCellIndependent(type) {
+      if (_cellIndepCache.has(type)) return _cellIndepCache.get(type);
+      const raw = (buildingType(type) || {}).bonus || {};
+      let indep = true;
+      for (const k in raw) { if (parseBonusValue(raw[k]).mult) { indep = false; break; } }
+      _cellIndepCache.set(type, indep);
+      return indep;
+    }
+    // Signature of a cell's contribution AS A WORKED TERRAIN CELL (everything
+    // colonyBudget sums per worked cell: terrain yields/happiness, water & river
+    // adjacency, road-tile bonus, and any terrain-bonus deposit). Two cells with
+    // the same signature contribute identically whether worked as bare terrain
+    // or hosting a cell-independent building — so they are interchangeable in the
+    // early-plan enumeration.
+    function workedCellSig(x, y) {
+      const tp = terrainProd(terrainAt(x, y)) || {};
+      const tb = bonusDefAt(x, y);
+      const b = (tb && tb.bonus) ? tb.bonus : null;
+      // cellBaseAndFeature(res) is exactly what a building MULTIPLIER resolves
+      // against, so including it for every resource guarantees that a
+      // cell-sensitive building placed later in the sequence would also produce
+      // identical output on two cells sharing this signature.
+      const cbf = ['food','material','goods','energy','water','wealth']
+        .map((r) => cellBaseAndFeature(x, y, r));
+      return [
+        terrainAt(x, y),
+        tp.food || 0, tp.material || 0,
+        waterFoodBonus(x, y), riverWealthBonus(x, y), waterTileBonus(x, y),
+        roadTileBonus(x, y, 'food'), roadTileBonus(x, y, 'material'), roadTileBonus(x, y, 'goods'),
+        ...cbf,
+        b ? JSON.stringify(b) : '',
+      ].join('|');
+    }
     // worked terrain cells. Returns { placements:[{type,x,y}], worked:[keys],
     // rates } or null if no placement is possible.
     function planEarlyColony(col) {
@@ -11955,6 +12131,18 @@
       // its pool. Pools are small (<=6 total control cells).
       const placed = [];        // [{ type, x, y }] actually placed (skips excluded)
       const usedKeys = new Set();
+      // The enumeration is a permutation search: many branches place the SAME
+      // building types on the SAME set of cells (only the recursion order
+      // differs), and interchangeable buildings (e.g. flat-output Solar/Factory
+      // over equivalent land cells) collapse to the same placement+worked set.
+      // Those produce byte-identical projected rates, so memoize the (expensive,
+      // full-colonyStats) projectColonyRates by a canonical signature of
+      // (placements, worked). This is exact — same inputs, same output — and
+      // removes the redundant recomputations that dominated the turn.
+      const _rateMemo = new Map();
+      const _sig = (placements, worked) =>
+        placements.map((p) => p.type + '@' + p.x + ',' + p.y).sort().join(';')
+        + '#' + worked.slice().sort().join(',');
       const evaluate = () => {
         const placements = placed.map((p) => ({ type: p.type, x: p.x, y: p.y }));
         if (!placements.length) return;    // nothing placed -> not a usable plan
@@ -11968,7 +12156,12 @@
           .map((c) => cellKey(c.x, c.y))
           .filter((k) => k !== homeKey && !buildingSet.has(k));
         const worked = [...buildKeys, ...terrain].slice(0, Math.max(0, cap));
-        const rates = projectColonyRates(col, placements, worked);
+        const _k = _sig(placements, worked);
+        let rates = _rateMemo.get(_k);
+        if (rates === undefined) {
+          rates = projectColonyRates(col, placements, worked);
+          _rateMemo.set(_k, rates);
+        }
         const deficit = earlyPlanDeficit(rates);        // <=0 (0 = all non-negative)
         const objective = earlyPlanObjective(rates, manager);
         // Preference: fewer/no deficits first (closer to 0), then higher objective.
@@ -11981,7 +12174,18 @@
       const recurse = (depth) => {
         if (depth === need) { evaluate(); return; }
         const type = placeableSeq[depth];
-        const avail = poolFor(type).filter((c) => !usedKeys.has(cellKey(c.x, c.y)));
+        let avail = poolFor(type).filter((c) => !usedKeys.has(cellKey(c.x, c.y)));
+        // PRUNE the permutation blow-up: for a cell-INDEPENDENT building (flat
+        // output), candidate cells with the same worked-cell signature are
+        // interchangeable — placing the building on either yields identical
+        // projected rates (the other just becomes an equivalent worked terrain
+        // cell). Keep only ONE representative per signature. This is exact (same
+        // best plan) and collapses the factorial search to polynomial — it was
+        // the dominant AI-turn cost (thousands of full colonyStats recomputes).
+        if (avail.length > 1 && bldgCellIndependent(type)) {
+          const seen = new Set();
+          avail = avail.filter((c) => { const s = workedCellSig(c.x, c.y); if (seen.has(s)) return false; seen.add(s); return true; });
+        }
         if (!avail.length) { recurse(depth + 1); return; }   // no suitable/free cell -> skip this building
         for (const c of avail) {
           const k = cellKey(c.x, c.y);
@@ -12196,20 +12400,41 @@
       ensureWorked(col);
       const homeKey = cellKey(col.x, col.y);
       const habCode = _bldgCode('habitat');
+      // These loops probe many candidate idles by splicing col.worked, calling
+      // colonyStats, then restoring — so colonyStats is invoked once per
+      // (candidate cell x metric) per pass. Since ONLY col.worked changes here,
+      // memoize colonyStats by the worked-set signature: identical worked states
+      // (the base state re-read for every candidate, and the same cell probed
+      // across passes) return the cached full-recompute. Exact — same worked set,
+      // same stats. This collapsed the dominant AI-turn cost (18.5k recomputes).
+      const _statMemo = new Map();
+      const _stats = () => {
+        const sig = col.worked.slice().sort().join('|');
+        let s = _statMemo.get(sig);
+        if (s === undefined) {
+          s = colonyStats(col);
+          // Snapshot the throttle map colonyBudget computed for THIS worked
+          // state (a side-effect on col), so a later cache hit reads the right
+          // one even if col._throttleByCell was since overwritten.
+          s = Object.assign({ _throttle: Object.assign({}, col._throttleByCell || {}) }, s);
+          _statMemo.set(sig, s);
+        }
+        return s;
+      };
       const WASTE_RES = ['energy', 'goods', 'material', 'water']; // skip food & wealth
       const ALL_RES = ['energy', 'food', 'material', 'goods', 'water', 'wealth'];
       let idled = 0;
 
       // Net rates snapshot for all resources at the current worked state.
       const netSnapshot = () => {
-        const s = colonyStats(col);
+        const s = _stats();
         return { energy: s.energy || 0, food: s.food || 0, material: s.material || 0,
                  goods: s.goods || 0, water: s.water || 0, wealth: s.wealthRate || 0 };
       };
       // Summed WASTE across WASTE_RES at the current worked state: production that
       // would overflow beyond local storage and any connected Federation room.
       const summedWaste = () => {
-        const s = colonyStats(col);
+        const s = _stats();
         const stored = s.stored || {}, caps = s.caps || {};
         const fedOwned = federationOwnedOf(col.owner);
         const fedMax = federationMaxStorage(col.owner);
@@ -12227,7 +12452,7 @@
       // Summed POSITIVE net of WASTE_RES (a cell's contribution = the drop here
       // when it is idled).
       const summedPosProd = () => {
-        const s = colonyStats(col);
+        const s = _stats();
         let total = 0;
         for (const R of WASTE_RES) total += Math.max(0, s[R] || 0);
         return total;
@@ -12260,11 +12485,10 @@
       };
 
       // --- Case 1: Factories throttled below 10% ---------------------------
-      // Recompute each pass (idling changes the picture). col._throttleByCell is
-      // (re)populated by colonyStats.
+      // Recompute each pass (idling changes the picture). The throttle fraction
+      // per cell is captured in the memoized stats for the current worked state.
       for (;;) {
-        colonyStats(col); // refresh col._throttleByCell
-        const byCell = col._throttleByCell || {};
+        const byCell = _stats()._throttle || {};
         const before = netSnapshot();
         let victim = null;
         for (const k of eligibleWorked()) {
@@ -13322,6 +13546,18 @@
     // name -> happiness amount (positive). Used to price happiness trades and
     // to grant the happiness bonus to a consumer.
     function ownerHappinessBonuses(owner) {
+      const out = new Map();
+      for (const b of (gameState.buildings || [])) {
+        if (b.owner !== owner || b.type !== 1 || b.inTransit) continue;
+        for (const k of (b.worked || [])) {
+          const [cx, cy] = String(k).split(",").map(Number);
+          if (!Number.isFinite(cx)) continue;
+          const tb = bonusDefAt(cx, cy);
+          if (tb && tb.bonus && typeof tb.bonus.happiness === 'number' && tb.bonus.happiness > 0) {
+            out.set(tb.name, (out.get(tb.name) || 0) + tb.bonus.happiness);
+          }
+        }
+      }
       return out;
     }
 
@@ -13342,11 +13578,40 @@
       return null;
     }
     // --- 'Other Resources' (terrain-bonus) leasing --------------------------
+    // Per-turn memo for the lease helpers. The lease math depends only on the
+    // owner's real colony/outpost deposits and the active 'other' trades — both
+    // stable across a turn's build planning (temp plan buildings aren't colonies
+    // or outposts, so they don't affect deposit counts). The cache key therefore
+    // tracks ONLY the turn and the trade set (NOT _placeGen, which churns every
+    // candidate placement), so these helpers go from 126k rebuilds/turn to a
+    // handful. It is also bumped whenever a colony's worked set is reassigned for
+    // real (managerAssignWorkers) via bumpLeaseGen().
+    let _leaseCacheObj = null;
+    let _leaseGenExtra = 0;              // bumped on real worked-cell reassignment
+    function bumpLeaseGen() { _leaseGenExtra++; _leaseCacheObj = null; }
+    function _leaseCache() {
+      const trades = ensureTrades();
+      const key = (gameState.turn || 0) + '|' + (gameState._tradeSeq || 0) + '|' + trades.length + '|' + _leaseGenExtra;
+      if (!_leaseCacheObj || _leaseCacheObj.key !== key) {
+        _leaseCacheObj = { key, counts: new Map(), frac: new Map() };
+      }
+      return _leaseCacheObj;
+    }
     // Count of an owner's terrain-bonus DEPOSITS by bonus NAME, across its
     // colonies' worked cells and operational outpost cells (the deposits it
     // actually exploits). Returns Map(name -> count). Used for the Other
     // Resources trade list (xN) and the lease-fraction math.
     function ownerBonusNameCounts(owner) {
+      // Memoized per owner within a "lease generation" — the deposit counts
+      // depend only on the owner's colonies' worked cells + outposts, which are
+      // stable during a turn's build planning (temp plan buildings are neither
+      // colonies nor outposts, so they never affect the count). Recomputing this
+      // per worked cell per candidate (it was called 126k times/turn) was a
+      // dominant AI-turn cost. The cache key bumps when trades change or the turn
+      // advances (see _leaseGen()).
+      const cache = _leaseCache();
+      const hit = cache.counts.get(owner);
+      if (hit) return hit;
       const counts = new Map();
       const seen = new Set();
       const add = (x, y) => {
@@ -13366,6 +13631,7 @@
           add(b.x, b.y);
         }
       }
+      cache.counts.set(owner, counts);
       return counts;
     }
     // How many of `owner`'s deposits of bonus `name` are currently LEASED OUT
@@ -13381,13 +13647,20 @@
     // The REMAINING yield fraction (0..1) each of `owner`'s deposits of bonus
     // `name` contributes after leasing: (N - K) / N, where N = deposits owned and
     // K = deposits leased out. If K >= N the fraction is 0; if the owner has no
-    // such deposit (N == 0) there is nothing to scale, so returns 1.
+    // such deposit (N == 0) there is nothing to scale, so returns 1. Memoized per
+    // (owner, name) within a lease generation (called 126k times/turn otherwise).
     function leasedYieldFraction(owner, name) {
       if (!name) return 1;
+      const cache = _leaseCache();
+      let m = cache.frac.get(owner);
+      if (m && m.has(name)) return m.get(name);
+      if (!m) { m = new Map(); cache.frac.set(owner, m); }
       const N = ownerBonusNameCounts(owner).get(name) || 0;
-      if (N <= 0) return 1;
-      const K = ownerLeasedCount(owner, name);
-      return Math.max(0, (N - K)) / N;
+      let f;
+      if (N <= 0) f = 1;
+      else { const K = ownerLeasedCount(owner, name); f = Math.max(0, (N - K)) / N; }
+      m.set(name, f);
+      return f;
     }
     // For a CONSUMER of 'other' deals: the extra yield FRACTION of a given bonus
     // name they receive = (leased count) / (provider's deposit count), summed
@@ -13430,15 +13703,27 @@
     // connected (any mode) to at least one CONSUMER colony? Reuses the same
     // connectivity matrix primitives but across owners by testing each pair.
     function ownersTradeConnected(a, b) {
+      // Memoized per owner-pair within the lease generation (colonies + transport
+      // are stable during a turn, so the cross-owner BFS result doesn't change).
+      // aiMaybeTrade tests this O(AIs^2) times/turn; the BFS per colony-pair was
+      // a multi-second cost.
+      const cache = _leaseCache();
+      if (!cache.conn) cache.conn = new Map();
+      const ck = (a < b) ? (a + '~' + b) : (b + '~' + a);
+      if (cache.conn.has(ck)) return cache.conn.get(ck);
       const colsA = (gameState.buildings || []).filter((x) => x.type === 1 && !x.inTransit && x.owner === a);
       const colsB = (gameState.buildings || []).filter((x) => x.type === 1 && !x.inTransit && x.owner === b);
-      if (!colsA.length || !colsB.length) return false;
-      for (const ca of colsA) {
-        for (const cb of colsB) {
-          if (_tradeRouteExists(ca, cb)) return true;
+      let result = false;
+      if (colsA.length && colsB.length) {
+        outer:
+        for (const ca of colsA) {
+          for (const cb of colsB) {
+            if (_tradeRouteExists(ca, cb)) { result = true; break outer; }
+          }
         }
       }
-      return false;
+      cache.conn.set(ck, result);
+      return result;
     }
     // A transport route (road, monorail, sea, or air) between two colonies of
     // DIFFERENT owners. Because a player CANNOT build transport inside a foreign
@@ -17449,6 +17734,25 @@
       // progress. Ignored when it isn't an AI's turn.
       if (e.key === "Escape" && e.ctrlKey) {
         if (forceEndAITurn()) { e.preventDefault(); return; }
+      }
+      // Plain Escape during the human's turn: END AUTO TURN END — switch off
+      // auto turn end (so the player keeps control now and on following turns)
+      // and cancel this turn's auto-advance/idle warning. Works even while a
+      // trade/diplomatic OFFER dialog is on screen (the "Press ESC to take
+      // control" hint). Skipped when a text field is focused so Escape can still
+      // cancel inline edits.
+      if (e.key === "Escape" && !e.ctrlKey && !e.metaKey) {
+        const tag = e.target && e.target.tagName;
+        const inField = tag === "INPUT" || tag === "TEXTAREA" || (e.target && e.target.isContentEditable);
+        if (!inField) {
+          const p = gameState.players && gameState.players[gameState.currentPlayer];
+          if (p && p.kind === 'human' && p.placed && (_autoTurnEnd || _idleArmed || _skipAutoEndThisTurn)) {
+            const wasAuto = _autoTurnEnd;
+            _autoTurnEnd = false;             // disable auto turn end going forward
+            takeManualControlThisTurn();      // cancel this turn's auto-advance/warning
+            if (wasAuto) notify('Auto turn end is off — press Ctrl/Cmd+Enter (End Turn) to resume it.');
+          }
+        }
       }
       if (e.key === "Enter") {
         // Cmd/Ctrl+Return is owned by the Turn ▸ End Turn menu accelerator,
