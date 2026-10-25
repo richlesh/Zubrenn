@@ -951,7 +951,7 @@ body.dark #strike-cancel { background: #3a3a3c; color: #e0e0e0; }
 #diplomacy-dialog {
   background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
-  width: 620px; max-width: 92vw; max-height: 90vh; display: flex; flex-direction: column;
+  width: 860px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column;
 }
 body.dark #diplomacy-dialog { background: #2c2c2e; color: #e0e0e0; }
 #diplomacy-dialog h2 { font-size: 15px; margin-bottom: 6px; }
@@ -972,3 +972,22 @@ body.dark #diplomacy-table tbody tr:nth-child(even) { background: rgba(255,255,2
 #diplomacy-table button:hover { filter: brightness(1.12); }
 #diplomacy-table button:active { filter: brightness(0.85); transform: translateY(1px); }
 #diplomacy-close { background: #0a84ff; color: #fff; }
+/* Status column may hold a war/peace label plus one or two pact chips with a
+   cancel button each — let it wrap instead of forcing horizontal scroll. */
+#diplomacy-table td.diplo-status { white-space: normal; }
+.diplo-pact-chip { display: inline-flex; align-items: center; gap: 2px; margin-right: 4px; white-space: nowrap; }
+/* Shared icon trash-can button: a small red square with a white SVG glyph. Used
+   by the Diplomacy status chips and the Trades cancel column. */
+.icon-trash {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; padding: 0; border: none; border-radius: 4px;
+  background: #c0392b; color: #fff; cursor: pointer; vertical-align: middle;
+}
+.icon-trash svg { width: 13px; height: 13px; display: block; }
+.icon-trash:hover { filter: brightness(1.12); }
+.icon-trash:active { filter: brightness(0.85); transform: translateY(1px); }
+/* Beat the ID-scoped button rules in these two tables (higher specificity). */
+#diplomacy-table button.icon-trash,
+#trades-table button.icon-trash {
+  width: 20px; height: 20px; padding: 0; border-radius: 4px; background: #c0392b; color: #fff;
+}

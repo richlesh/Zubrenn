@@ -17029,6 +17029,23 @@
       try { if (typeof updateResourcesPanel === 'function') updateResourcesPanel(); } catch (e) {}
     }
     // ---- Diplomacy screen --------------------------------------------------
+    // A small red-square button with a white trash-can SVG (shared by the
+    // Diplomacy pact chips and the Trades cancel column). `title` is the tooltip/
+    // aria-label; `onClick` runs on press.
+    function makeTrashButton(title, onClick) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'icon-trash';
+      if (title) { btn.title = title; btn.setAttribute('aria-label', title); }
+      btn.innerHTML =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/>' +
+        '<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>' +
+        '<path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+      if (onClick) btn.addEventListener('click', onClick);
+      return btn;
+    }
     function renderDiplomacy() {
       const body = document.getElementById('diplomacy-body');
       if (!body) return;
@@ -17048,26 +17065,26 @@
         // Each active pact gets a small trash-can button to cancel it early.
         const rel = relationOf('human', owner) || {};
         const statTd = document.createElement('td');
+        statTd.classList.add('diplo-status');
         const warSpan = document.createElement('span');
         warSpan.textContent = rel.war ? 'At War' : 'Peace';
-        if (rel.war) statTd.className = 'stat-neg';
+        if (rel.war) statTd.classList.add('stat-neg');
         statTd.appendChild(warSpan);
         const addPactChip = (kind, text) => {
           statTd.appendChild(document.createTextNode(', '));
           const chip = document.createElement('span');
-          chip.textContent = text + ' ';
+          chip.className = 'diplo-pact-chip';
+          const lbl = document.createElement('span');
+          lbl.textContent = text;
+          chip.appendChild(lbl);
+          const del = makeTrashButton(
+            `Cancel this ${kind === 'freeTravel' ? 'free-travel' : 'non-aggression'} pact early`,
+            (e) => {
+              e.stopPropagation();
+              if (cancelPactEarly(owner, kind)) { try { renderDiplomacy(); } catch (err) {} try { refreshAll(); } catch (err) {} }
+            });
+          chip.appendChild(del);
           statTd.appendChild(chip);
-          const del = document.createElement('button');
-          del.type = 'button';
-          del.textContent = '\uD83D\uDDD1';                 // 🗑 trash can
-          del.title = `Cancel this ${kind === 'freeTravel' ? 'free-travel' : 'non-aggression'} pact early`;
-          del.setAttribute('aria-label', del.title);
-          del.style.cssText = 'margin:0 0 0 2px;padding:0 4px;line-height:1;font-size:12px;cursor:pointer;';
-          del.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (cancelPactEarly(owner, kind)) { try { renderDiplomacy(); } catch (err) {} try { refreshAll(); } catch (err) {} }
-          });
-          statTd.appendChild(del);
         };
         if (rel.nonAggressionUntil > turn) addPactChip('nonAggression', `Non-Aggression (${rel.nonAggressionUntil - turn}y)`);
         if (rel.freeTravelUntil > turn) addPactChip('freeTravel', `Free Travel (${rel.freeTravelUntil - turn}y)`);
@@ -17288,9 +17305,7 @@
         tr.appendChild(mk(payTxt, 'num'));
         tr.appendChild(mk(`${t.remaining}${t._active === false ? ' (suspended)' : ''}`, 'num'));
         const actTd = document.createElement('td');
-        const btn = document.createElement('button');
-        btn.className = 'trade-cancel'; btn.textContent = 'Cancel';
-        btn.addEventListener('click', () => {
+        const btn = makeTrashButton('Cancel this trade deal', () => {
           gameState.trades = ensureTrades().filter((x) => x.id !== t.id);
           // Ending a trade logs AND pops a user dialog (notify does both).
           const other = (t.provider === 'human') ? t.consumer : t.provider;
