@@ -15828,6 +15828,12 @@
       if (e.key === "Enter" || e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
+        // Enter animates the default "Done" button press (then it closes);
+        // Escape closes immediately.
+        if (e.key === "Enter") {
+          const btn = document.getElementById("work-close");
+          if (btn && typeof animateButtonClick === 'function') { animateButtonClick(btn); return; }
+        }
         closeWorkModal();
       }
     }, true);
@@ -17935,6 +17941,40 @@
       endTurn(true);   // Cmd/Ctrl+Return (Turn ▸ End Turn): resume auto turn end
     });
 
+    // Dialog windows where Enter should click the DEFAULT (usually "Done")
+    // button instead of ending the turn. Ordered so the most-modal/last-opened
+    // wins if several are somehow visible. Each entry: [overlayId, defaultBtnId].
+    const _ENTER_DIALOGS = [
+      ['work-overlay', 'work-close'],           // colony detail
+      ['diplomacy-overlay', 'diplomacy-close'],
+      ['trades-overlay', 'trades-close'],
+      ['colonies-overlay', 'colonies-close'],
+      ['federation-overlay', 'federation-close'],
+      ['rankings-overlay', 'rankings-close'],
+      ['military-overlay', 'military-close'],
+    ];
+    // If one of the above windows is open, return its default button; else null.
+    function openDialogDefaultButton() {
+      for (const [ovId, btnId] of _ENTER_DIALOGS) {
+        const ov = document.getElementById(ovId);
+        if (ov && !ov.hidden) {
+          const btn = document.getElementById(btnId);
+          if (btn) return btn;
+        }
+      }
+      return null;
+    }
+    // Visibly "press" a button (brief animation), then activate it. Used when a
+    // key (Enter) triggers a button so the click is animated like a real press.
+    function animateButtonClick(btn) {
+      if (!btn) return;
+      btn.classList.add('btn-press');
+      setTimeout(() => {
+        btn.classList.remove('btn-press');
+        try { btn.click(); } catch (e) {}
+      }, 110);
+    }
+
     document.addEventListener("keydown", (e) => {
       // Ctrl+Esc: escape hatch to force-end a stuck AI turn so the game can
       // progress. Ignored when it isn't an AI's turn.
@@ -17972,7 +18012,11 @@
         }
         if (nameOverlay && !nameOverlay.hidden) return;
         if (viewlocOverlay && !viewlocOverlay.hidden) return;
-        if (workOverlay && !workOverlay.hidden) return;
+        // When a colony-detail / diplomacy / trade / colonies / federation /
+        // rankings / military window is open, Enter clicks its default ("Done")
+        // button — animated — and must NOT end the turn.
+        const dlgBtn = openDialogDefaultButton();
+        if (dlgBtn) { e.preventDefault(); animateButtonClick(dlgBtn); return; }
 
         e.preventDefault();
         // Plain Return ends ONLY this turn and leaves auto turn end OFF, so the

@@ -826,6 +826,11 @@ body.dark #trades-table tbody tr:nth-child(even) { background: rgba(255,255,255,
 .work-row button:hover { filter: brightness(1.12); }
 .work-row button:active { filter: brightness(0.85); transform: translateY(1px); }
 
+/* Programmatic "pressed" feedback: applied briefly when Enter activates a
+   dialog's default button, so the click is visibly animated even though no
+   mouse button was held. Mirrors the :active look. */
+.btn-press { filter: brightness(0.82) !important; transform: translateY(1px) scale(0.97) !important; transition: filter 90ms ease, transform 90ms ease; }
+
 /* AI trade offer popup (alien portrait + the proposed deal). */
 #offer-overlay {
   position: fixed; z-index: 10006; inset: 0;
