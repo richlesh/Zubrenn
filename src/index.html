@@ -805,6 +805,24 @@
       return Math.max(0, Math.min(1, w));
     }
     // The AI's asking value for a pact (what it wants to be paid). Peace is a
+    // Length (years) of a non-aggression / free-travel pact that `owner` offers
+    // `toOwner`, scaled by how warmly `owner` regards `toOwner`: the friendlier
+    // the alien, the longer the term, capped at pactTerm.maxYears (default 30).
+    // Config-driven (CONFIG.pactTerm) with safe fallbacks.
+    function aiPactTermYears(owner, toOwner) {
+      const pt = (CONFIG && CONFIG.pactTerm) || {};
+      const minY = (typeof pt.minYears === 'number') ? pt.minYears : 5;
+      const maxY = (typeof pt.maxYears === 'number') ? pt.maxYears : 30;
+      const minO = (typeof pt.minOpinion === 'number') ? pt.minOpinion : 0;
+      const maxO = (typeof pt.maxOpinion === 'number') ? pt.maxOpinion : 100;
+      let frac = 0;
+      if (maxO > minO) {
+        const o = getOpinion(ownerToIndex(owner), ownerToIndex(toOwner));
+        frac = Math.max(0, Math.min(1, (o - minO) / (maxO - minO)));
+      }
+      const yrs = Math.round(minY + (maxY - minY) * frac);
+      return Math.max(1, Math.min(maxY, yrs));
+    }
     // one-time sum; pacts are per-year. A more willing AI asks less; a reluctant
     // one asks more. Returns { resource:'wealth', amountTotal? , amountPerYear? }.
     function aiPactAsk(owner, toOwner, kind, years) {
@@ -867,7 +885,7 @@
           for (const kind of kinds) {
             const w = aiPactWillingness(aiOwner, 'human', kind);
             if (w > 0.55 && Math.random() < 0.15 * w) {
-              const years = 5;
+              const years = aiPactTermYears(aiOwner, 'human');
               const ask = aiPactAsk(aiOwner, 'human', kind, years);
               const pay = Math.round(ask.amountPerYear * 0.5);
               const deal = { kind, a: aiOwner, b: 'human', payer: aiOwner, payee: 'human', resource: 'wealth', amountPerYear: pay, years };

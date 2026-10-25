@@ -2111,6 +2111,17 @@
     // the attacker (this is on TOP of any pact-break penalty).
     "attack": -50
   },
+  // How long a non-aggression / free-travel pact an AI OFFERS scales with how
+  // warmly it regards the other party: at opinion <= minOpinion it offers
+  // minYears; the term rises linearly to maxYears at opinion >= maxOpinion
+  // (opinion scale is -100..100). So the friendlier an alien is, the longer the
+  // pact it proposes, up to maxYears.
+  "pactTerm": {
+    "minYears": 5,
+    "maxYears": 30,
+    "minOpinion": 0,
+    "maxOpinion": 100
+  },
   // Reserved happiness tuning constant (currently read for happiness clamping).
   "happinessCap": 20,
   // Cap on the per-turn happiness contribution (percentage points) from a
