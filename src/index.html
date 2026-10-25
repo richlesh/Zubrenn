@@ -14119,6 +14119,38 @@
       gameState.pacts = kept;
     }
 
+    // Cancel a still-active pact (`kind` = 'nonAggression' | 'freeTravel')
+    // between the human and `owner` BEFORE its term ends. Clears the relation's
+    // expiry, drops the pact record (so it is no longer charged), and applies the
+    // early-break opinion penalty (the OTHER party sours toward the human, the
+    // one breaking it). Returns true if a pact was actually cancelled.
+    function cancelPactEarly(owner, kind) {
+      if (owner == null || (kind !== 'nonAggression' && kind !== 'freeTravel')) return false;
+      const turn = gameState.turn || 0;
+      const rel = relationOf('human', owner);
+      const active = rel && ((kind === 'nonAggression' && rel.nonAggressionUntil > turn)
+                          || (kind === 'freeTravel' && rel.freeTravelUntil > turn));
+      if (!active) return false;
+      // Clear the relation's expiry for this pact kind.
+      if (kind === 'nonAggression') rel.nonAggressionUntil = 0;
+      else rel.freeTravelUntil = 0;
+      // Drop the matching ongoing pact record (by the human/owner pair + kind).
+      const iH = ownerToIndex('human'), iO = ownerToIndex(owner);
+      const lo = Math.min(iH, iO), hi = Math.max(iH, iO);
+      gameState.pacts = (ensurePacts()).filter((p) => {
+        if (p.kind !== kind) return true;
+        const pa = ownerToIndex(p.a), pb = ownerToIndex(p.b);
+        return !(Math.min(pa, pb) === lo && Math.max(pa, pb) === hi);
+      });
+      // Breaking a pact early is a betrayal: the other party's opinion of the
+      // human (the breaker) drops (same penalty as a lapsed/attacked pact).
+      if (iH >= 0 && iO >= 0) adjustOpinion(iO, iH, opinionDelta('pactBroken'));
+      // Log it for a human-involved pact.
+      const label = (kind === 'freeTravel') ? 'free-travel' : 'non-aggression';
+      try { if (typeof diploLog === 'function') diploLog(`You cancelled the ${label} pact with ${ownerDisplayName(owner)} early.`); } catch (e) {}
+      return true;
+    }
+
     // --- AI trade willingness & pricing (trait- and scarcity-driven) --------
     // Willingness 0..1 that AI `owner` will SELL access to `category`/`key` to
     // `toOwner`. Driven by traits (commerce/diplomacy raise it; aggression and
@@ -17013,14 +17045,32 @@
         const opTd = document.createElement('td'); opTd.className = 'num';
         opTd.textContent = `${op > 0 ? '+' : ''}${nf(op, 0)}`;
         // Status text: war/peace plus any active pacts (with years remaining).
+        // Each active pact gets a small trash-can button to cancel it early.
         const rel = relationOf('human', owner) || {};
-        const bits = [];
-        bits.push(rel.war ? 'At War' : 'Peace');
-        if (rel.nonAggressionUntil > turn) bits.push(`Non-Aggression (${rel.nonAggressionUntil - turn}y)`);
-        if (rel.freeTravelUntil > turn) bits.push(`Free Travel (${rel.freeTravelUntil - turn}y)`);
         const statTd = document.createElement('td');
-        statTd.textContent = bits.join(', ');
+        const warSpan = document.createElement('span');
+        warSpan.textContent = rel.war ? 'At War' : 'Peace';
         if (rel.war) statTd.className = 'stat-neg';
+        statTd.appendChild(warSpan);
+        const addPactChip = (kind, text) => {
+          statTd.appendChild(document.createTextNode(', '));
+          const chip = document.createElement('span');
+          chip.textContent = text + ' ';
+          statTd.appendChild(chip);
+          const del = document.createElement('button');
+          del.type = 'button';
+          del.textContent = '\uD83D\uDDD1';                 // 🗑 trash can
+          del.title = `Cancel this ${kind === 'freeTravel' ? 'free-travel' : 'non-aggression'} pact early`;
+          del.setAttribute('aria-label', del.title);
+          del.style.cssText = 'margin:0 0 0 2px;padding:0 4px;line-height:1;font-size:12px;cursor:pointer;';
+          del.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (cancelPactEarly(owner, kind)) { try { renderDiplomacy(); } catch (err) {} try { refreshAll(); } catch (err) {} }
+          });
+          statTd.appendChild(del);
+        };
+        if (rel.nonAggressionUntil > turn) addPactChip('nonAggression', `Non-Aggression (${rel.nonAggressionUntil - turn}y)`);
+        if (rel.freeTravelUntil > turn) addPactChip('freeTravel', `Free Travel (${rel.freeTravelUntil - turn}y)`);
         // Actions depend on current standing.
         const actTd = document.createElement('td');
         const addBtn = (label, onClick) => {
