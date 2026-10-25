@@ -385,11 +385,6 @@
         <button id="offer-accept">Accept</button>
         <button id="offer-decline">Decline</button>
       </div>
-      <div class="work-row" id="offer-auto-row" hidden>
-        <button id="offer-auto-accept" title="Accept this and all future pacts of this kind automatically">Auto Accept</button>
-        <button id="offer-auto-reject" title="Reject this and all future pacts of this kind automatically">Auto Reject</button>
-      </div>
-      <div id="offer-auto-note" class="hint" hidden></div>
     </div>
   </div>
   <!-- Propose Trade: player-initiated offer to a connected alien. -->
@@ -1134,7 +1129,6 @@
       opinion: null,   // diplomacy matrix: { "fromIdx->toIdx": value in [-100,100] }, 0 = neutral
       relations: null, // per-pair war/pact status: { "i|j": { war, warStartTurn, nonAggressionUntil, freeTravelUntil } }
       pacts: null,     // active diplomatic pacts (per-year priced): [{ id, kind, a, b, payer, payee, resource, amountPerYear, years, remaining }]
-      pactAutoPref: null, // player's per-pact-kind Auto Accept/Reject: { nonAggression:'accept'|'reject', freeTravel:... }
       playerName: "Human", // editable human player name (saved)
       // Player (human) accumulated resources and last per-year production rates.
       resources: { material: 0, goods: 0, food: 0, energy: 0, wealth: 0 },
@@ -1174,7 +1168,6 @@
         relations: gameState.relations || null,
         pacts: gameState.pacts || [],
         _pactSeq: gameState._pactSeq || 0,
-        pactAutoPref: gameState.pactAutoPref || null,
         resources: gameState.resources || { material: 0, food: 0, energy: 0, wealth: 0 },
         rates: gameState.rates || { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 },
         playerName: gameState.playerName || "Human",
@@ -17637,40 +17630,26 @@
     // Pending AI offers to the human, shown one at a time.
     let _offerQueue = [];
     let _offerShowing = false;
-    let _offerAutoTimer = null;   // 1s override-window timer for auto-handled pacts
     function queueTradeOffer(offer) { _offerQueue.push(offer); showNextOffer(); }
-    // Per-pact-kind auto preference ('accept' | 'reject' | null), persisted on
-    // gameState so it survives save/load. Applies to ALL aliens offering that
-    // pact kind (non-aggression / free-travel).
-    function pactAutoPref() {
-      if (!gameState.pactAutoPref || typeof gameState.pactAutoPref !== 'object') gameState.pactAutoPref = {};
-      return gameState.pactAutoPref;
-    }
-    function getPactAutoPref(kind) { const p = pactAutoPref()[kind]; return (p === 'accept' || p === 'reject') ? p : null; }
-    function setPactAutoPref(kind, pref) { if (kind) pactAutoPref()[kind] = (pref === 'accept' || pref === 'reject') ? pref : null; }
     function showNextOffer() {
       if (_offerShowing) return;
-      if (_offerAutoTimer) { clearTimeout(_offerAutoTimer); _offerAutoTimer = null; }
       const offer = _offerQueue.shift();
       if (!offer) return;
       const overlay = document.getElementById('offer-overlay');
       if (!overlay) return;
-      // A diplomatic PACT offer (non-aggression / free-travel) can be auto-handled.
-      const pactKind = (offer.diplo && offer.deal && (offer.deal.kind === 'nonAggression' || offer.deal.kind === 'freeTravel'))
-        ? offer.deal.kind : null;
-      const autoPref = pactKind ? getPactAutoPref(pactKind) : null;
       _offerShowing = true;
-      // A trade/diplomatic offer normally needs the player's decision, so cancel
-      // this turn's auto-end — EXCEPT when an auto preference is active for this
-      // pact kind, in which case the dialog is a brief 1s override window and must
-      // NOT cancel auto-turn.
-      if (!autoPref) { _skipAutoEndThisTurn = true; stopIdleWatch(); }
+      // A trade offer needs the player's decision, so cancel this turn's
+      // auto-end (same mechanism as "Let me handle it") — the turn won't
+      // auto-advance until the player accepts or declines.
+      _skipAutoEndThisTurn = true;
+      stopIdleWatch();
       const title = document.getElementById('offer-title');
       const portrait = document.getElementById('offer-portrait');
       const text = document.getElementById('offer-text');
       const from = offer.provider;
       if (portrait) { const src = ownerPortraitSrc(from); portrait.src = src; portrait.style.visibility = src ? 'visible' : 'hidden'; }
       if (offer.diplo) {
+        // Diplomatic offer (peace / non-aggression / free-travel) from an AI.
         if (title) title.textContent = `Diplomatic Offer from ${ownerDisplayName(from)}`;
         if (text) text.innerHTML = offer.text || '';
       } else {
@@ -17682,61 +17661,26 @@
           `(total ¤${nf(offer.amountPerYear * offer.years, 0)}).</p>` +
           `<p class="hint">A transport connection between your colonies and theirs is required each year; the deal pauses if it is lost and cancels if either side attacks.</p>`;
       }
-      // Auto Accept/Reject buttons appear only for pact offers.
-      const autoRow = document.getElementById('offer-auto-row');
-      const autoNote = document.getElementById('offer-auto-note');
-      const autoAcceptBtn = document.getElementById('offer-auto-accept');
-      const autoRejectBtn = document.getElementById('offer-auto-reject');
-      if (autoRow) autoRow.hidden = !pactKind;
-      if (autoNote) {
-        if (pactKind && autoPref) {
-          const label = (pactKind === 'freeTravel') ? 'free-travel' : 'non-aggression';
-          autoNote.hidden = false;
-          autoNote.textContent = `Auto-${autoPref === 'accept' ? 'accepting' : 'rejecting'} ${label} pacts — ${autoPref === 'accept' ? 'accepting' : 'rejecting'} in 1s unless you choose otherwise.`;
-        } else { autoNote.hidden = true; autoNote.textContent = ''; }
-      }
       overlay.hidden = false;
       const accept = document.getElementById('offer-accept');
       const decline = document.getElementById('offer-decline');
       const close = (accepted) => {
-        if (_offerAutoTimer) { clearTimeout(_offerAutoTimer); _offerAutoTimer = null; }
         overlay.hidden = true; _offerShowing = false;
         accept.onclick = null; decline.onclick = null;
-        if (autoAcceptBtn) autoAcceptBtn.onclick = null;
-        if (autoRejectBtn) autoRejectBtn.onclick = null;
         if (accepted) {
           if (offer.diplo && offer.deal) { applyPactDeal(offer.deal); try { renderDiplomacy(); } catch (e) {} }
           else { createTrade(offer); }
           try { refreshAll(); } catch (e) {}
-        } else {
+        }
+        else {
           // Declining nudges the AI's opinion of you down a little.
           const fIdx = ownerToIndex(from), hIdx = ownerToIndex('human');
           if (fIdx >= 0 && hIdx >= 0) adjustOpinion(fIdx, hIdx, -3);
         }
-        // Show the next queued offer; once the queue drains, re-check auto-end
-        // (an auto-handled offer must not leave the turn hanging).
-        setTimeout(() => {
-          showNextOffer();
-          if (!_offerShowing && _offerQueue.length === 0 && typeof maybeAutoEndHumanTurn === 'function') {
-            try { maybeAutoEndHumanTurn(); } catch (e) {}
-          }
-        }, 50);
+        setTimeout(showNextOffer, 50);
       };
       accept.onclick = () => close(true);
       decline.onclick = () => close(false);
-      // Auto buttons: remember the choice for this pact kind, then apply it now.
-      if (autoAcceptBtn) autoAcceptBtn.onclick = () => { if (pactKind) setPactAutoPref(pactKind, 'accept'); close(true); };
-      if (autoRejectBtn) autoRejectBtn.onclick = () => { if (pactKind) setPactAutoPref(pactKind, 'reject'); close(false); };
-      // If an auto preference is active for this pact kind, keep the dialog up for
-      // 1 second so the player may override, then apply the preference and dismiss.
-      if (autoPref) {
-        _offerAutoTimer = setTimeout(() => {
-          _offerAutoTimer = null;
-          if (!_offerShowing) return;                     // already resolved by a click
-          if (getPactAutoPref(pactKind) !== autoPref) return; // pref changed; leave open
-          close(autoPref === 'accept');
-        }, 1000);
-      }
     }
 
     // Called during an AI player's turn: the AI may extend a trade offer to the
@@ -17994,7 +17938,6 @@
         relations: (extra && extra.relations) || null,
         pacts: (extra && Array.isArray(extra.pacts)) ? extra.pacts : [],
         _pactSeq: (extra && extra._pactSeq) || 0,
-        pactAutoPref: (extra && extra.pactAutoPref) || null,
         resources: (extra && extra.resources) || { material: 0, food: 0, energy: 0, wealth: 0 },
         rates: (extra && extra.rates) || { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 },
         playerName: (extra && (extra.playerName || (extra.players && extra.players[0] && extra.players[0].kind === 'human' && extra.players[0].name))) || gameState.playerName || "Human",
@@ -18456,7 +18399,6 @@
             relations: payload.relations || null,
             pacts: payload.pacts || [],
             _pactSeq: payload._pactSeq || 0,
-            pactAutoPref: payload.pactAutoPref || null,
             resources: payload.resources, rates: payload.rates,
             playerName: payload.playerName,
             transport: payload.transport || null,
