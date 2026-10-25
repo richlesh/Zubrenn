@@ -195,6 +195,12 @@ The Compressed‑Air Energy Storage (CAES) is an advanced energy‑storage facil
 
 Pumped Hydro is the largest energy store a colony can field — a pair of reservoirs that bank power by pumping water uphill and release it on demand by letting it fall back through turbines. It must be built on habitable land **beside a river or canal** (its upper and lower basins) and is a late‑game undertaking: it requires a **Solar Farm** and a **Global Bank** in the colony and a transport link to another of your colonies, with a colony population of at least 10,000. A major, costly build with a steady upkeep, it produces no energy of its own — its value is storage: it **massively** expands both the colony's and the Federation's energy reserves, the strategic buffer that lets a power‑hungry civilization ride out shortfalls and store a renewable surplus.
 
+### Grid Storage
+
+<span class="float-right">![grid_storage](../buildings/grid_storage.png)</span>
+
+Grid Storage is a utility‑scale battery bank — rows of cells that soak up surplus power and release it on demand. A standalone build (not an upgrade), it sits in the middle of the energy‑storage ladder, holding more than the entry‑tier Compressed‑Air store but less than a Pumped Hydro's vast reservoirs. It requires a **Solar Farm** and a **Global Bank** in the colony, a transport link to another of your colonies, a population of at least 10,000, and — crucially — a worked source of the strategic metal **lithium** for its cells. A moderate build with a modest upkeep, it produces nothing on its own; its value is capacity, expanding both the colony's and the Federation's energy storage so a power‑hungry civilization can bank a surplus and ride out shortfalls.
+
 ### Water Treatment Plant
 
 <span class="float-right">![water_plant](../buildings/water_plant.png)</span>

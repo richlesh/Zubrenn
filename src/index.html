@@ -35,6 +35,10 @@
         <div class="player-stat"><span>Wealth: <span id="player-wealth">0</span> / <span id="player-wealth-max">0</span></span> <span id="player-wealth-rate" class="player-rate">+0/yr</span></div>
         <div class="player-stat"><span>Happiness: <span id="player-happiness">0</span> / <span id="player-happiness-max">0</span></span> <span id="player-happiness-rate" class="player-rate">+0/yr</span></div>
       </div>
+      <div id="strategic-panel">
+        <div class="bldg-panel-title">Strategic Resources</div>
+        <div id="strategic-list"></div>
+      </div>
       <div id="buildings-panel">
         <div class="bldg-cols">
           <div class="bldg-col">
@@ -4284,6 +4288,7 @@
       }
       list.innerHTML = html;
       updateResourcesPanel();
+      updateStrategicResourcesPanel();
     }
 
     // Resources column of the Buildings panel: count the TILE BONUSES on every
@@ -4320,6 +4325,48 @@
       const rows = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
       el.innerHTML = rows.length
         ? rows.map(([name, n]) => `<div class="bldg-stat">${name}: <span>${n.toLocaleString()}</span></div>`).join("")
+        : `<div class="bldg-none">None</div>`;
+    }
+
+    // Strategic Resources panel: the strategic materials (terrain-bonus
+    // `bonusType`s) currently AVAILABLE to the human — a material is available
+    // when a terrain bonus carrying that bonusType is WORKED by one of the
+    // human's colonies OR covered by a human OUTPOST. Listed alphabetically,
+    // deduplicated. A bonus may declare several bonusTypes (array), all counted.
+    function updateStrategicResourcesPanel() {
+      const el = document.getElementById("strategic-list");
+      if (!el) return;
+      const have = new Set();
+      const addBt = (bt) => {
+        if (!bt) return;
+        if (Array.isArray(bt)) { for (const t of bt) if (t) have.add(String(t)); }
+        else have.add(String(bt));
+      };
+      // Worked cells of every human colony.
+      const colonies = (gameState.buildings || [])
+        .filter((b) => b.owner === 'human' && b.type === 1 && !b.inTransit);
+      for (const col of colonies) {
+        for (const k of (col.worked || [])) {
+          const [cx, cy] = String(k).split(",").map(Number);
+          if (!Number.isFinite(cx) || !Number.isFinite(cy)) continue;
+          const tb = bonusDefAt(cx, cy);
+          if (tb) addBt(tb.bonusType);
+        }
+      }
+      // Operational human outposts expose their cell's bonus (no worker needed).
+      for (const b of (gameState.buildings || [])) {
+        if (b.owner !== 'human' || b.type === 1 || b.inTransit) continue;
+        if (!isOperational(b)) continue;
+        if (!buildingHasOther(b.type, 'outpost')) continue;
+        const tb = bonusDefAt(b.x, b.y);
+        if (tb) addBt(tb.bonusType);
+      }
+      // Alphabetical; display with a capitalized first letter (bonusTypes are
+      // lowercase config keys like "iron", "aluminum").
+      const names = [...have].sort((a, b) => a.localeCompare(b));
+      const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+      el.innerHTML = names.length
+        ? names.map((n) => `<div class="bldg-stat">${cap(n)}</div>`).join("")
         : `<div class="bldg-none">None</div>`;
     }
 

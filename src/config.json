@@ -1024,6 +1024,26 @@
         "population": 10
       }
     },
+    // Grid energy storage (batteries)
+    "grid storage": {
+      "code": 45,
+      "name": "Grid Storage",
+      "icon": "buildings/128/grid_storage.png",
+      "symbol": "buildings/icons/bolt_plus.png",
+      "buildCost": { "energy": 45, "material": 75, "goods": 30, "wealth": 75, "water": 2, "turns": 5 },
+      "costPerYear": { "energy": 15, "goods": 3, "wealth": 7 },
+      "bonus": { },
+      "storage": { "energy": 250 },
+      "federationStorage": { "energy": 250 },
+      "prerequisite": {
+        "building": ["solar farm", "global bank"],
+        "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains"],
+        "other": [ ],
+        "network":  ["any"],
+        "bonusType": ["lithium"],
+        "population": 10
+      }
+    },
     // Water Treatment Plant
     "wtp": {
       "code": 12,
@@ -1224,6 +1244,10 @@
     "wealth": { "name": "Wealth", "units":  "M¤", "abbrev": "¤", "desc": "The colony's accumulated economic value in millions of credits. It pays building upkeep, construction costs and is used by consumers and industry. It is produced by trade, banks, and luxury bonuses."}
   },
 
+  // Bonus types are the strategic resources that can be found in terrain bonuses
+  // and can be prerequisites for certain buildings and units.
+  "bonusType": [ "aluminum", "crystal", "iron", "lithium", "stone", "titanium", "uranium" ],
+
   // Special resource deposits scattered across the map at generation time. Each
   // entry defines a "bonus" (per-resource yield added when its cell is worked),
   // the terrain(s)/terrain groups it may appear on, climate band(s), optional
@@ -1350,7 +1374,7 @@
       "bonus": { "material": "25-50", "wealth": "5-10" },
       "terrain": ["hills","mountain-low"],
       "other": [ ],
-      "abundancy": 0.5,
+      "abundancy": 2,
       "bonusType": "crystal",
       "desc": "Piezoelectric crystals grown in vibration fields. Great for electronics and construction."
     },
@@ -1422,7 +1446,7 @@
       "bonus": { "material": "30-50", "wealth": "10-20" },
       "terrain": ["mountain-low","mountain-high"],
       "other": [ ],
-      "abundancy": 3,
+      "abundancy": 5,
       "bonusType": "titanium",
       "desc": "Rare mineral lattices that can be processed into exceptionally strong structural mesh."
     },
@@ -1467,7 +1491,7 @@
       "bonus": { "energy": "100-300" },
       "terrain": ["desert"],
       "other": [ ],
-      "abundancy": 2,
+      "abundancy": 5,
       "bonusType": "crystal",
       "desc": "Naturally photovoltaic crystals convert starlight into harvestable current."
     },
@@ -1799,7 +1823,7 @@
       "bonus": { "material": "35-55", "energy": "100-300" },
       "terrain": ["mountain-low","mountain-high"],
       "other": [ ],
-      "abundancy": 0.5,
+      "abundancy": 4,
       "bonusType": "crystal",
       "desc": "Crystals that store seismic strain, mined for both structural mesh and the power of their discharge."
     },
@@ -1828,7 +1852,7 @@
       "bonus": { "material": "30-50", "energy": "100-300", "wealth": "10-20" },
       "terrain": ["mountain-high"],
       "other": [ ],
-      "abundancy": 0.1,
+      "abundancy": 1,
       "bonusType": "crystal",
       "desc": "Towering superconductive crystal pillars that channel storm charge and refine into ultra-premium alloy."
     },
@@ -1855,7 +1879,7 @@
       "bonus": { "material": "25-50", "wealth": "25-50", "happiness": 0.25 },
       "terrain": ["desert","frozen","plains"],
       "other": [ ],
-      "abundancy": 0.1,
+      "abundancy": 0.2,
       "bonusType": "titanium",
       "desc": "The salvage of an ancient crashed vessel: exotic alloys to strip, relics to sell, and a legend to tell."
     },

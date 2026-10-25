@@ -154,6 +154,15 @@ body.dark #buildings-panel { background: #2c2c2e; color: #ddd; border-color: #44
 #buildings-panel .bldg-cols { display: flex; gap: 12px; }
 #buildings-panel .bldg-col { flex: 1 1 0; min-width: 0; }
 #buildings-panel .bldg-none { color: #999; font-style: italic; }
+#strategic-panel {
+  border: 1px solid gray; background: #eee; color: #1e1e1e;
+  font: 12px Calibri, sans-serif; padding: 6px 8px; border-radius: 4px;
+  margin-bottom: 8px;
+}
+body.dark #strategic-panel { background: #2c2c2e; color: #ddd; border-color: #444; }
+#strategic-panel .bldg-panel-title { font-weight: 700; margin-bottom: 4px; }
+#strategic-panel .bldg-stat { font-variant-numeric: tabular-nums; }
+#strategic-panel .bldg-none { color: #999; font-style: italic; }
 body.dark #buildings-panel .bldg-none { color: #888; }
 
 
