@@ -9738,6 +9738,18 @@
       }
       return n;
     }
+    // Resolve a building prerequisite's effective per-owner build cap. With
+    // `maxCountScope: "colony"` the cap is `maxCount` PER COLONY, so the owner's
+    // total allowance is maxCount x (their colony count) — e.g. 1 drone base per
+    // colony => 10 colonies allow 10. Default scope ("player") caps the total at
+    // `maxCount` regardless of colony count. Returns Infinity when no cap.
+    function effectiveMaxCount(pre, owner) {
+      if (!pre || pre.maxCount == null) return Infinity;
+      const base = Number(pre.maxCount);
+      if (!(base >= 0)) return Infinity;
+      if (pre.maxCountScope === 'colony') return base * Math.max(0, ownerColonyCount(owner));
+      return base; // per-player (default)
+    }
     // A player's Federation is "established" once they have founded a SECOND
     // colony (a single colony has nothing to federate). Federation buildings
     // require an established Federation to build.
@@ -9922,8 +9934,9 @@
       // have founded a second colony before any can be built.
       if (buildingIsFederation(type) && !federationEstablished(owner)) return false;
       // Per-type build cap: at most `maxCount` of this building type may exist
-      // (or be under construction) at one time for this owner.
-      if (pre.maxCount != null && ownerBuildingCount(type, owner) >= Number(pre.maxCount)) return false;
+      // (or be under construction) at one time for this owner — scoped per-player
+      // or per-colony via maxCountScope (see effectiveMaxCount).
+      if (pre.maxCount != null && ownerBuildingCount(type, owner) >= effectiveMaxCount(pre, owner)) return false;
       // For `anywhere` buildings outside every zone, prerequisites (required
       // buildings, network, city size) are evaluated against the nearest colony
       // — the same colony that pays for and owns the build.
@@ -10011,8 +10024,11 @@
       if (buildingIsFederation(type) && !federationEstablished(owner)) {
         missing.push("an established Federation (a second colony)");
       }
-      if (pre.maxCount != null && ownerBuildingCount(type, owner) >= Number(pre.maxCount)) {
-        missing.push(`no more than ${Number(pre.maxCount)} ${improvementName(type)}${Number(pre.maxCount) === 1 ? '' : 's'} at one time`);
+      if (pre.maxCount != null && ownerBuildingCount(type, owner) >= effectiveMaxCount(pre, owner)) {
+        const cap = effectiveMaxCount(pre, owner);
+        const per = (pre.maxCountScope === 'colony')
+          ? ` (${Number(pre.maxCount)} per colony)` : '';
+        missing.push(`no more than ${cap} ${improvementName(type)}${cap === 1 ? '' : 's'} at one time${per}`);
       }
       for (const t of missingBonusTypes(pre.bonusType, col)) {
         missing.push(`a worked source of ${t}`);

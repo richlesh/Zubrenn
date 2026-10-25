@@ -1118,7 +1118,8 @@
       "prerequisite": {
         "terrain": ["grassland","hills","forest","jungle","desert","plains","wetlands","mountain-low"],
         "other": [ "anywhere", "federation", "intelligence" ],
-        "maxCount": 3
+        "maxCount": 1,
+        "maxCountScope": "colony"
       },
       "visibility": 16
     },
