@@ -6746,7 +6746,13 @@
         for (const col of cols) {
           const owned = ensureOwned(col);
           const max = maxByCol.get(col) || colonyMaxStorage(col);
-          const hCap = max.happiness || 0;
+          // Use the SAME happiness cap the UI shows (deduped per building type via
+          // colonyHappinessStorage) so the stored value and the displayed ±cap
+          // always agree — avoids the economy clamping to a different (summed)
+          // cap than the colony panel reports.
+          const hCap = (typeof colonyHappinessStorage === 'function')
+            ? (colonyHappinessStorage(col) || 0)
+            : (max.happiness || 0);
           owned.happiness = Math.max(-hCap, Math.min(hCap, owned.happiness));
           if (owned.population <= 0) {
             col._disbanded = true;
