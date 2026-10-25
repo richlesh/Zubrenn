@@ -17958,6 +17958,34 @@
       const maxT = aiCfg.maxLandingTurns || 200;
       const players = [{ id: 0, kind: 'human', name: gameState.playerName || 'Human', placed: false, modules: 1 }];
       const n = Math.max(0, Math.min(aiCount, aiCfg.maxAgents || 40, names.length));
+      // Guarantee the chosen set includes at least one highly-aggressive species
+      // at aggression 5 AND one at aggression 4 (when there's room and such
+      // species exist). If the shuffled prefix names[0..n-1] lacks a level, swap
+      // in a candidate of that level from the tail (names[n..]). Distinct target
+      // slots are used so the two requirements don't overwrite each other.
+      const aggOf = (nm) => (species[nm] && species[nm].traits && species[nm].traits.aggression) || 0;
+      const ensureAggressionLevel = (level, avoidSlot) => {
+        if (n < 1) return -1;
+        for (let i = 0; i < n; i++) if (aggOf(names[i]) === level) return i; // already present
+        // Find a candidate of this level in the unused tail.
+        let cand = -1;
+        for (let j = n; j < names.length; j++) if (aggOf(names[j]) === level) { cand = j; break; }
+        if (cand < 0) return -1;                       // no such species available
+        // Choose a slot to replace: prefer a non-reserved slot whose own level is
+        // not itself a required one, so we don't clobber the other guarantee.
+        let slot = -1;
+        for (let i = 0; i < n; i++) {
+          if (i === avoidSlot) continue;
+          const a = aggOf(names[i]);
+          if (a !== 5 && a !== 4) { slot = i; break; }
+        }
+        if (slot < 0) { for (let i = 0; i < n; i++) { if (i !== avoidSlot) { slot = i; break; } } }
+        if (slot < 0) return -1;
+        [names[slot], names[cand]] = [names[cand], names[slot]];
+        return slot;
+      };
+      const slot5 = ensureAggressionLevel(5, -1);
+      ensureAggressionLevel(4, slot5);
       for (let i = 0; i < n; i++) {
         const name = names[i] || ('AI ' + (i + 1));
         const traits = (species[name] && species[name].traits) || null;
