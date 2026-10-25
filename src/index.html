@@ -14795,10 +14795,28 @@
     }
     document.getElementById("name-cancel").addEventListener("click", closeNameDialog);
     document.getElementById("name-ok").addEventListener("click", confirmName);
-    nameInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") confirmName();
-      else if (e.key === "Escape") closeNameDialog();
-    });
+    // Keyboard in the Establish Colony dialog: Enter activates the FOCUSED button
+    // (Cancel if Tabbed to it, else Establish — the default). From the text input
+    // Enter establishes. Escape cancels. The button press is animated.
+    {
+      const _nameDlg = document.getElementById("name-dialog");
+      const _nameOk = document.getElementById("name-ok");
+      const _nameCancel = document.getElementById("name-cancel");
+      (_nameDlg || nameInput).addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const focused = document.activeElement;
+          if (focused === _nameCancel) {
+            if (typeof animateButtonClick === 'function') animateButtonClick(_nameCancel); else closeNameDialog();
+          } else {
+            // Establish is the default (input focused or Establish focused).
+            if (typeof animateButtonClick === 'function') animateButtonClick(_nameOk); else confirmName();
+          }
+        } else if (e.key === "Escape") {
+          e.preventDefault(); closeNameDialog();
+        }
+      });
+    }
     async function confirmName() {
       // Launch-naming path: resolve the pending promise with the entered name.
       if (_launchNaming) {
