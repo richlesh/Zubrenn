@@ -894,6 +894,8 @@ function buildSaveObject(gameState) {
     // Diplomacy: per-pair war/pact relations and active (priced) pacts.
     relations: (gameState && gameState.relations) || null,
     pacts: (gameState && gameState.pacts) || [],
+    // Player's per-pact-kind Auto Accept/Reject preferences for AI offers.
+    pactAutoPref: (gameState && gameState.pactAutoPref) || null,
     _pactSeq: (gameState && gameState._pactSeq) || 0,
     resources: (gameState && gameState.resources) || { material: 0, food: 0, energy: 0, wealth: 0 },
     rates: (gameState && gameState.rates) || { food: 0, material: 0, energy: 0, wealth: 0, happiness: 0 },
