@@ -2098,6 +2098,19 @@
   // 0.005/yr -> 0.5 happiness points per year, capped at 0.15 -> 15 points.
   "warWearinessPerYear": 0.005,
   "maxWarWeariness": 0.15,
+  // How specific diplomatic acts shift an alien's opinion of the actor (opinion
+  // scale is -100..100). Positive = warmer, negative = colder. Tunable.
+  "opinion": {
+    // Agreeing a non-aggression or free-travel (open-border) pact: both parties
+    // warm to each other.
+    "pactAgreed": 10,
+    // Breaking a pact early (attacking while it is active, or defaulting on its
+    // payments) — a betrayal, so larger than the goodwill of agreeing it.
+    "pactBroken": -20,
+    // Attacking another player's colony: a big hit to how the defender regards
+    // the attacker (this is on TOP of any pact-break penalty).
+    "attack": -50
+  },
   // Reserved happiness tuning constant (currently read for happiness clamping).
   "happinessCap": 20,
   // Cap on the per-turn happiness contribution (percentage points) from a

@@ -13349,6 +13349,14 @@
         adjustOpinion(i, targetIdx, delta);
       }
     }
+    // Named opinion deltas for diplomatic acts, from CONFIG.opinion with safe
+    // fallbacks (so older configs/saves still behave sensibly).
+    const _OPINION_DEFAULTS = { pactAgreed: 10, pactBroken: -20, attack: -50 };
+    function opinionDelta(name) {
+      const o = (CONFIG && CONFIG.opinion) || {};
+      const v = o[name];
+      return (typeof v === 'number' && Number.isFinite(v)) ? v : (_OPINION_DEFAULTS[name] || 0);
+    }
     // --- Diplomacy: per-pair relations (war status + pacts) ------------------
     // gameState.relations maps an UNORDERED owner-index pair "i|j" (i<j) to a
     // record { war, warStartTurn, nonAggressionUntil, freeTravelUntil }. Owners
@@ -13398,9 +13406,27 @@
     function setWar(a, b) {
       const r = relationOf(a, b);
       if (!r || r.war) return;
+      // Was a pact (non-aggression or free-travel) active between them? Starting
+      // a war by attacking breaks it early — a betrayal that further sours the
+      // victim toward the aggressor (a = attacker, b = defender; see call site).
+      const turn = gameState.turn || 0;
+      const pactWasActive = (r.nonAggressionUntil > turn) || (r.freeTravelUntil > turn);
       r.war = true; r.warStartTurn = gameState.turn || 0;
-      // War voids any non-aggression pact between the two.
+      // War voids any non-aggression / free-travel pact between the two.
       r.nonAggressionUntil = 0;
+      r.freeTravelUntil = 0;
+      if (pactWasActive) {
+        const ia = ownerToIndex(a), ib = ownerToIndex(b), d = opinionDelta('pactBroken');
+        if (ia >= 0 && ib >= 0 && d) adjustOpinion(ib, ia, d); // victim's view of the betrayer
+        // Drop the active pact bookkeeping so it is not also charged/announced.
+        if (typeof ensurePacts === 'function') {
+          const io = Math.min(ia, ib), hi = Math.max(ia, ib);
+          gameState.pacts = (gameState.pacts || []).filter((p) => {
+            const pa = ownerToIndex(p.a), pb = ownerToIndex(p.b);
+            return !(Math.min(pa, pb) === io && Math.max(pa, pb) === hi);
+          });
+        }
+      }
       // Log war's beginning (no popup — the triggering attack has its own report).
       if (pairInvolvesHuman(a, b)) {
         const other = (a === 'human') ? b : a;
@@ -13994,6 +14020,12 @@
           kind, a, b, payer, payee, resource: res,
           amountPerYear: amt, years, remaining: years, startTurn: gameState.turn || 0,
         });
+        // Agreeing a non-aggression / free-travel pact warms both parties toward
+        // each other.
+        {
+          const ia = ownerToIndex(a), ib = ownerToIndex(b), d = opinionDelta('pactAgreed');
+          if (ia >= 0 && ib >= 0 && d) { adjustOpinion(ia, ib, d); adjustOpinion(ib, ia, d); }
+        }
         // Log the pact's beginning (no popup — the proposer/acceptor is notified
         // at the point of agreement).
         if (pairInvolvesHuman(a, b)) {
@@ -14026,7 +14058,15 @@
         const from = federationOwnedOf(p.payer), to = federationOwnedOf(p.payee);
         const amt = Math.max(0, Number(p.amountPerYear) || 0);
         if (amt > 0 && (from[res] || 0) < amt - 1e-9) {
-          // Payer defaulted: the pact lapses (its relation expiry runs out).
+          // Payer defaulted: the pact is broken early. Lapse its relation
+          // expiry now and sour the payee toward the payer (a broken promise).
+          const r = relationOf(p.a, p.b);
+          if (r) {
+            if (p.kind === 'nonAggression') r.nonAggressionUntil = 0;
+            else if (p.kind === 'freeTravel') r.freeTravelUntil = 0;
+          }
+          const ipay = ownerToIndex(p.payer), ipayee = ownerToIndex(p.payee), d = opinionDelta('pactBroken');
+          if (ipay >= 0 && ipayee >= 0 && d) adjustOpinion(ipayee, ipay, d);
           announceEnd(p, 'payment lapsed');
           continue;
         }
@@ -16781,7 +16821,7 @@
       if (attackerOwner && defenderOwner && attackerOwner !== defenderOwner) {
         const cancelled = cancelTradesBetween(attackerOwner, defenderOwner);
         const aIdx = ownerToIndex(attackerOwner), dIdx = ownerToIndex(defenderOwner);
-        if (aIdx >= 0 && dIdx >= 0) adjustOpinion(dIdx, aIdx, -40);
+        if (aIdx >= 0 && dIdx >= 0) adjustOpinion(dIdx, aIdx, opinionDelta('attack'));
         if (cancelled > 0 && (attackerOwner === 'human' || defenderOwner === 'human')) {
           notify(`${cancelled} trade deal${cancelled === 1 ? '' : 's'} cancelled by the attack.`);
         }
