@@ -736,6 +736,124 @@
         return "./resources/zubrenn_theme_long.m4a";
       }
     }
+    // --- AI diplomacy (Stage C) ---------------------------------------------
+    // Willingness 0..1 that AI `owner` wants a pact of `kind` with `toOwner`.
+    // Peace & non-aggression are driven by (low) aggression + diplomacy +
+    // cooperation and by war weariness (the longer at war, the keener on peace);
+    // free-travel by cooperation + diplomacy. Opinion of the counterparty shifts
+    // it +/- ~0.3.
+    function aiPactWillingness(owner, toOwner, kind) {
+      const tr = ownerTraits(owner);
+      if (!tr) return 0;
+      const aggression = tr.aggression || 3, diplomacy = tr.diplomacy || 3;
+      const cooperation = tr.cooperation || 3;
+      let w;
+      if (kind === 'peace') {
+        // Peaceful/diplomatic races sue readily; weariness pushes everyone toward it.
+        const weary = Math.min(1, fedYearsAtWar(owner) * 0.1); // +0.1/yr at war, cap 1
+        w = 0.10 * (6 - aggression) + 0.06 * diplomacy + 0.04 * cooperation + 0.5 * weary;
+      } else if (kind === 'nonAggression') {
+        w = 0.10 * (6 - aggression) + 0.08 * diplomacy + 0.05 * cooperation;
+      } else { // freeTravel
+        w = 0.10 * cooperation + 0.08 * diplomacy;
+      }
+      const fromIdx = ownerToIndex(owner), toIdx = ownerToIndex(toOwner);
+      if (fromIdx >= 0 && toIdx >= 0) w += (getOpinion(fromIdx, toIdx) / 100) * 0.3;
+      return Math.max(0, Math.min(1, w));
+    }
+    // The AI's asking value for a pact (what it wants to be paid). Peace is a
+    // one-time sum; pacts are per-year. A more willing AI asks less; a reluctant
+    // one asks more. Returns { resource:'wealth', amountTotal? , amountPerYear? }.
+    function aiPactAsk(owner, toOwner, kind, years) {
+      const w = aiPactWillingness(owner, toOwner, kind);
+      const base = kind === 'peace' ? 300 : 40;           // peace total / pact per-year
+      // Reluctant (w~0) asks ~2x base; eager (w~1) asks ~0.5x base.
+      const mult = 2 - 1.5 * w;
+      const amt = Math.max(0, Math.round(base * mult));
+      return kind === 'peace'
+        ? { resource: 'wealth', amountTotal: amt }
+        : { resource: 'wealth', amountPerYear: amt, years: Math.max(1, years || 5) };
+    }
+    // The AI's verdict on a pact the HUMAN proposed (deal.payer === 'human').
+    // Accept when the AI is willing AND the human's offered price meets the AI's
+    // ask (discounted by willingness). Returns true to accept.
+    function aiVerdictOnPact(ai, deal) {
+      const w = aiPactWillingness(ai, 'human', deal.kind);
+      if (w <= 0.05) return false;                         // essentially unwilling
+      const ask = aiPactAsk(ai, 'human', deal.kind, deal.years);
+      // A willing AI accepts a lower price; require the offer to reach a
+      // willingness-scaled fraction of the ask (eager -> ~0.3x ask; cold -> ~1x).
+      const need = (deal.kind === 'peace' ? ask.amountTotal : ask.amountPerYear) * (1 - 0.7 * w);
+      const got = deal.kind === 'peace' ? (Number(deal.amountTotal) || 0) : (Number(deal.amountPerYear) || 0);
+      return got + 1e-9 >= need;
+    }
+    // AI diplomacy step: sue for peace, or propose non-aggression / free-travel
+    // pacts to the human (queued as diplomatic offers), and auto-resolve pacts
+    // with other AIs. Driven by personality + opinion + war weariness.
+    function aiDiplomacyStep(aiOwner) {
+      if (!aiOwner || aiOwner === 'human') return;
+      const tr = ownerTraits(aiOwner);
+      if (!tr) return;
+      const turn = gameState.turn || 0;
+      const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      // Only one diplomatic offer to the human per AI turn (avoid popup spam).
+      const humanOfferPending = _offerQueue.some((o) => o && o.diplo) || _offerShowing;
+      // ---- Toward the HUMAN ----
+      const rel = relationOf(aiOwner, 'human');
+      if (rel && !humanOfferPending) {
+        if (rel.war) {
+          // Sue for peace when willing (weariness/diplomacy push this).
+          const w = aiPactWillingness(aiOwner, 'human', 'peace');
+          if (w > 0.5 && Math.random() < 0.5 * w) {
+            const ask = aiPactAsk(aiOwner, 'human', 'peace');
+            // "The side suing generally pays" — the AI (suing) offers to pay the
+            // human a modest sum to end the war (payer = the AI).
+            const pay = Math.round(ask.amountTotal * 0.5);
+            const deal = { kind: 'peace', a: aiOwner, b: 'human', payer: aiOwner, payee: 'human', resource: 'wealth', amountTotal: pay };
+            queueTradeOffer({
+              diplo: true, provider: aiOwner, deal,
+              text: `<p><strong>${esc(ownerDisplayName(aiOwner))}</strong> sues for <strong>peace</strong> and offers you <strong>¤${nf(pay, 0)}</strong> to end the war.</p>`,
+            });
+          }
+        } else {
+          // At peace: occasionally propose a non-aggression or free-travel pact,
+          // paying the human a per-year fee for it.
+          const kinds = [];
+          if (!(rel.nonAggressionUntil > turn)) kinds.push('nonAggression');
+          if (!(rel.freeTravelUntil > turn)) kinds.push('freeTravel');
+          for (const kind of kinds) {
+            const w = aiPactWillingness(aiOwner, 'human', kind);
+            if (w > 0.55 && Math.random() < 0.15 * w) {
+              const years = 5;
+              const ask = aiPactAsk(aiOwner, 'human', kind, years);
+              const pay = Math.round(ask.amountPerYear * 0.5);
+              const deal = { kind, a: aiOwner, b: 'human', payer: aiOwner, payee: 'human', resource: 'wealth', amountPerYear: pay, years };
+              const label = kind === 'freeTravel' ? 'free-travel' : 'non-aggression';
+              queueTradeOffer({
+                diplo: true, provider: aiOwner, deal,
+                text: `<p><strong>${esc(ownerDisplayName(aiOwner))}</strong> proposes a <strong>${label} pact</strong> for <strong>${years} years</strong>, paying you <strong>¤${nf(pay, 0)}/yr</strong>.</p>`,
+              });
+              break;                                       // at most one proposal
+            }
+          }
+        }
+      }
+      // ---- AI <-> AI: auto-resolve peace and pacts occasionally ----
+      for (const other of activeOwners()) {
+        if (other === aiOwner || other === 'human') continue;
+        if (!ownerTraits(other)) continue;
+        const r = relationOf(aiOwner, other);
+        if (!r) continue;
+        if (r.war) {
+          // Both must be willing enough to make peace.
+          if (aiPactWillingness(aiOwner, other, 'peace') > 0.6 &&
+              aiPactWillingness(other, aiOwner, 'peace') > 0.6 &&
+              Math.random() < 0.3) {
+            makePeace(aiOwner, other);
+          }
+        }
+      }
+    }
     function ensureBgm() {
       if (_bgm) return _bgm;
       _bgm = new Audio(bgmSrcPath());
@@ -10419,6 +10537,10 @@
           // auto-settle deals with other AIs, driven by its species traits.
           try { aiMaybeTrade(pi); }
           catch (e) { console.error("[ai] trade step failed:", e); }
+          // Diplomacy: sue for peace, propose non-aggression/free-travel pacts
+          // (to the human as popups; auto-resolve with other AIs), per traits.
+          try { aiDiplomacyStep(pi); }
+          catch (e) { console.error("[ai] diplomacy step failed:", e); }
         }
       } catch (err) {
         console.error("[ai] aiTakeTurn error for player " + pi + ":", err);
@@ -16483,12 +16605,19 @@
     // proposal is accepted immediately (so pacts/effects can be exercised). Stage
     // C replaces this with a personality-driven accept/decline (and counter).
     function proposePactToOwner(deal, owner) {
-      const ok = applyPactDeal(deal);
-      if (ok) {
+      // The AI weighs the offer by its personality (traits), opinion, and — for
+      // peace — its war weariness, accepting only when willing AND the human's
+      // price meets its (willingness-discounted) ask.
+      const accepted = aiVerdictOnPact(owner, deal);
+      if (accepted) {
+        applyPactDeal(deal);
         const verb = deal.kind === 'peace' ? 'agrees to peace' : (deal.kind === 'freeTravel' ? 'accepts the free-travel pact' : 'accepts the non-aggression pact');
         notify(`${ownerDisplayName(owner)} ${verb}.`);
+        // A successful deal warms relations a little.
+        const oIdx = ownerToIndex(owner), hIdx = ownerToIndex('human');
+        if (oIdx >= 0 && hIdx >= 0) adjustOpinion(oIdx, hIdx, 3);
       } else {
-        notify(`The offer to ${ownerDisplayName(owner)} could not be completed.`);
+        notify(`${ownerDisplayName(owner)} rejects your offer.`);
       }
       renderDiplomacy();
       try { refreshAll(); } catch (e) {}
@@ -16952,21 +17081,31 @@
       const portrait = document.getElementById('offer-portrait');
       const text = document.getElementById('offer-text');
       const from = offer.provider;
-      if (title) title.textContent = `Trade Offer from ${ownerDisplayName(from)}`;
       if (portrait) { const src = ownerPortraitSrc(from); portrait.src = src; portrait.style.visibility = src ? 'visible' : 'hidden'; }
-      const resLabel = tradeResourceLabel(offer);
-      if (text) text.innerHTML =
-        `<p><strong>${esc(ownerDisplayName(from))}</strong> offers you access to <strong>${esc(resLabel)}</strong>.</p>` +
-        `<p>In return you would pay <strong>¤${nf(offer.amountPerYear, 0)} per year</strong> for <strong>${offer.years} years</strong> ` +
-        `(total ¤${nf(offer.amountPerYear * offer.years, 0)}).</p>` +
-        `<p class="hint">A transport connection between your colonies and theirs is required each year; the deal pauses if it is lost and cancels if either side attacks.</p>`;
+      if (offer.diplo) {
+        // Diplomatic offer (peace / non-aggression / free-travel) from an AI.
+        if (title) title.textContent = `Diplomatic Offer from ${ownerDisplayName(from)}`;
+        if (text) text.innerHTML = offer.text || '';
+      } else {
+        if (title) title.textContent = `Trade Offer from ${ownerDisplayName(from)}`;
+        const resLabel = tradeResourceLabel(offer);
+        if (text) text.innerHTML =
+          `<p><strong>${esc(ownerDisplayName(from))}</strong> offers you access to <strong>${esc(resLabel)}</strong>.</p>` +
+          `<p>In return you would pay <strong>¤${nf(offer.amountPerYear, 0)} per year</strong> for <strong>${offer.years} years</strong> ` +
+          `(total ¤${nf(offer.amountPerYear * offer.years, 0)}).</p>` +
+          `<p class="hint">A transport connection between your colonies and theirs is required each year; the deal pauses if it is lost and cancels if either side attacks.</p>`;
+      }
       overlay.hidden = false;
       const accept = document.getElementById('offer-accept');
       const decline = document.getElementById('offer-decline');
       const close = (accepted) => {
         overlay.hidden = true; _offerShowing = false;
         accept.onclick = null; decline.onclick = null;
-        if (accepted) { createTrade(offer); try { refreshAll(); } catch (e) {} }
+        if (accepted) {
+          if (offer.diplo && offer.deal) { applyPactDeal(offer.deal); try { renderDiplomacy(); } catch (e) {} }
+          else { createTrade(offer); }
+          try { refreshAll(); } catch (e) {}
+        }
         else {
           // Declining nudges the AI's opinion of you down a little.
           const fIdx = ownerToIndex(from), hIdx = ownerToIndex('human');
