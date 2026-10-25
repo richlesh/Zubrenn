@@ -4984,6 +4984,16 @@
         _clearTurnStartTimers();
         _closeTurnStart();
         if (!_autoTurnEnd) return;                  // player controls the turn
+        // A pending/open trade or diplomatic offer requires the player's
+        // decision: never auto-end the turn out from under it (the offer dialog
+        // sets _skipAutoEndThisTurn, and offers queued during the AI phase are
+        // reflected here). The turn resumes auto-end once the offer is resolved.
+        if (_skipAutoEndThisTurn || _offerShowing || _offerQueue.length > 0) {
+          // Make sure the offer dialog is actually on screen for the player to
+          // act on (it may have been queued behind the now-removed AI pane).
+          if (!_offerShowing && _offerQueue.length > 0) showNextOffer();
+          return;
+        }
         if (!humanHasAnyAction()) {
           // Nothing to do this turn. Show the "ending automatically" notice only
           // ONCE per auto-end session (until the player enters manual mode via ESC
