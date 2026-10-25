@@ -13802,6 +13802,24 @@
     function _tradeRouteExists(a, b) {
       // Air: either colony within the other's air range (uses their own hubs).
       if (coloniesAirLinked(a, b)) return true;
+      // Space: both colonies have a Spaceport (unlimited-range space network).
+      if (typeof colonyHasSpaceport === 'function' && colonyHasSpaceport(a) && colonyHasSpaceport(b)) return true;
+      // River / canal / freshwater-lake: the owner-agnostic river/canal vertex
+      // graph (the SAME one used for resource sharing and the Colony Status
+      // dialog, incl. freshwater-lake rings) connects two colonies when a corner
+      // vertex of each lands in the same vertex-component. A waterway is public
+      // (not inside anyone's buildable network), so no third-party blocking —
+      // mirroring how resource sharing treats river/canal/lake links.
+      {
+        const vComp = _connGlobalGraphs().vComp;
+        const compsA = new Set();
+        for (const vk of cellCornerKeys(a.x, a.y)) if (vComp.has(vk)) compsA.add(vComp.get(vk));
+        if (compsA.size) {
+          for (const vk of cellCornerKeys(b.x, b.y)) {
+            if (vComp.has(vk) && compsA.has(vComp.get(vk))) return true;
+          }
+        }
+      }
       const W = gameState.map.terrain[0].length, H = gameState.map.terrain.length;
       const wrap = !!(gameState.map.meta && gameState.map.meta.wrap);
       const wx = (x) => wrap ? ((x % W) + W) % W : x;
