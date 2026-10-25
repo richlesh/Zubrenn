@@ -2122,6 +2122,21 @@
     "minOpinion": 0,
     "maxOpinion": 100
   },
+  // Trade pricing. Per-year wealth an AI asks for access it sells, by category.
+  // These are the BASE amounts before the per-seller trait markup (aggression/
+  // commerce). `strategic` is further multiplied by the resource's scarcity.
+  // Raised ~10x from the old single-digit bases so trade payments are
+  // meaningful against colony wealth output (buildings yield tens-hundreds/yr)
+  // instead of trivial. `priceScale` multiplies all of them for easy tuning.
+  "trade": {
+    "priceScale": 1,
+    "basePrice": {
+      "strategic": 80,
+      "happiness": 60,
+      "other": 70,
+      "resource": 40
+    }
+  },
   // Reserved happiness tuning constant (currently read for happiness clamping).
   "happinessCap": 20,
   // Cap on the per-turn happiness contribution (percentage points) from a

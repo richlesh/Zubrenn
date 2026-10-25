@@ -14241,11 +14241,19 @@
     // low-commerce, high-aggression sellers charge a premium.
     function aiTradePrice(owner, category, key) {
       const tr = ownerTraits(owner) || { commerce: 3, aggression: 3 };
+      // Base per-year price by category, from CONFIG.trade.basePrice (with
+      // ~10x-raised fallbacks so payments are meaningful against colony wealth
+      // output). strategic scales by the resource's scarcity.
+      const _tp = (CONFIG && CONFIG.trade) || {};
+      const _bp = _tp.basePrice || {};
+      const _baseOf = (k, dflt) => (typeof _bp[k] === 'number' && _bp[k] >= 0) ? _bp[k] : dflt;
       let base;
-      if (category === 'strategic') base = 8 * bonusTypeScarcity(key);  // scarcer => pricier
-      else if (category === 'happiness') base = 6;
-      else if (category === 'other') base = 7;                          // terrain-bonus lease
-      else base = 4;                                                    // ordinary resource
+      if (category === 'strategic') base = _baseOf('strategic', 80) * bonusTypeScarcity(key); // scarcer => pricier
+      else if (category === 'happiness') base = _baseOf('happiness', 60);
+      else if (category === 'other') base = _baseOf('other', 70);       // terrain-bonus lease
+      else base = _baseOf('resource', 40);                              // ordinary resource
+      const scale = (typeof _tp.priceScale === 'number' && _tp.priceScale > 0) ? _tp.priceScale : 1;
+      base *= scale;
       // Trait markup: shrewd traders (high commerce) price keenly but not cheap;
       // aggressive/isolationist sellers demand a premium.
       const markup = 1 + 0.10 * ((tr.aggression || 3) - 3) + 0.06 * (3 - (tr.commerce || 3));
