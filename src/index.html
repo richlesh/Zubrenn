@@ -290,6 +290,11 @@
         <div class="hint">Taxation lowers morale: <span id="fed-happen">−5</span> happiness per year to every colony.</div>
       </div>
       <div class="fed-field">
+        <label for="fed-payrate">Pay rate: <span id="fed-payrate-val">8</span> credits / 1000 citizens / year</label>
+        <input id="fed-payrate" type="range" min="1" max="100" step="1" value="8">
+        <div class="hint">Wages for colonists and military (per population unit). Paying above the baseline (<span id="fed-payrate-base">8</span>) raises morale; below it lowers morale: <span id="fed-payhappen">0</span> happiness/year to every colony.</div>
+      </div>
+      <div class="fed-field">
         <label for="fed-roadcrews">Road crews: <span id="fed-roadcrews-val">3</span> working in parallel</label>
         <input id="fed-roadcrews" type="range" min="0" max="20" step="1" value="3">
         <div class="hint">Federation crews rebuild failed road/monorail segments (0 = off). Each repair costs the segment's normal build cost and takes its normal build time (longer on hard terrain). <span id="fed-roadcrews-cost"></span> <span id="fed-roadcrews-pending"></span></div>
@@ -3614,6 +3619,13 @@
         const v = Number(cpy[k]);
         if (Number.isFinite(v) && v) out[k] += v * frac;
       }
+      // Military PAYROLL (wealth): full-strength pay = (unitSize / popUnitSize) x
+      // the owner's pay rate, ADDED to the type's own wealth upkeep, then the
+      // whole wealth line is scaled by current strength (frac), like the other
+      // resources.
+      const pus = popUnitSize();
+      const pay = (pus > 0 ? (size / pus) : 0) * ownerPayRate(u.owner);
+      if (pay) out.wealth += pay * frac;
       return out;
     }
     // Citizens per population UNIT (units.population.unitSize, default 1000).
@@ -3626,6 +3638,36 @@
       const p = (CONFIG && CONFIG.units && CONFIG.units.population) || null;
       const n = p && Number(p.unitSize);
       return Number.isFinite(n) && n > 0 ? n : 1000;
+    }
+    // The REFERENCE/default pay rate (wealth per population unit per year): the
+    // config units.population.costPerYear.wealth (currently 8, may change). Used
+    // as the slider default and the happiness-neutral point.
+    function defaultPayRate() {
+      const p = (CONFIG && CONFIG.units && CONFIG.units.population) || null;
+      const v = p && p.costPerYear && Number(p.costPerYear.wealth);
+      return Number.isFinite(v) ? v : 8;
+    }
+    // Per population-unit happiness bonus from the population config (the factor
+    // the pay-rate happiness delta is scaled by).
+    function populationHappinessBonus() {
+      const p = (CONFIG && CONFIG.units && CONFIG.units.population) || null;
+      const v = p && p.bonus && Number(p.bonus.happiness);
+      return Number.isFinite(v) ? v : 0;
+    }
+    // An owner's PAY RATE (wealth per population unit per year), set per owner
+    // (human via the Federation slider; AIs set their own). Stored on the
+    // owner's federation record; defaults to defaultPayRate(). Clamped 1..100.
+    function ownerPayRate(owner) {
+      const fed = (typeof federationOf === 'function') ? federationOf(owner) : null;
+      const v = fed && Number(fed.payRate);
+      const r = Number.isFinite(v) ? v : defaultPayRate();
+      return Math.max(1, Math.min(100, r));
+    }
+    // The per-colony happiness delta from the owner's pay rate relative to the
+    // default: (payRate - default) * population.bonus.happiness / 100. Positive
+    // when paying ABOVE the default (morale up), negative below.
+    function payRateHappinessDelta(owner) {
+      return (ownerPayRate(owner) - defaultPayRate()) * populationHappinessBonus() / 100;
     }
     // Per-turn recruit rate for a specific unit `unitType` at building `type`.
     // config `recruitRate` is a map of unit-type -> colonists/turn, e.g.
@@ -6172,14 +6214,18 @@
       needs.goods += popUnits * popCostOf('goods', 0);
       needs.energy += popUnits * popCostOf('energy', 0);
       needs.water += popUnits * popCostOf('water', 0.1);
-      needs.wealth += popUnits * popCostOf('wealth', 0);
+      // Wealth upkeep is the colonist PAYROLL: population units x the owner's
+      // pay rate (set in the Federation dialog), REPLACING the flat config
+      // population wealth cost.
+      const _payRate = ownerPayRate(col.owner);
+      needs.wealth += popUnits * _payRate;
       // Population consumption shows as a negative contribution to each rate.
       addBreak('food', 'Population', -(popUnits * popCostOf('food', 1)));
       addBreak('material', 'Population', -(popUnits * popCostOf('material', 0)));
       addBreak('goods', 'Population', -(popUnits * popCostOf('goods', 0)));
       addBreak('energy', 'Population', -(popUnits * popCostOf('energy', 0)));
       addBreak('water', 'Population', -(popUnits * popCostOf('water', 0.1)));
-      addBreak('wealth', 'Population', -(popUnits * popCostOf('wealth', 0)));
+      addBreak('wealth', 'Population (pay)', -(popUnits * _payRate));
       // Military upkeep: every built unit whose HOME base is this colony costs
       // its type's costPerYear each year, scaled by strength/unitSize (see
       // unitUpkeep). The home colony pays regardless of where the unit is
@@ -7518,6 +7564,14 @@
       // rate hits every colony identically, NOT scaled by population.
       const taxPenalty = (federationTaxRateOf(col.owner) || 0);
       if (taxPenalty > 0) happinessNeg -= taxPenalty;
+      // Pay rate morale: paying colonists ABOVE the default rate lifts morale,
+      // below it lowers morale. FLAT per colony (not population-scaled):
+      //   (payRate - defaultPayRate) * population.bonus.happiness / 100.
+      {
+        const payHapp = payRateHappinessDelta(col.owner);
+        if (payHapp > 0) happinessPos += payHapp;
+        else if (payHapp < 0) happinessNeg += payHapp;
+      }
       // ---- War weariness: grows the longer the Federation stays at war. -------
       const warPerYear = (cfg.warWearinessPerYear != null) ? cfg.warWearinessPerYear : 0.005;
       const warMax = (cfg.maxWarWeariness != null) ? cfg.maxWarWeariness : 0.15;
@@ -10126,6 +10180,25 @@
       if (typeof player.federation.treasury !== 'number' || !isFinite(player.federation.treasury)) player.federation.treasury = 0;
       if (typeof player.federation.taxRate !== 'number' || !isFinite(player.federation.taxRate)) player.federation.taxRate = federationDefaultTaxRate();
       player.federation.taxRate = Math.max(0, Math.min(20, player.federation.taxRate));
+      // Pay rate: wealth per population unit per year paid to colonists AND the
+      // base of military payroll. Player sets it via the Federation slider; AIs
+      // set their own. Defaults to the config population wealth cost. Clamp 1..100.
+      if (typeof player.federation.payRate !== 'number' || !isFinite(player.federation.payRate)) {
+        let pr = defaultPayRate();
+        // AIs pick their own rate from personality: cooperative/diplomatic
+        // species pay a little above baseline (morale), frugal/aggressive ones
+        // at or slightly below. Human defaults to the baseline (sets it via UI).
+        if (player.kind === 'ai' && player.traits) {
+          const coop = Number(player.traits.cooperation) || 3;
+          const dipl = Number(player.traits.diplomacy) || 3;
+          const aggr = Number(player.traits.aggression) || 3;
+          // -2..+? around baseline: +1.5 per cooperation step above 3 and per
+          // diplomacy step, -1 per aggression step above 3.
+          pr = defaultPayRate() + 1.5 * (coop - 3) + 1.0 * (dipl - 3) - 1.0 * (aggr - 3);
+        }
+        player.federation.payRate = pr;
+      }
+      player.federation.payRate = Math.max(1, Math.min(100, player.federation.payRate));
       // Road-crew capacity: how many failed road/monorail segments the
       // Federation rebuilds per year (player-set via the Federation dialog
       // slider). Defaults to the config capacityPerTurn; clamped 0..20.
@@ -16453,6 +16526,7 @@
     const federationOverlay = document.getElementById("federation-overlay");
     const fedTaxRate = document.getElementById("fed-taxrate");
     const fedRoadCrews = document.getElementById("fed-roadcrews");
+    const fedPayRate = document.getElementById("fed-payrate");
     function _humanPlayer() {
       return (gameState.players || []).find((p) => p && p.kind === 'human') || null;
     }
@@ -16529,6 +16603,18 @@
       }
       const happEl = document.getElementById("fed-happen");
       if (happEl) happEl.textContent = "\u2212" + _fmtCredits(rate); // −rate happiness/colony
+      // Pay-rate slider: value, baseline, and the per-colony happiness delta.
+      if (fedPayRate) {
+        const pr = Math.max(1, Math.min(100, parseInt(fedPayRate.value, 10) || defaultPayRate()));
+        const prValEl = document.getElementById("fed-payrate-val"); if (prValEl) prValEl.textContent = String(pr);
+        const prBaseEl = document.getElementById("fed-payrate-base"); if (prBaseEl) prBaseEl.textContent = _fmtCredits(defaultPayRate());
+        const payHappEl = document.getElementById("fed-payhappen");
+        if (payHappEl) {
+          const d = (pr - defaultPayRate()) * populationHappinessBonus() / 100;
+          const r2 = Math.round(d * 1000) / 1000;
+          payHappEl.textContent = (r2 > 0 ? "+" : (r2 < 0 ? "\u2212" : "")) + _fmtCredits(Math.abs(r2));
+        }
+      }
       const taxes = federationTaxFor('human', rate);
       const counts = federationTransportCounts('human');
       const m = federationMaintenance('human');
@@ -16604,6 +16690,7 @@
       const snapped = Math.max(0, Math.min(20, Math.round(fed.taxRate * 2) / 2));
       fedTaxRate.value = String(snapped);
       if (fedRoadCrews) fedRoadCrews.value = String(Math.max(0, Math.min(20, Math.round(fed.roadCrews != null ? fed.roadCrews : 0))));
+      if (fedPayRate) fedPayRate.value = String(Math.max(1, Math.min(100, Math.round(fed.payRate != null ? fed.payRate : defaultPayRate()))));
       renderFederation();
       federationOverlay.hidden = false;
     }
@@ -16612,6 +16699,12 @@
     fedTaxRate.addEventListener("input", () => {
       const player = _humanPlayer();
       if (player) ensureFederation(player).taxRate = parseFloat(fedTaxRate.value) || 0;
+      renderFederation();
+    });
+    // Moving the pay-rate slider commits the wage immediately.
+    if (fedPayRate) fedPayRate.addEventListener("input", () => {
+      const player = _humanPlayer();
+      if (player) ensureFederation(player).payRate = Math.max(1, Math.min(100, parseInt(fedPayRate.value, 10) || defaultPayRate()));
       renderFederation();
     });
     // Moving the road-crews slider commits the per-year repair capacity.
