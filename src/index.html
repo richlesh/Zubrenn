@@ -13102,6 +13102,15 @@
     // A pact is active when its expiry turn is in the future (>= current turn).
     function hasNonAggression(a, b) { const r = relationOf(a, b); return !!(r && r.nonAggressionUntil > (gameState.turn || 0)); }
     function hasFreeTravel(a, b) { const r = relationOf(a, b); return !!(r && r.freeTravelUntil > (gameState.turn || 0)); }
+    // Record a diplomacy/trade/war lifecycle line in the Game Log WITHOUT a
+    // popup (used for "begin" events). "End" events and battle results use
+    // notify() instead, which both pops a dialog and logs. Only events involving
+    // the human are recorded (the Game Log is the player's record).
+    function diploLog(msg) {
+      try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(msg); } catch (e) {}
+    }
+    // Whether an owner pair involves the human (so it is worth logging/popping).
+    function pairInvolvesHuman(a, b) { return a === 'human' || b === 'human'; }
     // Start a war between two owners (idempotent). Records the start turn.
     function setWar(a, b) {
       const r = relationOf(a, b);
@@ -13109,12 +13118,23 @@
       r.war = true; r.warStartTurn = gameState.turn || 0;
       // War voids any non-aggression pact between the two.
       r.nonAggressionUntil = 0;
+      // Log war's beginning (no popup — the triggering attack has its own report).
+      if (pairInvolvesHuman(a, b)) {
+        const other = (a === 'human') ? b : a;
+        diploLog(`War has begun with ${ownerDisplayName(other)}.`);
+      }
     }
     // End a war between two owners (peace).
     function makePeace(a, b) {
       const r = relationOf(a, b);
       if (!r) return;
+      const wasWar = !!r.war;
       r.war = false; r.warStartTurn = 0;
+      // Peace ends a war (a diplomatic agreement) — log AND pop a dialog.
+      if (wasWar && pairInvolvesHuman(a, b)) {
+        const other = (a === 'human') ? b : a;
+        notify(`Peace agreed with ${ownerDisplayName(other)} — the war is over.`);
+      }
     }
     // Grant a pact ('nonAggression' | 'freeTravel') until the given turn.
     function grantPact(a, b, kind, untilTurn) {
@@ -13533,6 +13553,12 @@
           t.remaining -= 1;
         }
         if (t.remaining > 0) kept.push(t);
+        else if (t.provider === 'human' || t.consumer === 'human') {
+          // Trade reached the end of its term — pop + log.
+          const other = (t.consumer === 'human') ? t.provider : t.consumer;
+          let label; try { label = tradeResourceLabel(t); } catch (e) { label = t.key || 'resources'; }
+          notify(`The trade deal with ${ownerDisplayName(other)} for ${label} has ended.`);
+        }
       }
       gameState.trades = kept;
     }
@@ -13558,6 +13584,11 @@
         if (match) n++;
         return !match;
       });
+      // A cancelled trade ends the deal — pop + log when the human is a party.
+      if (n > 0 && pairInvolvesHuman(a, b)) {
+        const other = (a === 'human') ? b : a;
+        notify(`${n} trade deal${n === 1 ? '' : 's'} with ${ownerDisplayName(other)} ended due to the outbreak of war.`);
+      }
       return n;
     }
     // ---- Diplomatic pacts ---------------------------------------------------
@@ -13608,6 +13639,13 @@
           kind, a, b, payer, payee, resource: res,
           amountPerYear: amt, years, remaining: years, startTurn: gameState.turn || 0,
         });
+        // Log the pact's beginning (no popup — the proposer/acceptor is notified
+        // at the point of agreement).
+        if (pairInvolvesHuman(a, b)) {
+          const other = (a === 'human') ? b : a;
+          const label = (kind === 'freeTravel') ? 'free-travel' : 'non-aggression';
+          diploLog(`A ${label} pact with ${ownerDisplayName(other)} has begun (${years} year${years === 1 ? '' : 's'}).`);
+        }
         return true;
       }
       return false;
@@ -13618,15 +13656,23 @@
     function settlePactsForYear() {
       const pacts = ensurePacts();
       if (!pacts.length) return;
+      // Pop + log when a human-involved pact ends.
+      const announceEnd = (p, reason) => {
+        if (!pairInvolvesHuman(p.a, p.b)) return;
+        const other = (p.a === 'human') ? p.b : p.a;
+        const label = (p.kind === 'freeTravel') ? 'free-travel' : 'non-aggression';
+        notify(`The ${label} pact with ${ownerDisplayName(other)} has ended${reason ? ` (${reason})` : ''}.`);
+      };
       const kept = [];
       for (const p of pacts) {
         // The first year was paid at creation; charge each SUBSEQUENT year.
-        if (p.remaining <= 1) { continue; }            // term complete (expiry already set)
+        if (p.remaining <= 1) { announceEnd(p, 'term complete'); continue; } // term over
         const res = PACT_RESOURCES.includes(p.resource) ? p.resource : 'wealth';
         const from = federationOwnedOf(p.payer), to = federationOwnedOf(p.payee);
         const amt = Math.max(0, Number(p.amountPerYear) || 0);
         if (amt > 0 && (from[res] || 0) < amt - 1e-9) {
           // Payer defaulted: the pact lapses (its relation expiry runs out).
+          announceEnd(p, 'payment lapsed');
           continue;
         }
         if (amt > 0) {
@@ -13737,6 +13783,12 @@
       if (offer.category === 'happiness') deal.amountHappiness = Number(offer.amountHappiness) || 0;
       if (offer.category === 'resource') deal.amountQuantity = Math.max(0, Number(offer.amountQuantity) || 0);
       trades.push(deal);
+      // Log the trade's beginning (no popup — the accepting party saw the offer).
+      if (deal.provider === 'human' || deal.consumer === 'human') {
+        const other = (deal.consumer === 'human') ? deal.provider : deal.consumer;
+        let label; try { label = tradeResourceLabel(deal); } catch (e) { label = deal.key || 'resources'; }
+        diploLog(`A trade deal with ${ownerDisplayName(other)} for ${label} has begun (${deal.years} year${deal.years === 1 ? '' : 's'}).`);
+      }
       return deal;
     }
 
@@ -16387,6 +16439,14 @@
       lines.push(`Attacker losses: ${atkLost} unit${atkLost === 1 ? '' : 's'}.`);
       if (atkExpended > 0) lines.push(`Single-use units expended: ${atkExpended}.`);
       lines.push(`Defender losses: ${defUnitLost} unit${defUnitLost === 1 ? '' : 's'}, ${defBldgLost} defense building${defBldgLost === 1 ? '' : 's'}.`);
+      // Game Log (one-line) record of the battle result for any human-involved
+      // battle — win or loss — so the outcome is always in the communication log.
+      if (humanInvolved) {
+        const atkNm = ownerDisplayName(attackerOwner);
+        const tgtNm = targetBio.name || 'a colony';
+        const outcome = attackerWon ? 'succeeded' : 'was repelled';
+        try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(`Battle: ${atkNm}'s ${sf.name} attacked ${tgtNm} — the attack ${outcome} (attacker lost ${atkLost}, defender lost ${defUnitLost} unit${defUnitLost === 1 ? '' : 's'} + ${defBldgLost} defense${defBldgLost === 1 ? '' : 's'}).`); } catch (e) {}
+      }
       if (attackerWon) {
         finishWonBattle(targetBio, survivors, sf, lines, attackerOwner);
       } else {
@@ -16711,6 +16771,9 @@
         btn.className = 'trade-cancel'; btn.textContent = 'Cancel';
         btn.addEventListener('click', () => {
           gameState.trades = ensureTrades().filter((x) => x.id !== t.id);
+          // Ending a trade logs AND pops a user dialog (notify does both).
+          const other = (t.provider === 'human') ? t.consumer : t.provider;
+          notify(`The trade deal with ${ownerDisplayName(other)} for ${tradeResourceLabel(t)} was cancelled.`);
           renderTrades(); try { refreshAll(); } catch (e) {}
         });
         actTd.appendChild(btn); tr.appendChild(actTd);
