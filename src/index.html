@@ -408,6 +408,7 @@
         <div id="propose-portrait-name"></div>
         <img id="propose-portrait" alt="">
         <img id="propose-resimg" class="resimg" alt="">
+        <div id="propose-resimg-cap" class="resimg-cap"></div>
       </div>
     </div>
   </div>
@@ -432,6 +433,7 @@
         <div id="sell-portrait-name"></div>
         <img id="sell-portrait" alt="">
         <img id="sell-resimg" class="resimg" alt="">
+        <div id="sell-resimg-cap" class="resimg-cap"></div>
       </div>
     </div>
   </div>
@@ -6094,6 +6096,29 @@
         addBreak('wealth', 'Outpost', (otb.bonus.wealth || 0) * olf);
         addBreak('water', 'Outpost', (otb.bonus.water || 0) * olf);
       }
+      // Bought 'Other Resources' (terrain-bonus leases this owner CONSUMES): the
+      // FULL bonus is applied to EVERY one of the consumer's colonies equally
+      // (flat per-colony, resources + growth here; happiness is added in
+      // colonyStats). This is the buyer-side counterpart to the seller's
+      // proportional reduction.
+      {
+        const cob = (typeof consumerOtherBonus === 'function') ? consumerOtherBonus(col.owner) : null;
+        if (cob) {
+          production.food += cob.food || 0;
+          production.material += cob.material || 0;
+          production.goods += cob.goods || 0;
+          production.energy += cob.energy || 0;
+          production.wealth += cob.wealth || 0;
+          production.water += cob.water || 0;
+          growthBonus += cob.growth || 0;
+          addBreak('food', 'Trade (bought)', cob.food || 0);
+          addBreak('material', 'Trade (bought)', cob.material || 0);
+          addBreak('goods', 'Trade (bought)', cob.goods || 0);
+          addBreak('energy', 'Trade (bought)', cob.energy || 0);
+          addBreak('wealth', 'Trade (bought)', cob.wealth || 0);
+          addBreak('water', 'Trade (bought)', cob.water || 0);
+        }
+      }
       // Throttle pass: deferred throttleable buildings (Factories) run at a
       // CAPACITY FRACTION f in [0,1] rather than all-or-nothing, so a resource
       // shortfall throttles the Factory instead of idling a worked cell (a Mine).
@@ -7327,6 +7352,16 @@
       // Federation population (a larger member feels proportionally more).
       const tradeHappiness = (tradeHappinessBonusFor(col.owner) || 0) * popShare;
       if (tradeHappiness > 0) happinessPos += tradeHappiness;
+      // Bought 'Other Resources' happiness: applied FLAT to every consumer colony
+      // (the full happiness value of each bought terrain-bonus deposit), NOT
+      // population-scaled — matches the flat per-colony resource grant added in
+      // colonyBudget.
+      {
+        const cob = (typeof consumerOtherBonus === 'function') ? consumerOtherBonus(col.owner) : null;
+        const boughtHapp = cob ? (cob.happiness || 0) : 0;
+        if (boughtHapp > 0) happinessPos += boughtHapp;
+        else if (boughtHapp < 0) happinessNeg += boughtHapp;
+      }
       // Federation tax penalty (>= 0): a FLAT per-colony morale cost — the same
       // rate hits every colony identically, NOT scaled by population.
       const taxPenalty = (federationTaxRateOf(col.owner) || 0);
@@ -13370,6 +13405,26 @@
       }
       return out;
     }
+    // The TOTAL terrain-bonus an owner gains from BOUGHT 'other' deals (where it
+    // is the consumer), as a summed bonus map over all resource/happiness/growth
+    // keys. Each bought deposit contributes its FULL bonus values, and this full
+    // amount is applied to EVERY one of the consumer's colonies equally (a flat
+    // per-colony grant — intentionally NOT proportional, unlike the seller side).
+    // Suspended (disconnected) or expired deals contribute nothing.
+    function consumerOtherBonus(owner) {
+      const out = { energy: 0, food: 0, material: 0, goods: 0, water: 0, wealth: 0, happiness: 0, growth: 0 };
+      for (const t of ensureTrades()) {
+        if (t.category !== 'other' || t.consumer !== owner) continue;
+        if (!(t.remaining > 0) || t._active === false) continue;
+        const bo = providerDepositBonus(t.provider, t.key);
+        if (!bo) continue;
+        for (const k of Object.keys(out)) {
+          const v = bo[k];
+          if (typeof v === 'number' && Number.isFinite(v)) out[k] += v;
+        }
+      }
+      return out;
+    }
 
     // Cross-owner transport connectivity: is at least one PROVIDER colony
     // connected (any mode) to at least one CONSUMER colony? Reuses the same
@@ -13531,21 +13586,12 @@
             }
             t._lastDelivered = Math.round(delivered * 100) / 100;
           }
-          // 'Other Resources' (terrain-bonus) deals: the consumer receives ONE
-          // leased deposit's worth of the bonus's RESOURCE yield each year,
-          // transferred from the provider's pool (the provider's own deposits are
-          // already reduced in colonyBudget via leasedYieldFraction). Happiness/
-          // growth components are morale/rate effects, not pooled resources, so
-          // only the storable resource components transfer here.
-          if (t.category === 'other') {
-            const bo = providerDepositBonus(t.provider, t.key);
-            if (bo) {
-              for (const rk of ['energy', 'food', 'material', 'goods', 'water', 'wealth']) {
-                const v = (typeof bo[rk] === 'number' && Number.isFinite(bo[rk])) ? bo[rk] : 0;
-                if (v) { payee[rk] = (payee[rk] || 0) - v; payer[rk] = (payer[rk] || 0) + v; }
-              }
-            }
-          }
+          // 'Other Resources' (terrain-bonus) deals confer their benefit through
+          // the per-colony economy: the provider's deposits are reduced
+          // proportionally (leasedYieldFraction in colonyBudget) and the consumer
+          // gains the full bonus in EVERY colony (consumerOtherBonus in
+          // colonyBudget/colonyStats). Nothing is transferred through the pool
+          // here — only the wealth payment below changes hands.
           const amt = Math.round(fullAmt * payFraction * 100) / 100;
           payer.wealth = (payer.wealth || 0) - amt;
           payee.wealth = (payee.wealth || 0) + amt;
@@ -16728,6 +16774,46 @@
       };
       imgEl.src = candidates[0];
     }
+    // Image path for an 'Other Resource' (terrain-bonus) by NAME, from the
+    // config terrainBonus icon (served relative to index.html under resources/).
+    function terrainBonusImageSrc(name) {
+      const def = (CONFIG && CONFIG.terrainBonus && CONFIG.terrainBonus[name]) || null;
+      if (!def || !def.icon) return '';
+      return `resources/${def.icon}`;
+    }
+    // Set an <img> + caption <div> for an Other Resource: the terrain-bonus
+    // image, and a caption listing the deposit's bonus values (abbrev:value,
+    // including happiness/growth). Uses a real deposit the `party` controls so
+    // ranged values show their actual rolled amounts; falls back to the config
+    // base values when the party controls none.
+    function setOtherResImgCaption(imgEl, capEl, party, name) {
+      // Image.
+      if (imgEl) {
+        const src = terrainBonusImageSrc(name);
+        imgEl.style.visibility = 'hidden';
+        if (src) { imgEl.onload = () => { imgEl.style.visibility = 'visible'; }; imgEl.onerror = () => { imgEl.style.visibility = 'hidden'; imgEl.removeAttribute('src'); }; imgEl.src = src; }
+        else imgEl.removeAttribute('src');
+      }
+      if (!capEl) return;
+      // Bonus values: prefer a real controlled deposit (rolled values); else config.
+      let bo = (typeof providerDepositBonus === 'function') ? providerDepositBonus(party, name) : null;
+      if (!bo) { const def = (CONFIG.terrainBonus && CONFIG.terrainBonus[name]) || null; bo = def && def.bonus; }
+      if (!bo) { capEl.textContent = ''; return; }
+      const RT = (CONFIG && CONFIG.resourceTypes) || {};
+      const ab = (k, fb) => (RT[k] && RT[k].abbrev != null ? RT[k].abbrev : fb);
+      const sgn = (n) => (n > 0 ? '+' : '') + nf(n, (Math.abs(n) < 1 && n !== 0) ? 2 : 0);
+      const num = (v) => (typeof v === 'number' && Number.isFinite(v)) ? v : 0;
+      const parts = [];
+      if (num(bo.energy)) parts.push(`${ab('energy','E')}:${sgn(bo.energy)}`);
+      if (num(bo.food)) parts.push(`${ab('food','F')}:${sgn(bo.food)}`);
+      if (num(bo.goods)) parts.push(`${ab('goods','G')}:${sgn(bo.goods)}`);
+      if (num(bo.material)) parts.push(`${ab('material','M')}:${sgn(bo.material)}`);
+      if (num(bo.water)) parts.push(`${ab('water','W')}:${sgn(bo.water)}`);
+      if (num(bo.wealth)) parts.push(`${ab('wealth','¤')}:${sgn(bo.wealth)}`);
+      if (num(bo.growth)) parts.push(`${ab('population','P')}:${(bo.growth*100>0?'+':'')}${nf(bo.growth*100,2)}%`);
+      if (num(bo.happiness)) parts.push(`${ab('happiness','H')}:${sgn(bo.happiness)}`);
+      capEl.innerHTML = `<div style="font-weight:600;margin-bottom:2px;">${esc(name)}</div>${esc(parts.join(', ')) || '(no bonuses)'}`;
+    }
     // Human-readable name of what a deal conveys.
     function tradeResourceLabel(t) {
       const cap = (s) => s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : s;
@@ -16854,15 +16940,21 @@
         const otherGroup = document.createElement('optgroup'); otherGroup.label = 'Other resources';
         const counts = ownerBonusNameCounts(seller);
         const names = [...counts.keys()].sort((a, b) => a.localeCompare(b));
+        let anyOther = false;
         for (const nm of names) {
+          // Available to trade = the seller's deposits of this name MINUS the
+          // number already leased out. Hide the entry when none remain.
+          const avail = (counts.get(nm) || 0) - ownerLeasedCount(seller, nm);
+          if (avail <= 0) continue;
           const opt = document.createElement('option');
           const idx = items.length;
           opt.value = String(idx);
-          opt.textContent = `${nm} (x${counts.get(nm)})`;
+          opt.textContent = `${nm} (x${avail})`;
           otherGroup.appendChild(opt);
           items.push({ category: 'other', key: nm, selectable: true });
+          anyOther = true;
         }
-        if (names.length) resSel.appendChild(otherGroup);
+        if (anyOther) resSel.appendChild(otherGroup);
       }
       resSel._items = items;
       // Select the first SELECTABLE option.
@@ -16884,7 +16976,15 @@
       const items = (resSel && resSel._items) || [];
       const it = items[Number(resSel && resSel.value)] || null;
       const seller = partnerSel ? (partnerSel.value === 'human' ? 'human' : Number(partnerSel.value)) : null;
-      setResImg(document.getElementById('propose-resimg'), it && it.key);
+      const _cap = document.getElementById('propose-resimg-cap');
+      if (it && it.category === 'other') {
+        // Other Resource: show the terrain-bonus image + a caption of its values
+        // (from a deposit the SELLER controls).
+        setOtherResImgCaption(document.getElementById('propose-resimg'), _cap, seller, it.key);
+      } else {
+        if (_cap) _cap.innerHTML = '';
+        setResImg(document.getElementById('propose-resimg'), it && it.key);
+      }
       if (!it || seller == null) { if (qtyRow) qtyRow.hidden = true; return; }
       if (it.category === 'resource') {
         // Basic resource: show quantity prefilled with the seller's spare surplus.
@@ -17023,17 +17123,23 @@
         const mineCounts = ownerBonusNameCounts('human');
         const buyerCounts = ownerBonusNameCounts(buyer);
         const names = [...mineCounts.keys()].sort((a, b) => a.localeCompare(b));
+        let anyOther = false;
         for (const nm of names) {
+          // Available to sell = my deposits of this name MINUS the number I've
+          // already leased out. Hide the entry when none remain.
+          const avail = (mineCounts.get(nm) || 0) - ownerLeasedCount('human', nm);
+          if (avail <= 0) continue;
           const buyerNeeds = !buyerCounts.has(nm);
           const opt = document.createElement('option');
           const idx = items.length;
           opt.value = String(idx);
-          opt.textContent = `${nm} (x${mineCounts.get(nm)})` + (buyerNeeds ? ' — they need this' : '');
+          opt.textContent = `${nm} (x${avail})` + (buyerNeeds ? ' — they need this' : '');
           if (buyerNeeds) opt.className = 'opt-need';
           otherGroup.appendChild(opt);
           items.push({ category: 'other', key: nm, selectable: true, need: buyerNeeds });
+          anyOther = true;
         }
-        if (names.length) resSel.appendChild(otherGroup);
+        if (anyOther) resSel.appendChild(otherGroup);
       }
       resSel._items = items;
       // Prefer the first HIGHLIGHTED (needed) strategic option, else first selectable.
@@ -17051,7 +17157,13 @@
       const qty = document.getElementById('sell-qty');
       const items = (resSel && resSel._items) || [];
       const it = items[Number(resSel && resSel.value)] || null;
-      setResImg(document.getElementById('sell-resimg'), it && it.key);
+      const _scap = document.getElementById('sell-resimg-cap');
+      if (it && it.category === 'other') {
+        setOtherResImgCaption(document.getElementById('sell-resimg'), _scap, 'human', it.key);
+      } else {
+        if (_scap) _scap.innerHTML = '';
+        setResImg(document.getElementById('sell-resimg'), it && it.key);
+      }
       if (!it) { if (qtyRow) qtyRow.hidden = true; return; }
       // Price suggestion uses the human's own asking valuation for the resource.
       if (it.category === 'resource') {
