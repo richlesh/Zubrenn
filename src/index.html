@@ -17184,6 +17184,85 @@
         }
       }
     }
+    // ---- Attack flash: crossed red swords over a colony under attack --------
+    // When a battle resolves at a colony we briefly flash a red "crossed swords"
+    // marker over its biodome so the player can see which colonies are being
+    // attacked. Driven by a short timer that re-renders the map overlay until the
+    // flashes expire, then clears the overlay.
+    let _attackFlashes = [];     // [{ x, y, until }]
+    let _attackFlashTimer = null;
+    const ATTACK_FLASH_MS = 1600;
+    // Draw crossed swords centered at pixel (cx, cy), scaled to the hex size `s`,
+    // with the given alpha. Two blades crossed in an X with small crossguards and
+    // pommels, stroked in red.
+    function _drawCrossedSwords(ctx, cx, cy, s, alpha) {
+      const L = s * 0.42;        // blade half-length
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+      ctx.translate(cx, cy);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      // A dark outline underneath for contrast, then the bright red on top.
+      const blade = (ang) => {
+        ctx.save();
+        ctx.rotate(ang);
+        // blade
+        ctx.beginPath(); ctx.moveTo(0, -L); ctx.lineTo(0, L * 0.65);
+        ctx.stroke();
+        // crossguard (near the hilt, lower end)
+        ctx.beginPath(); ctx.moveTo(-L * 0.22, L * 0.4); ctx.lineTo(L * 0.22, L * 0.4);
+        ctx.stroke();
+        ctx.restore();
+      };
+      // outline pass
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = Math.max(3, s * 0.12);
+      blade(Math.PI / 4); blade(-Math.PI / 4);
+      // red pass
+      ctx.strokeStyle = '#e4121b'; ctx.lineWidth = Math.max(2, s * 0.08);
+      blade(Math.PI / 4); blade(-Math.PI / 4);
+      ctx.restore();
+    }
+    function _attackFlashOverlay(ctx, spacing, hexCenter) {
+      if (!_attackFlashes.length) return;
+      const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      const s = Math.min(spacing.x, spacing.y);
+      const W = gameState.map && gameState.map.terrain && gameState.map.terrain[0] ? gameState.map.terrain[0].length : 0;
+      const wrap = !!(gameState.map && gameState.map.meta && gameState.map.meta.wrap);
+      for (const f of _attackFlashes) {
+        const remain = f.until - now;
+        if (remain <= 0) continue;
+        // Pulse: 3 flashes over the lifetime via a sine on the elapsed fraction.
+        const frac = 1 - (remain / ATTACK_FLASH_MS);
+        const alpha = 0.35 + 0.65 * Math.abs(Math.sin(frac * Math.PI * 3));
+        // Draw at the cell (and its wrap copies so it shows across the seam).
+        const xs = wrap && W ? [f.x, f.x - W, f.x + W] : [f.x];
+        for (const xx of xs) {
+          const c = hexCenter(xx, f.y, spacing);
+          _drawCrossedSwords(ctx, c.x, c.y, s, alpha);
+        }
+      }
+    }
+    // Register an attack flash over the colony cell (x, y) and start/keep the
+    // animation loop running until all flashes expire.
+    function flashAttackAt(x, y) {
+      if (!hexMap || typeof hexMap.setOverlay !== 'function') return;
+      const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      _attackFlashes = _attackFlashes.filter((f) => f.until > now);
+      _attackFlashes.push({ x, y, until: now + ATTACK_FLASH_MS });
+      hexMap.setOverlay(_attackFlashOverlay);
+      if (_attackFlashTimer == null) {
+        _attackFlashTimer = setInterval(() => {
+          const t = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+          _attackFlashes = _attackFlashes.filter((f) => f.until > t);
+          if (!_attackFlashes.length) {
+            clearInterval(_attackFlashTimer); _attackFlashTimer = null;
+            if (hexMap && typeof hexMap.setOverlay === 'function') hexMap.setOverlay(null);
+          } else if (hexMap && typeof hexMap.setOverlay === 'function') {
+            hexMap.setOverlay(_attackFlashOverlay); // force a redraw for the pulse
+          }
+        }, 60);
+      }
+    }
     // Resolve a battle: attacking `members` vs the target colony's defenders
     // (stationed enemy units + defense buildings). Paired strongest-vs-strongest
     // duels with per-round randomness; combatants reduced to 0 are removed. On a
@@ -17201,6 +17280,9 @@
         return;
       }
       const defenderOwner = targetBio.owner;
+      // Flash crossed red swords over the colony under attack so the player can
+      // see which colonies are being hit.
+      try { flashAttackAt(targetBio.x, targetBio.y); } catch (e) {}
       // Build defender list: stationed enemy units (as combatants) + each defense
       // building as a combatant whose "strength" is its bonus.defense (no attack).
       const defenderUnits = colonyStationedUnits(targetBio);
