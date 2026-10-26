@@ -157,6 +157,12 @@
     <div class="hint">How much of the tropical mid-elevation band becomes jungle (vs. grassland). Higher = more jungle.</div>
   </div>
 
+  <div class="field">
+    <div class="labelrow"><label for="bandJitter">Climate band irregularity</label><span class="rangeval" id="bandJitter-val">4&deg;</span></div>
+    <input id="bandJitter" type="range" min="0" max="15" step="1" value="4">
+    <div class="hint">Wobble (degrees) at the tropic/temperate/subpolar/polar boundaries. 0 = straight horizontal lines; higher = more natural, meandering transitions.</div>
+  </div>
+
   <div class="field" id="tropicalFraction-field">
     <div class="labelrow"><label for="tropicalFraction">Tropical Fraction</label><span class="rangeval" id="tropicalFraction-val">35%</span></div>
     <input id="tropicalFraction" type="range" min="0" max="35" step="1" value="35">
@@ -259,7 +265,16 @@
       sync();
     })();
 
-    // Climate-band fraction sliders (Tropical Fraction, Subpolar Fraction):
+    // Climate band irregularity: whole degrees, shown with a degree sign.
+    (() => {
+      const input = document.getElementById("bandJitter");
+      const out = document.getElementById("bandJitter-val");
+      if (!input || !out) return;
+      const sync = () => { out.textContent = String(parseInt(input.value, 10) || 0) + "\u00b0"; };
+      input.addEventListener("input", sync);
+      sync();
+    })();
+
     // integer PERCENT 0..35 in the UI, converted to a 0..0.35 fraction for
     // generation. Defaults come from config.json `climateBands`; whatever the
     // user picks here overrides the config defaults for this map.
@@ -435,6 +450,7 @@
         biome: document.getElementById("biome").checked,
         polar: parseFloat(document.getElementById("polar").value),
         jungle: parseFloat(document.getElementById("jungle").value),
+        bandJitter: parseInt(document.getElementById("bandJitter").value, 10),
         climateBands: {
           tropicalFraction: parseFloat(document.getElementById("tropicalFraction").value) / 100,
           subpolarFraction: parseFloat(document.getElementById("subpolarFraction").value) / 100

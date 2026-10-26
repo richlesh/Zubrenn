@@ -368,6 +368,49 @@ function buildMoisture(width, height, rng, wrap) {
   return out;
 }
 
+// A smooth low-frequency noise field (0..1) used to WIGGLE the latitude at which
+// climate bands switch, so tropic/temperate/subpolar/polar boundaries meander
+// instead of forming straight horizontal lines. Lower frequency than moisture
+// (broad, gentle undulations) and decorrelated from it via a different offset.
+function buildClimateJitter(width, height, rng, wrap) {
+  const noise = makeValueNoise(rng);
+  const out = [];
+  // ~1.2 lattice cells per map min-dimension: broad, slowly-varying waves.
+  const baseScale = 1.2 / Math.max(1, Math.min(width, height));
+  const octaves = 3;
+  const persistence = 0.55;
+  const basePeriod = Math.max(2, Math.round(width * baseScale));
+  const offsetPeriods = basePeriod * 2; // integer => seam-safe; decorrelated
+  let min = Infinity, max = -Infinity;
+  for (let y = 0; y < height; y++) {
+    const row = new Float64Array(width);
+    for (let x = 0; x < width; x++) {
+      let amp = 1, freq = baseScale, period = basePeriod, sum = 0, norm = 0;
+      for (let o = 0; o < octaves; o++) {
+        if (wrap) {
+          const nx = x * (period / width) + offsetPeriods;
+          sum += noise(nx, y * freq + 5000, period) * amp;
+        } else {
+          sum += noise(x * freq + 5000, y * freq + 5000) * amp;
+        }
+        norm += amp;
+        amp *= persistence;
+        freq *= 2;
+        period *= 2;
+      }
+      const v = sum / norm;
+      row[x] = v;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    out.push(row);
+  }
+  const range = max - min || 1;
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) out[y][x] = (out[y][x] - min) / range;
+  return out;
+}
+
 // Latitude bands that steer vegetation. Jungle is confined to the tropics;
 // forest dominates the temperate zone. The map spans +/-maxLatDeg, so the
 // normalized 0..1 latitude is scaled to degrees before comparing.
@@ -407,8 +450,11 @@ function climateBand(latDeg, polarDeg, bands) {
   return 'subpolar';
 }
 
-function assignBiomes(tiers, width, height, rng, polar, wrap, climateBands, jungleThreshold) {
+function assignBiomes(tiers, width, height, rng, polar, wrap, climateBands, jungleThreshold, bandJitterDeg) {
   const moisture = buildMoisture(width, height, rng, wrap);
+  const jitter = buildClimateJitter(width, height, rng, wrap);
+  // Max degrees to wiggle each cell's effective latitude at the band edges.
+  const jAmp = (Number.isFinite(bandJitterDeg) && bandJitterDeg >= 0) ? bandJitterDeg : 4;
   const cy = (height - 1) / 2;
   const maxLat = cy || 1;
   const maxLatDeg = 70; // map spans +/-70 degrees (matches terrain-bonus latitude)
@@ -421,11 +467,16 @@ function assignBiomes(tiers, width, height, rng, polar, wrap, climateBands, jung
   const grid = [];
   for (let y = 0; y < height; y++) {
     const latitude = Math.abs(y - cy) / maxLat; // 0 at equator .. 1 at pole
-    const latDeg = latitude * maxLatDeg;         // absolute latitude in degrees
+    const latDegRow = latitude * maxLatDeg;      // absolute latitude in degrees (row base)
     const row = new Array(width);
     for (let x = 0; x < width; x++) {
       const tier = tiers[y][x];
       const m = moisture[y][x];
+      // Per-cell effective latitude: wiggle the row latitude by +/- jAmp degrees
+      // using the smooth jitter field, so each climate-band boundary meanders
+      // across the map instead of snapping to one straight row. Clamped to the
+      // valid latitude range.
+      const latDeg = Math.max(0, Math.min(maxLatDeg, latDegRow + (jitter[y][x] - 0.5) * 2 * jAmp));
 
       if (tier === 1) {
         row[x] = 1; // sea
@@ -1345,6 +1396,9 @@ const DEFAULTS = {
   jungle: 0.25,    // 0..1 jungle lushness in the tropics (maps to the jungle
                    //  moisture threshold; higher => more jungle). 0.25 keeps
                    //  the original threshold (0.68).
+  bandJitter: 4,   // degrees of per-cell latitude wobble at climate-band edges
+                   //  (tropic/temperate/subpolar/polar). 0 = hard straight
+                   //  lines; higher = more irregular, meandering boundaries.
   bonusAbundancy: 0.25, // 0..1 Sparse->Abundant; fraction of map cells seeded
                         //  with terrain bonuses ranges 5%..35% of map area.
   rivers: true,          // generate rivers flowing high -> sea
@@ -1402,6 +1456,8 @@ function generateMap(opts = {}) {
   //   jungleThreshold = 0.85 - jungle * 0.68  -> j0:0.85 j0.25:0.68 j0.5:0.51 j1:0.17
   const jungle = clamp01(numOr(o.jungle, DEFAULTS.jungle));
   const jungleThreshold = Math.max(0.1, 0.85 - jungle * 0.68);
+  // Climate-band boundary wobble in degrees (0..15). 0 = straight lines.
+  const bandJitter = Math.max(0, Math.min(15, numOr(o.bandJitter, DEFAULTS.bandJitter)));
   const bonusAbundancy = clamp01(numOr(o.bonusAbundancy, DEFAULTS.bonusAbundancy));
   // Climate-band dividing-line fractions (of the polar line), from config.
   const climateBands = resolveClimateBands(o.climateBands);
@@ -1469,7 +1525,7 @@ function generateMap(opts = {}) {
   }
 
   if (biome) {
-    grid = assignBiomes(grid, width, height, rng, polar, wrap, climateBands, jungleThreshold);
+    grid = assignBiomes(grid, width, height, rng, polar, wrap, climateBands, jungleThreshold, bandJitter);
   }
 
   // Rivers require sea cells (tile === 1) to flow into, which exist after
@@ -1526,7 +1582,7 @@ function generateMap(opts = {}) {
     bonuses,
     meta: {
       width, height, algo, seed, island, water: waterFraction, octaves,
-      roughness, erode, talus, mountains, biome, polar, jungle,
+      roughness, erode, talus, mountains, biome, polar, jungle, bandJitter,
       rivers: doRivers, springElevation, maxRivers, cellsPerRiver, minRiverLength,
       largestAreaWithoutRiver, wrap, seaLevel, aiOpponents, difficulty, bonusAbundancy
     }
