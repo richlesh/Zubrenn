@@ -17598,9 +17598,9 @@
       const trades = ensureTrades();
       for (const t of trades) {
         const humanParty = (t.provider === 'human') ? 'provider' : (t.consumer === 'human' ? 'consumer' : null);
-        const partner = humanParty === 'provider' ? t.consumer : (humanParty === 'consumer' ? t.provider : `${t.provider} ↔ ${t.consumer}`);
-        const direction = humanParty === 'provider' ? 'You sell → them'
-          : (humanParty === 'consumer' ? 'They sell → you' : 'AI ↔ AI');
+        if (!humanParty) continue;                 // only show deals the human is a party to
+        const partner = humanParty === 'provider' ? t.consumer : t.provider;
+        const direction = humanParty === 'provider' ? 'You sell → them' : 'They sell → you';
         const tr = document.createElement('tr');
         const mk = (txt, cls) => { const td = document.createElement('td'); if (cls) td.className = cls; td.textContent = txt; return td; };
         tr.appendChild(mk(ownerDisplayName(partner)));
