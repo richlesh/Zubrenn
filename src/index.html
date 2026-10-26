@@ -11439,10 +11439,20 @@
       const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi && !b.inTransit);
       if (myColonies.length < 2) return false;           // nothing to connect
       const landOk = (x, y) => cellHasTransport(x, y);
-      const kind = (aiTraitsOf(pi).industry >= 4) ? 'monorail' : 'road';
+      // Prefer the faster monorail for industrial species, but ONLY where the
+      // source colony actually meets the monorail prerequisite (population +
+      // stone/crystal/aluminum, per config). Otherwise fall back to a road, and
+      // only if the colony can build that either. This respects the same gate
+      // (colonyCanBuildTransport) the human must satisfy.
+      const prefersMonorail = aiTraitsOf(pi).industry >= 4;
       for (const src of myColonies) {
         // Skip if this colony already has a road/monorail plan under way.
         if (colonyTransportPlan(src)) continue;
+        // Choose a kind this colony is actually allowed to build.
+        let kind = null;
+        if (prefersMonorail && colonyCanBuildTransport(src, 'monorail')) kind = 'monorail';
+        else if (colonyCanBuildTransport(src, 'road')) kind = 'road';
+        if (!kind) continue;                                 // colony can't build any transport
         // Nearest sibling this colony is NOT already land-connected to.
         let target = null, bestD = Infinity;
         for (const other of myColonies) {
