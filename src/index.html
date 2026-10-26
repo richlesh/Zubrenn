@@ -17411,6 +17411,12 @@
       for (const b of flipped) b.owner = newOwner;
       targetBio.ownerName = (newOwner === 'human') ? 'You' : (playerDisplayName(playerIndexOf(newOwner)) || 'Owner');
       gameState.buildings = gameState.buildings.filter((b) => !b._delete);
+      // Fog of war: a captured colony reveals the biodome's visibility radius,
+      // just like founding one. revealBuildingVisibility only acts for the human
+      // and uses the biodome's configured radius (buildingVisibility(type)).
+      if (newOwner === 'human') {
+        for (const b of flipped) { if (b.owner === 'human') revealBuildingVisibility(b); }
+      }
     }
     // Raze: destroy every building of the colony (incl. the biodome). Applies the
     // opinion penalty: every OTHER player's opinion of the razer drops.
