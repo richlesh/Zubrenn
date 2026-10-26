@@ -468,7 +468,14 @@
     }
 
     const createBtn = document.getElementById("create-btn");
-    createBtn.addEventListener("click", async () => {
+    // Track Option/Alt held in the New Game window (keyboard focus lives here,
+    // not the main window, during generation) so the main window can show the
+    // Terrain Bonuses dialog on demand.
+    let _ngAltHeld = false;
+    window.addEventListener("keydown", (e) => { if (e.key === "Alt" || e.altKey) _ngAltHeld = true; }, true);
+    window.addEventListener("keyup", (e) => { if (e.key === "Alt") _ngAltHeld = false; }, true);
+    window.addEventListener("blur", () => { _ngAltHeld = false; });
+    createBtn.addEventListener("click", async (ev) => {
       let opts;
       try {
         opts = readOptions();
@@ -477,6 +484,10 @@
         alert("Could not read map settings: " + err.message);
         return;
       }
+      // Option/Alt held at creation => also show the Terrain Bonuses breakdown
+      // after the map (even in non-debug mode). Use the click's own modifier
+      // state, falling back to the tracked flag.
+      opts.showBonuses = !!(ev && ev.altKey) || _ngAltHeld;
       createBtn.disabled = true;
       createBtn.textContent = "Generating…";
       try {

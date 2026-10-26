@@ -810,6 +810,11 @@ ipcMain.handle("newgame-create", (_e, options) => {
       genOpts.climateBands = CONFIG.climateBands;
     }
     result = generateMap(genOpts);
+    // Pass the New Game dialog's on-demand "show terrain bonuses" request
+    // (Option/Alt held at Create) through to the renderer via the map meta.
+    if (result && result.meta && options && options.showBonuses) {
+      result.meta.showBonuses = true;
+    }
   } catch (err) {
     console.error("Map generation failed:", err);
     throw err; // propagate to the dialog's await so it can show the error

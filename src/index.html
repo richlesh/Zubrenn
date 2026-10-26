@@ -18830,9 +18830,11 @@
         showMap(result, null);
         // Always show the Terrain Types breakdown after a freshly generated map
         // is first shown. The Terrain Bonuses breakdown chains after it when in
-        // debug mode (config.json "debug": true) OR when the Option/Alt key is
-        // held (an on-demand peek in non-debug mode).
-        const showBonuses = !!(CONFIG && CONFIG.debug) || _altHeld;
+        // debug mode (config.json "debug": true) OR when the player requested it
+        // by holding Option/Alt at map creation (flagged on the map meta by the
+        // New Game dialog; _altHeld is a fallback for the main window).
+        const metaWantsBonuses = !!(result && result.meta && result.meta.showBonuses);
+        const showBonuses = !!(CONFIG && CONFIG.debug) || metaWantsBonuses || _altHeld;
         showTerrainTypeDebug(showBonuses ? showTerrainBonusDebug : null);
       }
       catch (err) { console.error("[index] failed to render new map:", err && err.stack || err); }
