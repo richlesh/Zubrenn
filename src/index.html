@@ -18816,15 +18816,24 @@
       if (okBtn) okBtn.focus();
     }
 
+    // Track whether the Option/Alt key is currently held, so the Terrain
+    // Bonuses breakdown can be shown on demand after a new map even outside
+    // debug mode (hold Option while generating/accepting the map).
+    let _altHeld = false;
+    window.addEventListener("keydown", (e) => { if (e.key === "Alt" || e.altKey) _altHeld = true; }, true);
+    window.addEventListener("keyup", (e) => { if (e.key === "Alt") _altHeld = false; }, true);
+    window.addEventListener("blur", () => { _altHeld = false; });
+
     // New Game.
     ipcRenderer.on("new-map", (_e, result) => {
       try {
         showMap(result, null);
         // Always show the Terrain Types breakdown after a freshly generated map
-        // is first shown. The Terrain Bonuses breakdown still chains after it
-        // only in debug mode (config.json "debug": true).
-        const debug = !!(CONFIG && CONFIG.debug);
-        showTerrainTypeDebug(debug ? showTerrainBonusDebug : null);
+        // is first shown. The Terrain Bonuses breakdown chains after it when in
+        // debug mode (config.json "debug": true) OR when the Option/Alt key is
+        // held (an on-demand peek in non-debug mode).
+        const showBonuses = !!(CONFIG && CONFIG.debug) || _altHeld;
+        showTerrainTypeDebug(showBonuses ? showTerrainBonusDebug : null);
       }
       catch (err) { console.error("[index] failed to render new map:", err && err.stack || err); }
     });
