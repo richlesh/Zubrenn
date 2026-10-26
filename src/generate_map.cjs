@@ -432,6 +432,18 @@ function assignBiomes(tiers, width, height, rng, polar, wrap, climateBands, jung
       } else if (tier <= 3) {
         if (latDeg >= polarDeg) {
           row[x] = 9; // frozen
+        } else if (latDeg <= tropicalMaxDeg) {
+          // Tropical LOWLANDS are prime jungle country (think Amazon/Congo
+          // basins): dry -> desert, mid -> grassland, wettest -> jungle, using
+          // the same configurable jungle cutoff as the mid-elevation band.
+          const jCut = (Number.isFinite(jungleThreshold) && jungleThreshold > 0 && jungleThreshold < 1) ? jungleThreshold : 0.68;
+          if (m < 0.42) {
+            row[x] = 6; // desert
+          } else if (m < jCut) {
+            row[x] = 2; // grassland
+          } else {
+            row[x] = 5; // jungle
+          }
         } else if (m < 0.42) {
           row[x] = 6; // desert
         } else {
