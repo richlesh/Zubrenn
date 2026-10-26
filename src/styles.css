@@ -674,7 +674,7 @@ body.dark #confirm-cancel { background: #3a3a3c; color: #e0e0e0; }
 #federation-dialog {
   background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
-  width: 420px; max-width: 92vw; max-height: 90vh; overflow: auto;
+  width: 525px; max-width: 92vw; max-height: 90vh; overflow: auto;
 }
 body.dark #federation-dialog { background: #2c2c2e; color: #e0e0e0; }
 #federation-dialog h2 { font-size: 15px; margin-bottom: 6px; }

@@ -16712,7 +16712,7 @@
       const taxes = federationTaxFor('human', rate);
       const counts = federationTransportCounts('human');
       const m = federationMaintenance('human');
-      document.getElementById("fed-taxes").textContent = _fmtCredits(taxes);
+      document.getElementById("fed-taxes").textContent = (taxes > 0 ? "+" : "") + _fmtCredits(taxes);
       document.getElementById("fed-roadn").textContent = String(counts.roads);
       document.getElementById("fed-roadcost").textContent = _fmtMaintCost(m.road);
       document.getElementById("fed-mononn").textContent = String(counts.monorails);
