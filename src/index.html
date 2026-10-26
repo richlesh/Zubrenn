@@ -17023,13 +17023,26 @@
       _strikeChecks = [];
       let idx = 0;
       for (const { colony, dist } of humanColoniesByDistance(targetCol)) {
-        const eligible = colonyStationedUnits(colony).filter((u) => unitCanJoinStrike(u, colony, targetCol));
+        // Exclude units already committed to a strike force (u.strikeForce) — they
+        // can't be reassigned mid-attack.
+        const eligible = colonyStationedUnits(colony).filter((u) => !u.strikeForce && unitCanJoinStrike(u, colony, targetCol));
         if (!eligible.length) continue;
         const section = document.createElement('div');
         section.style.margin = '8px 0';
+        // Header with a per-colony "check all" box to the LEFT of the name.
         const h = document.createElement('div');
-        h.innerHTML = `<strong>${esc(colony.name || 'Colony')}</strong> — ${dist} hex away`;
+        const cityChk = document.createElement('input');
+        cityChk.type = 'checkbox';
+        cityChk.className = 'strike-city-check';
+        cityChk.style.width = 'auto';
+        cityChk.style.marginRight = '6px';
+        cityChk.title = 'Check / uncheck all units in this city';
+        const hLabel = document.createElement('span');
+        hLabel.innerHTML = `<strong>${esc(colony.name || 'Colony')}</strong> — ${dist} hex away`;
+        h.appendChild(cityChk);
+        h.appendChild(hLabel);
         section.appendChild(h);
+        const rowChecks = [];
         for (const u of eligible) {
           const myIdx = idx++;
           _strikeChecks.push({ unit: u, colony });
@@ -17038,7 +17051,18 @@
           const atk = unitEffAttack(u);
           rowEl.innerHTML = `<input type="checkbox" data-sidx="${myIdx}" style="width:auto"> ${esc(u.name)} ${esc(typeLabel(u.type))} — attack ${nf(atk, 1)}`;
           section.appendChild(rowEl);
+          rowChecks.push(rowEl.querySelector('input[type="checkbox"]'));
         }
+        // City checkbox toggles all its unit rows; and it reflects their state.
+        cityChk.addEventListener('change', () => {
+          for (const c of rowChecks) c.checked = cityChk.checked;
+        });
+        const syncCity = () => {
+          const on = rowChecks.filter((c) => c.checked).length;
+          cityChk.checked = on === rowChecks.length && rowChecks.length > 0;
+          cityChk.indeterminate = on > 0 && on < rowChecks.length;
+        };
+        for (const c of rowChecks) c.addEventListener('change', syncCity);
         body.appendChild(section);
       }
       if (!_strikeChecks.length) {
@@ -17057,7 +17081,7 @@
       if (!_strikeTarget) { closeStrikeForceDialog(); return; }
       const body = document.getElementById('strike-body');
       const nameInput = document.getElementById('strike-name');
-      const checked = Array.from(body.querySelectorAll('input[type="checkbox"]:checked'))
+      const checked = Array.from(body.querySelectorAll('input[type="checkbox"][data-sidx]:checked'))
         .map((cb) => _strikeChecks[Number(cb.dataset.sidx)]).filter(Boolean);
       if (!checked.length) { notify('Select at least one unit for the strike force.'); return; }
       const name = (nameInput.value || '').trim() || `Strike Force ${_strikeForceSeq + 1}`;
