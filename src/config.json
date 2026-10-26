@@ -234,7 +234,7 @@
     "population": { "name": "Population", "unitSize": 1000, "speed": 5,
         "buildCost": { },
         "costPerYear": { "food": 1, "goods": 5, "energy": 4.5, "water": 0.1, "wealth": 8 },
-        "bonus": { "happiness": 1.0 }
+        "bonus": { "happiness": 10 }
     },
     // Batallion 1000 service men, 100 APC, cost is per battalion
     // Stryker M1126 cost is $5M = 0.5 credits for 10 soldiers
@@ -1300,7 +1300,7 @@
       "bonus": { "food": "5-10" },
       "terrain": ["frozen"],
       "other": [ ],
-      "abundancy": 0.5,
+      "abundancy": 2,
       "desc": "Seasonal thaw releases edible cryo-lichens that glow at night."
     },
     "Chemosyntheic Vent Colonies": {
@@ -1308,7 +1308,7 @@
       "bonus": { "energy": 5, "food": "5-10" },
       "terrain": ["mountain"],
       "other": [ ],
-      "abundancy": 1,
+      "abundancy": 2,
       "desc": "Tube-worm analogs around geothermal seeps. Self-sustaining source of protein."
     },
     "Veyra Pods": {
@@ -1370,18 +1370,18 @@
     "Ferric Strata Veins": {
       "icon": "terrain_bonus/128/ferric_strata.png",
       "bonus": { "material": "25-50" },
-      "terrain": ["hills","mountain-low","mountain-high"],
+      "terrain": ["hills","mountain"],
       "other": [ ],
-      "abundancy": 3,
+      "abundancy": 5,
       "bonusType": "iron",
       "desc": "Banded iron-silicate seams exposed by stellar winds. Common in basalt shelves."
     },
     "Kinetite Crystals": {
       "icon": "terrain_bonus/128/kinetite_crystals.png",
       "bonus": { "material": "25-50", "wealth": "5-10" },
-      "terrain": ["hills","mountain-low"],
+      "terrain": ["hills","mountain"],
       "other": [ ],
-      "abundancy": 2,
+      "abundancy": 5,
       "bonusType": "crystal",
       "desc": "Piezoelectric crystals grown in vibration fields. Great for electronics and construction."
     },
@@ -1400,7 +1400,7 @@
       "terrain": ["desert"],
       "climate": ["tropical", "temperate", "subpolar"],
       "other": [ ],
-      "abundancy": 1,
+      "abundancy": 3,
       "desc": "Alien arachnoid creatures spin high-tensile fiber in low-humidity zones."
     },
     "Starfall Alloy Crater": {
@@ -1417,7 +1417,7 @@
       "bonus": { "material": "25-45" },
       "terrain": ["land"],
       "other": [ ],
-      "abundancy": 8,
+      "abundancy": 4,
       "bonusType": "stone",
       "desc": "Naturally fibrous rock that separates into useful construction strands."
     },
@@ -1444,14 +1444,14 @@
       "bonus": { "material": "35-55", "wealth": "5-10" },
       "terrain": ["mountain-low","mountain-high"],
       "other": [ ],
-      "abundancy": 2,
+      "abundancy": 5,
       "bonusType": "iron",
       "desc": "An unusually dense metallic ore prized for heavy machinery and orbital infrastructure."
     },
     "Titanlace Deposit": {
       "icon": "terrain_bonus/128/titanlace_deposit.png",
       "bonus": { "material": "30-50", "wealth": "10-20" },
-      "terrain": ["mountain-low","mountain-high"],
+      "terrain": ["hills","mountain"],
       "other": [ ],
       "abundancy": 5,
       "bonusType": "titanium",
@@ -1460,9 +1460,9 @@
     "Uranium Deposit": {
       "icon": "terrain_bonus/128/uranium_deposit.png",
       "bonus": { "material": "1-5", "wealth": "1-5" },
-      "terrain": ["mountain-low","mountain-high"],
+      "terrain": ["mountain"],
       "other": [ ],
-      "abundancy": 3,
+      "abundancy": 5,
       "bonusType": "uranium",
       "desc": "Rare mineral that is used in nuclear reactors and nuclear weapons."
     },
@@ -1482,15 +1482,14 @@
       "bonus": { "energy": "250-750" },
       "terrain": ["sea"],
       "other": [ "land" ],
-      "abundancy": 0.25,
+      "abundancy": 1,
       "desc": "Tidal water flow between twin-star orbits powers generators."
     },
     "Geothermal Plume": {
       "icon": "terrain_bonus/128/geothermal_plume.png",
       "bonus": { "energy": "250-750" },
-      "terrain": ["mountain-low","mountain-high"],
-      "other": [ "mountain" ],
-      "abundancy": 1,
+      "terrain": ["mountain"],
+      "abundancy": 2,
       "desc": "Deep heat vents under crustal plates. Reliable, but needs cooling infrastructure."
     },
     "Sunshard Flats": {
@@ -1498,7 +1497,7 @@
       "bonus": { "energy": "100-300" },
       "terrain": ["desert"],
       "other": [ ],
-      "abundancy": 5,
+      "abundancy": 6,
       "bonusType": "crystal",
       "desc": "Naturally photovoltaic crystals convert starlight into harvestable current."
     },
@@ -1529,7 +1528,7 @@
       "terrain": ["forest"],
       "climate": ["tropical", "temperate"],
       "other": [ ],
-      "abundancy": 1,
+      "abundancy": 3,
       "desc": "A fragrant native secretion used in luxury perfumes and precision manufacturing."
     },
     "Lightningfly Venom": {
@@ -1538,7 +1537,7 @@
       "terrain": ["forest","jungle"],
       "climate": ["temperate"],
       "other": [ ],
-      "abundancy": 1,
+      "abundancy": 3,
       "desc": "A powerful biologic used to create a variety of medicines."
     },
     "Memory Opals": {
@@ -1556,15 +1555,15 @@
       "terrain": ["forest","jungle"],
       "climate": ["temperate"],
       "other": [ ],
-      "abundancy": 1,
+      "abundancy": 2,
       "desc": "Fine biological fibers used to weave shimmering, temperature-regulating garments."
     },
     "Crownfire Geodes": {
       "icon": "terrain_bonus/128/crownfire_geodes.png",
       "bonus": { "wealth": "25-50", "happiness": 0.25 },
-      "terrain": ["mountain-low","mountain-high"],
+      "terrain": ["mountain"],
       "other": [ ],
-      "abundancy": 1,
+      "abundancy": 2,
       "desc": "Extremely rare crystals whose luminous interiors resemble miniature stellar flares."
     },
 
@@ -1574,7 +1573,7 @@
       "bonus": { "wealth": "10-30", "happiness": 0.25 },
       "terrain": ["grassland","hills","forest","jungle","desert"],
       "other": [ "pristine" ],
-      "abundancy": 0.1,
+      "abundancy": 0.5,
       "desc": "Shimmering mineral pools that reflect the binary sunset. Must stay pristine."
     },
     "Chorus Gardens": {
@@ -1583,7 +1582,7 @@
       "terrain": ["jungle"],
       "climate": ["tropical"],
       "other": [ "pristine" ],
-      "abundancy": 1,
+      "abundancy": 3,
       "desc": "Sonic-reactive flora engineered to hum in harmony with colonist frequencies. Must stay pristine."
     },
     "Echo Monolith": {
@@ -1591,16 +1590,16 @@
       "bonus": { "wealth": "50-100", "happiness": 0.25 },
       "terrain": ["grassland"],
       "other": [ "pristine", "dry" ],
-      "abundancy": 0.1,
+      "abundancy": 0.5,
       "desc": "Ancient monoliths left by an alien race, culturally significant. Must stay pristine."
     },
     "Jaba Grove": {
       "icon": "terrain_bonus/128/jaba_grove.png",
       "bonus": { "energy": "100-300", "food": "5-10", "happiness": 0.25 },
-      "terrain": ["forest"],
+      "terrain": ["jungle"],
       "climate": ["tropical"],
       "other": [ "pristine" ],
-      "abundancy": 0.25,
+      "abundancy": 3,
       "desc": "Groves of Jaba fruit trees, providing food and sonic energy. Must stay pristine."
     },
     "Dreamblossom Field": {
@@ -1609,16 +1608,16 @@
       "terrain": ["plains"],
       "climate": ["temperate"],
       "other": [ "pristine" ],
-      "abundancy": 1,
+      "abundancy": 3,
       "desc": "Vast blooms release a pleasant fragrance and become the focus of seasonal festivals."
     },
     "Dancing Veil Falls": {
       "icon": "terrain_bonus/128/dancing_veil_falls.png",
       "bonus": { "energy": "100-300", "wealth": "40-80", "happiness": 0.25 },
-      "terrain": ["mountain-low","mountain-high"],
+      "terrain": ["mountain"],
       "climate": ["tropical", "temperate"],
       "other": [ "river","pristine" ],
-      "abundancy": 1,
+      "abundancy": 2,
       "desc": "Charged mist forms drifting curtains of colored light around immense waterfalls."
     },
 
@@ -1628,7 +1627,7 @@
       "bonus": { "water": 1 },
       "terrain": ["grassland","hills","plains","forest","mountain-low"],
       "other": [ "dry" ],
-      "abundancy": 3,
+      "abundancy": 2,
       "desc": "Groundwater wells up through fractured rock, a dependable source of fresh water far from any river."
     },
     "Glacial Meltwater": {
@@ -1653,30 +1652,30 @@
       "icon": "terrain_bonus/128/fishery.png",
       "bonus": { "food": 2, "wealth": 4 },
       "terrain": ["sea"],
-      "abundancy": 3,
+      "abundancy": 2,
       "desc": "Rich shoaling grounds where native sea-life gathers in harvestable abundance."
     },
 
     // Material / Wealth
     "Diamonds": {
       "icon": "terrain_bonus/128/diamonds.png",
-      "bonus": { "material": 2, "wealth": 4, "happiness": 0.25 },
+      "bonus": { "material": "2-4", "wealth": "4-20", "happiness": 0.25 },
       "terrain": ["mountain-low","mountain-high"],
-      "abundancy": 1,
+      "abundancy": 4,
       "desc": "Deep kimberlite pipes yield gem-grade diamonds, prized for both industry and adornment."
     },
     "Gemstones": {
       "icon": "terrain_bonus/128/gemstones.png",
-      "bonus": { "wealth": 4, "happiness": 0.25 },
+      "bonus": { "wealth": "4-15", "happiness": 0.25 },
       "terrain": ["highland"],
-      "abundancy": 2,
+      "abundancy": 3,
       "desc": "Pockets of colorful crystals in the uplands, cut and traded as luxury stones."
     },
     "Fingerfruit": {
       "icon": "terrain_bonus/128/fingerfruit.png",
       "bonus": { "food": 2, "happiness": 0.25 },
       "terrain": ["jungle"],
-      "abundancy": 3,
+      "abundancy": 5,
       "desc": "Clusters of sweet, finger-shaped fruit that ripen year-round in the jungle canopy."
     },
     "Pearls": {
@@ -1697,7 +1696,7 @@
       "bonus": { "food": 2, "happiness": -0.25 },
       "unworkedBonus": { "happiness": 0.25 },
       "terrain": ["frozen"],
-      "abundancy": 2,
+      "abundancy": 3,
       "desc": "Rookeries of blubber-rich pinnipeds haul out on the ice. Harvest them for food, or leave the colonies in peace."
     },
     "Whales": {
@@ -1814,7 +1813,7 @@
       "terrain": ["hills","mountain-low"],
       "climate": ["tropical", "temperate"],
       "other": [ "river" ],
-      "abundancy": 2,
+      "abundancy": 3,
       "desc": "Terraced vines that condense fog into runnels, feeding both the crops and the colony's cisterns."
     },
     "Verdant Hot Springs": {
@@ -1828,7 +1827,7 @@
     "Quakecrystal Lodes": {
       "icon": "terrain_bonus/128/quakecrystal_lodes.png",
       "bonus": { "material": "35-55", "energy": "100-300" },
-      "terrain": ["mountain-low","mountain-high"],
+      "terrain": ["hills","mountain"],
       "other": [ ],
       "abundancy": 4,
       "bonusType": "crystal",
@@ -1839,7 +1838,7 @@
     "Prismbloom Caldera": {
       "icon": "terrain_bonus/128/prismbloom_caldera.png",
       "bonus": { "energy": "100-300", "food": "5-10", "happiness": 0.25 },
-      "terrain": ["mountain-low","mountain-high"],
+      "terrain": ["mountain"],
       "climate": ["tropical", "temperate"],
       "other": [ "pristine" ],
       "abundancy": 0.25,
@@ -1851,15 +1850,15 @@
       "terrain": ["sea"],
       "climate": ["tropical"],
       "other": [ "land", "pristine" ],
-      "abundancy": 0.25,
+      "abundancy": 1,
       "desc": "A sheltered lagoon of singing shellfish — a food harvest, a pearl trade, and a cultural wonder all at once. Must stay pristine."
     },
     "Celestite Spires": {
       "icon": "terrain_bonus/128/celestite_spires.png",
       "bonus": { "material": "30-50", "energy": "100-300", "wealth": "10-20" },
-      "terrain": ["mountain-high"],
+      "terrain": ["mountain"],
       "other": [ ],
-      "abundancy": 1,
+      "abundancy": 3,
       "bonusType": "crystal",
       "desc": "Towering superconductive crystal pillars that channel storm charge and refine into ultra-premium alloy."
     },
@@ -1876,9 +1875,9 @@
     "Ruined Sky-Temple": {
       "icon": "terrain_bonus/128/ruined_sky_temple.png",
       "bonus": { "wealth": "25-50", "happiness": 0.25 },
-      "terrain": ["mountain-low","mountain-high"],
+      "terrain": ["mountain"],
       "other": [ "pristine" ],
-      "abundancy": 0.25,
+      "abundancy": 2,
       "desc": "Weathered terraces of a lost mountaintop faith, revered as a pilgrimage site. Must stay pristine."
     },
     "Buried Starship Hull": {
@@ -1886,7 +1885,7 @@
       "bonus": { "material": "25-50", "wealth": "25-50", "happiness": 0.25 },
       "terrain": ["desert","frozen","plains"],
       "other": [ ],
-      "abundancy": 0.2,
+      "abundancy": 0.5,
       "bonusType": "titanium",
       "desc": "The salvage of an ancient crashed vessel: exotic alloys to strip, relics to sell, and a legend to tell."
     },
@@ -1904,7 +1903,7 @@
       "terrain": ["sea"],
       "climate": ["tropical", "temperate"],
       "other": [ "shallow", "pristine" ],
-      "abundancy": 0.25,
+      "abundancy": 1,
       "desc": "A drowned data-library of a vanished people; divers recover priceless records from the silt. Must stay pristine."
     },
     "Ancestral Catacombs": {
@@ -1912,7 +1911,7 @@
       "bonus": { "wealth": "25-50", "happiness": 0.25 },
       "terrain": ["hills","mountain-low"],
       "other": [ "dry" ],
-      "abundancy": 0.5,
+      "abundancy": 2,
       "desc": "Carved burial halls whose grave-goods fund the colony and anchor its heritage."
     }
   },
@@ -2137,7 +2136,8 @@
       "happiness": 60,
       "other": 70,
       "resource": 40
-    }
+    },
+    "maxYears": 50
   },
   // Reserved happiness tuning constant (currently read for happiness clamping).
   "happinessCap": 20,

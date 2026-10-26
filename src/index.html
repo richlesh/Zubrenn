@@ -402,7 +402,7 @@
         <div class="propose-row"><label for="propose-resource">Resource</label><select id="propose-resource"></select></div>
         <div class="propose-row" id="propose-qty-row" hidden><label for="propose-qty">Amount per year</label><input id="propose-qty" type="number" min="0" step="1" value="0"></div>
         <div class="propose-row"><label for="propose-amount">Payment per year (¤)</label><input id="propose-amount" type="number" min="0" step="1" value="0"></div>
-        <div class="propose-row"><label for="propose-years">Years</label><input id="propose-years" type="number" min="1" max="20" step="1" value="5"></div>
+        <div class="propose-row"><label for="propose-years">Years</label><input id="propose-years" type="number" min="1" max="50" step="1" value="5"></div>
         <div id="propose-note" class="hint"></div>
         <div class="work-row">
           <button id="propose-send">Propose</button>
@@ -427,7 +427,7 @@
         <div class="propose-row"><label for="sell-resource">Resource</label><select id="sell-resource"></select></div>
         <div class="propose-row" id="sell-qty-row" hidden><label for="sell-qty">Amount per year</label><input id="sell-qty" type="number" min="0" step="1" value="0"></div>
         <div class="propose-row"><label for="sell-amount">Payment per year (¤)</label><input id="sell-amount" type="number" min="0" step="1" value="0"></div>
-        <div class="propose-row"><label for="sell-years">Years</label><input id="sell-years" type="number" min="1" max="20" step="1" value="5"></div>
+        <div class="propose-row"><label for="sell-years">Years</label><input id="sell-years" type="number" min="1" max="50" step="1" value="5"></div>
         <div id="sell-note" class="hint"></div>
         <div class="work-row">
           <button id="sell-send">Propose</button>
@@ -14418,6 +14418,13 @@
       const tr = ownerTraits(owner) || { risk: 3 };
       return Math.max(3, Math.min(15, 5 + ((tr.risk || 3) - 3) * 2));
     }
+    // Maximum term (years) a trade deal may run, from CONFIG.trade.maxYears
+    // (default 50). The single source of truth for the trade-years cap used by
+    // the UI inputs, the AI accept/counter logic, and deal creation.
+    function tradeMaxYears() {
+      const v = CONFIG && CONFIG.trade && Number(CONFIG.trade.maxYears);
+      return (Number.isFinite(v) && v >= 1) ? Math.floor(v) : 50;
+    }
 
     // Build the list of candidate offers an AI `owner` could make to `toOwner`
     // this turn: strategic resources and happiness bonuses the AI controls that
@@ -14555,7 +14562,7 @@
         return { decision: 'accept' };
       }
       // Counter at the ask price, meeting the player's requested term (clamped).
-      const years = Math.max(1, Math.min(20, Number(offer.years) || aiTradeYears(seller)));
+      const years = Math.max(1, Math.min(tradeMaxYears(), Number(offer.years) || aiTradeYears(seller)));
       const counter = {
         provider: seller, consumer: 'human', category: offer.category, key: offer.key,
         amountPerYear: ask, years,
@@ -14597,7 +14604,7 @@
       const asked = Math.max(0, Number(offer.amountPerYear) || 0);
       if (asked <= ceiling) return { decision: 'accept' };
       // Overpriced: counter at the buyer's valuation (what it will actually pay).
-      const years = Math.max(1, Math.min(20, Number(offer.years) || aiTradeYears(buyer)));
+      const years = Math.max(1, Math.min(tradeMaxYears(), Number(offer.years) || aiTradeYears(buyer)));
       const counter = {
         provider: 'human', consumer: buyer, category: offer.category, key: offer.key,
         amountPerYear: valuation, years,
@@ -17759,6 +17766,7 @@
       if (years) years.value = String(aiTradeYears(seller));
     }
     function openPropose() {
+      const _py = document.getElementById('propose-years'); if (_py) _py.max = String(tradeMaxYears());
       const partnerSel = document.getElementById('propose-partner');
       const note = document.getElementById('propose-note');
       if (!partnerSel) return;
@@ -17801,7 +17809,7 @@
       const offer = {
         provider: seller, consumer: 'human', category: base.category, key: base.key,
         amountPerYear: Math.max(0, Math.round(Number(amount && amount.value) || 0)),
-        years: Math.max(1, Math.min(20, Math.round(Number(years && years.value) || 1))),
+        years: Math.max(1, Math.min(tradeMaxYears(), Math.round(Number(years && years.value) || 1))),
       };
       if (base.category === 'happiness') offer.amountHappiness = base.amountHappiness;
       if (base.category === 'resource') {
@@ -17937,6 +17945,7 @@
       if (years) years.value = '5';
     }
     function openSell() {
+      const _sy = document.getElementById('sell-years'); if (_sy) _sy.max = String(tradeMaxYears());
       const partnerSel = document.getElementById('sell-partner');
       const note = document.getElementById('sell-note');
       if (!partnerSel) return;
@@ -17973,7 +17982,7 @@
       const offer = {
         provider: 'human', consumer: buyer, category: base.category, key: base.key,
         amountPerYear: Math.max(0, Math.round(Number(amount && amount.value) || 0)),
-        years: Math.max(1, Math.min(20, Math.round(Number(years && years.value) || 1))),
+        years: Math.max(1, Math.min(tradeMaxYears(), Math.round(Number(years && years.value) || 1))),
       };
       if (base.category === 'resource') {
         const qtyEl = document.getElementById('sell-qty');
