@@ -375,11 +375,15 @@ function buildMoisture(width, height, rng, wrap) {
 function buildClimateJitter(width, height, rng, wrap) {
   const noise = makeValueNoise(rng);
   const out = [];
-  // ~1.2 lattice cells per map min-dimension: broad, slowly-varying waves.
-  const baseScale = 1.2 / Math.max(1, Math.min(width, height));
-  const octaves = 3;
-  const persistence = 0.55;
-  const basePeriod = Math.max(2, Math.round(width * baseScale));
+  // Higher frequency than moisture so the band edges vary cell-to-cell (broken,
+  // jagged boundaries) rather than the whole line shifting together. ~10 waves
+  // across the map width; extra octaves add finer wobble on top.
+  const baseScale = 6 / Math.max(1, Math.min(width, height));
+  const octaves = 5;
+  const persistence = 0.7;
+  // basePeriod is the number of lattice cells across the map width for the
+  // lowest octave; make it reasonably high so wrap maps also get fine detail.
+  const basePeriod = Math.max(6, Math.round(width * baseScale));
   const offsetPeriods = basePeriod * 2; // integer => seam-safe; decorrelated
   let min = Infinity, max = -Infinity;
   for (let y = 0; y < height; y++) {
@@ -1396,9 +1400,9 @@ const DEFAULTS = {
   jungle: 0.25,    // 0..1 jungle lushness in the tropics (maps to the jungle
                    //  moisture threshold; higher => more jungle). 0.25 keeps
                    //  the original threshold (0.68).
-  bandJitter: 4,   // degrees of per-cell latitude wobble at climate-band edges
+  bandJitter: 6,   // degrees of per-cell latitude wobble at climate-band edges
                    //  (tropic/temperate/subpolar/polar). 0 = hard straight
-                   //  lines; higher = more irregular, meandering boundaries.
+                   //  lines; higher = more irregular, broken-up boundaries.
   bonusAbundancy: 0.25, // 0..1 Sparse->Abundant; fraction of map cells seeded
                         //  with terrain bonuses ranges 5%..35% of map area.
   rivers: true,          // generate rivers flowing high -> sea
@@ -1456,8 +1460,8 @@ function generateMap(opts = {}) {
   //   jungleThreshold = 0.85 - jungle * 0.68  -> j0:0.85 j0.25:0.68 j0.5:0.51 j1:0.17
   const jungle = clamp01(numOr(o.jungle, DEFAULTS.jungle));
   const jungleThreshold = Math.max(0.1, 0.85 - jungle * 0.68);
-  // Climate-band boundary wobble in degrees (0..15). 0 = straight lines.
-  const bandJitter = Math.max(0, Math.min(15, numOr(o.bandJitter, DEFAULTS.bandJitter)));
+  // Climate-band boundary wobble in degrees (0..25). 0 = straight lines.
+  const bandJitter = Math.max(0, Math.min(25, numOr(o.bandJitter, DEFAULTS.bandJitter)));
   const bonusAbundancy = clamp01(numOr(o.bonusAbundancy, DEFAULTS.bonusAbundancy));
   // Climate-band dividing-line fractions (of the polar line), from config.
   const climateBands = resolveClimateBands(o.climateBands);
