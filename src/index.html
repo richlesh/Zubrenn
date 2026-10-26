@@ -16349,7 +16349,12 @@
         if (r.me) tr.className = "me";
         for (const col of RANK_COLUMNS) {
           const td = document.createElement("td");
-          td.textContent = _rankFmt(col, r[col.key]);
+          if (col.key === "name") {
+            // Species name links to its Nexus page (aliens only; human is plain).
+            td.appendChild(makeSpeciesNameEl(r.owner, _rankFmt(col, r[col.key])));
+          } else {
+            td.textContent = _rankFmt(col, r[col.key]);
+          }
           tr.appendChild(td);
         }
         rankingsBody.appendChild(tr);
