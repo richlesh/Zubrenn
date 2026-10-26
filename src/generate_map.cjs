@@ -407,7 +407,7 @@ function climateBand(latDeg, polarDeg, bands) {
   return 'subpolar';
 }
 
-function assignBiomes(tiers, width, height, rng, polar, wrap, climateBands) {
+function assignBiomes(tiers, width, height, rng, polar, wrap, climateBands, jungleThreshold) {
   const moisture = buildMoisture(width, height, rng, wrap);
   const cy = (height - 1) / 2;
   const maxLat = cy || 1;
@@ -448,9 +448,15 @@ function assignBiomes(tiers, width, height, rng, polar, wrap, climateBands) {
         //   - temperate (.. temperateMaxDeg): forest dominates; dry cells are hills
         //   - subpolar (.. polarDeg): mostly hills; only the very wettest are forest
         if (latDeg <= tropicalMaxDeg) {
-          if (m < 0.38) {
+          // Tropical mid-elevation: wettest -> jungle, mid -> grassland, dry ->
+          // hills. The jungle cutoff is configurable (lower => more jungle);
+          // the grassland cutoff (0.38) stays, but is clamped below the jungle
+          // cutoff so a very low jungle threshold doesn't invert the bands.
+          const jCut = (Number.isFinite(jungleThreshold) && jungleThreshold > 0 && jungleThreshold < 1) ? jungleThreshold : 0.68;
+          const gCut = Math.min(0.38, jCut);
+          if (m < gCut) {
             row[x] = 3; // hills
-          } else if (m < 0.68) {
+          } else if (m < jCut) {
             row[x] = 2; // grassland (tropical, non-jungle)
           } else {
             row[x] = 5; // jungle
@@ -1324,6 +1330,9 @@ const DEFAULTS = {
                    //  0.25 reproduces the original exponent (1.3).
   biome: true,     // map elevation tiers -> biome tile IDs
   polar: 0.82,     // latitude beyond which lowlands freeze (biome mode)
+  jungle: 0.25,    // 0..1 jungle lushness in the tropics (maps to the jungle
+                   //  moisture threshold; higher => more jungle). 0.25 keeps
+                   //  the original threshold (0.68).
   bonusAbundancy: 0.25, // 0..1 Sparse->Abundant; fraction of map cells seeded
                         //  with terrain bonuses ranges 5%..35% of map area.
   rivers: true,          // generate rivers flowing high -> sea
@@ -1375,6 +1384,12 @@ function generateMap(opts = {}) {
   const terrainExponent = Math.max(0.2, 1.6 - mountains * 1.2);
   const biome = o.biome === true || o.biome === 'true' || o.biome === 1;
   const polar = clamp01(numOr(o.polar, DEFAULTS.polar));
+  // Jungle lushness (0..1): map to the tropical jungle moisture threshold.
+  // 0.25 => 0.68 (original). Higher `jungle` LOWERS the threshold so more of
+  // the tropical mid-elevation band becomes jungle instead of grassland.
+  //   jungleThreshold = 0.85 - jungle * 0.68  -> j0:0.85 j0.25:0.68 j0.5:0.51 j1:0.17
+  const jungle = clamp01(numOr(o.jungle, DEFAULTS.jungle));
+  const jungleThreshold = Math.max(0.1, 0.85 - jungle * 0.68);
   const bonusAbundancy = clamp01(numOr(o.bonusAbundancy, DEFAULTS.bonusAbundancy));
   // Climate-band dividing-line fractions (of the polar line), from config.
   const climateBands = resolveClimateBands(o.climateBands);
@@ -1442,7 +1457,7 @@ function generateMap(opts = {}) {
   }
 
   if (biome) {
-    grid = assignBiomes(grid, width, height, rng, polar, wrap, climateBands);
+    grid = assignBiomes(grid, width, height, rng, polar, wrap, climateBands, jungleThreshold);
   }
 
   // Rivers require sea cells (tile === 1) to flow into, which exist after
@@ -1499,7 +1514,7 @@ function generateMap(opts = {}) {
     bonuses,
     meta: {
       width, height, algo, seed, island, water: waterFraction, octaves,
-      roughness, erode, talus, mountains, biome, polar,
+      roughness, erode, talus, mountains, biome, polar, jungle,
       rivers: doRivers, springElevation, maxRivers, cellsPerRiver, minRiverLength,
       largestAreaWithoutRiver, wrap, seaLevel, aiOpponents, difficulty, bonusAbundancy
     }
