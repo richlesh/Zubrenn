@@ -132,6 +132,12 @@
     <input id="talus" type="range" min="0" max="1" step="0.01" value="0.06">
   </div>
 
+  <div class="field">
+    <div class="labelrow"><label for="mountains">Mountains</label><span class="rangeval" id="mountains-val">0.25</span></div>
+    <input id="mountains" type="range" min="0" max="1" step="0.05" value="0.25">
+    <div class="hint">Proportion of mountainous terrain (mountain-low / mountain-high). Higher lifts more land into the mountain tiers.</div>
+  </div>
+
     </div><!-- /settings-col (left) -->
     <div class="settings-col">
 
@@ -225,7 +231,7 @@
     });
 
     // Live-update range value labels.
-    const ranges = ["water", "island", "roughness", "talus", "springElevation"];
+    const ranges = ["water", "island", "roughness", "talus", "mountains", "springElevation"];
     ranges.forEach((id) => {
       const input = document.getElementById(id);
       const out = document.getElementById(id + "-val");
@@ -419,6 +425,7 @@
         octaves: parseInt(document.getElementById("octaves").value, 10),
         erode: parseInt(document.getElementById("erode").value, 10),
         talus: parseFloat(document.getElementById("talus").value),
+        mountains: parseFloat(document.getElementById("mountains").value),
         biome: document.getElementById("biome").checked,
         polar: parseFloat(document.getElementById("polar").value),
         climateBands: {

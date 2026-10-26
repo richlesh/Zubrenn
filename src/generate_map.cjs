@@ -292,7 +292,7 @@ function thermalErosion(map, width, height, iterations, talus) {
 // Quantize the 0..1 heightmap into integer elevation tiers 1..9.
 // Returns { grid, seaLevel } — seaLevel is the normalized elevation at/below
 // which cells are water; used to report elevation relative to sea level.
-function quantize(map, width, height, waterFraction) {
+function quantize(map, width, height, waterFraction, terrainExponent) {
   const flat = [];
   for (let y = 0; y < height; y++)
     for (let x = 0; x < width; x++) flat.push(map[y][x]);
@@ -309,7 +309,10 @@ function quantize(map, width, height, waterFraction) {
         row[x] = 1; // water
       } else {
         const t = (h - seaLevel) / landRange;
-        const shaped = Math.pow(t, 1.3);
+        // Shaping exponent biases land toward LOW tiers (exp > 1) or HIGH tiers
+        // (exp < 1). Lower exponent => MORE mountains (tiers 7/8). Default 1.3.
+        const exp = (Number.isFinite(terrainExponent) && terrainExponent > 0) ? terrainExponent : 1.3;
+        const shaped = Math.pow(t, exp);
         let tier = 2 + Math.floor(shaped * 8);
         if (tier > 9) tier = 9;
         if (tier < 2) tier = 2;
@@ -1316,6 +1319,9 @@ const DEFAULTS = {
   roughness: 0.55, // diamond roughness / fbm persistence
   erode: 0,        // thermal erosion iterations
   talus: 0.06,     // erosion slope threshold
+  mountains: 0.25, // 0..1 proportion of mountainous terrain (maps to the
+                   //  elevation shaping exponent; higher => more mountains).
+                   //  0.25 reproduces the original exponent (1.3).
   biome: true,     // map elevation tiers -> biome tile IDs
   polar: 0.82,     // latitude beyond which lowlands freeze (biome mode)
   bonusAbundancy: 0.25, // 0..1 Sparse->Abundant; fraction of map cells seeded
@@ -1361,6 +1367,12 @@ function generateMap(opts = {}) {
   const roughness = clamp01(numOr(o.roughness, DEFAULTS.roughness));
   const erode = Math.max(0, parseInt(o.erode, 10) || 0);
   const talus = clamp01(numOr(o.talus, DEFAULTS.talus));
+  // Mountainous-terrain control (0..1): map to the elevation shaping exponent.
+  // 0.25 => 1.3 (original). Higher `mountains` lowers the exponent, lifting more
+  // land into the high tiers (7 mountain-low, 8 mountain-high).
+  //   exp = 1.6 - mountains * 1.2  -> m0:1.6  m0.25:1.3  m0.5:1.0  m1:0.4
+  const mountains = clamp01(numOr(o.mountains, DEFAULTS.mountains));
+  const terrainExponent = Math.max(0.2, 1.6 - mountains * 1.2);
   const biome = o.biome === true || o.biome === 'true' || o.biome === 1;
   const polar = clamp01(numOr(o.polar, DEFAULTS.polar));
   const bonusAbundancy = clamp01(numOr(o.bonusAbundancy, DEFAULTS.bonusAbundancy));
@@ -1404,7 +1416,7 @@ function generateMap(opts = {}) {
     elevation.push(row);
   }
 
-  const quantized = quantize(map, width, height, waterFraction);
+  const quantized = quantize(map, width, height, waterFraction, terrainExponent);
   let grid = quantized.grid;
   const seaLevel = quantized.seaLevel;
 
@@ -1487,7 +1499,7 @@ function generateMap(opts = {}) {
     bonuses,
     meta: {
       width, height, algo, seed, island, water: waterFraction, octaves,
-      roughness, erode, talus, biome, polar,
+      roughness, erode, talus, mountains, biome, polar,
       rivers: doRivers, springElevation, maxRivers, cellsPerRiver, minRiverLength,
       largestAreaWithoutRiver, wrap, seaLevel, aiOpponents, difficulty, bonusAbundancy
     }
