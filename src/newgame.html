@@ -119,7 +119,7 @@
   <div class="grid2">
     <div class="field" id="octaves-field">
       <label for="octaves">fBm octaves</label>
-      <input id="octaves" type="number" min="1" max="12" step="1" value="6">
+      <input id="octaves" type="number" min="1" max="12" step="1" value="12">
     </div>
     <div class="field">
       <label for="erode">Erosion iterations</label>
@@ -133,8 +133,8 @@
   </div>
 
   <div class="field">
-    <div class="labelrow"><label for="mountains">Mountains</label><span class="rangeval" id="mountains-val">0.25</span></div>
-    <input id="mountains" type="range" min="0" max="1" step="0.05" value="0.25">
+    <div class="labelrow"><label for="mountains">Mountains</label><span class="rangeval" id="mountains-val">0.65</span></div>
+    <input id="mountains" type="range" min="0" max="1" step="0.05" value="0.65">
     <div class="hint">Proportion of mountainous terrain (mountain-low / mountain-high). Higher lifts more land into the mountain tiers.</div>
   </div>
 
@@ -166,20 +166,20 @@
   </div>
 
   <div class="field">
-    <div class="labelrow"><label for="jungle">Jungle (tropical lushness)</label><span class="rangeval" id="jungle-val">0.25</span></div>
-    <input id="jungle" type="range" min="0" max="1" step="0.05" value="0.25">
+    <div class="labelrow"><label for="jungle">Jungle (tropical lushness)</label><span class="rangeval" id="jungle-val">0.60</span></div>
+    <input id="jungle" type="range" min="0" max="1" step="0.05" value="0.6">
     <div class="hint">How much of the tropical mid-elevation band becomes jungle (vs. grassland). Higher = more jungle.</div>
   </div>
 
   <div class="field">
-    <div class="labelrow"><label for="bandJitter">Climate band irregularity</label><span class="rangeval" id="bandJitter-val">6&deg;</span></div>
-    <input id="bandJitter" type="range" min="0" max="25" step="1" value="6">
+    <div class="labelrow"><label for="bandJitter">Climate band irregularity</label><span class="rangeval" id="bandJitter-val">12&deg;</span></div>
+    <input id="bandJitter" type="range" min="0" max="25" step="1" value="12">
     <div class="hint">Wobble (degrees) at the tropic/temperate/subpolar/polar boundaries. 0 = straight horizontal lines; higher = more natural, meandering transitions.</div>
   </div>
 
   <div class="field" id="tropicalFraction-field">
-    <div class="labelrow"><label for="tropicalFraction">Tropical Fraction</label><span class="rangeval" id="tropicalFraction-val">35%</span></div>
-    <input id="tropicalFraction" type="range" min="0" max="35" step="1" value="35">
+    <div class="labelrow"><label for="tropicalFraction">Tropical Fraction</label><span class="rangeval" id="tropicalFraction-val">25%</span></div>
+    <input id="tropicalFraction" type="range" min="0" max="35" step="1" value="25">
     <div class="hint">Tropics span the inner this-% of the polar line (tropical/temperate divide).</div>
   </div>
 

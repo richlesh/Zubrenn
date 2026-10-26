@@ -427,7 +427,7 @@ function buildClimateJitter(width, height, rng, wrap) {
 // fractions come from config.json `climateBands`
 // ({ tropicalFraction, subpolarFraction }); these defaults are used only when
 // config does not supply them.
-const DEFAULT_CLIMATE_BANDS = { tropicalFraction: 0.35, subpolarFraction: 0.15 };
+const DEFAULT_CLIMATE_BANDS = { tropicalFraction: 0.25, subpolarFraction: 0.15 };
 // Normalize a config climateBands object to concrete fractions, applying
 // defaults for any missing/invalid values.
 function resolveClimateBands(cb) {
@@ -1388,19 +1388,19 @@ const DEFAULTS = {
   seed: undefined, // random if omitted
   island: 0.5,     // 0..1 edge falloff
   water: 0.35,     // 0..1 target water fraction
-  octaves: 6,      // fbm only
+  octaves: 12,     // fbm only
   roughness: 0.55, // diamond roughness / fbm persistence
   erode: 0,        // thermal erosion iterations
   talus: 0.06,     // erosion slope threshold
-  mountains: 0.25, // 0..1 proportion of mountainous terrain (maps to the
+  mountains: 0.65, // 0..1 proportion of mountainous terrain (maps to the
                    //  elevation shaping exponent; higher => more mountains).
                    //  0.25 reproduces the original exponent (1.3).
   biome: true,     // map elevation tiers -> biome tile IDs
   polar: 0.82,     // latitude beyond which lowlands freeze (biome mode)
-  jungle: 0.25,    // 0..1 jungle lushness in the tropics (maps to the jungle
+  jungle: 0.6,     // 0..1 jungle lushness in the tropics (maps to the jungle
                    //  moisture threshold; higher => more jungle). 0.25 keeps
                    //  the original threshold (0.68).
-  bandJitter: 6,   // degrees of per-cell latitude wobble at climate-band edges
+  bandJitter: 12,  // degrees of per-cell latitude wobble at climate-band edges
                    //  (tropic/temperate/subpolar/polar). 0 = hard straight
                    //  lines; higher = more irregular, broken-up boundaries.
   bonusAbundancy: 0.25, // 0..1 Sparse->Abundant; fraction of map cells seeded
