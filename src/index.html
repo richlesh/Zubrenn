@@ -7593,6 +7593,13 @@
       if (terrainHappiness) b.breakdown.happiness['Terrain'] = terrainHappiness;
       if (terrainBonusHappiness) b.breakdown.happiness['Terrain Bonus'] = terrainBonusHappiness;
       if (tradeHappiness > 0) b.breakdown.happiness['Trade'] = tradeHappiness;
+      // Bought 'Other Resources' happiness (flat per colony): the morale from
+      // leased terrain-bonus deposits the owner buys. Folded into the rate above.
+      {
+        const cob = (typeof consumerOtherBonus === 'function') ? consumerOtherBonus(col.owner) : null;
+        const boughtHapp = cob ? (cob.happiness || 0) : 0;
+        if (boughtHapp) b.breakdown.happiness['Bought Resources'] = boughtHapp;
+      }
       if (taxPenalty > 0) b.breakdown.happiness['Federation Tax'] = -taxPenalty;
       // Pay-rate morale (flat per colony): positive above the default pay rate,
       // negative below. Matches the term added to happinessPos/happinessNeg.
