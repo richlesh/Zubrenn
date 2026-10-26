@@ -291,7 +291,7 @@
       </div>
       <div class="fed-field">
         <label for="fed-payrate">Pay rate: <span id="fed-payrate-val">8</span> credits / 1000 citizens / year</label>
-        <input id="fed-payrate" type="range" min="1" max="100" step="1" value="8">
+        <input id="fed-payrate" type="range" min="1" max="100" step="0.25" value="8">
         <div class="hint">Wages for colonists and military (per population unit). Paying above the baseline (<span id="fed-payrate-base">8</span>) raises morale; below it lowers morale: <span id="fed-payhappen">0</span> happiness/year to every colony.</div>
       </div>
       <div class="fed-field">
@@ -16618,8 +16618,9 @@
       if (happEl) happEl.textContent = "\u2212" + _fmtCredits(rate); // −rate happiness/colony
       // Pay-rate slider: value, baseline, and the per-colony happiness delta.
       if (fedPayRate) {
-        const pr = Math.max(1, Math.min(100, parseInt(fedPayRate.value, 10) || defaultPayRate()));
-        const prValEl = document.getElementById("fed-payrate-val"); if (prValEl) prValEl.textContent = String(pr);
+        const pr = Math.max(1, Math.min(100, parseFloat(fedPayRate.value) || defaultPayRate()));
+        const _prTxt = (Math.round(pr * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 });
+        const prValEl = document.getElementById("fed-payrate-val"); if (prValEl) prValEl.textContent = _prTxt;
         const prBaseEl = document.getElementById("fed-payrate-base"); if (prBaseEl) prBaseEl.textContent = _fmtCredits(defaultPayRate());
         const payHappEl = document.getElementById("fed-payhappen");
         if (payHappEl) {
@@ -16703,7 +16704,11 @@
       const snapped = Math.max(0, Math.min(20, Math.round(fed.taxRate * 2) / 2));
       fedTaxRate.value = String(snapped);
       if (fedRoadCrews) fedRoadCrews.value = String(Math.max(0, Math.min(20, Math.round(fed.roadCrews != null ? fed.roadCrews : 0))));
-      if (fedPayRate) fedPayRate.value = String(Math.max(1, Math.min(100, Math.round(fed.payRate != null ? fed.payRate : defaultPayRate()))));
+      if (fedPayRate) {
+        const pr0 = (fed.payRate != null) ? fed.payRate : defaultPayRate();
+        const snappedPay = Math.max(1, Math.min(100, Math.round(pr0 * 4) / 4)); // nearest 0.25
+        fedPayRate.value = String(snappedPay);
+      }
       renderFederation();
       federationOverlay.hidden = false;
     }
@@ -16717,7 +16722,7 @@
     // Moving the pay-rate slider commits the wage immediately.
     if (fedPayRate) fedPayRate.addEventListener("input", () => {
       const player = _humanPlayer();
-      if (player) ensureFederation(player).payRate = Math.max(1, Math.min(100, parseInt(fedPayRate.value, 10) || defaultPayRate()));
+      if (player) ensureFederation(player).payRate = Math.max(1, Math.min(100, parseFloat(fedPayRate.value) || defaultPayRate()));
       renderFederation();
     });
     // Moving the road-crews slider commits the per-year repair capacity.
