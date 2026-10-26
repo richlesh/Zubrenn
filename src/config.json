@@ -234,7 +234,7 @@
     "population": { "name": "Population", "unitSize": 1000, "speed": 5,
         "buildCost": { },
         "costPerYear": { "food": 1, "goods": 5, "energy": 4.5, "water": 0.1, "wealth": 8 },
-        "bonus": { "happiness": 0.05 }
+        "bonus": { "happiness": 1.0 }
     },
     // Batallion 1000 service men, 100 APC, cost is per battalion
     // Stryker M1126 cost is $5M = 0.5 credits for 10 soldiers
