@@ -977,6 +977,10 @@ body.dark #strike-cancel { background: #3a3a3c; color: #e0e0e0; }
 body.dark #diplomacy-dialog { background: #2c2c2e; color: #e0e0e0; }
 #diplomacy-dialog h2 { font-size: 15px; margin-bottom: 6px; }
 #diplomacy-dialog .hint { font-size: 11px; color: #888; margin-bottom: 10px; }
+/* Clickable species names (Diplomacy / Trades) that open the Nexus page. */
+a.species-link { color: #0a84ff; text-decoration: underline; cursor: pointer; }
+a.species-link:hover { filter: brightness(1.15); }
+body.dark a.species-link { color: #5aa9ff; }
 #diplomacy-table-wrap { overflow: auto; flex: 1 1 auto; min-height: 0; }
 #diplomacy-table { border-collapse: collapse; width: 100%; font-size: 12px; }
 #diplomacy-table th, #diplomacy-table td { padding: 5px 9px; text-align: left; white-space: nowrap; }

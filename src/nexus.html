@@ -641,6 +641,16 @@
     try { readPage("how_to_play.md"); loadContent("how_to_play.md"); }
     catch { loadContent("index.md"); }
 
+    // Jump to a specific doc on request (e.g. an alien species page opened from
+    // the in-game Diplomacy/Trades species links). Accepts a path relative to
+    // the Nexus dir, optionally "doc#anchor". Falls back silently if missing.
+    ipcRenderer.on("nexus-open-doc", (_e, docPath) => {
+      if (!docPath) return;
+      const [name, anchor] = String(docPath).split("#");
+      try { readPage(name); loadContent(name, anchor ? ("#" + anchor) : undefined); }
+      catch (err) { /* unknown doc: leave the current page */ }
+    });
+
     // Close on Escape or Cmd/Ctrl+W.
     window.addEventListener("keydown", (e) => {
       // Cmd/Ctrl+F focuses the page-find field.

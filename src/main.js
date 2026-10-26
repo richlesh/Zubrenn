@@ -280,8 +280,13 @@ function showBackstory() {
 // it can stay open beside the game. Theme and font size follow Settings and
 // update live via the "settings-updated" broadcast.
 let nexusWin;
-function showNexus() {
-  if (nexusWin && !nexusWin.isDestroyed()) return nexusWin.focus();
+function showNexus(targetDoc) {
+  const nav = () => {
+    if (nexusWin && !nexusWin.isDestroyed() && targetDoc) {
+      nexusWin.webContents.send("nexus-open-doc", String(targetDoc));
+    }
+  };
+  if (nexusWin && !nexusWin.isDestroyed()) { nexusWin.focus(); nav(); return; }
   nexusWin = new BrowserWindow({
     width: 900,
     height: 680,
@@ -304,9 +309,17 @@ function showNexus() {
     }
     nexusWin.show();
   });
+  // Navigate to the requested doc once the page has loaded its scripts.
+  if (targetDoc) nexusWin.webContents.once("did-finish-load", nav);
   nexusWin.on("closed", () => { nexusWin = null; });
 }
 ipcMain.handle("close-nexus", () => nexusWin?.close());
+// Open the Nexus viewer to a specific doc (e.g. an alien species page) — used by
+// the in-game species hyperlinks in the Diplomacy/Trades dialogs.
+ipcMain.handle("open-nexus", (_e, arg) => {
+  const doc = arg && typeof arg === "object" ? arg.doc : arg;
+  showNexus(doc ? String(doc) : undefined);
+});
 
 // Debug: a standalone, movable AI Tool Log window (independent OS window, not an
 // in-page panel). Opened lazily when the renderer sends the first log entry in

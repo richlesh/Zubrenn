@@ -13776,6 +13776,36 @@
       return idx >= 0 ? playerDisplayName(idx) : String(owner);
     }
 
+    // The Nexus species-page doc path for an owner, or null if there isn't one
+    // (the human, or a name without a page). AI pages live at
+    // resources/nexus/aliens/<Name>.md with spaces replaced by underscores.
+    function speciesNexusDoc(owner) {
+      if (owner === 'human') return null;
+      const idx = ownerToIndex(owner);
+      const p = idx >= 0 ? (gameState.players || [])[idx] : null;
+      if (!p || p.kind !== 'ai' || !p.name) return null;
+      return 'aliens/' + String(p.name).replace(/ /g, '_') + '.md';
+    }
+    // Build a species-name element for a dialog: a clickable hyperlink that opens
+    // the alien's Nexus page when available, else a plain text node (human /
+    // page-less). `labelText` overrides the displayed text (defaults to the
+    // owner's display name).
+    function makeSpeciesNameEl(owner, labelText) {
+      const text = (labelText != null) ? String(labelText) : ownerDisplayName(owner);
+      const doc = speciesNexusDoc(owner);
+      if (!doc) return document.createTextNode(text);
+      const a = document.createElement('a');
+      a.href = '#';
+      a.className = 'species-link';
+      a.textContent = text;
+      a.title = `Open ${text} in the Nexus`;
+      a.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        try { ipcRenderer.invoke('open-nexus', { doc }); } catch (err) {}
+      });
+      return a;
+    }
+
     // All distinct owners that currently have at least one placed colony.
     function activeOwners() {
       const set = new Set();
@@ -17413,7 +17443,7 @@
         if (owner == null) continue;
         const op = getOpinion(i, 0);               // their opinion of the human
         const tr = document.createElement('tr');
-        const nameTd = document.createElement('td'); nameTd.textContent = playerDisplayName(i);
+        const nameTd = document.createElement('td'); nameTd.appendChild(makeSpeciesNameEl(indexToOwner(i), playerDisplayName(i)));
         const opTd = document.createElement('td'); opTd.className = 'num';
         opTd.textContent = `${op > 0 ? '+' : ''}${nf(op, 0)}`;
         // Status text: war/peace plus any active pacts (with years remaining).
@@ -17642,7 +17672,9 @@
         const direction = humanParty === 'provider' ? 'You sell → them' : 'They sell → you';
         const tr = document.createElement('tr');
         const mk = (txt, cls) => { const td = document.createElement('td'); if (cls) td.className = cls; td.textContent = txt; return td; };
-        tr.appendChild(mk(ownerDisplayName(partner)));
+        const partnerTd = document.createElement('td');
+        partnerTd.appendChild(makeSpeciesNameEl(partner, ownerDisplayName(partner)));
+        tr.appendChild(partnerTd);
         tr.appendChild(mk(direction));
         // Resource label; for a basic-resource deal that under-delivered last
         // year (seller couldn't spare the full agreed amount), note the reduced
