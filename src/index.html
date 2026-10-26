@@ -140,10 +140,10 @@
     </div>
   </div>
 
-  <!-- Debug: terrain-type cell counts for the freshly generated map. -->
+  <!-- Terrain-type cell counts for the freshly generated map (always shown). -->
   <div id="terraindebug-overlay" hidden>
     <div id="terraindebug-dialog">
-      <h2>Terrain Types (debug)</h2>
+      <h2>Terrain Types</h2>
       <div class="hint" id="terraindebug-sub"></div>
       <div id="terraindebug-table-wrap">
         <table id="terraindebug-table">
@@ -18820,14 +18820,11 @@
     ipcRenderer.on("new-map", (_e, result) => {
       try {
         showMap(result, null);
-        // Debug (only when config.json "debug" is true): after the freshly
-        // generated map is first shown, report the cell count/percentage of each
-        // terrain type, then how many of each configured terrain-bonus type were
-        // placed (zeros included). The terrain-bonus dialog chains after the
-        // terrain-type dialog is closed.
-        if (CONFIG && CONFIG.debug) {
-          showTerrainTypeDebug(showTerrainBonusDebug);
-        }
+        // Always show the Terrain Types breakdown after a freshly generated map
+        // is first shown. The Terrain Bonuses breakdown still chains after it
+        // only in debug mode (config.json "debug": true).
+        const debug = !!(CONFIG && CONFIG.debug);
+        showTerrainTypeDebug(debug ? showTerrainBonusDebug : null);
       }
       catch (err) { console.error("[index] failed to render new map:", err && err.stack || err); }
     });
