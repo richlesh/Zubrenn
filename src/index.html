@@ -325,10 +325,14 @@
   <div id="military-overlay" hidden>
     <div id="military-dialog">
       <h2>Military</h2>
-      <div class="hint">Battalions recruit from their colony's population (down to a 2,000 floor). Use the rebase button at the end of a row to move a stationed unit to another colony; travel time is the cheapest route cost divided by the unit's speed.</div>
+      <div class="hint">Battalions recruit from their colony's population (down to a 2,000 floor). Use the per-row rebase button to move a stationed unit to another colony, or check units and use the header Transfer / Homebase buttons to move or recall them in bulk; travel time is the cheapest route cost divided by the unit's speed.</div>
       <div id="military-table-wrap">
         <table id="military-table">
-          <thead><tr><th>Name</th><th>Type</th><th>Strength</th><th>Location</th><th class="mil-act"></th></tr></thead>
+          <thead><tr>
+            <th class="mil-chk"><input type="checkbox" id="military-check-all" title="Select / deselect all units"></th>
+            <th>Name</th><th>Type</th><th>Strength</th><th>Location</th>
+            <th class="mil-act"><button type="button" id="military-bulk-transfer" class="mil-bulk" title="Transfer all checked units to a colony">Transfer</button> <button type="button" id="military-bulk-home" class="mil-bulk" title="Send all checked units to their home base">Homebase</button></th>
+          </tr></thead>
           <tbody id="military-body"></tbody>
         </table>
       </div>
@@ -18202,13 +18206,23 @@
       if (!units.length) {
         const tr = document.createElement("tr");
         const td = document.createElement("td");
-        td.colSpan = 5; td.className = "stat-note";
+        td.colSpan = 6; td.className = "stat-note";
         td.textContent = "No military units yet. Build a Barracks and it will recruit a battalion.";
         tr.appendChild(td); militaryBody.appendChild(tr);
         return;
       }
       for (const u of units) {
         const tr = document.createElement("tr");
+        // Leading checkbox for bulk Transfer / Homebase actions.
+        const chkTd = document.createElement("td");
+        chkTd.className = "mil-chk";
+        const chk = document.createElement("input");
+        chk.type = "checkbox";
+        chk.className = "mil-row-check";
+        chk.dataset.unitId = u.id;
+        chk.addEventListener("change", _syncMilitaryCheckAll);
+        chkTd.appendChild(chk);
+        tr.appendChild(chkTd);
         const full = unitFullStrength(u);
         const strengthTxt = full > 0 ? `${milNf(u.strength)} / ${milNf(full)}` : milNf(u.strength);
         const cells = [u.name, typeLabel(u.type), strengthTxt, unitLocationLabel(u)];
@@ -18234,11 +18248,122 @@
         tr.appendChild(actTd);
         militaryBody.appendChild(tr);
       }
+      _syncMilitaryCheckAll();
+    }
+    // Keep the header "select all" checkbox in sync with the row checkboxes
+    // (checked when all are checked, indeterminate on a partial selection).
+    function _syncMilitaryCheckAll() {
+      const all = document.getElementById("military-check-all");
+      if (!all) return;
+      const rows = Array.from(document.querySelectorAll("#military-body .mil-row-check"));
+      const checked = rows.filter((c) => c.checked).length;
+      all.checked = rows.length > 0 && checked === rows.length;
+      all.indeterminate = checked > 0 && checked < rows.length;
+    }
+    // The units whose row checkbox is currently ticked.
+    function _checkedMilitaryUnits() {
+      const ids = Array.from(document.querySelectorAll("#military-body .mil-row-check:checked"))
+        .map((c) => c.dataset.unitId);
+      return ids.map((id) => findUnitById(id)).filter(Boolean);
+    }
+    // Bulk Homebase: recall every checked unit to its home base to rebuild.
+    function bulkHomebaseChecked() {
+      const units = _checkedMilitaryUnits();
+      if (!units.length) { notify("Check one or more units first."); return; }
+      let moved = 0;
+      for (const u of units) { if (recallUnit(u) != null) moved++; }
+      renderMilitary();
+      notify(moved ? `${moved} unit${moved === 1 ? '' : 's'} recalled to home base.`
+                   : "No checked unit could be recalled (already home / in transit / no home base).");
+    }
+    // Bulk Transfer: pick ONE destination colony and deploy every eligible
+    // checked unit there. The picker lists colonies reachable by at least one
+    // checked unit; on pick, each checked unit that can reach it is deployed.
+    function bulkTransferChecked(anchorEl) {
+      const units = _checkedMilitaryUnits();
+      if (!units.length) { notify("Check one or more units first."); return; }
+      // Union of reachable destination colonies across the checked units, keyed
+      // by colony cell; keep the max ETA seen so the label is representative.
+      const byCell = new Map(); // "x,y" -> { colony, turns }
+      for (const u of units) {
+        for (const d of rebaseDestinations(u)) {
+          const k = d.colony.x + "," + d.colony.y;
+          const prev = byCell.get(k);
+          if (!prev || d.turns > prev.turns) byCell.set(k, { colony: d.colony, turns: d.turns });
+        }
+      }
+      const dests = Array.from(byCell.values()).sort((a, b) => a.turns - b.turns);
+      openBulkColonyPicker(anchorEl, units, dests);
+    }
+    // A destination picker for a SET of units (bulk transfer). Reuses the rebase
+    // popup element. On pick, deploys each unit that can actually reach the
+    // chosen colony.
+    function openBulkColonyPicker(anchorEl, units, dests) {
+      closeColonyPicker();
+      const el = document.getElementById("rebase-picker");
+      if (!el) return;
+      el.innerHTML = "";
+      const header = document.createElement("div");
+      header.className = "rebase-head";
+      header.textContent = `Transfer ${units.length} unit${units.length === 1 ? '' : 's'} to…`;
+      el.appendChild(header);
+      if (!dests.length) {
+        const empty = document.createElement("div");
+        empty.className = "rebase-empty";
+        empty.textContent = "No reachable colonies for the checked units.";
+        el.appendChild(empty);
+      } else {
+        for (const d of dests) {
+          const item = document.createElement("div");
+          item.className = "rebase-item";
+          const name = document.createElement("span");
+          name.textContent = d.colony.name || `(${d.colony.x}, ${d.colony.y})`;
+          const eta = document.createElement("span");
+          eta.className = "rebase-eta";
+          eta.textContent = `\u2264 ${d.turns} turn${d.turns === 1 ? "" : "s"}`;
+          item.appendChild(name); item.appendChild(eta);
+          item.addEventListener("click", (e) => {
+            e.stopPropagation();
+            let moved = 0;
+            for (const u of units) { if (deployUnit(u, d.colony) != null) moved++; }
+            closeColonyPicker();
+            renderMilitary();
+            notify(moved ? `${moved} unit${moved === 1 ? '' : 's'} transferring to ${d.colony.name || 'the colony'}.`
+                         : "No checked unit could transfer there (out of range / not full strength / in transit).");
+          });
+          el.appendChild(item);
+        }
+      }
+      el.hidden = false;
+      const r = anchorEl.getBoundingClientRect();
+      let left = r.left, top = r.bottom + 4;
+      const pr = el.getBoundingClientRect();
+      if (left + pr.width > window.innerWidth - 6) left = Math.max(6, window.innerWidth - pr.width - 6);
+      if (top + pr.height > window.innerHeight - 6) top = Math.max(6, r.top - pr.height - 4);
+      el.style.left = left + "px"; el.style.top = top + "px";
+      const onDocClick = (e) => { if (!el.contains(e.target)) closeColonyPicker(); };
+      const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); closeColonyPicker(); } };
+      setTimeout(() => {
+        document.addEventListener("mousedown", onDocClick, true);
+        document.addEventListener("keydown", onKey, true);
+      }, 0);
+      _rebaseCleanup = () => {
+        document.removeEventListener("mousedown", onDocClick, true);
+        document.removeEventListener("keydown", onKey, true);
+      };
     }
     function openMilitary() { renderMilitary(); militaryOverlay.hidden = false; }
     function closeMilitary() { closeColonyPicker(); militaryOverlay.hidden = true; }
     ipcRenderer.on("view-military", openMilitary);
     document.getElementById("military-close").addEventListener("click", closeMilitary);
+    // Header "select all" checkbox toggles every row checkbox to match.
+    { const el = document.getElementById("military-check-all"); if (el) el.addEventListener("change", () => {
+        const on = el.checked; el.indeterminate = false;
+        document.querySelectorAll("#military-body .mil-row-check").forEach((c) => { c.checked = on; });
+      }); }
+    // Header bulk-action buttons apply to all checked rows.
+    { const el = document.getElementById("military-bulk-transfer"); if (el) el.addEventListener("click", (e) => { e.stopPropagation(); bulkTransferChecked(el); }); }
+    { const el = document.getElementById("military-bulk-home"); if (el) el.addEventListener("click", (e) => { e.stopPropagation(); bulkHomebaseChecked(); }); }
     militaryOverlay.addEventListener("click", (e) => { if (e.target === militaryOverlay) closeMilitary(); });
     // Strike Force dialog buttons.
     document.getElementById("strike-attack").addEventListener("click", confirmStrikeForce);

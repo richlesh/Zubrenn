@@ -725,6 +725,15 @@ body.dark #military-table tbody tr:nth-child(even) { background: rgba(255,255,25
 .mil-msg { color: #666; }
 body.dark .mil-msg { color: #aaa; }
 #military-close { background: #0a84ff; color: #fff; }
+/* Leading checkbox column + header bulk-action buttons. */
+#military-table th.mil-chk, #military-table td.mil-chk { width: 1%; text-align: center; padding-left: 10px; padding-right: 6px; }
+#military-table input[type="checkbox"] { cursor: pointer; }
+button.mil-bulk {
+  background: #0a84ff; color: #fff; border: none; border-radius: 6px;
+  font-size: 11px; padding: 2px 8px; cursor: pointer;
+}
+button.mil-bulk:hover { filter: brightness(1.12); }
+button.mil-bulk:active { filter: brightness(0.85); transform: translateY(1px); }
 
 /* Rebase destination picker (reusable floating menu). */
 #rebase-picker {
