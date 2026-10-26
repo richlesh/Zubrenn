@@ -303,6 +303,8 @@
         <thead><tr><th>End of turn</th><th>Credits</th></tr></thead>
         <tbody>
           <tr><td>Taxes collected</td><td id="fed-taxes">0</td></tr>
+          <tr><td>Trade income</td><td id="fed-tradeincome">0</td></tr>
+          <tr><td>Trade expenses</td><td id="fed-tradeexpense">0</td></tr>
           <tr><td>Road maintenance (<span id="fed-roadn">0</span> seg)</td><td id="fed-roadcost">0</td></tr>
           <tr><td>Monorail maintenance (<span id="fed-mononn">0</span> seg)</td><td id="fed-monocost">0</td></tr>
           <tr><td>Canal maintenance (<span id="fed-canaln">0</span> sides)</td><td id="fed-canalcost">0</td></tr>
@@ -10369,6 +10371,22 @@
       }
       return total;
     }
+    // Per-year trade wealth flows for `owner`'s Federation: income (sum of
+    // amountPerYear on ACTIVE deals where owner is the PROVIDER) and expense
+    // (where owner is the CONSUMER). Only connected deals with remaining term
+    // count — matching what settleTradesForYear will actually transfer. Returns
+    // { income, expense, net }.
+    function federationTradeFlows(owner) {
+      let income = 0, expense = 0;
+      for (const t of ensureTrades()) {
+        if (!(t.remaining > 0) || t._active === false) continue; // suspended/expired pay nothing
+        const amt = Math.max(0, Number(t.amountPerYear) || 0);
+        if (!amt) continue;
+        if (t.provider === owner) income += amt;
+        else if (t.consumer === owner) expense += amt;
+      }
+      return { income, expense, net: income - expense };
+    }
     // Transport the player maintains. Roads/monorails/canals are a single global
     // network built only by the human, so they are attributed to 'human'; other
     // players maintain none. Counts: road & monorail SEGMENTS (edges), canal
@@ -16561,7 +16579,22 @@
       return (gameState.players || []).find((p) => p && p.kind === 'human') || null;
     }
     function _fmtCredits(n) {
-      const r = Math.round(n * 10) / 10;
+      const num = Number(n) || 0;
+      // Federation window: values over 1000 (abs) are shown in SI units with
+      // two decimals (e.g. 1234 -> "1.23k", 2,500,000 -> "2.50M").
+      if (Math.abs(num) > 1000) {
+        const neg = num < 0;
+        let v = Math.abs(num);
+        const units = [
+          { d: 1e12, s: 'T' }, { d: 1e9, s: 'B' }, { d: 1e6, s: 'M' }, { d: 1e3, s: 'k' },
+        ];
+        for (const u of units) {
+          if (v >= u.d) {
+            return (neg ? '\u2212' : '') + (v / u.d).toFixed(2) + u.s;
+          }
+        }
+      }
+      const r = Math.round(num * 10) / 10;
       return (Number.isInteger(r) ? r.toLocaleString() : r.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
     }
     // Format a maintenance cost VECTOR (energy/material/water/wealth) as a
@@ -16587,7 +16620,7 @@
       const cols = playerColonies('human');
       let pop = 0; for (const c of cols) pop += (c.population || 0);
       document.getElementById("fed-colonies").textContent = cols.length.toLocaleString();
-      document.getElementById("fed-population").textContent = Math.round(pop).toLocaleString();
+      document.getElementById("fed-population").textContent = _fmtCredits(Math.round(pop));
       document.getElementById("fed-treasury").textContent = _fmtCredits(fed.treasury);
       // Per-resource stored / max (Federation owned pool vs its pooled storage).
       {
@@ -16661,9 +16694,15 @@
       document.getElementById("fed-dronen").textContent = String(m.fedBuildingCount || 0);
       document.getElementById("fed-dronecost").textContent = _fmtMaintCost(m.fedBuildings);
       document.getElementById("fed-maint").textContent = _fmtMaintCost(m.total);
-      // Net/projected treasury track WEALTH only (taxes and treasury are wealth);
-      // other maintenance resources draw from their own owned pools.
-      const net = taxes - (m.total.wealth || 0);
+      // Trade income (as provider) and expenses (as consumer) this year.
+      const trade = federationTradeFlows('human');
+      const tInEl = document.getElementById("fed-tradeincome");
+      if (tInEl) tInEl.textContent = (trade.income > 0 ? "+" : "") + _fmtCredits(trade.income);
+      const tExEl = document.getElementById("fed-tradeexpense");
+      if (tExEl) tExEl.textContent = (trade.expense > 0 ? "\u2212" : "") + _fmtCredits(trade.expense);
+      // Net/projected treasury track WEALTH only (taxes, trade, and treasury are
+      // wealth); other maintenance resources draw from their own owned pools.
+      const net = taxes + trade.income - trade.expense - (m.total.wealth || 0);
       const netEl = document.getElementById("fed-net");
       netEl.textContent = (net >= 0 ? "+" : "") + _fmtCredits(net);
       netEl.style.color = net >= 0 ? "#1a9e1a" : "#d23b3b";
