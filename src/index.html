@@ -7594,6 +7594,12 @@
       if (terrainBonusHappiness) b.breakdown.happiness['Terrain Bonus'] = terrainBonusHappiness;
       if (tradeHappiness > 0) b.breakdown.happiness['Trade'] = tradeHappiness;
       if (taxPenalty > 0) b.breakdown.happiness['Federation Tax'] = -taxPenalty;
+      // Pay-rate morale (flat per colony): positive above the default pay rate,
+      // negative below. Matches the term added to happinessPos/happinessNeg.
+      {
+        const payHapp = payRateHappinessDelta(col.owner);
+        if (payHapp) b.breakdown.happiness['Pay'] = payHapp;
+      }
       if (warWeariness > 0) b.breakdown.happiness['War Weariness'] = -warWeariness;
       const happinessCap = colonyHappinessStorage(col);
       // Show the stored total as it WILL be after clamping next turn.
