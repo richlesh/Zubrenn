@@ -17477,8 +17477,8 @@
             : ` You have no surviving land units to occupy it, so it cannot be captured — you may only raze it (razing lowers other species' opinion of you) or leave it neutral.`) +
           `</div>`,
         landSurvivors.length
-          ? [{ value: 'capture', label: 'Capture', kind: 'primary' }, { value: 'raze', label: 'Raze', kind: 'danger' }, { value: 'leave', label: 'Leave', kind: 'neutral' }]
-          : [{ value: 'raze', label: 'Raze', kind: 'danger' }, { value: 'leave', label: 'Leave', kind: 'neutral' }]
+          ? [{ value: 'capture', label: 'Capture', kind: 'positive' }, { value: 'raze', label: 'Raze', kind: 'danger' }, { value: 'leave', label: 'Leave', kind: 'primary' }]
+          : [{ value: 'raze', label: 'Raze', kind: 'danger' }, { value: 'leave', label: 'Leave', kind: 'primary' }]
       ).then((choice) => apply(choice));
     }
     // Capture: flip ownership to `newOwner`, destroy a random 10–30% of the
@@ -17665,7 +17665,7 @@
       row.style.marginTop = '14px'; row.style.display = 'flex'; row.style.gap = '8px'; row.style.justifyContent = 'flex-end';
       const close = () => { if (overlay.parentNode) document.body.removeChild(overlay); };
       const cancelBtn = document.createElement('button'); cancelBtn.textContent = 'Cancel';
-      cancelBtn.className = 'btn-neutral';
+      cancelBtn.className = 'btn-danger';
       cancelBtn.addEventListener('click', close);
       const sendBtn = document.createElement('button'); sendBtn.textContent = isPeace ? 'Offer Peace' : 'Send Offer';
       sendBtn.className = 'btn-positive';
