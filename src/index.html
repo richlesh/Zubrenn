@@ -16987,18 +16987,20 @@
         // info/confirmation dialog always appears on top of whatever opened it.
         overlay.style.zIndex = '10070';
         const dlg = document.createElement('div');
-        dlg.className = 'dialog';
-        dlg.style.background = 'var(--panel-bg, #222)'; dlg.style.color = 'var(--panel-fg, #eee)';
-        dlg.style.padding = '16px 20px'; dlg.style.borderRadius = '8px';
+        // Share the app dialog look (light/dark surface + rounded colored
+        // buttons) with the rest of the game instead of a dark-only panel.
+        dlg.className = 'dialog app-dialog';
         dlg.style.maxWidth = '560px'; dlg.style.maxHeight = '80vh'; dlg.style.overflow = 'auto';
-        dlg.style.boxShadow = '0 6px 30px rgba(0,0,0,0.6)';
-        dlg.innerHTML = `${title ? `<h2 style="margin-top:0">${esc(title)}</h2>` : ""}<div>${bodyHtml}</div>`;
+        dlg.innerHTML = `${title ? `<h2>${esc(title)}</h2>` : ""}<div>${bodyHtml}</div>`;
         const row = document.createElement('div');
         row.style.marginTop = '14px'; row.style.display = 'flex'; row.style.gap = '8px'; row.style.justifyContent = 'flex-end';
         const done = (val) => { document.body.removeChild(overlay); resolve(val); };
         for (const b of buttons) {
           const btn = document.createElement('button');
           btn.textContent = b.label;
+          // Role-based color (green/red/blue + neutral). Buttons without an
+          // explicit kind default to the blue primary look.
+          btn.className = 'btn-' + (b.kind || 'primary');
           btn.addEventListener('click', () => done(b.value));
           row.appendChild(btn);
         }
@@ -17475,8 +17477,8 @@
             : ` You have no surviving land units to occupy it, so it cannot be captured — you may only raze it (razing lowers other species' opinion of you) or leave it neutral.`) +
           `</div>`,
         landSurvivors.length
-          ? [{ value: 'capture', label: 'Capture' }, { value: 'raze', label: 'Raze' }, { value: 'leave', label: 'Leave' }]
-          : [{ value: 'raze', label: 'Raze' }, { value: 'leave', label: 'Leave' }]
+          ? [{ value: 'capture', label: 'Capture', kind: 'primary' }, { value: 'raze', label: 'Raze', kind: 'danger' }, { value: 'leave', label: 'Leave', kind: 'neutral' }]
+          : [{ value: 'raze', label: 'Raze', kind: 'danger' }, { value: 'leave', label: 'Leave', kind: 'neutral' }]
       ).then((choice) => apply(choice));
     }
     // Capture: flip ownership to `newOwner`, destroy a random 10–30% of the
@@ -17644,13 +17646,13 @@
       overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
       overlay.style.zIndex = '10071';
       const dlg = document.createElement('div');
-      dlg.className = 'dialog';
-      dlg.style.background = 'var(--panel-bg, #222)'; dlg.style.color = 'var(--panel-fg, #eee)';
-      dlg.style.padding = '16px 20px'; dlg.style.borderRadius = '8px'; dlg.style.minWidth = '320px';
-      dlg.style.boxShadow = '0 6px 30px rgba(0,0,0,0.6)';
+      // Match the rest of the app's dialogs (light/dark surface + rounded,
+      // color-coded buttons) rather than the old dark-only panel.
+      dlg.className = 'dialog app-dialog';
+      dlg.style.minWidth = '320px';
       const resOpts = PACT_RESOURCES.map((r) => `<option value="${r}"${r === 'wealth' ? ' selected' : ''}>${r.charAt(0).toUpperCase() + r.slice(1)}</option>`).join('');
       dlg.innerHTML =
-        `<h2 style="margin-top:0">${esc(titleMap[kind] || 'Diplomacy')} — ${esc(ownerDisplayName(owner))}</h2>` +
+        `<h2>${esc(titleMap[kind] || 'Diplomacy')} — ${esc(ownerDisplayName(owner))}</h2>` +
         `<div class="hint" style="margin-bottom:10px">${isPeace
           ? 'A one-time payment to end the war.'
           : 'A per-year payment for the agreed term. ' + (kind === 'freeTravel' ? 'Allows routing and resource sharing through each other\u2019s territory.' : 'Neither side may attack the other while it is active.')}</div>` +
@@ -17663,8 +17665,10 @@
       row.style.marginTop = '14px'; row.style.display = 'flex'; row.style.gap = '8px'; row.style.justifyContent = 'flex-end';
       const close = () => { if (overlay.parentNode) document.body.removeChild(overlay); };
       const cancelBtn = document.createElement('button'); cancelBtn.textContent = 'Cancel';
+      cancelBtn.className = 'btn-neutral';
       cancelBtn.addEventListener('click', close);
       const sendBtn = document.createElement('button'); sendBtn.textContent = isPeace ? 'Offer Peace' : 'Send Offer';
+      sendBtn.className = 'btn-positive';
       sendBtn.addEventListener('click', () => {
         const res = (document.getElementById('pact-res') || {}).value || 'wealth';
         const amt = Math.max(0, Number((document.getElementById('pact-amt') || {}).value) || 0);
