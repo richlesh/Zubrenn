@@ -7914,6 +7914,14 @@
       if (!Number.isFinite(radius)) {
         // World visibility: reveal every cell on the map.
         added = revealEntireMap();
+        // Announce + log the first time the player's world-visibility network
+        // (the Satellite Network) reveals the planet. The guard lives on map
+        // meta so it is saved/restored and the dialog fires exactly once.
+        const meta = (gameState.map && gameState.map.meta) || null;
+        if (meta && !meta.worldRevealAnnounced) {
+          meta.worldRevealAnnounced = true;
+          try { announceWorldRevealed(b); } catch (e) { console.error('[reveal] world-reveal announce failed:', e); }
+        }
       } else {
         added = addVisibleAround(b.x, b.y, radius);
       }
@@ -7921,6 +7929,20 @@
         syncVisibleToMeta();
         if (hexMap) hexMap.setVisible(_visibleSet);
       }
+    }
+    // Inform + log that the player's orbital network (the Satellite Network) has
+    // revealed the whole planet. `b` is the completed world-visibility building.
+    function announceWorldRevealed(b) {
+      const netName = (typeof improvementName === 'function' && b) ? improvementName(b.type) : 'Satellite Network';
+      const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const logMsg = `The launch of the ${netName} has revealed the whole world of Zubrenn.`;
+      try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(logMsg); } catch (e) {}
+      const body =
+        `<p>The <strong>${esc(netName)}</strong> is operational. Its orbital eyes have ` +
+        `<strong>revealed the entire world of Zubrenn</strong>.</p>` +
+        `<p class="hint">The fog of war is lifted — the whole map is now visible.</p>`;
+      try { showChoiceDialog('The World Revealed', body, [{ value: 'ok', label: 'Onward', kind: 'primary' }]); }
+      catch (e) { console.error('[reveal] world-reveal dialog failed:', e); }
     }
     // Reveal every cell on the map into the explored (visible) set. Returns the
     // number of newly revealed cells.
