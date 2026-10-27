@@ -13742,11 +13742,9 @@
           });
         }
       }
-      // Log war's beginning (no popup — the triggering attack has its own report).
-      if (pairInvolvesHuman(a, b)) {
-        const other = (a === 'human') ? b : a;
-        diploLog(`War has begun with ${ownerDisplayName(other)}.`);
-      }
+      // A new war has begun: show a diplomacy screen (attacker's portrait) and
+      // record it in the Game Log. diploScreen handles both.
+      try { showWarDeclaredDialog(a, b); } catch (e) { console.error('[setWar] war dialog failed:', e); }
     }
     // End a war between two owners (peace).
     function makePeace(a, b) {
@@ -17693,16 +17691,15 @@
     // planet, with its portrait when available.
     function showSpeciesEvictedDialog(speciesName, owner) {
       const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-      const src = (typeof ownerPortraitSrc === 'function') ? ownerPortraitSrc(owner) : '';
-      const portrait = src
-        ? `<img src="${esc(src)}" alt="" width="96" height="96" style="border-radius:8px;flex:0 0 auto;background:#0002;object-fit:cover;" onerror="this.style.display='none'">`
-        : '';
       const body =
-        `<div style="display:flex;gap:14px;align-items:flex-start;">${portrait}` +
-        `<div><p>The <strong>${esc(speciesName)}</strong> have lost their last colony and have been ` +
+        `<p>The <strong>${esc(speciesName)}</strong> have lost their last colony and have been ` +
         `<strong>evicted from the planet Zubrenn</strong>.</p>` +
-        `<p class="hint">Their colonies, forces, and treaties are no more.</p></div></div>`;
-      showChoiceDialog('Species Evicted', body, [{ value: 'ok', label: 'Onward', kind: 'primary' }]);
+        `<p class="hint">Their colonies, forces, and treaties are no more.</p>`;
+      diploScreen('Species Evicted', body, {
+        portraitOwner: owner,
+        logMsg: `The ${speciesName} have been evicted from the planet Zubrenn.`,
+        buttons: [{ value: 'ok', label: 'Onward', kind: 'primary' }],
+      });
     }
     // Diplomacy-styled dialog shown when the HUMAN loses their last colony: the
     // battle for Zubrenn is lost and the game is over.
@@ -17711,7 +17708,48 @@
         `<p>Your last colony has fallen. Your species has been ` +
         `<strong>driven from the planet Zubrenn</strong>.</p>` +
         `<p class="hint">You have lost the battle for Zubrenn.</p>`;
-      showChoiceDialog('Defeat — The Battle for Zubrenn is Lost', body, [{ value: 'ok', label: 'Game Over', kind: 'danger' }]);
+      diploScreen('Defeat — The Battle for Zubrenn is Lost', body, {
+        logMsg: 'Your last colony has fallen — you have lost the battle for Zubrenn.',
+        buttons: [{ value: 'ok', label: 'Game Over', kind: 'danger' }],
+      });
+    }
+    // Shared presenter for the diplomacy "screens" (war declared, species
+    // evicted, defeat). It (1) ALWAYS records the event in the Game Log and
+    // (2) shows a diplomacy-styled dialog, optionally with a species portrait.
+    // opts: { portraitOwner, logMsg, buttons }.
+    function diploScreen(title, bodyHtml, opts) {
+      const o = opts || {};
+      // Log every diplomacy-screen message (regardless of whether the human is
+      // involved), so the Game Log is a complete diplomatic record.
+      if (o.logMsg) { try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(o.logMsg); } catch (e) {} }
+      const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      let body = bodyHtml;
+      // Prefix a species portrait when requested and available.
+      if (o.portraitOwner != null) {
+        const src = (typeof ownerPortraitSrc === 'function') ? ownerPortraitSrc(o.portraitOwner) : '';
+        if (src) {
+          body =
+            `<div style="display:flex;gap:14px;align-items:flex-start;">` +
+            `<img src="${esc(src)}" alt="" width="96" height="96" style="border-radius:8px;flex:0 0 auto;background:#0002;object-fit:cover;" onerror="this.style.display='none'">` +
+            `<div>${bodyHtml}</div></div>`;
+        }
+      }
+      const buttons = o.buttons || [{ value: 'ok', label: 'OK', kind: 'primary' }];
+      try { showChoiceDialog(title, body, buttons); } catch (e) { console.error('[diploScreen] failed:', e); }
+    }
+    // Diplomacy screen announcing that `attacker` has started a war with
+    // `defender`. The displayed portrait is the ATTACKING species.
+    function showWarDeclaredDialog(attacker, defender) {
+      const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const atkName = ownerDisplayName(attacker);
+      const defName = ownerDisplayName(defender);
+      const body =
+        `<p><strong>${esc(atkName)}</strong> has started a war with <strong>${esc(defName)}</strong>.</p>`;
+      diploScreen('War Declared', body, {
+        portraitOwner: attacker,
+        logMsg: `${atkName} has started a war with ${defName}.`,
+        buttons: [{ value: 'ok', label: 'Onward', kind: 'danger' }],
+      });
     }
     // Resolve an owner id ('human' or an AI index) to its players[] index.
     function playerIndexOf(owner) {
