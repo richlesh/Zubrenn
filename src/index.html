@@ -7937,10 +7937,19 @@
       const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
       const logMsg = `The launch of the ${netName} has revealed the whole world of Zubrenn.`;
       try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(logMsg); } catch (e) {}
-      const body =
+      // The Satellite Network's config icon, shown on the left of the dialog.
+      const iconRel = (b && typeof buildingType === 'function' && buildingType(b.type) && buildingType(b.type).icon) || '';
+      const iconSrc = iconRel ? `resources/${iconRel}` : '';
+      const iconHtml = iconSrc
+        ? `<img src="${esc(iconSrc)}" alt="" width="96" height="96" style="border-radius:8px;flex:0 0 auto;background:#0002;object-fit:contain;" onerror="this.style.display='none'">`
+        : '';
+      const text =
         `<p>The <strong>${esc(netName)}</strong> is operational. Its orbital eyes have ` +
         `<strong>revealed the entire world of Zubrenn</strong>.</p>` +
         `<p class="hint">The fog of war is lifted — the whole map is now visible.</p>`;
+      const body = iconHtml
+        ? `<div style="display:flex;gap:14px;align-items:flex-start;">${iconHtml}<div>${text}</div></div>`
+        : text;
       try { showChoiceDialog('The World Revealed', body, [{ value: 'ok', label: 'Onward', kind: 'primary' }]); }
       catch (e) { console.error('[reveal] world-reveal dialog failed:', e); }
     }
