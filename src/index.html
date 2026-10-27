@@ -4391,6 +4391,11 @@
         }
         badgeChanged = true;
         invalidateColonyConnectivity();
+        // A colony disbanding may have been an owner's LAST — resolve defeat
+        // (human game-over, or AI eviction) for each affected owner.
+        for (const o of new Set(disbanded.map((g) => g.owner))) {
+          try { checkColonyLossElimination(o); } catch (e) { console.error('[defeat] disband check failed:', e); }
+        }
       }
 
       // Post-pipeline per-colony bookkeeping: rate snapshot, worker-availability
@@ -4823,8 +4828,13 @@
         if (typeof gameLog !== 'undefined') gameLog.year(currentYear());
       }
       updateStatus();
+      // The human has been defeated — the game is over; stop advancing turns.
+      if (gameState._gameOver) return;
       const p = players[gameState.currentPlayer];
-      if (p && p.kind === 'ai') {
+      if (p && p.kind === 'ai' && p.eliminated) {
+        // An evicted species takes no turn; move straight on to the next player.
+        scheduleTurnStep(() => advanceTurn());
+      } else if (p && p.kind === 'ai') {
         // Cover the window with the gray AI-turn glass pane (idempotent across
         // consecutive AI turns); removed when the human's turn starts.
         showAITurnOverlay();
@@ -10858,6 +10868,7 @@
       try {
         const p = gameState.players && gameState.players[pi];
         if (!p || p.kind !== 'ai') return;
+        if (p.eliminated) return; // an evicted species takes no turn
         if (!p.placed && (p.modules || 0) > 0 && gameState.turn >= p.placeTurn) {
           const spot = aiChooseColonySite();
           if (spot) {
@@ -17521,6 +17532,9 @@
           for (const u of survivors) recallUnit(u);
           if (humanInvolved) notify(`${targetName} is left undefended and neutral.`);
         }
+        // Losing this colony may have been the defender's LAST — if so, the
+        // species is evicted from Zubrenn (or, for the human, the game is over).
+        checkColonyLossElimination(defenderOwner);
         refreshAll();
       };
       // AI attacker: decide automatically, no dialog.
@@ -17595,6 +17609,110 @@
       const razerIdx = playerIndexOf(razerOwner);
       if (razerIdx != null) adjustOpinionOfAll(razerIdx, -cfg.razeOpinionPenalty);
     }
+    // ---- Defeat / elimination ----------------------------------------------
+    // Whether `owner` still has any colony presence on the planet: a standing
+    // biodome, an inbound (in-transit) biodome en route to found a new colony,
+    // or an unplaced player still holding a colony module to land. A species
+    // with none of these has been driven off Zubrenn.
+    function ownerHasColonyPresence(owner) {
+      if (owner == null) return false;
+      const hasBiodome = (gameState.buildings || []).some((b) => b.type === 1 && b.owner === owner);
+      if (hasBiodome) return true; // standing OR in transit
+      const idx = ownerToIndex(owner);
+      const p = (gameState.players || [])[idx];
+      if (p && !p.placed && (p.modules || 0) > 0) return true; // yet to land its first colony
+      return false;
+    }
+    // Called after a colony changes hands/neutralizes. If `lostOwner` has no
+    // colony presence left, resolve their defeat: the human losing their last
+    // colony ends the game; an AI losing its last colony is evicted from the
+    // planet and removed from gameplay.
+    function checkColonyLossElimination(lostOwner) {
+      if (lostOwner == null) return;
+      if (gameState._gameOver) return;
+      if (ownerHasColonyPresence(lostOwner)) return;
+      const idx = ownerToIndex(lostOwner);
+      const p = (gameState.players || [])[idx];
+      if (!p) return;
+      if (p.kind === 'human') {
+        gameState._gameOver = true;
+        try { showGameOverDialog(); } catch (e) { console.error('[defeat] game-over dialog failed:', e); }
+        return;
+      }
+      if (p.eliminated) return; // already removed
+      const name = playerDisplayName(idx);
+      eliminatePlayer(lostOwner);
+      try { showSpeciesEvictedDialog(name, lostOwner); }
+      catch (e) { console.error('[defeat] eviction dialog failed:', e); }
+    }
+    // Remove an eliminated AI species from all game data structures. Uses a
+    // tombstone (p.eliminated) rather than splicing players[], because an AI's
+    // owner id IS its players[] index and that index is referenced throughout
+    // (building/unit .owner, opinion/relation keys, pacts, trades) — renumbering
+    // would corrupt every reference. All of the species' physical assets and
+    // diplomatic bookkeeping are purged; turn/AI/diplomacy loops skip an
+    // eliminated player.
+    function eliminatePlayer(owner) {
+      const idx = ownerToIndex(owner);
+      const p = (gameState.players || [])[idx];
+      if (!p || p.kind === 'human' || p.eliminated) return;
+      // Tombstone the player (kept in the array to preserve indices).
+      p.eliminated = true;
+      p.placed = false;
+      p.modules = 0;
+      if (p.federation) p.federation = null;
+      // Drop every building (incl. any in-transit biodome) and unit it owns.
+      gameState.buildings = (gameState.buildings || []).filter((b) => b.owner !== owner);
+      gameState.units = (gameState.units || []).filter((u) => u.owner !== owner);
+      // Cancel trades it is a party to, and pacts it holds.
+      if (Array.isArray(gameState.trades)) {
+        gameState.trades = gameState.trades.filter((t) => t.provider !== owner && t.consumer !== owner);
+      }
+      if (Array.isArray(gameState.pacts)) {
+        gameState.pacts = gameState.pacts.filter((pct) => pct.a !== owner && pct.b !== owner);
+      }
+      // Purge diplomatic state keyed by this player's index: relation pairs and
+      // opinion entries in either direction.
+      const i = idx;
+      if (gameState.relations && typeof gameState.relations === 'object') {
+        for (const k of Object.keys(gameState.relations)) {
+          const parts = k.split('|');
+          if (Number(parts[0]) === i || Number(parts[1]) === i) delete gameState.relations[k];
+        }
+      }
+      if (gameState.opinion && typeof gameState.opinion === 'object') {
+        for (const k of Object.keys(gameState.opinion)) {
+          const parts = k.split('->');
+          if (Number(parts[0]) === i || Number(parts[1]) === i) delete gameState.opinion[k];
+        }
+      }
+      // Refresh any open diplomacy view so the evicted species drops out.
+      try { if (typeof renderDiplomacy === 'function') renderDiplomacy(); } catch (e) {}
+    }
+    // Diplomacy-styled dialog announcing an AI species has been evicted from the
+    // planet, with its portrait when available.
+    function showSpeciesEvictedDialog(speciesName, owner) {
+      const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const src = (typeof ownerPortraitSrc === 'function') ? ownerPortraitSrc(owner) : '';
+      const portrait = src
+        ? `<img src="${esc(src)}" alt="" width="96" height="96" style="border-radius:8px;flex:0 0 auto;background:#0002;object-fit:cover;" onerror="this.style.display='none'">`
+        : '';
+      const body =
+        `<div style="display:flex;gap:14px;align-items:flex-start;">${portrait}` +
+        `<div><p>The <strong>${esc(speciesName)}</strong> have lost their last colony and have been ` +
+        `<strong>evicted from the planet Zubrenn</strong>.</p>` +
+        `<p class="hint">Their colonies, forces, and treaties are no more.</p></div></div>`;
+      showChoiceDialog('Species Evicted', body, [{ value: 'ok', label: 'Onward', kind: 'primary' }]);
+    }
+    // Diplomacy-styled dialog shown when the HUMAN loses their last colony: the
+    // battle for Zubrenn is lost and the game is over.
+    function showGameOverDialog() {
+      const body =
+        `<p>Your last colony has fallen. Your species has been ` +
+        `<strong>driven from the planet Zubrenn</strong>.</p>` +
+        `<p class="hint">You have lost the battle for Zubrenn.</p>`;
+      showChoiceDialog('Defeat — The Battle for Zubrenn is Lost', body, [{ value: 'ok', label: 'Game Over', kind: 'danger' }]);
+    }
     // Resolve an owner id ('human' or an AI index) to its players[] index.
     function playerIndexOf(owner) {
       if (owner === 'human') return 0;
@@ -17633,6 +17751,7 @@
       const turn = gameState.turn || 0;
       for (let i = 0; i < players.length; i++) {
         if (i === 0) continue;                     // skip the human themself
+        if (players[i] && players[i].eliminated) continue; // evicted from the planet
         const owner = indexToOwner(i);
         if (owner == null) continue;
         const op = getOpinion(i, 0);               // their opinion of the human
