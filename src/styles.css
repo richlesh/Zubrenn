@@ -734,6 +734,28 @@ button.mil-bulk {
 }
 button.mil-bulk:hover { filter: brightness(1.12); }
 button.mil-bulk:active { filter: brightness(0.85); transform: translateY(1px); }
+/* Icon variant of the header bulk buttons (Transfer ⇄ / Homebase ⌂), sized to
+   match the per-row ⇄/⌂ and the trash-can icon beside them. */
+button.mil-bulk-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; padding: 0; border-radius: 4px;
+  font-size: 14px; line-height: 1; vertical-align: middle;
+}
+/* The header bulk row keeps its three icons on one line, vertically centered. */
+#military-table th.mil-act { white-space: nowrap; }
+/* Disabled action buttons (per-row trash when a unit isn't attacking, etc.). */
+#military-table .mil-act button:disabled,
+button.mil-bulk:disabled, button.mil-bulk-icon:disabled {
+  opacity: 0.4; cursor: default; filter: none; transform: none;
+}
+/* Clickable colony names in the Location column: look like links, act like the
+   Colonies-list center-on-colony control. */
+.mil-colony-link {
+  color: #0a84ff; cursor: pointer; text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.mil-colony-link:hover { filter: brightness(1.15); }
+body.dark .mil-colony-link { color: #4ea1ff; }
 
 /* Rebase destination picker (reusable floating menu). */
 #rebase-picker {
@@ -773,8 +795,10 @@ body.dark .rebase-btn { background: #3a3a3c; color: #4da3ff; border-color: #5555
 .stationed-mil .mil-unit-main { display: flex; flex-direction: column; }
 .stationed-mil .mil-unit-sub { font-size: 10px; color: #999; }
 
-/* Military table trailing action cell (rebase button). */
-#military-table th.mil-act, #military-table td.mil-act { text-align: center; width: 34px; }
+/* Military table trailing action cell (rebase / recall / cancel-attack icons). */
+#military-table th.mil-act, #military-table td.mil-act { text-align: center; width: 1%; white-space: nowrap; }
+#military-table td.mil-act button { vertical-align: middle; }
+#military-table td.mil-act button + button { margin-left: 5px; }
 
 /* Recall (house) button shares the rebase-btn look with a distinct accent. */
 .recall-btn { color: #8a6d00; }

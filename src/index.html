@@ -325,13 +325,13 @@
   <div id="military-overlay" hidden>
     <div id="military-dialog">
       <h2>Military</h2>
-      <div class="hint">Battalions recruit from their colony's population (down to a 2,000 floor). Use the per-row rebase button to move a stationed unit to another colony, or check units and use the header Transfer / Homebase buttons to move or recall them in bulk; travel time is the cheapest route cost divided by the unit's speed.</div>
+      <div class="hint">Battalions recruit from their colony's population (down to a 2,000 floor). Click a colony name in the Location column to close this window and center the map on it. Use the per-row buttons to rebase a stationed unit to another colony (⇄), recall it home (⌂), or cancel its attack and bring it home (🗑). Check units and use the matching header icons to move, recall, or cancel attacks in bulk; travel time is the cheapest route cost divided by the unit's speed.</div>
       <div id="military-table-wrap">
         <table id="military-table">
           <thead><tr>
             <th class="mil-chk"><input type="checkbox" id="military-check-all" title="Select / deselect all units"></th>
             <th>Name</th><th>Type</th><th>Strength</th><th>Location</th>
-            <th class="mil-act"><button type="button" id="military-bulk-transfer" class="mil-bulk" title="Transfer all checked units to a colony">Transfer</button> <button type="button" id="military-bulk-home" class="mil-bulk" title="Send all checked units to their home base">Homebase</button></th>
+            <th class="mil-act"><button type="button" id="military-bulk-transfer" class="mil-bulk mil-bulk-icon" title="Transfer all checked units to a colony" aria-label="Transfer all checked units to a colony">⇄</button> <button type="button" id="military-bulk-home" class="mil-bulk mil-bulk-icon" title="Send all checked units to their home base" aria-label="Send all checked units to their home base">⌂</button> <button type="button" id="military-bulk-cancel" class="icon-trash" title="Cancel the attack for all checked units and return them home" aria-label="Cancel the attack for all checked units and return them home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button></th>
           </tr></thead>
           <tbody id="military-body"></tbody>
         </table>
@@ -5741,6 +5741,34 @@
       }
       return `In ${colonyNameAt(u.x, u.y)}`;
     }
+    // Like unitLocationLabel, but returns the message broken into segments so the
+    // Military window can render the colony name(s) as clickable links (each link
+    // closes the window and centers the map on that colony). A segment is either
+    // { text } (plain) or { colony, x, y } (a clickable colony reference).
+    function unitLocationParts(u) {
+      const colonyNameAt = (x, y) => {
+        const c = (gameState.buildings || []).find((b) => b.type === 1 && b.x === x && b.y === y);
+        return (c && c.name) || `(${x}, ${y})`;
+      };
+      const link = (x, y) => ({ colony: colonyNameAt(x, y), x, y });
+      if (u.strikeForce) {
+        const sf = u.strikeForce;
+        const n = u.turnsRemaining || 0;
+        const where = sf.phase === 'rally' ? 'rallying' : 'attacking';
+        return [
+          { text: 'Attacking ' }, link(sf.targetX, sf.targetY),
+          { text: ` — ${sf.name} (${where}, ${n} turn${n === 1 ? '' : 's'})` },
+        ];
+      }
+      if (u.inTransit) {
+        const n = u.turnsRemaining || 0;
+        return [
+          { text: 'In transit to ' }, link(u.destX, u.destY),
+          { text: ` (${n} turn${n === 1 ? '' : 's'})` },
+        ];
+      }
+      return [{ text: 'In ' }, link(u.x, u.y)];
+    }
 
     // --- Unit strength / home / recall / destruction --------------------------
     // A unit's maximum strength (its unit type's unitSize). Falls back to the
@@ -5780,6 +5808,25 @@
       u.destX = home.x; u.destY = home.y;
       u.turnsRemaining = turns;
       return turns;
+    }
+    // Cancel a unit's participation in a strike force and send it back to the
+    // colony it launched from (its home base). Clears the strikeForce tag first
+    // so recallUnit (which refuses in-transit units) can route it home; if it is
+    // already standing on its home cell it simply stands down. Returns true if a
+    // strike was canceled. The "under attack" overlay derives its targets live
+    // from remaining strike forces, so it clears itself once the last attacker
+    // for a colony stands down.
+    function cancelStrikeForUnit(u) {
+      if (!u || !u.strikeForce) return false;
+      u.strikeForce = null;
+      // Settle the unit at its current staging cell (legs only move position on
+      // completion, so u.x/u.y is the last colony it actually reached), then
+      // recall it home. If it is already home, stand it down in place.
+      u.inTransit = false;
+      u.destX = u.x; u.destY = u.y; u.turnsRemaining = 0;
+      recallUnit(u);
+      try { ensureAttackOverlay(); } catch (e) {}
+      return true;
     }
     // Remove a unit from the game (strength reached 0 or otherwise destroyed) and
     // clear any barracks link that points at it.
@@ -16903,6 +16950,22 @@
       });
       return btn;
     }
+    // Build a cancel-attack (red trash-can) icon button for `unit`: pulls it out
+    // of its strike force and returns it to the colony it launched from. Enabled
+    // only while the unit is committed to a strike force.
+    function makeCancelAttackButton(unit, onCanceled) {
+      const inStrike = !!(unit && unit.strikeForce);
+      const btn = makeTrashButton(
+        inStrike ? "Cancel attack and return home" : "Unit is not attacking",
+        (e) => {
+          if (e && typeof e.stopPropagation === "function") e.stopPropagation();
+          if (!unit.strikeForce) return;
+          if (cancelStrikeForUnit(unit) && typeof onCanceled === "function") onCanceled(unit);
+        }
+      );
+      btn.disabled = !inStrike;
+      return btn;
+    }
     // Replace a unit's name cell with an inline text field to rename the unit.
     // Enter or blur commits (empty keeps the old name); Escape cancels. On a
     // successful change the unit's `name` is updated and the table re-rendered.
@@ -18354,12 +18417,12 @@
         tr.appendChild(chkTd);
         const full = unitFullStrength(u);
         const strengthTxt = full > 0 ? `${milNf(u.strength)} / ${milNf(full)}` : milNf(u.strength);
-        const cells = [u.name, typeLabel(u.type), strengthTxt, unitLocationLabel(u)];
+        const cells = [u.name, typeLabel(u.type), strengthTxt, null /* location: built below as links */];
         for (let i = 0; i < cells.length; i++) {
           const td = document.createElement("td");
-          td.textContent = cells[i];
           if (i === 2) td.className = "num";
           if (i === 0) {
+            td.textContent = cells[i];
             // Double-click the name to rename the unit inline.
             td.classList.add("mil-name");
             td.title = "Double-click to rename";
@@ -18367,6 +18430,31 @@
               e.stopPropagation();
               startRenameUnit(td, u);
             });
+          } else if (i === 3) {
+            // Location: colony names are links that close the window and center
+            // the map on the colony.
+            td.className = "mil-loc";
+            for (const part of unitLocationParts(u)) {
+              if (part.colony != null) {
+                const a = document.createElement("span");
+                a.className = "mil-colony-link";
+                a.textContent = part.colony;
+                a.title = "Center the map on this colony";
+                a.tabIndex = 0;
+                const go = (e) => {
+                  e.stopPropagation();
+                  militaryOverlay.hidden = true;
+                  if (hexMap) hexMap.centerOnCell(part.x, part.y);
+                };
+                a.addEventListener("click", go);
+                a.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(e); } });
+                td.appendChild(a);
+              } else {
+                td.appendChild(document.createTextNode(part.text || ""));
+              }
+            }
+          } else {
+            td.textContent = cells[i];
           }
           tr.appendChild(td);
         }
@@ -18374,6 +18462,7 @@
         actTd.className = "mil-act";
         actTd.appendChild(makeRebaseButton(u, () => renderMilitary()));
         actTd.appendChild(makeRecallButton(u, () => renderMilitary()));
+        actTd.appendChild(makeCancelAttackButton(u, () => renderMilitary()));
         tr.appendChild(actTd);
         militaryBody.appendChild(tr);
       }
@@ -18404,6 +18493,17 @@
       renderMilitary();
       notify(moved ? `${moved} unit${moved === 1 ? '' : 's'} recalled to home base.`
                    : "No checked unit could be recalled (already home / in transit / no home base).");
+    }
+    // Bulk Cancel Attack: pull every checked unit out of its strike force and
+    // send each back to the colony it launched from.
+    function bulkCancelAttackChecked() {
+      const units = _checkedMilitaryUnits();
+      if (!units.length) { notify("Check one or more units first."); return; }
+      let canceled = 0;
+      for (const u of units) { if (cancelStrikeForUnit(u)) canceled++; }
+      renderMilitary();
+      notify(canceled ? `${canceled} unit${canceled === 1 ? '' : 's'} recalled from their attack.`
+                      : "No checked unit was attacking.");
     }
     // Bulk Transfer: pick ONE destination colony and deploy every eligible
     // checked unit there. The picker lists colonies reachable by at least one
@@ -18493,6 +18593,7 @@
     // Header bulk-action buttons apply to all checked rows.
     { const el = document.getElementById("military-bulk-transfer"); if (el) el.addEventListener("click", (e) => { e.stopPropagation(); bulkTransferChecked(el); }); }
     { const el = document.getElementById("military-bulk-home"); if (el) el.addEventListener("click", (e) => { e.stopPropagation(); bulkHomebaseChecked(); }); }
+    { const el = document.getElementById("military-bulk-cancel"); if (el) el.addEventListener("click", (e) => { e.stopPropagation(); bulkCancelAttackChecked(); }); }
     militaryOverlay.addEventListener("click", (e) => { if (e.target === militaryOverlay) closeMilitary(); });
     // Strike Force dialog buttons.
     document.getElementById("strike-attack").addEventListener("click", confirmStrikeForce);
