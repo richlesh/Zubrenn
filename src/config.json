@@ -568,6 +568,25 @@
       "equivalentTo": "solar farm"
     },
     // Mine
+    // Mine
+    "quarry": {
+      "code": 46,
+      "name": "Quarry",
+      "icon": "buildings/128/quarry.png",
+      "symbol": "buildings/icons/crystal.png",
+      "buildCost":   { "energy": 5, "material": 5, "wealth": 15, "water": 0.5, "turns": 3 },
+      "costPerYear": { "energy": 15, "goods": 3, "wealth": 3, "water": 0.1 },
+      "bonus":       { "material": "15x", "wealth": "3x", "happiness": -0.25 },
+      "storage":     { "energy": 15, "material": 50 },
+      "federationStorage": { "material": 50 },
+      "prerequisite": {
+        "building": ["solar panel"],
+        "terrain":  ["grassland", "hills", "forest", "jungle", "plains", "mountain-low", "mountain-high"],
+        "population": 5,
+        "other":    []
+      },
+      "equivalentTo": "mine"
+    },
     "mine": {
       "code": 17,
       "name": "Mine",
@@ -581,6 +600,7 @@
       "prerequisite": {
         "building": ["solar panel"],
         "terrain":  ["grassland", "hills", "forest", "jungle", "plains", "mountain-low", "mountain-high"],
+        "population": 5,
         "other":    []
       }
     },
@@ -596,9 +616,9 @@
       "symbol": "buildings/icons/crystal.png",
       "buildCost":   { "energy": 5, "material": 10, "wealth": 15, "water": 1, "turns": 3 },
       "costPerYear": { "energy": 20, "goods": 3, "wealth": 5, "water": 0.3 },
-      "bonus":       { "material": "10x", "wealth": "8x", "happiness": -0.15 },
-      "storage":     { "material": 250 },
-      "federationStorage": { "material": 250 },
+      "bonus":       { "material": "10x", "wealth": "8x" },
+      "storage":     { "material": 150 },
+      "federationStorage": { "material": 150 },
       "prerequisite": {
         "building": ["solar panel"],
         "terrain":  ["desert"],
@@ -623,7 +643,8 @@
         "building": ["solar farm"],
         "terrain":  ["grassland", "hills", "forest", "jungle", "plains", "mountain-low", "mountain-high"],
         "other":    [],
-        "upgrades": "mine"
+        "population": 7,
+        "upgrades": "quarry"
       }
     },
     
@@ -2197,6 +2218,7 @@
     "costPerYear": { "energy": 0.5, "material": 1, "wealth": 0.75 },
     "decayRate": 0.001,
     "prerequisite": {
+      "building": ["quarry"],
       "population": 3,
       "bonusType": ["stone"]
     },
@@ -2220,8 +2242,9 @@
     "costPerYear": { "energy": 0.5, "material": 0.5, "wealth": 0.5 },
     "decayRate": 0.001,
     "prerequisite": {
+      "building": ["quarry"],
       "population": 10,
-      "bonusType": ["stone", "crystal", "aluminum"]
+      "bonusType": ["stone", "aluminum"]
     },
     "catastrophicFailure": { "rate": 0.001, "minAge": 50 }
   },

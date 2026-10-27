@@ -63,6 +63,12 @@ The Megafarm is the Agridome scaled up to industrial agriculture — a vast, ful
 
 The Aquafarm is the sea's answer to the Farm — a floating lattice of pens, kelp racks, and shellfish beds that harvests food from the water instead of the land. It is built on the shallows within a colony's reach and requires a **Dock** first (the Dock opens the colony's sea tiles to work and gives the Aquafarm its harbor). Its catch *scales with how rich the water beneath it is*, so the most productive, bonus‑rich shallows make the best sites. Quick and inexpensive to raise with modest upkeep, it also brings in a steady flow of wealth. For coastal and island colonies — where arable land is scarce but shallow sea is plentiful — the Aquafarm is the mainstay of the food supply.
 
+### Quarry
+
+<img align="right" width="128" src="src/resources/buildings/128/quarry.png">
+
+The Quarry is the colony's first dedicated source of stone and raw material — an open working of pits and cutting faces that pulls building‑grade rock straight out of the ground. It is cheap and quick to raise, requires only a **Solar Panel** first, and may be worked on the same high, cold, and broken terrain as the Mine, where the rock is richest (the most forbidding mountain summits remain off‑limits to everyone). Its output *scales with how mineral‑rich the cell beneath it is*, so site it on the best ground you can reach. It yields less than a full Mine and carries a lighter energy appetite, and the scarred ground weighs only a little on morale. Crucially, the Quarry is the groundwork of a colony's construction effort: it is **ideal for extracting the stone and material needed to raise buildings and to lay roads and monorails** — in fact a Quarry is now **required before a colony can build roads or monorails**. It counts as a Mine for anything that depends on one, and it is the building a Megamine is later raised from.
+
 ### Mine
 
 <img align="right" width="128" src="src/resources/buildings/128/mine.png">
@@ -73,7 +79,7 @@ The Mine is the colony's dedicated material producer, carving ore and stone stra
 
 <img align="right" width="128" src="src/resources/buildings/128/megamine.png">
 
-The Megamine is the Mine scaled up to heavy extraction — a vast open‑pit and deep‑shaft complex that tears material from the ground on a scale no single Mine can match. It is built as an **upgrade of an existing Mine**, raised in its place, and still counts as a Mine for anything that depends on one. It requires a **Solar Farm** in the colony. Like the Mine, its yield *scales with how mineral‑rich the cell beneath it is* — on the richest ground it multiplies that tile's material enormously — and it brings a healthy stream of wealth besides, with large material storage to match. It is a costly build with a voracious appetite for energy and goods to keep its machinery and crews running, and the scarred land weighs a little on morale. When a colony's Factories outgrow what its Mines can supply, upgrading a key Mine to a Megamine is how its material output takes off.
+The Megamine is the Quarry scaled up to heavy extraction — a vast open‑pit and deep‑shaft complex that tears material from the ground on a scale no single Quarry or Mine can match. It is built as an **upgrade of an existing Quarry**, raised in its place, and still counts as a Mine for anything that depends on one. It requires a **Solar Farm** in the colony. Its yield *scales with how mineral‑rich the cell beneath it is* — on the richest ground it multiplies that tile's material enormously — and it brings a healthy stream of wealth besides, with large material storage to match. It is a costly build with a voracious appetite for energy and goods to keep its machinery and crews running, and the scarred land weighs a little on morale. When a colony's Factories outgrow what its Quarries can supply, upgrading a key Quarry to a Megamine is how its material output takes off.
 
 ### Solar Salt Works
 

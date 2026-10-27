@@ -9038,6 +9038,43 @@
       const pre = (cfg.prerequisite && typeof cfg.prerequisite === 'object') ? cfg.prerequisite : null;
       return pre ? pre.bonusType : null;
     }
+    // The required-building list for a transport kind, from
+    // config[kind].prerequisite.building (lowercase building-name keys, e.g.
+    // ["quarry"]). Returns an array (possibly empty).
+    function transportBuildingReq(kind) {
+      const cfg = (CONFIG && CONFIG[kind]) || {};
+      const pre = (cfg.prerequisite && typeof cfg.prerequisite === 'object') ? cfg.prerequisite : null;
+      return (pre && Array.isArray(pre.building)) ? pre.building : [];
+    }
+    // The set of building codes a colony effectively HAS, expanded along the
+    // upgrade and equivalent chains (so a Megamine satisfies a "quarry"
+    // requirement, a Port satisfies "dock", etc.). Mirrors the building-
+    // prerequisite logic used by _hasPrerequisitesAtImpl.
+    function colonyPresentBuildingCodes(col) {
+      const present = new Set();
+      if (!col) return present;
+      for (const b of colonyBuildings(col)) {
+        present.add(b.type);
+        let up = buildingUpgradesCode(b.type);
+        while (up != null && !present.has(up)) { present.add(up); up = buildingUpgradesCode(up); }
+        let eq = buildingEquivalentCode(b.type);
+        while (eq != null && !present.has(eq)) { present.add(eq); eq = buildingUpgradesCode(eq); }
+      }
+      return present;
+    }
+    // The required building NAME keys a colony is still MISSING for a transport
+    // kind (empty when all are satisfied). Used both to gate the build and to
+    // explain why it is blocked.
+    function missingTransportBuildings(col, kind) {
+      const names = transportBuildingReq(kind);
+      if (!names.length) return [];
+      const present = colonyPresentBuildingCodes(col);
+      return names.filter((nm) => {
+        const e = buildingType(nm);
+        const code = e ? e.code : nm;
+        return !present.has(code);
+      });
+    }
     // Whether a colony is large enough to build the given transport type.
     function colonyCanBuildTransport(col, kind) {
       if (!col) return false;
@@ -9045,6 +9082,10 @@
       // Strategic resources: the owner must have the transport's required
       // bonusType(s) from a worked terrain-bonus cell (e.g. road needs "stone").
       if (!bonusTypesMet(transportBonusTypeReq(kind), col)) return false;
+      // Required buildings: the colony must contain the transport's prerequisite
+      // building(s) (e.g. road/monorail need a "quarry"); an upgrade or
+      // equivalent of a required building counts (a Megamine satisfies "quarry").
+      if (missingTransportBuildings(col, kind).length) return false;
       return true;
     }
     function beginTransport(kind, x, y) {
@@ -9058,7 +9099,11 @@
       // bonusType gate (e.g. road needs "stone").
       if (!colonyCanBuildTransport(col, kind)) {
         const missRes = missingBonusTypes(transportBonusTypeReq(kind), col);
-        if (missRes.length) {
+        const missBldg = missingTransportBuildings(col, kind);
+        if (missBldg.length) {
+          const names = missBldg.map((nm) => { const e = buildingType(nm); return (e && e.name) || nm; });
+          notify(`Building a ${kind} requires a ${names.join(" and ")} in the colony.`);
+        } else if (missRes.length) {
           notify(`Building a ${kind} requires a worked source of ${missRes.join(" and ")}.`);
         } else {
           const need = transportMinPopulation(kind);
