@@ -100,6 +100,7 @@ Welcome, Administrator. The Nexus Data Core is your field reference for the colo
 
 ## Contents
 
+- [Zubrenn Story](zubrenn_story.md) — the history of colonization on Zubrenn
 - [How to Play](how_to_play.md) — turn flow, founding colonies, and controls
 - [Resources](resource_types.md) — the seven resources and the colony economy
 - [Terrain](terrain.md) — the eleven terrain types and what they yield
@@ -108,7 +109,7 @@ Welcome, Administrator. The Nexus Data Core is your field reference for the colo
 - [Military](military.md) — units, upkeep, colony defenses, and how combat works
 - [Transportation](transportation.md) — roads, rivers, sea, monorail, air, space
 - [Federation](federation.md) — the capital, treasury, taxes, and shared upkeep
-- [Alien Species](aliens.md) — the peoples who contest the continent
+- [Alien Species](aliens.md) — the peoples who contest the planet
 
 ## Getting started
 
