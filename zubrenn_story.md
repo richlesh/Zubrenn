@@ -20,7 +20,7 @@ It had taken centuries of rivalry, scarcity, and disasters no nation could solve
 
 The United Earth Expedition was its boldest undertaking.
 
-<img src="src/resources/story/256/space_telescope.png">
+<img align="right" width="256" src="src/resources/story/256/space_telescope.png">
 
 Its observatories searched nearby systems for worlds where humanity might live without spending every waking hour fighting the environment. Most discoveries offered only variations of hardship: frozen oceans beneath kilometers of ice, deserts under poisonous skies, barren rock scorched by unstable stars.
 
