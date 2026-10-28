@@ -1,14 +1,3 @@
-<style>
-img {
-  width: 256;
-  float: right;
-  margin: 0 0 0 1em;
-}
-body {
-    font-size: 16pt;
-}
-</style>
-
 # Zubrenn: First Claim
 
 The first rain on Zubrenn fell while the colony ship was still burning.
