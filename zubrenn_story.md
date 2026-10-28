@@ -126,9 +126,9 @@ Soon construction began outside the biodome: Solar panels for energy production,
 
 The first iron deposit was discovered upstream, exposed where the river had cut into a hillside.  It was not particularly rich. On Earth, it might never have justified a mine.
 
-<img align="right" width="256" src="src/resources/story/256/quarry.png">
-
 Nearby quarries supplied stone for foundations and roads. Clay beds yielded the settlement’s first locally made bricks. Carefully managed forest plots provided structural material after testing showed which native woods could be dried and worked safely.
+
+<img align="right" width="256" src="src/resources/story/256/quarry.png">
 
 Each discovery changed what was possible.
 
