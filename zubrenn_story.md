@@ -36,11 +36,11 @@ Then came the transmissions.
 
 Some were intercepted near the system. Others arrived as tightly focused signals, repeated in mathematical sequences until their meaning became clear. Humanity was not alone in its interest. Other civilizations had charted Zubrenn. Some claimed prior discovery. Some announced expeditions already underway.
 
+<img align="right" width="256" src="src/resources/story/256/horizon_departs.png">
+
 On Earth, celebration gave way to argument, and argument to urgency. A habitable world so close to humanity’s birthplace could become a partner, a refuge, or the stronghold of a power with little concern for Earth’s future.
 
 Waiting was no longer considered safe.
-
-<img align="right" width="256" src="src/resources/story/256/horizon_departs.png">
 
 The colony ship *Horizon* departed carrying settlers, scientists, engineers, seed banks, livestock, industrial machinery, components for a biodome and a library containing much of humanity’s accumulated knowledge.
 
@@ -78,11 +78,11 @@ There was no choice, you ordered the bridge crew to pilot the *Horizon* to contr
 
 Atmospheric entry turned the windows white. Equipment tore loose in an unmanned storage bay. Somewhere below the command deck, a thousand people heard the change in engine pitch and understood that the landing was happening weeks too soon.
 
+<img align="right" width="256" src="src/resources/story/256/horizon_crash.png">
+
 The final descent carried *Horizon* over dark forest, glittering water, and ridges veined with pale stone.
 
 The atmosphere on Zubrenn was denser than expected. The emergency fins did not bleed heat as modeled. The ship struck harder than it was designed to.
-
-<img align="right" width="256" src="src/resources/story/256/horizon_crash.png">
 
 Support struts buried themselves in wet earth. A cargo cradle collapsed. The smell of smoke from electrical fires filled the air.  For several seconds, every light aboard went out before coming back on under emergency power.
 
@@ -102,9 +102,9 @@ Most of the planet was still a blur of incomplete images and unanswered question
 
 The first council meeting took place in a cargo compartment beneath a flickering work light.
 
-In the seed vaults there were genome sequences for staple crops edited for Zubrenn’s UV spectrum and 620-day growing season. In the fabrication templates there were designs advanced reactors, autonomous factories, and medical systems that could rebuild damaged organs. In the library there were centuries of metallurgy, chemistry, and medicine.  Humanity had not forgotten how to make those things.
-
 <img align="right" width="256" src="src/resources/story/256/biodome_construction.png">
+
+In the seed vaults there were genome sequences for staple crops edited for Zubrenn’s UV spectrum and 620-day growing season. In the fabrication templates there were designs advanced reactors, autonomous factories, and medical systems that could rebuild damaged organs. In the library there were centuries of metallurgy, chemistry, and medicine.  Humanity had not forgotten how to make those things.
 
 But knowledge is not infrastructure. The biodome carried by *Horizon* was the product of an entire planet’s industry. Zubrenn possesed no such advanced infrastructure.  It would have to be built.
 
@@ -112,13 +112,13 @@ The *Horizon* carried 3D printing units could produce a remarkable range of equi
 
 Precision manufactured goods required specialized alloys. Those alloys required refined metals, controlled furnaces, chemical reagents, and reliable power. The machines that shaped them needed cutting tools, sensors, lubricants, and replacement parts of their own.
 
+<img align="right" width="256" src="src/resources/story/256/biodome_farm.png">
+
 The *Horizon* carried all the components to build the first pre-fabricated biodome: a self-contained habitat with micro-fusion power generation, housing, food production, manufacturing and well drilling equipment. The colony had the technical skills and know how to build almost everything that was needed.  But first they would have to build out the industrial base needed to build more biodomes necessary for establishing new colonies.
 
 That became the work of the first colony on Zubrenn.
 
 Water purification systems appeared beside the river. Imported crops took root in sealed growing houses while researchers tested whether local soils could safely support them.  Locations for extracting materials from the ground were explored.  
-
-<img align="right" width="256" src="src/resources/story/256/biodome_farm.png">
 
 Soon construction began outside the biodome: Solar panels for energy production, farms to grow crops and raise livestock, mines to extract precious materials, even a factory to transform raw materials into finished goods and docks to open access to the wealth of the sea.
 
@@ -126,9 +126,9 @@ Soon construction began outside the biodome: Solar panels for energy production,
 
 The first iron deposit was discovered upstream, exposed where the river had cut into a hillside.  It was not particularly rich. On Earth, it might never have justified a mine.
 
-Nearby quarries supplied stone for foundations and roads. Clay beds yielded the settlement’s first locally made bricks. Carefully managed forest plots provided structural material after testing showed which native woods could be dried and worked safely.
-
 <img align="right" width="256" src="src/resources/story/256/quarry.png">
+
+Nearby quarries supplied stone for foundations and roads. Clay beds yielded the settlement’s first locally made bricks. Carefully managed forest plots provided structural material after testing showed which native woods could be dried and worked safely.
 
 Each discovery changed what was possible.
 

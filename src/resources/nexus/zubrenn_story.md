@@ -1,8 +1,10 @@
 <style>
-img {
-  width: 25%;
+.float-right img {
+  width: 40%;
+  max-width: 256px;
+  height: auto;
   float: right;
-  margin: 0 0 0 1em;
+  margin: 0 0 0.5em 1em;
 }
 body {
     font-size: 16pt;
@@ -47,11 +49,11 @@ Then came the transmissions.
 
 Some were intercepted near the system. Others arrived as tightly focused signals, repeated in mathematical sequences until their meaning became clear. Humanity was not alone in its interest. Other civilizations had charted Zubrenn. Some claimed prior discovery. Some announced expeditions already underway.
 
+<span class="float-right">![Horizon Departs](../story/horizon_departs.png)</span>
+
 On Earth, celebration gave way to argument, and argument to urgency. A habitable world so close to humanity’s birthplace could become a partner, a refuge, or the stronghold of a power with little concern for Earth’s future.
 
 Waiting was no longer considered safe.
-
-<span class="float-right">![Horizon Departs](../story/horizon_departs.png)</span>
 
 The colony ship *Horizon* departed carrying settlers, scientists, engineers, seed banks, livestock, industrial machinery, components for a biodome and a library containing much of humanity’s accumulated knowledge.
 
@@ -89,11 +91,11 @@ There was no choice, you ordered the bridge crew to pilot the *Horizon* to contr
 
 Atmospheric entry turned the windows white. Equipment tore loose in an unmanned storage bay. Somewhere below the command deck, a thousand people heard the change in engine pitch and understood that the landing was happening weeks too soon.
 
+<span class="float-right">![horizon_crash](../story/horizon_crash.png)</span>
+
 The final descent carried *Horizon* over dark forest, glittering water, and ridges veined with pale stone.
 
 The atmosphere on Zubrenn was denser than expected. The emergency fins did not bleed heat as modeled. The ship struck harder than it was designed to.
-
-<span class="float-right">![horizon_crash](../story/horizon_crash.png)</span>
 
 Support struts buried themselves in wet earth. A cargo cradle collapsed. The smell of smoke from electrical fires filled the air.  For several seconds, every light aboard went out before coming back on under emergency power.
 
@@ -113,10 +115,9 @@ Most of the planet was still a blur of incomplete images and unanswered question
 
 The first council meeting took place in a cargo compartment beneath a flickering work light.
 
-In the seed vaults there were genome sequences for staple crops edited for Zubrenn’s UV spectrum and 620-day growing season. In the fabrication templates there were designs advanced reactors, autonomous factories, and medical systems that could rebuild damaged organs. In the library there were centuries of metallurgy, chemistry, and medicine.  Humanity had not forgotten how to make those things.
+<span class="float-right">![biodome_construction](../story/biodome_construction.png)</span>
 
-<span class="float-right">![biodome_construction](../story/biodome_construction.png)
-</span>
+In the seed vaults there were genome sequences for staple crops edited for Zubrenn’s UV spectrum and 620-day growing season. In the fabrication templates there were designs advanced reactors, autonomous factories, and medical systems that could rebuild damaged organs. In the library there were centuries of metallurgy, chemistry, and medicine.  Humanity had not forgotten how to make those things.
 
 But knowledge is not infrastructure. The biodome carried by *Horizon* was the product of an entire planet’s industry. Zubrenn possesed no such advanced infrastructure.  It would have to be built.
 
@@ -124,14 +125,13 @@ The *Horizon* carried 3D printing units could produce a remarkable range of equi
 
 Precision manufactured goods required specialized alloys. Those alloys required refined metals, controlled furnaces, chemical reagents, and reliable power. The machines that shaped them needed cutting tools, sensors, lubricants, and replacement parts of their own.
 
+<span class="float-right">![biodome_farm](../story/biodome_farm.png)</span>
+
 The *Horizon* carried all the components to build the first pre-fabricated biodome: a self-contained habitat with micro-fusion power generation, housing, food production, manufacturing and well drilling equipment. The colony had the technical skills and know how to build almost everything that was needed.  But first they would have to build out the industrial base needed to build more biodomes necessary for establishing new colonies.
 
 That became the work of the first colony on Zubrenn.
 
 Water purification systems appeared beside the river. Imported crops took root in sealed growing houses while researchers tested whether local soils could safely support them.  Locations for extracting materials from the ground were explored.  
-
-<span class="float-right">![biodome_farm](../story/biodome_farm.png)
-</span>
 
 Soon construction began outside the biodome: Solar panels for energy production, farms to grow crops and raise livestock, mines to extract precious materials, even a factory to transform raw materials into finished goods and docks to open access to the wealth of the sea.
 
@@ -167,8 +167,7 @@ Between them stretched roads, power lines, and supply routes that now mattered a
 
 ## Other Claims
 
-<span class="float-right">![alien_arrival](../story/alien_arrival.png)
-</span>
+<span class="float-right">![alien_arrival](../story/alien_arrival.png)</span>
 
 The first alien vessel you saw crossed the northern sky at dusk.
 
@@ -188,8 +187,7 @@ A third offered to recognize your borders in exchange for exclusive access to ev
 
 Not every encounter began with a threat.
 
-<span class="float-right">![treaty](../story/treaty.png)
-</span>
+<span class="float-right">![treaty](../story/treaty.png)</span>
 
 Your first successful trade agreement was negotiated through translation software that rendered both sides’ statements with painful literalness. The visitors possessed a heat-resistant ceramic your workshops could not yet manufacture reliably. They wanted iron, purified industrial water, and access to your coastal weather data.
 
@@ -205,8 +203,7 @@ And some preferred conquest from the beginning.
 
 ## The Price of a Foothold
 
-<span class="float-right">![alien_attack](../story/alien_attack.png)
-</span>
+<span class="float-right">![alien_attack](../story/alien_attack.png)</span>
 
 The attack came at a mining outpost before dawn.
 
@@ -220,8 +217,7 @@ At the emergency meeting, there was no agreement about what to do.
 
 One adviser urged negotiation. Another proposed buying replacement supplies from a different civilization. Your engineers warned that converting the workshops to substitute materials would take months.
 
-<span class="float-right">![battle_plans](../story/battle_plans.png)
-</span>
+<span class="float-right">![battle_plans](../story/battle_plans.png)</span>
 
 Your security commander called up a map on the table.
 
@@ -241,8 +237,7 @@ There was something here worth protecting.
 
 ## First Claim
 
-<span class="float-right">![colony_expands](../story/colony_expands.png)
-</span>
+<span class="float-right">![colony_expands](../story/colony_expands.png)</span>
 
 Years after the landing, you climbed the ridge above *Horizon*.
 
