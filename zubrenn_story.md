@@ -51,7 +51,7 @@ On Earth, celebration gave way to argument, and argument to urgency. A habitable
 
 Waiting was no longer considered safe.
 
-<img src="src/resources/story/256/horizon_departs.png">
+<img align="right" width="256" src="src/resources/story/256/horizon_departs.png">
 
 The colony ship *Horizon* departed carrying settlers, scientists, engineers, seed banks, livestock, industrial machinery, components for a biodome and a library containing much of humanity’s accumulated knowledge.
 
@@ -75,7 +75,7 @@ Then a propellant line ruptured.
 
 On the command deck, the planet began to turn across the forward display.
 
-<img src="src/resources/story/256/horizon_landing.png">
+<img align="right" width="256" src="src/resources/story/256/horizon_landing.png">
 
 Emergency valves finally stopped the leak, but the damage was done. The ship had lost a substantial part of its maneuvering reserve, and its new trajectory dipped into the atmosphere. The dedicated descent engines remained intact. There was enough fuel for a controlled landing.
 
@@ -93,7 +93,7 @@ The final descent carried *Horizon* over dark forest, glittering water, and ridg
 
 The atmosphere on Zubrenn was denser than expected. The emergency fins did not bleed heat as modeled. The ship struck harder than it was designed to.
 
-<img src="src/resources/story/256/horizon_crash.png">
+<img align="right" width="256" src="src/resources/story/256/horizon_crash.png">
 
 Support struts buried themselves in wet earth. A cargo cradle collapsed. The smell of smoke from electrical fires filled the air.  For several seconds, every light aboard went out before coming back on under emergency power.
 
@@ -115,7 +115,7 @@ The first council meeting took place in a cargo compartment beneath a flickering
 
 In the seed vaults there were genome sequences for staple crops edited for Zubrenn’s UV spectrum and 620-day growing season. In the fabrication templates there were designs advanced reactors, autonomous factories, and medical systems that could rebuild damaged organs. In the library there were centuries of metallurgy, chemistry, and medicine.  Humanity had not forgotten how to make those things.
 
-<img src="src/resources/story/256/biodome_construction.png">
+<img align="right" width="256" src="src/resources/story/256/biodome_construction.png">
 
 But knowledge is not infrastructure. The biodome carried by *Horizon* was the product of an entire planet’s industry. Zubrenn possesed no such advanced infrastructure.  It would have to be built.
 
@@ -129,7 +129,7 @@ That became the work of the first colony on Zubrenn.
 
 Water purification systems appeared beside the river. Imported crops took root in sealed growing houses while researchers tested whether local soils could safely support them.  Locations for extracting materials from the ground were explored.  
 
-<img src="src/resources/story/256/biodome_farm.png">
+<img align="right" width="256" src="src/resources/story/256/biodome_farm.png">
 
 Soon construction began outside the biodome: Solar panels for energy production, farms to grow crops and raise livestock, mines to extract precious materials, even a factory to transform raw materials into finished goods and docks to open access to the wealth of the sea.
 
@@ -137,7 +137,7 @@ Soon construction began outside the biodome: Solar panels for energy production,
 
 The first iron deposit was discovered upstream, exposed where the river had cut into a hillside.  It was not particularly rich. On Earth, it might never have justified a mine.
 
-<img src="src/resources/story/256/quarry.png">
+<img align="right" width="256" src="src/resources/story/256/quarry.png">
 
 Nearby quarries supplied stone for foundations and roads. Clay beds yielded the settlement’s first locally made bricks. Carefully managed forest plots provided structural material after testing showed which native woods could be dried and worked safely.
 
@@ -151,7 +151,7 @@ Electronic production depended on elements found only in traces near the landing
 
 Maps acquired new importance. A remote desert basin might hold lithium-bearing brines needed to produce batteries for energy storage. A mountain belt might contain iron or titanium. Somewhere a source of crystalline materials must be found so that desperately needed electronics could be fabricated.
 
-<img src="src/resources/story/256/offshore_fishery.png">
+<img align="right" width="256" src="src/resources/story/256/offshore_fishery.png">
 
 The sea offered its own possibilities.
 
@@ -165,7 +165,7 @@ Between them stretched roads, power lines, and supply routes that now mattered a
 
 ## Other Claims
 
-<img src="src/resources/story/256/alien_arrival.png">
+<img align="right" width="256" src="src/resources/story/256/alien_arrival.png">
 
 The first alien vessel you saw crossed the northern sky at dusk.
 
@@ -185,7 +185,7 @@ A third offered to recognize your borders in exchange for exclusive access to ev
 
 Not every encounter began with a threat.
 
-<img src="src/resources/story/256/treaty.png">
+<img align="right" width="256" src="src/resources/story/256/treaty.png">
 
 Your first successful trade agreement was negotiated through translation software that rendered both sides’ statements with painful literalness. The visitors possessed a heat-resistant ceramic your workshops could not yet manufacture reliably. They wanted iron, purified industrial water, and access to your coastal weather data.
 
@@ -201,7 +201,7 @@ And some preferred conquest from the beginning.
 
 ## The Price of a Foothold
 
-<img src="src/resources/story/256/alien_attack.png">
+<img align="right" width="256" src="src/resources/story/256/alien_attack.png">
 
 The attack came at a mining outpost before dawn.
 
@@ -215,7 +215,7 @@ At the emergency meeting, there was no agreement about what to do.
 
 One adviser urged negotiation. Another proposed buying replacement supplies from a different civilization. Your engineers warned that converting the workshops to substitute materials would take months.
 
-<img src="src/resources/story/256/battle_plans.png">
+<img align="right" width="256" src="src/resources/story/256/battle_plans.png">
 
 Your security commander called up a map on the table.
 
@@ -235,7 +235,7 @@ There was something here worth protecting.
 
 ## First Claim
 
-<img src="src/resources/story/256/colony_expands.png">
+<img align="right" width="256" src="src/resources/story/256/colony_expands.png">
 
 Years after the landing, you climbed the ridge above *Horizon*.
 
