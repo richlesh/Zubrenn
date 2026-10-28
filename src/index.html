@@ -808,8 +808,10 @@
         w = 0.10 * (6 - aggression) + 0.06 * diplomacy + 0.04 * cooperation + 0.5 * weary;
       } else if (kind === 'nonAggression') {
         w = 0.10 * (6 - aggression) + 0.08 * diplomacy + 0.05 * cooperation;
-      } else { // freeTravel
+      } else if (kind === 'freeTravel') {
         w = 0.10 * cooperation + 0.08 * diplomacy;
+      } else { // mapSwap — a friendly intel exchange; open, cooperative races share readily
+        w = 0.10 * cooperation + 0.08 * diplomacy + 0.04 * (6 - aggression);
       }
       const fromIdx = ownerToIndex(owner), toIdx = ownerToIndex(toOwner);
       if (fromIdx >= 0 && toIdx >= 0) w += (getOpinion(fromIdx, toIdx) / 100) * 0.3;
@@ -838,6 +840,8 @@
     // one asks more. Returns { resource:'wealth', amountTotal? , amountPerYear? }.
     function aiPactAsk(owner, toOwner, kind, years) {
       const w = aiPactWillingness(owner, toOwner, kind);
+      // A map swap is a mutual intel exchange — no payment is asked.
+      if (kind === 'mapSwap') return { resource: 'wealth', amountTotal: 0 };
       const base = kind === 'peace' ? 300 : 40;           // peace total / pact per-year
       // Reluctant (w~0) asks ~2x base; eager (w~1) asks ~0.5x base.
       const mult = 2 - 1.5 * w;
@@ -852,6 +856,8 @@
     function aiVerdictOnPact(ai, deal) {
       const w = aiPactWillingness(ai, 'human', deal.kind);
       if (w <= 0.05) return false;                         // essentially unwilling
+      // A map swap carries no price — a willing AI simply agrees.
+      if (deal.kind === 'mapSwap') return true;
       const ask = aiPactAsk(ai, 'human', deal.kind, deal.years);
       // A willing AI accepts a lower price; require the offer to reach a
       // willingness-scaled fraction of the ask (eager -> ~0.3x ask; cold -> ~1x).
@@ -906,6 +912,20 @@
                 text: `<p><strong>${esc(ownerDisplayName(aiOwner))}</strong> proposes a <strong>${label} pact</strong> for <strong>${years} years</strong>, paying you <strong>¤${nf(pay, 0)}/yr</strong>.</p>`,
               });
               break;                                       // at most one proposal
+            }
+          }
+          // Occasionally offer the human a MAP SWAP (reveal each other's
+          // explored territory). One-time per pair: skip once already swapped.
+          // Only meaningful if the alien actually has territory to reveal.
+          if (!rel.mapsSwapped && ownerColonyCount(aiOwner) > 0
+              && !(_offerQueue.some((o) => o && o.diplo) || _offerShowing)) {
+            const wm = aiPactWillingness(aiOwner, 'human', 'mapSwap');
+            if (wm > 0.55 && Math.random() < 0.12 * wm) {
+              const deal = { kind: 'mapSwap', a: aiOwner, b: 'human', payer: aiOwner, payee: 'human' };
+              queueTradeOffer({
+                diplo: true, provider: aiOwner, deal,
+                text: `<p><strong>${esc(ownerDisplayName(aiOwner))}</strong> offers to <strong>swap maps</strong> — reveal each other's explored territory.</p>`,
+              });
             }
           }
         }
@@ -7930,6 +7950,29 @@
         if (hexMap) hexMap.setVisible(_visibleSet);
       }
     }
+    // Reveal an OWNER's explored territory into the HUMAN's fog-of-war set — the
+    // "map" half of a diplomatic map swap. The owner's known area is modeled as
+    // the visibility disk around each of its buildings (the same radius that
+    // owner would see from them: a colony's biodome reveals its visibility
+    // radius; an intel building with world visibility reveals the whole map).
+    // No-op when fog is inactive. Returns the number of newly revealed cells.
+    function revealOwnerTerritoryToHuman(owner) {
+      if (owner == null || owner === 'human') return 0;
+      if (!_visibleSet) return 0;                 // fog inactive (legacy/debug)
+      let added = 0;
+      for (const b of (gameState.buildings || [])) {
+        if (b.owner !== owner || b.inTransit) continue;
+        const radius = buildingVisibility(b.type);
+        if (radius <= 0) continue;
+        if (!Number.isFinite(radius)) { added += revealEntireMap(); }
+        else { added += addVisibleAround(b.x, b.y, radius); }
+      }
+      if (added > 0) {
+        syncVisibleToMeta();
+        if (hexMap) hexMap.setVisible(_visibleSet);
+      }
+      return added;
+    }
     // Inform + log that the player's orbital network (the Satellite Network) has
     // revealed the whole planet. `b` is the completed world-visibility building.
     function announceWorldRevealed(b) {
@@ -14447,6 +14490,28 @@
         makePeace(a, b);
         return true;
       }
+      if (kind === 'mapSwap') {
+        // A mutual map exchange: each side's explored territory is revealed to
+        // the other. Fog of war is human-only, so in practice the HUMAN's view
+        // gains the alien party's territory; the reverse is a no-op for the AI.
+        // One-time and free; recorded on the relation so it isn't offered again.
+        const other = (a === 'human') ? b : (b === 'human') ? a : null;
+        if (other != null) {
+          const added = revealOwnerTerritoryToHuman(other);
+          const rel = relationOf('human', other);
+          if (rel) rel.mapsSwapped = true;
+          // A friendly intel exchange warms both parties a little.
+          const ia = ownerToIndex(a), ib = ownerToIndex(b), d = opinionDelta('pactAgreed');
+          if (ia >= 0 && ib >= 0 && d) { adjustOpinion(ia, ib, d); adjustOpinion(ib, ia, d); }
+          diploLog(`You swapped maps with ${ownerDisplayName(other)} — their explored territory is now revealed.`);
+          try { if (added > 0) notify(`Map swap with ${ownerDisplayName(other)}: their territory has been revealed.`); } catch (e) {}
+        } else {
+          // AI <-> AI map swap: no fog to reveal, just warm relations.
+          const ia = ownerToIndex(a), ib = ownerToIndex(b), d = opinionDelta('pactAgreed');
+          if (ia >= 0 && ib >= 0 && d) { adjustOpinion(ia, ib, d); adjustOpinion(ib, ia, d); }
+        }
+        return true;
+      }
       if (kind === 'nonAggression' || kind === 'freeTravel') {
         const years = Math.max(1, Math.floor(Number(deal.years) || 1));
         const amt = Math.max(0, Number(deal.amountPerYear) || 0);
@@ -17900,6 +17965,14 @@
         };
         if (rel.nonAggressionUntil > turn) addPactChip('nonAggression', `Non-Aggression (${rel.nonAggressionUntil - turn}y)`);
         if (rel.freeTravelUntil > turn) addPactChip('freeTravel', `Free Travel (${rel.freeTravelUntil - turn}y)`);
+        // One-time map swap (no expiry, no cancel) shown as a plain label.
+        if (rel.mapsSwapped) {
+          statTd.appendChild(document.createTextNode(', '));
+          const ms = document.createElement('span');
+          ms.className = 'diplo-pact-chip';
+          ms.textContent = 'Maps Swapped';
+          statTd.appendChild(ms);
+        }
         // Actions depend on current standing.
         const actTd = document.createElement('td');
         const addBtn = (label, onClick) => {
@@ -17913,6 +17986,14 @@
         } else {
           if (!(rel.nonAggressionUntil > turn)) addBtn('Non-Aggression', () => openPactComposer('nonAggression', owner));
           if (!(rel.freeTravelUntil > turn)) addBtn('Free Travel', () => openPactComposer('freeTravel', owner));
+          // Map swap: a one-time, free intel exchange (reveals the alien's
+          // explored territory to you). Offered while at peace until done once.
+          if (!rel.mapsSwapped) {
+            addBtn('Swap Maps', () => {
+              const deal = { kind: 'mapSwap', a: 'human', b: owner, payer: 'human', payee: owner };
+              proposePactToOwner(deal, owner);
+            });
+          }
         }
         tr.appendChild(nameTd); tr.appendChild(opTd); tr.appendChild(statTd); tr.appendChild(actTd);
         body.appendChild(tr);
@@ -17989,7 +18070,10 @@
       const accepted = aiVerdictOnPact(owner, deal);
       if (accepted) {
         applyPactDeal(deal);
-        const verb = deal.kind === 'peace' ? 'agrees to peace' : (deal.kind === 'freeTravel' ? 'accepts the free-travel pact' : 'accepts the non-aggression pact');
+        const verb = deal.kind === 'peace' ? 'agrees to peace'
+          : deal.kind === 'freeTravel' ? 'accepts the free-travel pact'
+          : deal.kind === 'mapSwap' ? 'agrees to swap maps'
+          : 'accepts the non-aggression pact';
         notify(`${ownerDisplayName(owner)} ${verb}.`);
         // A successful deal warms relations a little.
         const oIdx = ownerToIndex(owner), hIdx = ownerToIndex('human');
