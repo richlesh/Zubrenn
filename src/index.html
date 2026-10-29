@@ -897,8 +897,10 @@
           // At peace: occasionally propose a non-aggression or free-travel pact,
           // paying the human a per-year fee for it.
           const kinds = [];
-          if (!(rel.nonAggressionUntil > turn)) kinds.push('nonAggression');
-          if (!(rel.freeTravelUntil > turn)) kinds.push('freeTravel');
+          // Don't re-offer a pact type that is already in place (by relation
+          // expiry OR an active pact record) — wait until it expires.
+          if (!(rel.nonAggressionUntil > turn) && !ownerHasActivePactRecord(aiOwner, 'human', 'nonAggression')) kinds.push('nonAggression');
+          if (!(rel.freeTravelUntil > turn) && !ownerHasActivePactRecord(aiOwner, 'human', 'freeTravel')) kinds.push('freeTravel');
           for (const kind of kinds) {
             const w = aiPactWillingness(aiOwner, 'human', kind);
             if (w > 0.55 && Math.random() < 0.15 * w) {
@@ -13889,6 +13891,21 @@
     // A pact is active when its expiry turn is in the future (>= current turn).
     function hasNonAggression(a, b) { const r = relationOf(a, b); return !!(r && r.nonAggressionUntil > (gameState.turn || 0)); }
     function hasFreeTravel(a, b) { const r = relationOf(a, b); return !!(r && r.freeTravelUntil > (gameState.turn || 0)); }
+    // Whether an ACTIVE pact RECORD of `kind` exists between a and b (order-
+    // independent). This reads gameState.pacts directly, so it stays correct
+    // even if a relation's expiry field and the pact list ever drift apart —
+    // used to stop an AI re-offering a pact type it already holds with you.
+    function ownerHasActivePactRecord(a, b, kind) {
+      const ia = ownerToIndex(a), ib = ownerToIndex(b);
+      const lo = Math.min(ia, ib), hi = Math.max(ia, ib);
+      for (const p of (gameState.pacts || [])) {
+        if (!p || p.kind !== kind) continue;
+        if ((Number(p.remaining) || 0) <= 0) continue;
+        const pa = ownerToIndex(p.a), pb = ownerToIndex(p.b);
+        if (Math.min(pa, pb) === lo && Math.max(pa, pb) === hi) return true;
+      }
+      return false;
+    }
     // Record a diplomacy/trade/war lifecycle line in the Game Log WITHOUT a
     // popup (used for "begin" events). "End" events and battle results use
     // notify() instead, which both pops a dialog and logs. Only events involving
