@@ -18702,12 +18702,19 @@
       const text = document.getElementById('offer-text');
       const from = offer.provider;
       if (portrait) { const src = ownerPortraitSrc(from); portrait.src = src; portrait.style.visibility = src ? 'visible' : 'hidden'; }
+      // Render the title with the alien's name as a Nexus hyperlink (falls back
+      // to plain text for page-less owners).
+      const setOfferTitle = (prefix) => {
+        if (!title) return;
+        title.textContent = prefix;
+        title.appendChild(makeSpeciesNameEl(from));
+      };
       if (offer.diplo) {
         // Diplomatic offer (peace / non-aggression / free-travel) from an AI.
-        if (title) title.textContent = `Diplomatic Offer from ${ownerDisplayName(from)}`;
+        setOfferTitle('Diplomatic Offer from ');
         if (text) text.innerHTML = offer.text || '';
       } else {
-        if (title) title.textContent = `Trade Offer from ${ownerDisplayName(from)}`;
+        setOfferTitle('Trade Offer from ');
         const resLabel = tradeResourceLabel(offer);
         if (text) text.innerHTML =
           `<p><strong>${esc(ownerDisplayName(from))}</strong> offers you access to <strong>${esc(resLabel)}</strong>.</p>` +
