@@ -921,11 +921,28 @@
               && !(_offerQueue.some((o) => o && o.diplo) || _offerShowing)) {
             const wm = aiPactWillingness(aiOwner, 'human', 'mapSwap');
             if (wm > 0.55 && Math.random() < 0.12 * wm) {
-              const deal = { kind: 'mapSwap', a: aiOwner, b: 'human', payer: aiOwner, payee: 'human' };
-              queueTradeOffer({
-                diplo: true, provider: aiOwner, deal,
-                text: `<p><strong>${esc(ownerDisplayName(aiOwner))}</strong> offers to <strong>swap maps</strong> — reveal each other's explored territory.</p>`,
-              });
+              // Price the swap by the gap in revealed cells; the side that knows
+              // LESS pays the other. If the human knows less, the AI may ask the
+              // human to pay; otherwise the AI offers a straight (free) swap, and
+              // when the AI itself knows less it offers to PAY the human.
+              const pr = mapSwapPricing(aiOwner, 'human');
+              // A straight swap is always on the table when the gap is small; a
+              // priced swap is offered when the gap is meaningful. Flip a coin so
+              // the alien sometimes just proposes the free exchange regardless.
+              const wantsPrice = pr.amountTotal > 0 && Math.random() < 0.6;
+              const amountTotal = wantsPrice ? pr.amountTotal : 0;
+              const payer = wantsPrice ? pr.payer : aiOwner;   // free swap: nominal payer, amount 0
+              const payee = wantsPrice ? pr.payee : 'human';
+              const deal = { kind: 'mapSwap', a: aiOwner, b: 'human', payer, payee, resource: 'wealth', amountTotal };
+              let text;
+              if (amountTotal <= 0) {
+                text = `<p><strong>${esc(ownerDisplayName(aiOwner))}</strong> offers a <strong>straight map swap</strong> — reveal each other's explored territory.</p>`;
+              } else if (payer === 'human') {
+                text = `<p><strong>${esc(ownerDisplayName(aiOwner))}</strong> offers to <strong>swap maps</strong>. Since you have explored less, they ask <strong>¤${nf(amountTotal, 0)}</strong> for the exchange.</p>`;
+              } else {
+                text = `<p><strong>${esc(ownerDisplayName(aiOwner))}</strong> offers to <strong>swap maps</strong> and will pay you <strong>¤${nf(amountTotal, 0)}</strong> (they have explored less).</p>`;
+              }
+              queueTradeOffer({ diplo: true, provider: aiOwner, deal, text });
             }
           }
         }
@@ -7973,6 +7990,51 @@
       }
       return added;
     }
+    // Total number of cells on the map (used as the cap for world visibility).
+    function totalMapCells() {
+      const t = gameState.map && gameState.map.terrain;
+      if (!t || !t.length) return 0;
+      return t.length * (t[0] ? t[0].length : 0);
+    }
+    // How many cells an OWNER has "revealed" (knows). The human's is its fog
+    // visible set; an AI's is modeled as the union of the visibility disks
+    // around its buildings (a world-visibility building => the whole map).
+    // Returns a count (not the set) for pricing a map swap.
+    function ownerRevealedCellCount(owner) {
+      if (owner === 'human') {
+        return _visibleSet ? _visibleSet.size : totalMapCells();
+      }
+      const keys = new Set();
+      let worldSeen = false;
+      for (const b of (gameState.buildings || [])) {
+        if (b.owner !== owner || b.inTransit) continue;
+        const radius = buildingVisibility(b.type);
+        if (radius <= 0) continue;
+        if (!Number.isFinite(radius)) { worldSeen = true; break; }
+        for (const c of cellsWithinCartesian(b.x, b.y, radius)) keys.add(fogKey(c.x, c.y));
+      }
+      return worldSeen ? totalMapCells() : keys.size;
+    }
+    // Per-cell wealth price used to compensate for an unequal map swap.
+    // Config-driven (CONFIG.mapSwap.pricePerCell) with a safe fallback.
+    function mapSwapPricePerCell() {
+      const v = CONFIG && CONFIG.mapSwap && CONFIG.mapSwap.pricePerCell;
+      return (typeof v === 'number' && v >= 0) ? v : 0.5;
+    }
+    // Price a map swap between two owners. The side that has explored LESS gains
+    // the most from the exchange, so IT pays — an amount proportional to the gap
+    // between the two sides' revealed-cell counts (so a straight swap between
+    // equals is free). Returns { aCells, bCells, payer, payee, amountTotal }.
+    function mapSwapPricing(ownerA, ownerB) {
+      const aCells = ownerRevealedCellCount(ownerA);
+      const bCells = ownerRevealedCellCount(ownerB);
+      const gap = Math.abs(aCells - bCells);
+      const amountTotal = Math.max(0, Math.round(gap * mapSwapPricePerCell()));
+      // The owner with fewer revealed cells pays the one with more.
+      const payer = (aCells <= bCells) ? ownerA : ownerB;
+      const payee = (payer === ownerA) ? ownerB : ownerA;
+      return { aCells, bCells, payer, payee, amountTotal };
+    }
     // Inform + log that the player's orbital network (the Satellite Network) has
     // revealed the whole planet. `b` is the completed world-visibility building.
     function announceWorldRevealed(b) {
@@ -14494,7 +14556,11 @@
         // A mutual map exchange: each side's explored territory is revealed to
         // the other. Fog of war is human-only, so in practice the HUMAN's view
         // gains the alien party's territory; the reverse is a no-op for the AI.
-        // One-time and free; recorded on the relation so it isn't offered again.
+        // May carry a one-time wealth cost (deal.amountTotal) when the two sides
+        // know unequal amounts of the map — the side that knows LESS pays the
+        // other, proportional to the gap (a swap between equals is free).
+        // One-time; recorded on the relation so it isn't offered again.
+        payOnce(Math.max(0, Number(deal.amountTotal) || 0));
         const other = (a === 'human') ? b : (b === 'human') ? a : null;
         if (other != null) {
           const added = revealOwnerTerritoryToHuman(other);
@@ -14503,7 +14569,11 @@
           // A friendly intel exchange warms both parties a little.
           const ia = ownerToIndex(a), ib = ownerToIndex(b), d = opinionDelta('pactAgreed');
           if (ia >= 0 && ib >= 0 && d) { adjustOpinion(ia, ib, d); adjustOpinion(ib, ia, d); }
-          diploLog(`You swapped maps with ${ownerDisplayName(other)} — their explored territory is now revealed.`);
+          const paid = Math.max(0, Number(deal.amountTotal) || 0);
+          const costNote = paid > 0
+            ? (deal.payer === 'human' ? ` (you paid ¤${nf(paid, 0)})` : ` (they paid you ¤${nf(paid, 0)})`)
+            : '';
+          diploLog(`You swapped maps with ${ownerDisplayName(other)} — their explored territory is now revealed${costNote}.`);
           try { if (added > 0) notify(`Map swap with ${ownerDisplayName(other)}: their territory has been revealed.`); } catch (e) {}
         } else {
           // AI <-> AI map swap: no fog to reveal, just warm relations.
@@ -17990,8 +18060,25 @@
           // explored territory to you). Offered while at peace until done once.
           if (!rel.mapsSwapped) {
             addBtn('Swap Maps', () => {
-              const deal = { kind: 'mapSwap', a: 'human', b: owner, payer: 'human', payee: owner };
-              proposePactToOwner(deal, owner);
+              // Price by the revealed-cell gap: whoever has explored LESS pays.
+              const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+              const pr = mapSwapPricing('human', owner);
+              const deal = {
+                kind: 'mapSwap', a: 'human', b: owner,
+                payer: pr.payer, payee: pr.payee, resource: 'wealth',
+                amountTotal: pr.amountTotal,
+              };
+              const send = () => proposePactToOwner(deal, owner);
+              if (pr.amountTotal > 0 && pr.payer === 'human') {
+                // The human would pay — confirm the cost first.
+                showChoiceDialog('Swap Maps',
+                  `<p>You have explored less of Zubrenn than <strong>${esc(ownerDisplayName(owner))}</strong>, so a swap costs <strong>¤${nf(pr.amountTotal, 0)}</strong>.</p>` +
+                  `<p class="hint">Offer the swap at this price?</p>`,
+                  [{ value: 'cancel', label: 'Cancel', kind: 'neutral' }, { value: 'ok', label: `Offer ¤${nf(pr.amountTotal, 0)}`, kind: 'positive' }]
+                ).then((v) => { if (v === 'ok') send(); });
+              } else {
+                send();
+              }
             });
           }
         }

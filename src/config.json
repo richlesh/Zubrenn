@@ -2365,5 +2365,12 @@
   // of control (0 = must be inside the zone; 3 = up to three cells beyond the
   // border). The cell must still hold a terrain bonus and not lie in another
   // player's zone of control.
-  "outpostMaxControlDistance": 3
+  "outpostMaxControlDistance": 3,
+  // Diplomatic MAP SWAP pricing. A map swap reveals each side's explored
+  // territory to the other; when the two sides know unequal amounts of the map,
+  // the side that has explored FEWER cells pays the other a one-time wealth
+  // cost proportional to the gap in revealed cells. pricePerCell is the wealth
+  // charged per cell of difference (a swap between equally-explored sides is
+  // free). Set to 0 to make every map swap a straight (free) exchange.
+  "mapSwap": { "pricePerCell": 0.5 }
 }
