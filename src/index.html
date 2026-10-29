@@ -14646,7 +14646,11 @@
         const res = PACT_RESOURCES.includes(p.resource) ? p.resource : 'wealth';
         const from = federationOwnedOf(p.payer), to = federationOwnedOf(p.payee);
         const amt = Math.max(0, Number(p.amountPerYear) || 0);
-        if (amt > 0 && (from[res] || 0) < amt - 1e-9) {
+        // A HUMAN payer who can't cover the fee breaks the pact early (a broken
+        // promise). An AI payer that falls short does NOT break the pact — it
+        // simply skips that year's payment, so an AI-funded pact it offered
+        // still lasts its full term (and isn't re-offered mid-term).
+        if (amt > 0 && (from[res] || 0) < amt - 1e-9 && p.payer === 'human') {
           // Payer defaulted: the pact is broken early. Lapse its relation
           // expiry now and sour the payee toward the payer (a broken promise).
           const r = relationOf(p.a, p.b);
@@ -14659,7 +14663,9 @@
           announceEnd(p, 'payment lapsed');
           continue;
         }
-        if (amt > 0) {
+        // Pay what the payer can afford this year (an AI short on funds pays
+        // nothing this year but keeps the pact; a solvent payer pays in full).
+        if (amt > 0 && (from[res] || 0) >= amt - 1e-9) {
           from[res] = Math.max(0, (from[res] || 0) - amt);
           to[res] = (to[res] || 0) + amt;
           if (res === 'wealth') { const fp = federationOf(p.payer), tp = federationOf(p.payee); if (fp) fp.treasury = from.wealth; if (tp) tp.treasury = to.wealth; }
