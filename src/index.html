@@ -11652,10 +11652,16 @@
         }
       }
 
-      // --- (4) AGGRESSIVE (3-5): launch a strike at the nearest enemy colony
-      // (AI or human). Higher aggression launches more readily; aiLaunchStrike
-      // already only commits a force strong enough to win.
-      if (aggressive) {
+      // --- (4) EVERY AI: try to RECAPTURE a colony it recently lost. Defenders
+      // (even peaceful species) fight to recover lost ground; only commits a
+      // force strong enough to win. At most one strike per turn, so a reclaim
+      // takes precedence over a fresh war of conquest below.
+      let struck = false;
+      if (aiRecaptureStrike(pi)) { acted = true; struck = true; }
+      // --- (5) AGGRESSIVE (3-5): launch a strike at an enemy colony (AI or
+      // human). Aggression 4-5 prey on the WEAKEST reachable enemy to capture
+      // it; 3 hits the nearest. Higher aggression commits more readily.
+      if (!struck && aggressive) {
         if (aiLaunchStrike(pi)) acted = true;
       }
       return acted;
@@ -11666,16 +11672,28 @@
     function aiLaunchStrike(pi) {
       const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi && !b.inTransit);
       if (!myColonies.length) return false;
+      const aggression = aiTraitsOf(pi).aggression;
       // Candidate targets: any colony NOT owned by this AI (other AIs, the human,
-      // or neutral biodomes), sorted by distance to this AI's nearest colony.
+      // or neutral biodomes). Highly aggressive species (4-5) go after the
+      // WEAKEST reachable enemy colony (lowest defense) to capture it — picking
+      // on weaker neighbours and a weakly-defended player — with distance as a
+      // tie-breaker. Merely aggressive species (3) stay opportunistic and hit
+      // the NEAREST target.
+      const preyOnWeak = aggression >= 4;
       const targets = gameState.buildings
         .filter((b) => b.type === 1 && !b.inTransit && b.owner !== pi)
         .map((t) => {
           let best = Infinity;
           for (const c of myColonies) best = Math.min(best, hexDistance(c.x, c.y, t.x, t.y));
-          return { target: t, dist: best };
+          return { target: t, dist: best, def: colonyDefenseStrength(t) };
         })
-        .sort((a, b) => a.dist - b.dist);
+        .sort((a, b) => preyOnWeak
+          ? (a.def - b.def) || (a.dist - b.dist)   // weakest first, then nearest
+          : (a.dist - b.dist));                     // nearest first
+      // How much stronger than the defender the strike force must look before it
+      // commits. The more aggressive the species, the smaller the margin it
+      // demands (4-5 press attacks a merely-aggressive 3 would hold back from).
+      const commitRatio = aggression >= 5 ? 0.4 : aggression >= 4 ? 0.5 : 0.6;
       for (const { target } of targets) {
         // Gather this AI's eligible, idle, full-strength units from each colony.
         const members = [];
@@ -11689,11 +11707,48 @@
         // Only commit if the force looks capable of beating the target's defense.
         const atkTotal = members.reduce((s, m) => s + unitEffAttack(m.unit), 0);
         const defTotal = colonyDefenseStrength(target);
-        if (atkTotal < Math.max(1, defTotal * 0.6)) continue; // too weak; hold back
+        if (atkTotal < Math.max(1, defTotal * commitRatio)) continue; // too weak; hold back
         _strikeForceSeq++;
         const name = `${(gameState.players[pi] && gameState.players[pi].name) || 'AI'} Strike Force ${_strikeForceSeq}`;
         launchStrikeForce(name, target, members);
         return true;                                     // one strike per AI turn
+      }
+      return false;
+    }
+    // Defensive reclamation: try to RETAKE a colony this AI recently lost — an
+    // enemy-held biodome whose `_priorOwner` is this AI. Runs for EVERY AI
+    // (including peaceful ones) so a defender fights to recover lost ground,
+    // not just the aggressors. Targets the nearest reclaimable colony it can
+    // field a winning force against; launches at most one strike. Returns true
+    // if a reclaim strike launched.
+    function aiRecaptureStrike(pi) {
+      const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi && !b.inTransit);
+      if (!myColonies.length) return false;
+      // Colonies formerly ours, now held by someone else, nearest first.
+      const targets = gameState.buildings
+        .filter((b) => b.type === 1 && !b.inTransit && b.owner !== pi && b._priorOwner === pi)
+        .map((t) => {
+          let best = Infinity;
+          for (const c of myColonies) best = Math.min(best, hexDistance(c.x, c.y, t.x, t.y));
+          return { target: t, dist: best };
+        })
+        .sort((a, b) => a.dist - b.dist);
+      for (const { target } of targets) {
+        const members = [];
+        for (const col of myColonies) {
+          for (const u of colonyStationedUnits(col)) {
+            if (u.strikeForce) continue;
+            if (unitCanJoinStrike(u, col, target)) members.push({ unit: u, colony: col });
+          }
+        }
+        if (!members.length) continue;
+        const atkTotal = members.reduce((s, m) => s + unitEffAttack(m.unit), 0);
+        const defTotal = colonyDefenseStrength(target);
+        if (atkTotal < Math.max(1, defTotal * 0.6)) continue;   // wait until strong enough
+        _strikeForceSeq++;
+        const name = `${(gameState.players[pi] && gameState.players[pi].name) || 'AI'} Reclamation Force ${_strikeForceSeq}`;
+        launchStrikeForce(name, target, members);
+        return true;
       }
       return false;
     }
@@ -17784,9 +17839,13 @@
       };
       // AI attacker: decide automatically, no dialog.
       if (attackerOwner !== 'human') {
-        const aggressive = aiTraitsOf(playerIndexOf(attackerOwner)).aggression >= 4;
-        if (!landSurvivors.length) { apply('leave'); return; }
-        apply(aggressive ? 'raze' : 'capture');
+        // Capture when there are surviving LAND units to occupy and hold the
+        // colony (the point of attacking a weaker neighbor is to take it). With
+        // no land survivors the colony can't be held: the most aggressive
+        // species (5) raze it to deny it to the enemy; others leave it neutral.
+        if (landSurvivors.length) { apply('capture'); return; }
+        const veryAggressive = aiTraitsOf(playerIndexOf(attackerOwner)).aggression >= 5;
+        apply(veryAggressive ? 'raze' : 'leave');
         return;
       }
       // Human attacker: prompt.
@@ -17827,6 +17886,9 @@
       const flipped = (gameState.buildings || []).filter((b) =>
         !b._delete && !b.inTransit && b.owner === targetBio.owner &&
         (b === targetBio || hexDistance(targetBio.x, targetBio.y, b.x, b.y) <= radius));
+      // Remember who just lost this colony so they (an AI) can try to retake it.
+      // A neutral/unowned biodome has no prior owner worth reclaiming.
+      targetBio._priorOwner = (targetBio.owner != null) ? targetBio.owner : null;
       for (const b of flipped) b.owner = newOwner;
       targetBio.ownerName = (newOwner === 'human') ? 'You' : (playerDisplayName(playerIndexOf(newOwner)) || 'Owner');
       gameState.buildings = gameState.buildings.filter((b) => !b._delete);
