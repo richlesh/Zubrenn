@@ -2,7 +2,7 @@
 
 The first rain on Zubrenn fell while the colony ship was still burning.
 
-It hissed against the hull, ran black through the landing trenches, and gathered in the enormous footprints of the ship’s support struts. Beyond the scorched clearing, silver-leaved trees bent beneath the downpour. Something called from deep inside the forest—a long, rising note answered by another farther away.
+It hissed against the hull, ran black through the landing trenches, and pooled in the enormous footprints of the ship’s support struts. Beyond the scorched clearing, silver-leaved trees bent beneath the downpour. Something called from deep in the forest — a long, rising note answered by another farther away.
 
 You stood beneath the shelter of an open cargo ramp and watched water fall from an alien sky.
 
@@ -10,13 +10,11 @@ Behind you, a thousand colonists waited for orders.
 
 Above you, hidden by the clouds, were the stars you would not be returning to.
 
----
-
 ## A World Within Reach
 
 By the year 2500, Earth had finally learned to act as one world.
 
-It had taken centuries of rivalry, scarcity, and disasters no nation could solve alone. The unity that emerged was imperfect, held together as much by necessity as conviction. But for the first time, humanity could undertake something greater than any single country could afford, endure, or claim.
+It had taken centuries of rivalry, scarcity, and disasters no single nation could solve alone. The unity that emerged was imperfect, held together as much by necessity as conviction. But for the first time humanity could undertake something greater than any one nation could afford, endure, or claim.
 
 The United Earth Expedition was its boldest undertaking.
 
@@ -24,9 +22,9 @@ The United Earth Expedition was its boldest undertaking.
 
 Its observatories searched nearby systems for worlds where humanity might live without spending every waking hour fighting the environment. Most discoveries offered only variations of hardship: frozen oceans beneath kilometers of ice, deserts under poisonous skies, barren rock scorched by unstable stars.
 
-Then the most advanced telescopes ever devised turned toward the most promising candidate found to date orbiting Alpha Centauri.
+Then the most advanced telescopes ever built turned toward the most promising candidate orbiting our nearest neighbor, Alpha Centauri.
 
-There were oceans.  There were clouds.  There were forests sprawling across broad continents, their colors shifting with the seasons.  The atmosphere contained breathable levels of oxygen. Liquid water flowed freely across the surface. Gravity fell within tolerable limits. The planet’s biosphere was complex, vigorous, and unlike anything in Earth’s records.
+There were oceans. There were clouds. Forests sprawled across broad continents, their colors shifting with the seasons. The atmosphere held breathable oxygen. Liquid water flowed freely. Gravity fell within tolerable limits. The biosphere was complex, vigorous, and unlike anything in Earth’s records.
 
 The expedition named the world **Zubrenn**.
 
@@ -54,15 +52,15 @@ You were given command.
 
 The plan called for thirty days in orbit.
 
-During that time, survey satellites would map the continents, trace weather systems, inspect coastlines, and search for concentrations of useful minerals. Automated landers would test soils and water. Only after comparing dozens of locations would you choose the site of humanity’s first colony.
+Survey satellites would map the continents, trace weather systems, inspect coastlines, and search for concentrations of useful minerals. Automated landers would test soils and water. Only after comparing dozens of locations would you choose the site of humanity’s first colony.
 
 You had completed less than a day of that work when the alarm sounded.
 
-A maneuvering thruster had failed during an orbital adjustment. Instead of shutting down, it continued firing, pushing *Horizon* out of alignment. Automatic corrections brought other thrusters online. For a few seconds, the ship fought itself.
+A maneuvering thruster failed during an orbital adjustment. Instead of shutting down, it kept firing, pushing *Horizon* out of alignment. Automatic corrections brought other thrusters online. For a few seconds the ship fought itself.
 
 Then a propellant line ruptured.
 
-On the command deck, the planet began to turn across the forward display.
+On the command deck the planet began to turn across the forward display.
 
 <img align="right" width="256" src="src/resources/story/256/horizon_landing.png">
 
@@ -70,11 +68,11 @@ Emergency valves finally stopped the leak, but the damage was done. The ship had
 
 There was no longer enough margin to regain a safe orbit and continue the survey.
 
-The navigation officer brought up three possible landing zones. One lay beneath a vast storm. Another had only low-resolution terrain coverage and might have been marshland.  The third was a broad river valley near a sheltered coast.
+The navigation officer brought up three possible landing zones. One lay beneath a vast storm. Another had only low-resolution terrain coverage and might have been marshland. The third was a broad river valley near a sheltered coast.
 
 You knew almost nothing about the terrain on Zubrenn.
 
-There was no choice, you ordered the bridge crew to pilot the *Horizon* to controlled emergency landing.  The exact site would have to be chosen during descent.
+With no choice, you ordered the bridge crew to pilot *Horizon* to a controlled emergency landing. The exact site would have to be chosen during descent.
 
 Atmospheric entry turned the windows white. Equipment tore loose in an unmanned storage bay. Somewhere below the command deck, a thousand people heard the change in engine pitch and understood that the landing was happening weeks too soon.
 
@@ -84,9 +82,9 @@ The final descent carried *Horizon* over dark forest, glittering water, and ridg
 
 The atmosphere on Zubrenn was denser than expected. The emergency fins did not bleed heat as modeled. The ship struck harder than it was designed to.
 
-Support struts buried themselves in wet earth. A cargo cradle collapsed. The smell of smoke from electrical fires filled the air.  For several seconds, every light aboard went out before coming back on under emergency power.
+Support struts buried themselves in wet earth. A cargo cradle collapsed. The smell of smoke from electrical fires filled the air. For several seconds every light aboard went out before coming back on under emergency power.
 
-The *Horizon* had landed with no serious casualties.  All 1000 colonists were now committed to this new world.
+*Horizon* had landed with no serious casualties. All 1,000 colonists were now committed to this new world.
 
 ## What We Had Brought
 
@@ -104,27 +102,27 @@ The first council meeting took place in a cargo compartment beneath a flickering
 
 <img align="right" width="256" src="src/resources/story/256/biodome_construction.png">
 
-In the seed vaults there were genome sequences for staple crops edited for Zubrenn’s UV spectrum and 620-day growing season. In the fabrication templates there were designs advanced reactors, autonomous factories, and medical systems that could rebuild damaged organs. In the library there were centuries of metallurgy, chemistry, and medicine.  Humanity had not forgotten how to make those things.
+In the seed vaults there were genome sequences for staple crops edited for Zubrenn’s UV spectrum and 620-day growing season. In the fabrication templates there were designs for advanced reactors, autonomous factories, and medical systems that could rebuild damaged organs. In the library there were centuries of metallurgy, chemistry, and medicine. Humanity had not forgotten how to make those things.
 
-But knowledge is not infrastructure. The biodome carried by *Horizon* was the product of an entire planet’s industry. Zubrenn possesed no such advanced infrastructure.  It would have to be built.
+But knowledge is not infrastructure. The biodome carried by *Horizon* was the product of an entire planet’s industry. Zubrenn possessed no such advanced infrastructure. It would have to be built.
 
-The *Horizon* carried 3D printing units could produce a remarkable range of equipment from prepared feedstock. They could not turn an arbitrary heap of alien rock into whatever the colony needed.
+The *Horizon* carried 3D printing units that could produce a remarkable range of equipment from prepared feedstock. They could not turn an arbitrary heap of alien rock into whatever the colony needed.
 
 Precision manufactured goods required specialized alloys. Those alloys required refined metals, controlled furnaces, chemical reagents, and reliable power. The machines that shaped them needed cutting tools, sensors, lubricants, and replacement parts of their own.
 
 <img align="right" width="256" src="src/resources/story/256/biodome_farm.png">
 
-The *Horizon* carried all the components to build the first pre-fabricated biodome: a self-contained habitat with micro-fusion power generation, housing, food production, manufacturing and well drilling equipment. The colony had the technical skills and know how to build almost everything that was needed.  But first they would have to build out the industrial base needed to build more biodomes necessary for establishing new colonies.
+*Horizon* carried all the components to build the first pre-fabricated biodome: a self-contained habitat with micro-fusion power generation, housing, food production, manufacturing and well drilling equipment. The colony had the technical skills and know-how to build almost everything it needed. But first it would have to build out the industrial base needed to build more biodomes necessary for establishing new colonies.
 
 That became the work of the first colony on Zubrenn.
 
-Water purification systems appeared beside the river. Imported crops took root in sealed growing houses while researchers tested whether local soils could safely support them.  Locations for extracting materials from the ground were explored.  
+Water purification systems appeared beside the river. Imported crops took root in sealed growing houses while researchers tested whether local soils could safely support them.  Locations for extracting materials from the ground were explored.
 
-Soon construction began outside the biodome: Solar panels for energy production, farms to grow crops and raise livestock, mines to extract precious materials, even a factory to transform raw materials into finished goods and docks to open access to the wealth of the sea.
+Soon construction began outside the biodome: solar panels for energy production, farms to grow crops and raise livestock, mines to extract precious materials, even a factory to transform raw materials into finished goods and docks to open access to the wealth of the sea.
 
 ## The Wealth Beneath Our Feet
 
-The first iron deposit was discovered upstream, exposed where the river had cut into a hillside.  It was not particularly rich. On Earth, it might never have justified a mine.
+The first iron deposit was discovered upstream, exposed where the river had cut into a hillside. It was not particularly rich. On Earth, it might never have justified a mine.
 
 <img align="right" width="256" src="src/resources/story/256/quarry.png">
 
@@ -136,7 +134,7 @@ A small foundry reduced the need to consume the ship’s finite stock of metal. 
 
 But progress exposed new shortages.
 
-Electronic production depended on elements found only in traces near the landing site. Fertilizer supplies dwindled while agricultural teams searched for accessible phosphate deposits.  Aluminum and titanium were needed for advanced manufacturing. Reliable energy production required finding a source of uranium to fuel a reactor.
+Electronic production depended on elements found only in traces near the landing site. Fertilizer supplies dwindled while agricultural teams searched for accessible phosphate deposits. Aluminum and titanium were needed for advanced manufacturing. Reliable energy production required finding a source of uranium to fuel a reactor.
 
 Maps acquired new importance. A remote desert basin might hold lithium-bearing brines needed to produce batteries for energy storage. A mountain belt might contain iron or titanium. Somewhere a source of crystalline materials must be found so that desperately needed electronics could be fabricated.
 
@@ -148,7 +146,7 @@ Offshore fisheries promised a bountiful source of needed protein. Marine organis
 
 The sea was not empty space between valuable lands. It was a resource frontier, a transport network, and eventually another border to defend.
 
-After many years, a second colony was founded beside a rare mineral deposit.  Years after that a third colony was founded near a natural harbor on the coast.
+After many years, a second colony was founded beside a rare mineral deposit. Years after that a third colony was founded near a natural harbor on the coast.
 
 Between them stretched roads, power lines, and supply routes that now mattered as much as the settlements themselves.
 
