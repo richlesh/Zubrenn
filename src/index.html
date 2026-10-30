@@ -896,11 +896,20 @@
         } else {
           // At peace: occasionally propose a non-aggression or free-travel pact,
           // paying the human a per-year fee for it.
+          // Cooldown: don't propose ANOTHER new pact to the human too soon after
+          // the last proposal/agreement with this species (so e.g. a free-travel
+          // pact isn't immediately followed by a non-aggression offer).
+          const pactCooldown = (CONFIG && CONFIG.pactTerm && Number.isFinite(+CONFIG.pactTerm.offerCooldownTurns))
+            ? +CONFIG.pactTerm.offerCooldownTurns : 10;
+          const recentlyOffered = (rel.lastPactOfferTurn != null)
+            && (turn - rel.lastPactOfferTurn) < pactCooldown;
           const kinds = [];
           // Don't re-offer a pact type that is already in place (by relation
           // expiry OR an active pact record) — wait until it expires.
-          if (!(rel.nonAggressionUntil > turn) && !ownerHasActivePactRecord(aiOwner, 'human', 'nonAggression')) kinds.push('nonAggression');
-          if (!(rel.freeTravelUntil > turn) && !ownerHasActivePactRecord(aiOwner, 'human', 'freeTravel')) kinds.push('freeTravel');
+          if (!recentlyOffered) {
+            if (!(rel.nonAggressionUntil > turn) && !ownerHasActivePactRecord(aiOwner, 'human', 'nonAggression')) kinds.push('nonAggression');
+            if (!(rel.freeTravelUntil > turn) && !ownerHasActivePactRecord(aiOwner, 'human', 'freeTravel')) kinds.push('freeTravel');
+          }
           for (const kind of kinds) {
             const w = aiPactWillingness(aiOwner, 'human', kind);
             if (w > 0.55 && Math.random() < 0.15 * w) {
@@ -913,6 +922,7 @@
                 diplo: true, provider: aiOwner, deal,
                 text: `<p><strong>${esc(ownerDisplayName(aiOwner))}</strong> proposes a <strong>${label} pact</strong> for <strong>${years} years</strong>, paying you <strong>¤${nf(pay, 0)}/yr</strong>.</p>`,
               });
+              rel.lastPactOfferTurn = turn;   // start the cooldown
               break;                                       // at most one proposal
             }
           }
@@ -14615,6 +14625,9 @@
           const ia = ownerToIndex(a), ib = ownerToIndex(b), d = opinionDelta('pactAgreed');
           if (ia >= 0 && ib >= 0 && d) { adjustOpinion(ia, ib, d); adjustOpinion(ib, ia, d); }
         }
+        // Start the pact-offer cooldown so the other party doesn't immediately
+        // propose a second (different-type) pact right after this one is agreed.
+        { const rr = relationOf(a, b); if (rr) rr.lastPactOfferTurn = gameState.turn || 0; }
         // Log the pact's beginning (no popup — the proposer/acceptor is notified
         // at the point of agreement).
         if (pairInvolvesHuman(a, b)) {

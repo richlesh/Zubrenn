@@ -577,12 +577,11 @@
       "buildCost":   { "energy": 5, "material": 5, "wealth": 15, "water": 0.5, "turns": 3 },
       "costPerYear": { "energy": 15, "goods": 3, "wealth": 3, "water": 0.1 },
       "bonus":       { "material": "15x", "wealth": "3x", "happiness": -0.25 },
-      "storage":     { "energy": 15, "material": 50 },
-      "federationStorage": { "material": 50 },
+      "storage":     { "energy": 20, "material": 200 },
+      "federationStorage": { "material": 200 },
       "prerequisite": {
         "building": ["solar panel"],
         "terrain":  ["grassland", "hills", "forest", "jungle", "plains", "mountain-low", "mountain-high"],
-        "population": 5,
         "other":    []
       },
       "equivalentTo": "mine"
@@ -637,8 +636,8 @@
       "buildCost":   { "energy": 25, "material": 25, "wealth": 50, "water": 1.5, "turns": 5 },
       "costPerYear": { "energy": 100, "goods": 25, "wealth": 25, "water": 0.5 },
       "bonus":       { "material": "90x", "wealth": "20x", "happiness": -0.5 },
-      "storage":     { "energy": 100, "material": 300 },
-      "federationStorage": { "material": 300 },
+      "storage":     { "energy": 100, "material": 400 },
+      "federationStorage": { "material": 400 },
       "prerequisite": {
         "building": ["solar farm"],
         "terrain":  ["grassland", "hills", "forest", "jungle", "plains", "mountain-low", "mountain-high"],
@@ -2142,7 +2141,8 @@
     "minYears": 5,
     "maxYears": 30,
     "minOpinion": 0,
-    "maxOpinion": 100
+    "maxOpinion": 100,
+    "offerCooldownTurns": 10
   },
   // Trade pricing. Per-year wealth an AI asks for access it sells, by category.
   // These are the BASE amounts before the per-seller trait markup (aggression/
