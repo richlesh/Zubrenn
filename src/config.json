@@ -2410,6 +2410,8 @@
   //                surviving species wins. Rating is a weighted score of
   //                population, treasury, colony count, and controlled habitable
   //                land cells (ratingWeights).
+  // minYear: the earliest game year any victory may be declared (prevents early
+  //          false wins, e.g. domination while only a couple of colonies exist).
   // Research / tech tree. Research is pooled at the Federation level. Each year
   // science is funded by all Federation wealth that cannot be stored PLUS the
   // player's science-funding slider percent (0-100) of the stored treasury;
@@ -2431,6 +2433,7 @@
   },
   "victory": {
     "enabled": true,
+    "minYear": 2700,
     "conquest": true,
     "domination": { "enabled": true, "landPercent": 60, "colonyPercent": 70 },
     "economic": { "enabled": true, "treasuryThreshold": 1000000 },

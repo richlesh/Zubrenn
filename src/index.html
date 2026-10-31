@@ -18535,6 +18535,9 @@
       const w = v.ratingWeights || {};
       return {
         enabled: b(v.enabled, true),
+        // No victory of any type can be declared before this game year. Prevents
+        // early false wins (e.g. domination while only a few colonies exist).
+        minYear: n(v.minYear, 2700),
         conquest: b(v.conquest, true),
         domination: {
           enabled: b(dom.enabled, true),
@@ -18748,6 +18751,9 @@
       if (gameState._gameOver || gameState._victoryDeclared) return;
       const cfg = victoryCfg();
       if (!cfg.enabled) return;
+      // No victory may be declared before victory.minYear — stops early false
+      // wins (e.g. domination when only a couple of colonies exist turn 1).
+      if (currentYear() < cfg.minYear) return;
       const owners = livingOwners();
       if (!owners.length) return;                 // game not underway yet
 
