@@ -12268,6 +12268,10 @@
       const work = [], build = [], launch = [];
       const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi && !b.inTransit);
       for (const col of myColonies) {
+        // Early colonies are governed solely by the early planner (strict
+        // Solar->Farm->Mine->Factory order); don't let the cached plan build
+        // extra Solar/Farms on them and starve the material/Factory steps.
+        if (earlyPlanActive(col)) continue;
         ensureWorked(col);
         const homeKey = cellKey(col.x, col.y);
         const cap = workCap(col);
@@ -13190,11 +13194,31 @@
       }
       let landLeft = landCells.length, seaLeft = seaCells.length;
       let mineIncluded = false;
+      // Roles the colony ALREADY has (operational, non-biodome). When re-planning
+      // a partially-built colony (e.g. an old save that only has Solar+Farm), we
+      // must NOT re-plan a role it already owns — otherwise the scarce free cells
+      // get a redundant Solar/Farm instead of the MISSING Mine/Factory. For a
+      // fresh colony nothing is built, so nothing is skipped and the full
+      // Solar->Farm->Mine->Factory foundation is planned as before. A Farm counts
+      // its role as satisfied once at least one Farm exists; the mine role is
+      // satisfied by any mine-family member.
+      const _builtFound = colonyBuildings(col).filter((b) => b.type !== 1);
+      const _hasRole = (type) => {
+        if (isMineFamily(type)) return _builtFound.some((b) => isMineFamily(b.type));
+        return _builtFound.some((b) => b.type === type);
+      };
       for (const type of buildSeq) {
         if (type === dockCode) {
           if (seaLeft > 0) { placeableSeq.push(type); seaLeft--; }
           continue;
         }
+        if (type !== factoryCode && _hasRole(type)) {
+          // Role already present (Solar/Farm/mine-family). Treat mine as included
+          // so the Factory step can still follow, but don't spend a cell on it.
+          if (isMineFamily(type)) mineIncluded = true;
+          continue;
+        }
+        if (type === factoryCode && _hasRole(factoryCode)) continue; // factory already built
         if (type === factoryCode && !mineIncluded) continue;  // factory requires a mine
         if (landLeft <= 0) continue;                          // no land cell left
         // Suitable cell for this building must exist (Farm->food>0, Mine->material>0).
@@ -13342,6 +13366,23 @@
           if (!hasDockBuilt && !planHasDock) planValid = false;
         }
       }
+      // The foundation MUST include a material-storage building (a mine-family
+      // member: Mine/Quarry/Salt Works) and a Factory. Old saves — and plans made
+      // before the mine-family fix — often have only Solar+Farm, so the colony
+      // never banks material and never expands. If the plan (and colony) lack a
+      // mine-family building or a Factory while at least one is still buildable
+      // somewhere in the colony, force a re-plan so those steps are added. The
+      // re-plan may need to repurpose a surplus Farm (below) when cells are full.
+      if (planValid) {
+        const mineBaseCode = _bldgCode('mine');
+        const factoryCode = _bldgCode('factory');
+        const isMineFam = (t) => t === mineBaseCode || buildingEquivalentCode(t) === mineBaseCode;
+        const built = colonyBuildings(col).filter((b) => b.type !== 1);
+        const planTypes = plan.placements.map((p) => p.type);
+        const haveMineFam = built.some((b) => isMineFam(b.type)) || planTypes.some(isMineFam);
+        const haveFactory = built.some((b) => b.type === factoryCode) || planTypes.includes(factoryCode);
+        if (!haveMineFam || !haveFactory) planValid = false;
+      }
       if (!planValid) {
         const fresh = planEarlyColony(col);
         if (!fresh) return false;
@@ -13381,6 +13422,45 @@
       // A Habitat only provides population storage when worked, and must always
       // be worked — force it here too (freeing a lower-value worker if needed).
       ensureHabitatsWorked(col, (col.manager && col.manager !== 'none') ? col.manager : 'growth', null);
+      // 1b) HEAL THE FOUNDATION. An early colony that is CELL-CONSTRAINED (no empty
+      // control cell) but still lacks a material-storage building (Mine/Quarry/
+      // Salt Works) or a Factory can never reach the full foundation on its own —
+      // it was filled with surplus Farms by older logic. Tear down ONE surplus
+      // Farm (the colony keeps at least one) to free a cell; the re-plan + build
+      // steps then place the missing foundation building there. Only one removal
+      // is started at a time (removeImprovement no-ops if one is already pending).
+      {
+        const _mineBaseCode = _bldgCode('mine');
+        const _factoryCode = _bldgCode('factory');
+        const _farmCode = _bldgCode('farm');
+        const _isMineFam = (t) => t === _mineBaseCode || buildingEquivalentCode(t) === _mineBaseCode;
+        const _built = colonyBuildings(col).filter((b) => b.type !== 1);
+        const _haveMineFam = _built.some((b) => _isMineFam(b.type));
+        const _haveFactory = _built.some((b) => b.type === _factoryCode);
+        const _removing = _built.some((b) => b.removeTurns != null && b.removeTurns > 0);
+        const _emptyCell = colonyControlCells(col).some((c) =>
+          cellKey(c.x, c.y) !== cellKey(col.x, col.y) && !cellHasBuilding(c.x, c.y) && !isImpassableFrozen(c.x, c.y));
+        if (!_removing && !_emptyCell && (!_haveMineFam || !_haveFactory)) {
+          // Surplus = Farms beyond the first; remove the lowest-food one so the
+          // colony keeps its best Farm. (Only Farms are torn down — never Solar,
+          // the Mine itself, or the Biodome.)
+          const _farms = _built.filter((b) => b.type === _farmCode);
+          if (_farms.length >= 2) {
+            let victim = null, vScore = Infinity;
+            for (const f of _farms) {
+              const prod = cellProduction(f.x, f.y, false, col.owner);
+              const sc = (prod.f || 0);
+              if (sc < vScore) { vScore = sc; victim = f; }
+            }
+            if (victim && canAffordRemovalAt(victim.x, victim.y, col.owner)) {
+              if (removeImprovement(victim.x, victim.y, col.owner)) {
+                col.earlyPlan = null;   // force a re-plan once the cell frees up
+                acted = true;
+              }
+            }
+          }
+        }
+      }
       // 2) Build the next unbuilt plan building when the queue is low.
       if (colonyBuildingsUnderConstruction(col) < 1) {
         // FORCED DOCK (5th building): once the first four foundation buildings
@@ -14045,6 +14125,16 @@
       const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi);
 
       for (const col of myColonies) {
+        // Small colonies are fully governed by the early planner (run earlier in
+        // aiTakeTurn): it assigns workers and builds the STRICT foundation order
+        // Solar Panel -> Farm -> Mine/Quarry/Salt Works -> Factory, WAITING when
+        // it can't yet afford the next step. If the general AI build logic below
+        // also acted on these colonies it would greedily fill the remaining cells
+        // with extra Solar/Farms (skipping the material building), which is why
+        // AI colonies ended up as all Solar+Farm and never got a Mine/Factory —
+        // so they could never bank material to found new colonies. Leave early
+        // colonies entirely to the planner.
+        if (earlyPlanActive(col)) continue;
         ensureWorked(col);
         pruneWorkedToControl(col);
         const homeKey = cellKey(col.x, col.y);
