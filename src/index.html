@@ -68,8 +68,12 @@
   <div id="research-overlay" hidden>
     <div id="research-dialog">
       <h2>Research</h2>
-      <div class="hint">Your Federation funds science each year: all wealth it cannot store, plus the science-funding slider's share of its stored wealth (set it in the Federation dialog). Pick a technology to research; completing it unlocks the buildings and units that require it.</div>
+      <div class="hint">Science is funded each year by all wealth that cannot be stored, plus the funding slider's share of stored wealth. Research works from your very first colony. Pick a technology below; completing it unlocks the buildings and units that require it.</div>
       <div id="research-current"></div>
+      <div class="fed-field" id="research-funding-field">
+        <label for="research-funding">Science funding: <span id="research-funding-val">50</span>% of stored wealth</label>
+        <input id="research-funding" type="range" min="0" max="100" step="5" value="50">
+      </div>
       <div id="research-table-wrap">
         <table id="research-table">
           <thead><tr><th>Technology</th><th>Cost</th><th>Requires</th><th>Status</th><th></th></tr></thead>
@@ -8763,9 +8767,10 @@
           else if (hostile) hints.push({ text: `${ownerDisplayName(owner)} is hostile and may attack.`, kind: 'threat' });
         }
       } catch (e) {}
-      // Research idle (research on, a Federation exists, nothing selected).
+      // Research idle (research on, you have a colony, nothing selected). Works
+      // from the first colony — research isn't gated on having a Federation.
       try {
-        if (typeof researchEnabled === 'function' && researchEnabled() && (typeof federationEstablished !== 'function' || federationEstablished('human'))) {
+        if (typeof researchEnabled === 'function' && researchEnabled() && cols.length > 0) {
           const r = ownerResearch('human');
           const anyTech = Object.keys(techDefs()).length > 0;
           if (r && !r.current && anyTech) {
@@ -19013,6 +19018,20 @@
       const r = ownerResearch('human');
       const defs = techDefs();
       const keys = Object.keys(defs);
+      // Science-funding slider (same value the Federation dialog's slider sets).
+      // Available here from the first colony, so research works before a
+      // Federation (2 colonies) exists.
+      {
+        const field = document.getElementById('research-funding-field');
+        const slider = document.getElementById('research-funding');
+        const valEl = document.getElementById('research-funding-val');
+        if (field) field.style.display = researchEnabled() ? '' : 'none';
+        if (slider && r) {
+          const pct = Math.max(0, Math.min(100, Math.round(((r.fundingPercent != null) ? r.fundingPercent : researchDefaultFundingPercent()) / 5) * 5));
+          slider.value = String(pct);
+          if (valEl) valEl.textContent = String(pct);
+        }
+      }
       // Current-research summary + progress bar.
       const curWrap = document.getElementById('research-current');
       if (curWrap) {
@@ -20031,6 +20050,14 @@
       } catch (err) { console.error('[log-jump] failed:', err); }
     });
     { const el = document.getElementById("research-close"); if (el) el.addEventListener("click", closeResearch); }
+    // Science-funding slider inside the Research dialog (mirrors the Federation
+    // dialog slider; both write ownerResearch('human').fundingPercent).
+    { const el = document.getElementById("research-funding"); if (el) el.addEventListener("input", () => {
+        const r = ownerResearch('human');
+        const pct = Math.max(0, Math.min(100, parseInt(el.value, 10) || 0));
+        if (r) r.fundingPercent = pct;
+        const v = document.getElementById("research-funding-val"); if (v) v.textContent = String(pct);
+      }); }
     ipcRenderer.on("view-trades", openTrades);
     { const el = document.getElementById("trades-close"); if (el) el.addEventListener("click", closeTrades); }
     { const el = document.getElementById("trades-buy"); if (el) el.addEventListener("click", openPropose); }
