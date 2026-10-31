@@ -18492,13 +18492,33 @@
       lines.push(`Attacker losses: ${atkLost} unit${atkLost === 1 ? '' : 's'}.`);
       if (atkExpended > 0) lines.push(`Single-use units expended: ${atkExpended}.`);
       lines.push(`Defender losses: ${defUnitLost} unit${defUnitLost === 1 ? '' : 's'}, ${defBldgLost} defense building${defBldgLost === 1 ? '' : 's'}.`);
-      // Game Log (one-line) record of the battle result for any human-involved
-      // battle — win or loss — so the outcome is always in the communication log.
-      if (humanInvolved) {
+      // Game Log (one-line) record of EVERY battle result — win or loss, and
+      // including alien-vs-alien battles — so the communication log is a complete
+      // record of the war across Zubrenn (not just battles the human fought).
+      {
         const atkNm = ownerDisplayName(attackerOwner);
         const tgtNm = targetBio.name || 'a colony';
         const outcome = attackerWon ? 'succeeded' : 'was repelled';
-        try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.battle(`Battle: ${atkNm}'s ${sf.name} attacked ${tgtNm} — the attack ${outcome} (attacker lost ${atkLost}, defender lost ${defUnitLost} unit${defUnitLost === 1 ? '' : 's'} + ${defBldgLost} defense${defBldgLost === 1 ? '' : 's'}).`, { jump: (targetBio ? { x: targetBio.x, y: targetBio.y } : null) }); } catch (e) {}
+        const jump = targetBio ? { x: targetBio.x, y: targetBio.y } : null;
+        try {
+          if (typeof gameLog !== 'undefined' && gameLog) {
+            gameLog.battle(`Battle: ${atkNm}'s ${sf.name} attacked ${tgtNm} — the attack ${outcome} (attacker lost ${atkLost}, defender lost ${defUnitLost} unit${defUnitLost === 1 ? '' : 's'} + ${defBldgLost} defense${defBldgLost === 1 ? '' : 's'}).`, { jump });
+          }
+        } catch (e) {}
+        // Announce alien-vs-alien battles with a notification too, but only when
+        // the human can actually see the target colony (same intel gating as the
+        // Rankings/incoming-attack warnings) so distant skirmishes don't spam.
+        if (!humanInvolved) {
+          let visible = false;
+          try { visible = (typeof humanCanSeeEnemyColony === 'function') && humanCanSeeEnemyColony(targetBio); } catch (e) {}
+          if (visible) {
+            const defNm = ownerDisplayName(defenderOwner);
+            // No logOpts: the battle is already recorded via gameLog.battle above,
+            // so this notify is a transient on-screen announcement only (passing
+            // logOpts would create a duplicate Game Log line).
+            try { notify(`${atkNm} attacked ${defNm}'s ${tgtNm} — the attack ${outcome}.`); } catch (e) {}
+          }
+        }
       }
       if (attackerWon) {
         finishWonBattle(targetBio, survivors, sf, lines, attackerOwner);
