@@ -18707,6 +18707,17 @@
         if (cands.length) {
           const victim = cands[Math.floor(Math.random() * cands.length)];
           const vname = (typeof improvementName === 'function') ? improvementName(victim.type) : 'a building';
+          // If the razed building is a military base, disband its garrison the
+          // same way a player Remove Improvement does: destroy the units and
+          // return their personnel to the base's controlling colony as
+          // population. Done BEFORE the building is dropped so slot links are
+          // still intact.
+          if (Array.isArray(victim.unitIds) && victim.unitIds.length) {
+            const host = colonyControlling(victim.x, victim.y, victim.owner)
+              || gameState.buildings.find((bb) => bb.type === 1 && bb.owner === victim.owner && bb.x === victim.x && bb.y === victim.y && !bb.inTransit)
+              || col;
+            try { disbandBaseUnits(victim, host || null); } catch (e) {}
+          }
           victim._delete = true;
           gameState.buildings = gameState.buildings.filter((b) => !b._delete);
           try { if (typeof bumpPlaceGen === 'function') bumpPlaceGen(); } catch (e) {}
