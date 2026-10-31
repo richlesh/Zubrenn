@@ -810,6 +810,11 @@
         w = 0.10 * (6 - aggression) + 0.08 * diplomacy + 0.05 * cooperation;
       } else if (kind === 'freeTravel') {
         w = 0.10 * cooperation + 0.08 * diplomacy;
+      } else if (kind === 'alliance') {
+        // An alliance is a deep commitment (mutual defense + shared vision):
+        // only cooperative, diplomatic, non-aggressive species seek one, and the
+        // opinion term (added below) weighs heavily — hostiles won't ally.
+        w = 0.09 * cooperation + 0.07 * diplomacy + 0.05 * (6 - aggression) - 0.15;
       } else { // mapSwap — a friendly intel exchange; open, cooperative races share readily
         w = 0.10 * cooperation + 0.08 * diplomacy + 0.04 * (6 - aggression);
       }
@@ -909,6 +914,7 @@
           if (!recentlyOffered) {
             if (!(rel.nonAggressionUntil > turn) && !ownerHasActivePactRecord(aiOwner, 'human', 'nonAggression')) kinds.push('nonAggression');
             if (!(rel.freeTravelUntil > turn) && !ownerHasActivePactRecord(aiOwner, 'human', 'freeTravel')) kinds.push('freeTravel');
+            if (!(rel.allianceUntil > turn) && !ownerHasActivePactRecord(aiOwner, 'human', 'alliance')) kinds.push('alliance');
           }
           for (const kind of kinds) {
             const w = aiPactWillingness(aiOwner, 'human', kind);
@@ -917,11 +923,11 @@
               const ask = aiPactAsk(aiOwner, 'human', kind, years);
               const pay = Math.round(ask.amountPerYear * 0.5);
               const deal = { kind, a: aiOwner, b: 'human', payer: aiOwner, payee: 'human', resource: 'wealth', amountPerYear: pay, years };
-              const label = kind === 'freeTravel' ? 'free-travel' : 'non-aggression';
-              queueTradeOffer({
-                diplo: true, provider: aiOwner, deal,
-                text: `<p><strong>${esc(ownerDisplayName(aiOwner))}</strong> proposes a <strong>${label} pact</strong> for <strong>${years} years</strong>, paying you <strong>¤${nf(pay, 0)}/yr</strong>.</p>`,
-              });
+              const text = (kind === 'alliance')
+                ? `<p><strong>${esc(ownerDisplayName(aiOwner))}</strong> proposes an <strong>alliance</strong> for <strong>${years} years</strong>, paying you <strong>¤${nf(pay, 0)}/yr</strong>.</p>` +
+                  `<p class="hint">Mutual defense (they join any war against you, and you against them) and shared vision.</p>`
+                : `<p><strong>${esc(ownerDisplayName(aiOwner))}</strong> proposes a <strong>${kind === 'freeTravel' ? 'free-travel' : 'non-aggression'} pact</strong> for <strong>${years} years</strong>, paying you <strong>¤${nf(pay, 0)}/yr</strong>.</p>`;
+              queueTradeOffer({ diplo: true, provider: aiOwner, deal, text });
               rel.lastPactOfferTurn = turn;   // start the cooldown
               break;                                       // at most one proposal
             }
@@ -13976,11 +13982,11 @@
       const rels = ensureRelations();
       const k = relKey(a, b);
       if (!rels[k] || typeof rels[k] !== 'object') {
-        rels[k] = { war: false, warStartTurn: 0, nonAggressionUntil: 0, freeTravelUntil: 0 };
+        rels[k] = { war: false, warStartTurn: 0, nonAggressionUntil: 0, freeTravelUntil: 0, allianceUntil: 0 };
       }
       const r = rels[k];
       if (typeof r.war !== 'boolean') r.war = !!r.war;
-      for (const f of ['warStartTurn', 'nonAggressionUntil', 'freeTravelUntil']) {
+      for (const f of ['warStartTurn', 'nonAggressionUntil', 'freeTravelUntil', 'allianceUntil']) {
         if (typeof r[f] !== 'number' || !Number.isFinite(r[f])) r[f] = 0;
       }
       return r;
@@ -13988,8 +13994,13 @@
     // Two owners are at war when their relation record's war flag is set.
     function areAtWar(a, b) { const r = relationOf(a, b); return !!(r && r.war); }
     // A pact is active when its expiry turn is in the future (>= current turn).
-    function hasNonAggression(a, b) { const r = relationOf(a, b); return !!(r && r.nonAggressionUntil > (gameState.turn || 0)); }
-    function hasFreeTravel(a, b) { const r = relationOf(a, b); return !!(r && r.freeTravelUntil > (gameState.turn || 0)); }
+    function hasNonAggression(a, b) { const r = relationOf(a, b); const t = gameState.turn || 0; return !!(r && (r.nonAggressionUntil > t || r.allianceUntil > t)); }
+    function hasFreeTravel(a, b) { const r = relationOf(a, b); const t = gameState.turn || 0; return !!(r && (r.freeTravelUntil > t || r.allianceUntil > t)); }
+    // An alliance is active while its expiry turn is in the future. An alliance
+    // implies non-aggression and free travel between the two parties (mutual
+    // defense + shared routing/vision), so attack and routing checks treat an
+    // ally like a non-aggression / free-travel partner too.
+    function hasAlliance(a, b) { const r = relationOf(a, b); return !!(r && r.allianceUntil > (gameState.turn || 0)); }
     // Whether an ACTIVE pact RECORD of `kind` exists between a and b (order-
     // independent). This reads gameState.pacts directly, so it stays correct
     // even if a relation's expiry field and the pact list ever drift apart —
@@ -14022,11 +14033,12 @@
       // a war by attacking breaks it early — a betrayal that further sours the
       // victim toward the aggressor (a = attacker, b = defender; see call site).
       const turn = gameState.turn || 0;
-      const pactWasActive = (r.nonAggressionUntil > turn) || (r.freeTravelUntil > turn);
+      const pactWasActive = (r.nonAggressionUntil > turn) || (r.freeTravelUntil > turn) || (r.allianceUntil > turn);
       r.war = true; r.warStartTurn = gameState.turn || 0;
-      // War voids any non-aggression / free-travel pact between the two.
+      // War voids any non-aggression / free-travel / alliance between the two.
       r.nonAggressionUntil = 0;
       r.freeTravelUntil = 0;
+      r.allianceUntil = 0;
       if (pactWasActive) {
         const ia = ownerToIndex(a), ib = ownerToIndex(b), d = opinionDelta('pactBroken');
         if (ia >= 0 && ib >= 0 && d) adjustOpinion(ib, ia, d); // victim's view of the betrayer
@@ -14042,6 +14054,25 @@
       // A new war has begun: show a diplomacy screen (attacker's portrait) and
       // record it in the Game Log. diploScreen handles both.
       try { showWarDeclaredDialog(a, b); } catch (e) { console.error('[setWar] war dialog failed:', e); }
+      // Mutual defense: any ALLY of the defender (b) is drawn into the war
+      // against the aggressor (a). setWar is idempotent and cascades to those
+      // allies' allies in turn. The alliance between a and b was just voided
+      // above, so a's own alliance to b won't re-trigger here.
+      try {
+        const defenderAllies = [];
+        const candidates = ['human', ...activeOwners()];
+        for (const x of candidates) {
+          if (x === a || x === b) continue;
+          if (defenderAllies.includes(x)) continue;
+          if (hasAlliance(b, x) && !areAtWar(a, x)) defenderAllies.push(x);
+        }
+        for (const ally of defenderAllies) {
+          if (pairInvolvesHuman(a, ally) || pairInvolvesHuman(b, ally)) {
+            diploLog(`${ownerDisplayName(ally)} joins the war against ${ownerDisplayName(a)} in defense of ${ownerDisplayName(b)}.`);
+          }
+          setWar(a, ally);
+        }
+      } catch (e) { console.error('[setWar] mutual-defense step failed:', e); }
     }
     // End a war between two owners (peace).
     function makePeace(a, b) {
@@ -14055,13 +14086,14 @@
         notify(`Peace agreed with ${ownerDisplayName(other)} — the war is over.`);
       }
     }
-    // Grant a pact ('nonAggression' | 'freeTravel') until the given turn.
+    // Grant a pact ('nonAggression' | 'freeTravel' | 'alliance') until the turn.
     function grantPact(a, b, kind, untilTurn) {
       const r = relationOf(a, b);
       if (!r) return;
       const t = Math.max(gameState.turn || 0, Number(untilTurn) || 0);
       if (kind === 'nonAggression') r.nonAggressionUntil = t;
       else if (kind === 'freeTravel') r.freeTravelUntil = t;
+      else if (kind === 'alliance') r.allianceUntil = t;
     }
     // Whether `owner` is at war with ANY other owner (used by war weariness).
     function ownerAtWarWithAny(owner) {
@@ -14698,7 +14730,7 @@
         }
         return true;
       }
-      if (kind === 'nonAggression' || kind === 'freeTravel') {
+      if (kind === 'nonAggression' || kind === 'freeTravel' || kind === 'alliance') {
         const years = Math.max(1, Math.floor(Number(deal.years) || 1));
         const amt = Math.max(0, Number(deal.amountPerYear) || 0);
         payOnce(amt);                                  // first year up front
@@ -14714,6 +14746,12 @@
           const ia = ownerToIndex(a), ib = ownerToIndex(b), d = opinionDelta('pactAgreed');
           if (ia >= 0 && ib >= 0 && d) { adjustOpinion(ia, ib, d); adjustOpinion(ib, ia, d); }
         }
+        // An alliance also grants SHARED VISION: reveal the ally's explored
+        // territory to the human (fog is human-only, so the reverse is a no-op).
+        if (kind === 'alliance') {
+          const other = (a === 'human') ? b : (b === 'human') ? a : null;
+          if (other != null) { try { revealOwnerTerritoryToHuman(other); } catch (e) {} }
+        }
         // Start the pact-offer cooldown so the other party doesn't immediately
         // propose a second (different-type) pact right after this one is agreed.
         { const rr = relationOf(a, b); if (rr) rr.lastPactOfferTurn = gameState.turn || 0; }
@@ -14721,7 +14759,7 @@
         // at the point of agreement).
         if (pairInvolvesHuman(a, b)) {
           const other = (a === 'human') ? b : a;
-          const label = (kind === 'freeTravel') ? 'free-travel' : 'non-aggression';
+          const label = (kind === 'alliance') ? 'alliance' : (kind === 'freeTravel') ? 'free-travel' : 'non-aggression';
           diploLog(`A ${label} pact with ${ownerDisplayName(other)} has begun (${years} year${years === 1 ? '' : 's'}).`);
         }
         return true;
@@ -14786,15 +14824,17 @@
     // early-break opinion penalty (the OTHER party sours toward the human, the
     // one breaking it). Returns true if a pact was actually cancelled.
     function cancelPactEarly(owner, kind) {
-      if (owner == null || (kind !== 'nonAggression' && kind !== 'freeTravel')) return false;
+      if (owner == null || (kind !== 'nonAggression' && kind !== 'freeTravel' && kind !== 'alliance')) return false;
       const turn = gameState.turn || 0;
       const rel = relationOf('human', owner);
       const active = rel && ((kind === 'nonAggression' && rel.nonAggressionUntil > turn)
-                          || (kind === 'freeTravel' && rel.freeTravelUntil > turn));
+                          || (kind === 'freeTravel' && rel.freeTravelUntil > turn)
+                          || (kind === 'alliance' && rel.allianceUntil > turn));
       if (!active) return false;
       // Clear the relation's expiry for this pact kind.
       if (kind === 'nonAggression') rel.nonAggressionUntil = 0;
-      else rel.freeTravelUntil = 0;
+      else if (kind === 'freeTravel') rel.freeTravelUntil = 0;
+      else rel.allianceUntil = 0;
       // Drop the matching ongoing pact record (by the human/owner pair + kind).
       const iH = ownerToIndex('human'), iO = ownerToIndex(owner);
       const lo = Math.min(iH, iO), hi = Math.max(iH, iO);
@@ -18345,7 +18385,7 @@
           lbl.textContent = text;
           chip.appendChild(lbl);
           const del = makeTrashButton(
-            `Cancel this ${kind === 'freeTravel' ? 'free-travel' : 'non-aggression'} pact early`,
+            `Cancel this ${kind === 'alliance' ? 'alliance' : kind === 'freeTravel' ? 'free-travel' : 'non-aggression'} early`,
             (e) => {
               e.stopPropagation();
               if (cancelPactEarly(owner, kind)) { try { renderDiplomacy(); } catch (err) {} try { refreshAll(); } catch (err) {} }
@@ -18355,6 +18395,7 @@
         };
         if (rel.nonAggressionUntil > turn) addPactChip('nonAggression', `Non-Aggression (${rel.nonAggressionUntil - turn}y)`);
         if (rel.freeTravelUntil > turn) addPactChip('freeTravel', `Free Travel (${rel.freeTravelUntil - turn}y)`);
+        if (rel.allianceUntil > turn) addPactChip('alliance', `Alliance (${rel.allianceUntil - turn}y)`);
         // One-time map swap (no expiry, no cancel) shown as a plain label.
         if (rel.mapsSwapped) {
           statTd.appendChild(document.createTextNode(', '));
@@ -18376,6 +18417,7 @@
         } else {
           if (!(rel.nonAggressionUntil > turn)) addBtn('Non-Aggression', () => openPactComposer('nonAggression', owner));
           if (!(rel.freeTravelUntil > turn)) addBtn('Free Travel', () => openPactComposer('freeTravel', owner));
+          if (!(rel.allianceUntil > turn)) addBtn('Alliance', () => openPactComposer('alliance', owner));
           // Map swap: a one-time, free intel exchange (reveals the alien's
           // explored territory to you). Offered while at peace until done once.
           if (!rel.mapsSwapped) {
@@ -18420,7 +18462,7 @@
     // the deal through proposePactToOwner (AI verdict wired in Stage C; for now
     // player proposals take effect immediately via applyPactDeal).
     function openPactComposer(kind, owner) {
-      const titleMap = { peace: 'Sue for Peace', nonAggression: 'Propose Non-Aggression Pact', freeTravel: 'Propose Free-Travel Pact' };
+      const titleMap = { peace: 'Sue for Peace', nonAggression: 'Propose Non-Aggression Pact', freeTravel: 'Propose Free-Travel Pact', alliance: 'Propose Alliance' };
       const isPeace = (kind === 'peace');
       const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
       const overlay = document.createElement('div');
@@ -18439,7 +18481,10 @@
         `<h2>${esc(titleMap[kind] || 'Diplomacy')} — ${esc(ownerDisplayName(owner))}</h2>` +
         `<div class="hint" style="margin-bottom:10px">${isPeace
           ? 'A one-time payment to end the war.'
-          : 'A per-year payment for the agreed term. ' + (kind === 'freeTravel' ? 'Allows routing and resource sharing through each other\u2019s territory.' : 'Neither side may attack the other while it is active.')}</div>` +
+          : 'A per-year payment for the agreed term. ' + (
+              kind === 'freeTravel' ? 'Allows routing and resource sharing through each other\u2019s territory.'
+              : kind === 'alliance' ? 'Mutual defense (each joins any war against the other), shared vision, plus free travel and non-aggression.'
+              : 'Neither side may attack the other while it is active.')}</div>` +
         `<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;">` +
         `<label>Pay <select id="pact-res">${resOpts}</select></label>` +
         `<label>${isPeace ? 'Total' : '/ year'} <input id="pact-amt" type="number" min="0" step="1" value="50" style="width:90px"></label>` +
@@ -18480,6 +18525,7 @@
         const verb = deal.kind === 'peace' ? 'agrees to peace'
           : deal.kind === 'freeTravel' ? 'accepts the free-travel pact'
           : deal.kind === 'mapSwap' ? 'agrees to swap maps'
+          : deal.kind === 'alliance' ? 'accepts your alliance'
           : 'accepts the non-aggression pact';
         notify(`${ownerDisplayName(owner)} ${verb}.`);
         // A successful deal warms relations a little.
