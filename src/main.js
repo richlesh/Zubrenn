@@ -574,6 +574,17 @@ function buildMenu() {
         { label: "View Communication Log", accelerator: "CmdOrCtrl+Shift+L", click: () => showGameLog() },
         { type: "separator" },
         {
+          label: "Show Advisor",
+          type: "checkbox",
+          checked: load().advisorEnabled !== false,
+          click: (item) => {
+            const on = !!item.checked;
+            const s = load(); s.advisorEnabled = on; save(s);
+            sendToMain("set-advisor", on);
+          },
+        },
+        { type: "separator" },
+        {
           label: "Toggle Developer Tools",
           accelerator: isMac ? "Cmd+Option+I" : "Ctrl+Shift+I",
           click: () => BrowserWindow.getFocusedWindow()?.webContents.toggleDevTools()

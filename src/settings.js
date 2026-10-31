@@ -12,6 +12,7 @@ const DEFAULTS = {
   defaultModels: {},
   useBuiltinAI: true,
   autoTurnEnd: true,
+  advisorEnabled: true, // show the in-game Advisor hint panel
   musicEnabled: true,
   musicVolume: 50, // 0–100
   fontSize: "small", // "small" (1x) | "medium" (1.25x) | "large" (1.5x)

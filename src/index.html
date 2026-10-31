@@ -39,6 +39,10 @@
         <div class="bldg-panel-title">Strategic Resources</div>
         <div id="strategic-list"></div>
       </div>
+      <div id="advisor-panel">
+        <div class="bldg-panel-title">Advisor</div>
+        <div id="advisor-list"></div>
+      </div>
       <div id="resources-panel">
         <div class="bldg-panel-title">Resources</div>
         <div id="resources-list"></div>
@@ -795,6 +799,7 @@
 
     // Apply saved theme.
     let _autoTurnEnd = true; // whether to auto-end the human turn when idle
+    let _advisorEnabled = true; // whether to show the Advisor hint panel
 
     // --- Background music -------------------------------------------------
     // A looping theme track played in the main game window. Controlled by the
@@ -1106,8 +1111,10 @@
     function applyTheme(settings) {
       document.body.classList.toggle("dark", (settings.theme || "dark") === "dark");
       _autoTurnEnd = settings.autoTurnEnd !== false; // default on
+      _advisorEnabled = settings.advisorEnabled !== false; // default on
       applyFontSize(settings);
       applyMusic(settings);
+      try { renderAdvisor(); } catch (e) {}
     }
     ipcRenderer.invoke("settings-get").then(applyTheme).catch(() => {});
     ipcRenderer.on("settings-updated", () =>
@@ -8715,6 +8722,85 @@
       }
       if (changed && hexMap && typeof hexMap.setBuildings === 'function') {
         hexMap.setBuildings(gameState.buildings);
+      }
+      try { renderAdvisor(); } catch (e) {}
+    }
+    // ---- Advisor: proactive next-best-action hints --------------------------
+    // Derives a short list of suggestions from existing signals (colony
+    // deficits, idle workers, launch-readiness, diplomatic threats, research).
+    // Each hint: { text, jump? {x,y}, kind }. Rendered into #advisor-panel and
+    // toggled by the View > Show Advisor menu (settings.advisorEnabled).
+    function computeAdvisorHints() {
+      const hints = [];
+      const cols = (typeof playerColonies === 'function') ? playerColonies('human') : [];
+      const minPop = ((CONFIG && CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3) * popUnitSize();
+      for (const col of cols) {
+        const where = col.name || cellLatLonLabel(col.x, col.y);
+        // Resource shortfalls flagged by the economy pipeline.
+        if (Array.isArray(col._deficitResources) && col._deficitResources.length) {
+          const list = col._deficitResources.join(', ');
+          hints.push({ text: `${where} is short on ${list}.`, jump: { x: col.x, y: col.y }, kind: 'deficit' });
+        }
+        // An idle worker that could open another cell.
+        if (typeof colonyCanWorkMore === 'function' && colonyCanWorkMore(col)) {
+          hints.push({ text: `${where} has an idle worker — assign it in the colony view.`, jump: { x: col.x, y: col.y }, kind: 'idle' });
+        }
+        // Large enough to found a new colony.
+        if ((col.population || 0) >= minPop) {
+          hints.push({ text: `${where} is large enough to found a new colony.`, jump: { x: col.x, y: col.y }, kind: 'found' });
+        }
+      }
+      // Diplomatic threats: species at war with you, or deeply hostile.
+      try {
+        const hIdx = ownerToIndex('human');
+        for (const owner of activeOwners()) {
+          if (owner === 'human') continue;
+          const aIdx = ownerToIndex(owner);
+          if (aIdx < 0) continue;
+          const atWar = (typeof areAtWar === 'function') && areAtWar('human', owner);
+          const hostile = getOpinion(aIdx, hIdx) <= -50;
+          if (atWar) hints.push({ text: `You are at war with ${ownerDisplayName(owner)}.`, kind: 'war' });
+          else if (hostile) hints.push({ text: `${ownerDisplayName(owner)} is hostile and may attack.`, kind: 'threat' });
+        }
+      } catch (e) {}
+      // Research idle (research on, a Federation exists, nothing selected).
+      try {
+        if (typeof researchEnabled === 'function' && researchEnabled() && (typeof federationEstablished !== 'function' || federationEstablished('human'))) {
+          const r = ownerResearch('human');
+          const anyTech = Object.keys(techDefs()).length > 0;
+          if (r && !r.current && anyTech) {
+            hints.push({ text: `No research selected — choose a technology in the Research screen.`, kind: 'research' });
+          }
+        }
+      } catch (e) {}
+      return hints;
+    }
+    function renderAdvisor() {
+      const panel = document.getElementById('advisor-panel');
+      const list = document.getElementById('advisor-list');
+      if (!panel || !list) return;
+      // Hidden entirely when the Advisor is turned off (View > Show Advisor).
+      if (!_advisorEnabled) { panel.style.display = 'none'; return; }
+      panel.style.display = '';
+      const hints = computeAdvisorHints();
+      list.innerHTML = '';
+      if (!hints.length) {
+        const d = document.createElement('div');
+        d.className = 'advisor-empty';
+        d.textContent = 'All quiet — no pressing actions.';
+        list.appendChild(d);
+        return;
+      }
+      for (const h of hints) {
+        const row = document.createElement('div');
+        row.className = 'advisor-item advisor-' + (h.kind || 'info');
+        row.textContent = h.text;
+        if (h.jump) {
+          row.classList.add('advisor-clickable');
+          row.title = 'Center the map on this colony';
+          row.addEventListener('click', () => { if (hexMap && typeof hexMap.centerOnCell === 'function') hexMap.centerOnCell(h.jump.x, h.jump.y); });
+        }
+        list.appendChild(row);
       }
     }
 
@@ -19922,6 +20008,8 @@
     ipcRenderer.on("view-diplomacy", openDiplomacy);
     document.getElementById("diplomacy-close").addEventListener("click", closeDiplomacy);
     ipcRenderer.on("view-research", openResearch);
+    // Toggle the Advisor panel live from the View menu checkbox.
+    ipcRenderer.on("set-advisor", (_e, on) => { _advisorEnabled = !!on; try { renderAdvisor(); } catch (e) {} });
     // A Game Log "jump to": center the map on a cell, or open a species' Nexus
     // page, depending on the target the log entry carried.
     ipcRenderer.on("log-jump", (_e, target) => {

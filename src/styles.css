@@ -148,16 +148,29 @@ body.dark #player-panel .player-rate { color: #6d9; }
    Resources, then Buildings. They share one look; the uniform spacing between
    them comes from the #right_panel flex `gap` (no extra margins, so every gap
    is equal). */
-#strategic-panel, #resources-panel, #buildings-panel {
+#strategic-panel, #resources-panel, #buildings-panel, #advisor-panel {
   border: 1px solid gray; background: #eee; color: #1e1e1e;
   font: 12px Calibri, sans-serif; padding: 6px 8px; border-radius: 4px;
 }
 body.dark #strategic-panel,
 body.dark #resources-panel,
-body.dark #buildings-panel { background: #2c2c2e; color: #ddd; border-color: #444; }
+body.dark #buildings-panel,
+body.dark #advisor-panel { background: #2c2c2e; color: #ddd; border-color: #444; }
 #strategic-panel .bldg-panel-title,
 #resources-panel .bldg-panel-title,
-#buildings-panel .bldg-panel-title { font-weight: 700; margin-bottom: 4px; }
+#buildings-panel .bldg-panel-title,
+#advisor-panel .bldg-panel-title { font-weight: 700; margin-bottom: 4px; }
+/* Advisor hint rows. */
+.advisor-empty { color: #888; font-style: italic; }
+.advisor-item { margin: 2px 0; padding-left: 14px; position: relative; line-height: 1.35; }
+.advisor-item::before { content: "•"; position: absolute; left: 2px; color: #888; }
+.advisor-clickable { cursor: pointer; }
+.advisor-clickable:hover { text-decoration: underline; }
+/* Severity tints. */
+.advisor-deficit::before, .advisor-war::before { color: #c0392b; }
+.advisor-threat::before { color: #e67e22; }
+.advisor-found::before, .advisor-research::before { color: #0a84ff; }
+.advisor-idle::before { color: #c79a1a; }
 #strategic-panel .bldg-stat,
 #resources-panel .bldg-stat,
 #buildings-panel .bldg-stat { font-variant-numeric: tabular-nums; }
