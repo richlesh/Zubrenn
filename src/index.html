@@ -18810,12 +18810,12 @@
         if (best != null) { declareVictory(best, 'rating'); return; }
       }
     }
-    // End the game with a victory for `owner` by `type`, showing a win/defeat
-    // screen and logging it. Idempotent via the _victoryDeclared / _gameOver flags.
+    // Announce a victory for `owner` by `type` (dialog + log). The game is NOT
+    // ended — play continues afterward; the _victoryDeclared flag just stops the
+    // same victory from being announced again. Idempotent.
     function declareVictory(owner, type) {
       if (gameState._gameOver || gameState._victoryDeclared) return;
       gameState._victoryDeclared = true;
-      gameState._gameOver = true;
       const human = (owner === 'human');
       const who = victoryOwnerName(owner);
       const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -18825,11 +18825,12 @@
         economic: 'by economic might — an unrivalled Federation treasury',
         rating: 'with the highest standing when the age came to a close',
       }[type] || 'by decree';
-      const title = human ? 'Victory — Zubrenn is Yours' : 'Defeat — The Age of Zubrenn Has Ended';
+      const title = human ? 'Victory — Zubrenn is Yours' : 'A Rival Triumphs';
       const body = human
-        ? `<p>You have won the battle for <strong>Zubrenn</strong> ${reason}.</p>`
+        ? `<p>You have won the battle for <strong>Zubrenn</strong> ${reason}.</p>` +
+          `<p class="hint">You may keep playing.</p>`
         : `<p><strong>${esc(who)}</strong> has won the battle for <strong>Zubrenn</strong> ${reason}.</p>` +
-          `<p class="hint">Your bid for the planet is over.</p>`;
+          `<p class="hint">The game continues — play on if you wish.</p>`;
       const logMsg = human
         ? `You have won the battle for Zubrenn ${reason}.`
         : `${who} has won the battle for Zubrenn ${reason}.`;
@@ -18837,7 +18838,7 @@
         diploScreen(title, body, {
           portraitOwner: human ? null : owner,
           logMsg,
-          buttons: [{ value: 'ok', label: human ? 'Triumph!' : 'The End', kind: human ? 'positive' : 'danger' }],
+          buttons: [{ value: 'ok', label: human ? 'Triumph!' : 'Onward', kind: human ? 'positive' : 'primary' }],
         });
       } catch (e) { console.error('[victory] dialog failed:', e); }
     }
