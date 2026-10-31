@@ -18710,7 +18710,26 @@
           victim._delete = true;
           gameState.buildings = gameState.buildings.filter((b) => !b._delete);
           try { if (typeof bumpPlaceGen === 'function') bumpPlaceGen(); } catch (e) {}
-          parts.push(`destroyed the ${vname}`);
+          if (col.owner === 'human') {
+            // For the human, record a dedicated, clickable Game Log entry naming
+            // the LOST improvement so a disaster can never be mistaken for a
+            // silent manager action. Written straight to the log (bypassing
+            // notify's toast coalescing) so it is always present; the generic
+            // per-disaster summary below omits the building clause to avoid a
+            // duplicate.
+            try {
+              if (typeof gameLog !== 'undefined' && gameLog) {
+                const where = col.name || cellLatLonLabel(col.x, col.y);
+                const dname = type.name || 'A natural disaster';
+                gameLog.message(`${dname} destroyed the ${vname} at ${where}.`,
+                  { category: 'disaster', jump: { x: col.x, y: col.y } });
+              }
+            } catch (e) {}
+          } else {
+            // AI colonies get a single summary line (logged by the caller), so
+            // the building loss is reported there.
+            parts.push(`destroyed the ${vname}`);
+          }
         }
       }
       return parts.join(', ');
