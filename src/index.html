@@ -18745,17 +18745,57 @@
         buttons: [{ value: 'ok', label: 'Onward', kind: 'primary' }],
       });
     }
+    // Terminal end-of-game screen dominated by a full-width IMAGE (the military
+    // victory/defeat art). The game is already over by the time this shows, so
+    // the ONLY action is Close — there is no continue. Also records the outcome
+    // in the Game Log. Clicking Close (or Enter/Escape) dismisses the overlay.
+    function showEndGameImage(imageSrc, title, logMsg) {
+      try { if (logMsg && typeof gameLog !== 'undefined' && gameLog) gameLog.message(logMsg, { category: 'battle' }); } catch (e) {}
+      const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const overlay = document.createElement('div');
+      overlay.className = 'overlay';
+      overlay.style.position = 'fixed'; overlay.style.inset = '0';
+      overlay.style.background = 'rgba(0,0,0,0.78)';
+      overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
+      overlay.style.zIndex = '10080';   // above every other dialog (choice dialog is 10070)
+      const dlg = document.createElement('div');
+      dlg.className = 'dialog app-dialog';
+      dlg.style.maxWidth = 'min(720px, 92vw)';
+      dlg.style.maxHeight = '92vh';
+      dlg.style.overflow = 'auto';
+      dlg.style.textAlign = 'center';
+      dlg.innerHTML =
+        (title ? `<h2>${esc(title)}</h2>` : '') +
+        `<img src="${esc(imageSrc)}" alt="${esc(title || 'Game over')}" ` +
+        `style="display:block;max-width:100%;max-height:72vh;margin:0 auto 14px;border-radius:8px;" ` +
+        `onerror="this.style.display='none'">`;
+      const row = document.createElement('div');
+      row.style.marginTop = '6px'; row.style.display = 'flex'; row.style.gap = '8px'; row.style.justifyContent = 'center';
+      const close = () => { if (overlay.parentNode) document.body.removeChild(overlay); document.removeEventListener('keydown', onKey, true); };
+      const btn = document.createElement('button');
+      btn.textContent = 'Close';
+      btn.className = 'btn-primary';
+      btn.addEventListener('click', close);
+      row.appendChild(btn);
+      dlg.appendChild(row);
+      overlay.appendChild(dlg);
+      // Only the Close button ends the screen — clicking the backdrop does nothing
+      // (the game is over; the player explicitly closes). Enter/Escape also close.
+      const onKey = (e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); close(); } };
+      document.addEventListener('keydown', onKey, true);
+      document.body.appendChild(overlay);
+      try { hideAITurnOverlay(); } catch (e) {}   // clear any AI "working" pane behind it
+      btn.focus();
+    }
     // Diplomacy-styled dialog shown when the HUMAN loses their last colony: the
     // battle for Zubrenn is lost and the game is over.
     function showGameOverDialog() {
-      const body =
-        `<p>Your last colony has fallen. Your species has been ` +
-        `<strong>driven from the planet Zubrenn</strong>.</p>` +
-        `<p class="hint">You have lost the battle for Zubrenn.</p>`;
-      diploScreen('Defeat — The Battle for Zubrenn is Lost', body, {
-        logMsg: 'Your last colony has fallen — you have lost the battle for Zubrenn.',
-        buttons: [{ value: 'ok', label: 'Game Over', kind: 'danger' }],
-      });
+      // Military defeat: the human's last colony has fallen. Show the defeat art
+      // on a terminal screen (the game is over — Close is the only action).
+      showEndGameImage(
+        'resources/military_defeat.png',
+        'Defeat — The Battle for Zubrenn is Lost',
+        'Your last colony has fallen — you have lost the battle for Zubrenn.');
     }
     // ---- Victory conditions -------------------------------------------------
     // Tunable win rules from CONFIG.victory, with safe fallbacks. Each type can
@@ -19087,6 +19127,31 @@
         economic: 'by economic might — an unrivalled Federation treasury',
         rating: 'with the highest standing when the age came to a close',
       }[type] || 'by decree';
+      // MILITARY outcome (conquest = last species standing) gets a dedicated
+      // full-image, terminal end screen with a single Close button — the game is
+      // over, there is no "continue".
+      if (type === 'conquest') {
+        if (human) {
+          // Military VICTORY: the human is the last species standing.
+          gameState._gameOver = true;
+          showEndGameImage(
+            'resources/military_victory.png',
+            'Military Victory — Zubrenn is Yours',
+            `You have won the battle for Zubrenn ${reason}.`);
+          return;
+        }
+        if (ended) {
+          // Military DEFEAT: an alien conquered the planet and the human is gone.
+          // (_gameOver was already set above.)
+          showEndGameImage(
+            'resources/military_defeat.png',
+            'Military Defeat — The Battle for Zubrenn is Lost',
+            `${who} has conquered Zubrenn ${reason}. Your species has been driven from the planet.`);
+          return;
+        }
+        // (An AI conquest while the human somehow still holds a colony is not a
+        // real conquest end — fall through to the normal announcement.)
+      }
       const title = human
         ? 'Victory — Zubrenn is Yours'
         : (ended ? 'Defeat — The Age of Zubrenn Has Ended' : 'A Rival Triumphs');
