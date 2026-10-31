@@ -4982,7 +4982,12 @@
       // the next player's turn; declareVictory sets _gameOver to halt play.
       if (roundCompleted) { try { checkVictory(); } catch (e) { console.error('[victory] check failed:', e); } }
       // The human has been defeated — the game is over; stop advancing turns.
-      if (gameState._gameOver) return;
+      if (gameState._gameOver) {
+        // Remove the gray AI-turn glass pane / "working" helmet animation so the
+        // end-of-game dialog isn't left spinning behind it.
+        try { hideAITurnOverlay(); } catch (e) {}
+        return;
+      }
       const p = players[gameState.currentPlayer];
       if (p && p.kind === 'ai' && p.eliminated) {
         // An evicted species takes no turn; move straight on to the next player.
@@ -18992,6 +18997,14 @@
       if (gameState._gameOver || gameState._victoryDeclared) return;
       gameState._victoryDeclared = true;
       const human = (owner === 'human');
+      // Can the human keep playing? Only if they still hold a colony. When an AI
+      // wins while the human is ELIMINATED (e.g. a conquest win — the human has no
+      // colonies left), there is nothing to continue: the game MUST end. Not
+      // ending it leaves advanceTurn running with no human colonies, which spins
+      // on the AI-phase "working" animation forever (the reported bug).
+      const humanAlive = playerColonies('human').length > 0;
+      const ended = !human && !humanAlive;
+      if (ended) gameState._gameOver = true;
       const who = victoryOwnerName(owner);
       const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
       const reason = {
@@ -19000,12 +19013,16 @@
         economic: 'by economic might — an unrivalled Federation treasury',
         rating: 'with the highest standing when the age came to a close',
       }[type] || 'by decree';
-      const title = human ? 'Victory — Zubrenn is Yours' : 'A Rival Triumphs';
+      const title = human
+        ? 'Victory — Zubrenn is Yours'
+        : (ended ? 'Defeat — The Age of Zubrenn Has Ended' : 'A Rival Triumphs');
       const body = human
         ? `<p>You have won the battle for <strong>Zubrenn</strong> ${reason}.</p>` +
           `<p class="hint">You may keep playing.</p>`
         : `<p><strong>${esc(who)}</strong> has won the battle for <strong>Zubrenn</strong> ${reason}.</p>` +
-          `<p class="hint">The game continues — play on if you wish.</p>`;
+          (ended
+            ? `<p class="hint">Your species has been driven from the planet. The battle for Zubrenn is lost.</p>`
+            : `<p class="hint">The game continues — play on if you wish.</p>`);
       const logMsg = human
         ? `You have won the battle for Zubrenn ${reason}.`
         : `${who} has won the battle for Zubrenn ${reason}.`;
@@ -19013,12 +19030,15 @@
         const result = diploScreen(title, body, {
           portraitOwner: human ? null : owner,
           logMsg,
-          // "Continue" keeps playing; "End Game" stops the game here (sets
-          // _gameOver, which halts advanceTurn) for players who want to finish.
-          buttons: [
-            { value: 'ok', label: human ? 'Triumph!' : 'Onward', kind: human ? 'positive' : 'primary' },
-            { value: 'end', label: 'End Game', kind: 'danger' },
-          ],
+          // If the human is still alive, offer Continue / End Game. If the human
+          // was eliminated (the game has already been ended above), show a single
+          // terminal button — there is nothing left to continue.
+          buttons: ended
+            ? [{ value: 'end', label: 'Game Over', kind: 'danger' }]
+            : [
+                { value: 'ok', label: human ? 'Triumph!' : 'Onward', kind: human ? 'positive' : 'primary' },
+                { value: 'end', label: 'End Game', kind: 'danger' },
+              ],
         });
         if (result && typeof result.then === 'function') {
           result.then((val) => { if (val === 'end') gameState._gameOver = true; })
