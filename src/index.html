@@ -330,7 +330,7 @@
         <table id="military-table">
           <thead><tr>
             <th class="mil-chk"><input type="checkbox" id="military-check-all" title="Select / deselect all units"></th>
-            <th>Name</th><th>Type</th><th>Strength</th><th>Location</th>
+            <th>Name</th><th>Type</th><th class="mil-vet" title="Veterancy: ★ Veteran, ★★ Elite">Veterancy</th><th>Strength</th><th>Location</th>
             <th class="mil-act"><button type="button" id="military-bulk-transfer" class="mil-bulk mil-bulk-icon" title="Transfer all checked units to a colony" aria-label="Transfer all checked units to a colony">⇄</button> <button type="button" id="military-bulk-home" class="mil-bulk mil-bulk-icon" title="Send all checked units to their home base" aria-label="Send all checked units to their home base">⌂</button> <button type="button" id="military-bulk-cancel" class="icon-trash" title="Cancel the attack for all checked units and return them home" aria-label="Cancel the attack for all checked units and return them home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button></th>
           </tr></thead>
           <tbody id="military-body"></tbody>
@@ -19321,7 +19321,7 @@
       if (!units.length) {
         const tr = document.createElement("tr");
         const td = document.createElement("td");
-        td.colSpan = 6; td.className = "stat-note";
+        td.colSpan = 7; td.className = "stat-note";
         td.textContent = "No military units yet. Build a Barracks and it will recruit a battalion.";
         tr.appendChild(td); militaryBody.appendChild(tr);
         return;
@@ -19340,13 +19340,12 @@
         tr.appendChild(chkTd);
         const full = unitFullStrength(u);
         const strengthTxt = full > 0 ? `${milNf(u.strength)} / ${milNf(full)}` : milNf(u.strength);
-        // Append the veterancy tier to the type (e.g. "Infantry · Veteran").
-        const _vt = (typeof unitVeterancyTier === 'function') ? unitVeterancyTier(u) : null;
-        const typeTxt = _vt ? `${typeLabel(u.type)} · ${_vt.name}` : typeLabel(u.type);
-        const cells = [u.name, typeTxt, strengthTxt, null /* location: built below as links */];
+        // Columns: Name(0), Type(1), Veterancy(2), Strength(3), Location(4).
+        const cells = [u.name, typeLabel(u.type), null /* veterancy: stars below */,
+                       strengthTxt, null /* location: links below */];
         for (let i = 0; i < cells.length; i++) {
           const td = document.createElement("td");
-          if (i === 2) td.className = "num";
+          if (i === 3) td.className = "num";             // Strength, right-aligned
           if (i === 0) {
             td.textContent = cells[i];
             // Double-click the name to rename the unit inline.
@@ -19356,7 +19355,21 @@
               e.stopPropagation();
               startRenameUnit(td, u);
             });
-          } else if (i === 3) {
+          } else if (i === 2) {
+            // Veterancy: yellow stars — 1 for Veteran, 2 for Elite, none for
+            // the base tier. The tier's position in the configured tiers list
+            // (0 = base) gives the star count, so extra tiers scale naturally.
+            td.className = "mil-vet";
+            const tier = (typeof unitVeterancyTier === "function") ? unitVeterancyTier(u) : null;
+            if (tier && typeof veterancyCfg === "function") {
+              const tiers = veterancyCfg().tiers || [];
+              const rank = Math.max(0, tiers.findIndex((t) => t.name === tier.name));
+              if (rank > 0) {
+                td.textContent = "★".repeat(rank);
+                td.title = tier.name;
+              }
+            }
+          } else if (i === 4) {
             // Location: colony names are links that close the window and center
             // the map on the colony.
             td.className = "mil-loc";

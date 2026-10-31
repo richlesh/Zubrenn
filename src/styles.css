@@ -711,6 +711,9 @@ body.dark #military-dialog { background: #2c2c2e; color: #e0e0e0; }
 #military-table { border-collapse: collapse; width: 100%; font-size: 12px; }
 #military-table th, #military-table td { padding: 5px 9px; text-align: left; white-space: nowrap; }
 #military-table td.num, #military-table th.num { text-align: right; }
+/* Veterancy column: centered yellow stars (★ Veteran, ★★ Elite). */
+#military-table th.mil-vet, #military-table td.mil-vet { text-align: center; }
+#military-table td.mil-vet { color: #f5c518; letter-spacing: 1px; }
 #military-table thead th {
   position: sticky; top: 0; background: #e6e6ea; border-bottom: 2px solid #bbb; user-select: none;
 }
