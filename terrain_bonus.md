@@ -29,7 +29,7 @@ what each strategic resource unlocks and which deposits provide it:
 | **Lithium** | Lithium Brine Deposit | Solar Salt Works, Grid Storage |
 | **Stone** | Fossilized Chitin Reefs, Threadstone Seam | Roads, Monorails |
 | **Titanium** | Titanlace Deposit | Fighters, Bombers, Carriers; Spaceport, Satellite Network |
-| **Uranium** | Uranium Deposit | Nuclear Reactor, ICBMs |
+| **Uranium** | Uranium Deposit | Fission Reactor, ICBMs |
 
 ### Archaeological
 

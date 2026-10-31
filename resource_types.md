@@ -174,6 +174,6 @@ mature space-age civilization.
 <img align="right" width="128" src="src/resources/resource_types/128/uranium.png">
 
 A rare fissile mineral found in the **Uranium Deposit**. Uranium is the fuel of the
-atomic age: it is required to build and run the **Nuclear Reactor** and to arm the
+atomic age: it is required to build and run the **Fission Reactor** and to arm the
 **ICBM**. A worked uranium source is the gateway to the largest power plant and the
 most fearsome weapon on the planet.

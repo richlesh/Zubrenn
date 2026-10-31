@@ -548,8 +548,9 @@
         "other": [ "shallow" ]
       }
     },
-    // The Nuclear Reactor is an advanced power generation building. It requires
-    // access to the strategic material uranium.
+    // The Fission Reactor is an advanced power generation building. It requires
+    // access to the strategic material uranium. (Internal key kept as
+    // "nuclear reactor" / code 39 for save-file and code compatibility.)
     "nuclear reactor": {
       "code": 39,
       "name": "Fission Reactor",
@@ -1509,7 +1510,7 @@
       "other": [ ],
       "abundancy": 5,
       "bonusType": "uranium",
-      "desc": "Rare mineral that is used in nuclear reactors and nuclear weapons."
+      "desc": "Rare mineral that is used in the Fission Reactor and nuclear weapons."
     },
     "Lithium Brine Deposit": {
       "icon": "terrain_bonus/128/lithium_brine_deposit.png",
