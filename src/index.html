@@ -1570,18 +1570,69 @@
       const other = e && e.prerequisite && e.prerequisite.other;
       return Array.isArray(other) && other.includes('useOnce');
     }
-    // Effective combat strength scales the rated value by current manpower:
-    // rated x (currentStrength / fullStrength). A freshly recruited/partial unit
-    // fights proportionally weaker.
+    // ---- Unit veterancy (experience tiers) ----------------------------------
+    // Config from CONFIG.veterancy with safe fallbacks. tiers[] is sorted by
+    // minXp ascending; a unit's tier is the highest whose minXp <= the unit's xp.
+    function veterancyCfg() {
+      const v = (CONFIG && CONFIG.veterancy) || {};
+      const enabled = (typeof v.enabled === 'boolean') ? v.enabled : true;
+      const winXp = (typeof v.winXp === 'number' && v.winXp >= 0) ? v.winXp : 1;
+      let tiers = Array.isArray(v.tiers) && v.tiers.length ? v.tiers : [
+        { name: 'Green', minXp: 0, attackMult: 1.0, defenseMult: 1.0 },
+        { name: 'Veteran', minXp: 2, attackMult: 1.25, defenseMult: 1.2 },
+        { name: 'Elite', minXp: 5, attackMult: 1.5, defenseMult: 1.4 },
+      ];
+      tiers = tiers.map((t) => ({
+        name: String(t.name || 'Green'),
+        minXp: (typeof t.minXp === 'number' && Number.isFinite(t.minXp)) ? t.minXp : 0,
+        attackMult: (typeof t.attackMult === 'number' && t.attackMult > 0) ? t.attackMult : 1,
+        defenseMult: (typeof t.defenseMult === 'number' && t.defenseMult > 0) ? t.defenseMult : 1,
+      })).sort((a, b) => a.minXp - b.minXp);
+      return { enabled, winXp, tiers };
+    }
+    // The veterancy tier a unit currently holds (an object from veterancyCfg().
+    // tiers). Falls back to the lowest tier. Returns null when veterancy is off.
+    function unitVeterancyTier(u) {
+      const cfg = veterancyCfg();
+      if (!cfg.enabled) return null;
+      const xp = Math.max(0, Number(u && u.xp) || 0);
+      let tier = cfg.tiers[0] || null;
+      for (const t of cfg.tiers) { if (xp >= t.minXp) tier = t; }
+      return tier;
+    }
+    // Grant battle experience to the winning side's SURVIVING units. A unit that
+    // crosses into a higher tier is "promoted"; the human is notified of their
+    // own units' promotions. Dead units (strength <= 0) earn nothing.
+    function awardBattleExperience(units) {
+      const cfg = veterancyCfg();
+      if (!cfg.enabled || !(cfg.winXp > 0) || !Array.isArray(units)) return;
+      for (const u of units) {
+        if (!u || (Number(u.strength) || 0) <= 0) continue;
+        const before = unitVeterancyTier(u);
+        u.xp = Math.max(0, Number(u.xp) || 0) + cfg.winXp;
+        const after = unitVeterancyTier(u);
+        if (before && after && after.name !== before.name && u.owner === 'human') {
+          try { notify(`${unitDisplayName(u)} was promoted to ${after.name}.`); } catch (e) {}
+        }
+      }
+    }
+    // Effective combat strength scales the rated value by current manpower
+    // (rated x currentStrength/fullStrength) AND by the unit's veterancy tier
+    // multiplier. A freshly recruited/partial unit fights proportionally weaker;
+    // a battle-hardened one fights proportionally stronger.
     function unitEffAttack(u) {
       if (!u) return 0;
       const full = unitFullStrength(u) || 1;
-      return unitRatedAttack(u.type) * (Math.max(0, Number(u.strength) || 0) / full);
+      const tier = unitVeterancyTier(u);
+      const mult = tier ? tier.attackMult : 1;
+      return unitRatedAttack(u.type) * (Math.max(0, Number(u.strength) || 0) / full) * mult;
     }
     function unitEffDefense(u) {
       if (!u) return 0;
       const full = unitFullStrength(u) || 1;
-      return unitRatedDefense(u.type) * (Math.max(0, Number(u.strength) || 0) / full);
+      const tier = unitVeterancyTier(u);
+      const mult = tier ? tier.defenseMult : 1;
+      return unitRatedDefense(u.type) * (Math.max(0, Number(u.strength) || 0) / full) * mult;
     }
     // A unit's rated HP (health pool) from units[type].strength.hp. Defaults to
     // a small pool when unspecified so legacy types still fight.
@@ -17899,6 +17950,10 @@
         }
       }
       // Remove dead units from the game (including just-expended single-use units).
+      // Veterancy: the WINNING side's surviving units gain battle experience and
+      // may be promoted (done before dead/expended units are removed; the helper
+      // skips any unit at zero strength, so casualties and spent ICBMs earn none).
+      awardBattleExperience(combatWon ? atkC.map((c) => c.unit) : defUnitC.map((c) => c.unit));
       removeDeadUnits();
       // Defense buildings whose pool fell to <= 0 are destroyed/removed.
       for (const c of defBldgC) {
@@ -19285,7 +19340,10 @@
         tr.appendChild(chkTd);
         const full = unitFullStrength(u);
         const strengthTxt = full > 0 ? `${milNf(u.strength)} / ${milNf(full)}` : milNf(u.strength);
-        const cells = [u.name, typeLabel(u.type), strengthTxt, null /* location: built below as links */];
+        // Append the veterancy tier to the type (e.g. "Infantry · Veteran").
+        const _vt = (typeof unitVeterancyTier === 'function') ? unitVeterancyTier(u) : null;
+        const typeTxt = _vt ? `${typeLabel(u.type)} · ${_vt.name}` : typeLabel(u.type);
+        const cells = [u.name, typeTxt, strengthTxt, null /* location: built below as links */];
         for (let i = 0; i < cells.length; i++) {
           const td = document.createElement("td");
           if (i === 2) td.className = "num";

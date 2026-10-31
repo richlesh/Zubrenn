@@ -2447,5 +2447,21 @@
   // cost proportional to the gap in revealed cells. pricePerCell is the wealth
   // charged per cell of difference (a swap between equally-explored sides is
   // free). Set to 0 to make every map swap a straight (free) exchange.
-  "mapSwap": { "pricePerCell": 0.5 }
+  "mapSwap": { "pricePerCell": 0.5 },
+
+  // Unit veterancy. A unit's surviving members gain `winXp` experience for each
+  // battle their side wins; accumulated xp promotes the unit through `tiers`
+  // (highest tier whose minXp <= xp). Each tier multiplies the unit's effective
+  // attack and defense (applied on top of manpower scaling), so battle-hardened
+  // units hit harder and survive longer. Set enabled=false to turn veterancy off
+  // (all units fight at the base tier's multipliers).
+  "veterancy": {
+    "enabled": true,
+    "winXp": 1,
+    "tiers": [
+      { "name": "Green",   "minXp": 0, "attackMult": 1.0,  "defenseMult": 1.0 },
+      { "name": "Veteran", "minXp": 2, "attackMult": 1.25, "defenseMult": 1.2 },
+      { "name": "Elite",   "minXp": 5, "attackMult": 1.5,  "defenseMult": 1.4 }
+    ]
+  }
 }
