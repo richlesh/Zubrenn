@@ -4877,6 +4877,10 @@
         if (typeof gameLog !== 'undefined') gameLog.year(currentYear());
       }
       updateStatus();
+      // A completed round may have decided the game (last species standing,
+      // domination, economic, or the year-limit rating). Check before dispatching
+      // the next player's turn; declareVictory sets _gameOver to halt play.
+      if (roundCompleted) { try { checkVictory(); } catch (e) { console.error('[victory] check failed:', e); } }
       // The human has been defeated — the game is over; stop advancing turns.
       if (gameState._gameOver) return;
       const p = players[gameState.currentPlayer];
@@ -18051,6 +18055,194 @@
         logMsg: 'Your last colony has fallen — you have lost the battle for Zubrenn.',
         buttons: [{ value: 'ok', label: 'Game Over', kind: 'danger' }],
       });
+    }
+    // ---- Victory conditions -------------------------------------------------
+    // Tunable win rules from CONFIG.victory, with safe fallbacks. Each type can
+    // be enabled/disabled independently; `enabled:false` at the top disables all.
+    function victoryCfg() {
+      const v = (CONFIG && CONFIG.victory) || {};
+      const b = (x, d) => (typeof x === 'boolean') ? x : d;
+      const n = (x, d) => (typeof x === 'number' && Number.isFinite(x)) ? x : d;
+      const dom = v.domination || {}, eco = v.economic || {}, rat = v.rating || {};
+      const w = v.ratingWeights || {};
+      return {
+        enabled: b(v.enabled, true),
+        conquest: b(v.conquest, true),
+        domination: {
+          enabled: b(dom.enabled, true),
+          landPercent: n(dom.landPercent, 60),
+          colonyPercent: n(dom.colonyPercent, 70),
+        },
+        economic: {
+          enabled: b(eco.enabled, true),
+          treasuryThreshold: n(eco.treasuryThreshold, 1000000),
+        },
+        rating: {
+          enabled: b(rat.enabled, true),
+          endYear: n(rat.endYear, (CONFIG.startingYear || 2500) + 200),
+        },
+        ratingWeights: {
+          population: n(w.population, 1),
+          treasury: n(w.treasury, 0.001),
+          colonies: n(w.colonies, 5000),
+          landCells: n(w.landCells, 100),
+        },
+      };
+    }
+    // The owners that are still in the game: those with at least one colony.
+    function livingOwners() { return activeOwners(); }
+    // Total habitable-land cells on the map (denominator for domination %).
+    // Memoized on map meta since terrain is fixed for a game.
+    function totalHabitableLandCells() {
+      const meta = gameState.map && gameState.map.meta;
+      if (meta && typeof meta._habitableLandCells === 'number') return meta._habitableLandCells;
+      const t = gameState.map && gameState.map.terrain;
+      let count = 0;
+      if (t && t.length) {
+        for (let y = 0; y < t.length; y++) {
+          const row = t[y];
+          for (let x = 0; x < row.length; x++) {
+            if (isHabitableLandTerrain(row[x])) count++;
+          }
+        }
+      }
+      if (meta) meta._habitableLandCells = count;
+      return count;
+    }
+    // Sum of the population across all of an owner's colonies.
+    function ownerPopulation(owner) {
+      let pop = 0;
+      for (const b of (gameState.buildings || [])) {
+        if (b.type === 1 && b.owner === owner && !b.inTransit) pop += Math.max(0, Number(b.population) || 0);
+      }
+      return pop;
+    }
+    // Fraction (0..1) of the map's habitable land that lies within an owner's
+    // colonies' zones of control (distinct cells, union across colonies).
+    function ownerLandControlFraction(owner) {
+      const totalHab = totalHabitableLandCells();
+      if (totalHab <= 0) return 0;
+      const seen = new Set();
+      for (const b of (gameState.buildings || [])) {
+        if (b.type !== 1 || b.owner !== owner || b.inTransit) continue;
+        for (const c of colonyControlCells(b)) {
+          const terr = terrainAt(c.x, c.y);
+          if (!isHabitableLandTerrain(terr)) continue;
+          seen.add(c.y * 100000 + c.x);
+        }
+      }
+      return seen.size / totalHab;
+    }
+    // Fraction (0..1) of ALL colonies on the map owned by this owner.
+    function ownerColonyFraction(owner) {
+      let total = 0, mine = 0;
+      for (const b of (gameState.buildings || [])) {
+        if (b.type !== 1 || b.inTransit) continue;
+        total++;
+        if (b.owner === owner) mine++;
+      }
+      return total > 0 ? mine / total : 0;
+    }
+    // A composite rating/score for an owner (config-weighted).
+    function ownerRating(owner) {
+      const w = victoryCfg().ratingWeights;
+      const pop = ownerPopulation(owner);
+      const treasury = Math.max(0, Number(federationOwnedOf(owner).wealth) || 0);
+      const colonies = ownerColonyCount(owner);
+      const landCells = Math.round(ownerLandControlFraction(owner) * totalHabitableLandCells());
+      return pop * w.population + treasury * w.treasury + colonies * w.colonies + landCells * w.landCells;
+    }
+    // Display name for an owner in victory text (the human reads as "You").
+    function victoryOwnerName(owner) {
+      if (owner === 'human') return 'You';
+      const idx = ownerToIndex(owner);
+      return (idx >= 0 ? playerDisplayName(idx) : null) || 'A species';
+    }
+    // Evaluate win conditions once per completed round. Picks the first winner
+    // found across the enabled types (conquest, then domination, then economic,
+    // then the year-limit rating tiebreak) and ends the game. No-op once the
+    // game is already over or before any colony exists.
+    function checkVictory() {
+      if (gameState._gameOver || gameState._victoryDeclared) return;
+      const cfg = victoryCfg();
+      if (!cfg.enabled) return;
+      const owners = livingOwners();
+      if (!owners.length) return;                 // game not underway yet
+
+      // Some players may not have LANDED their first colony yet (an AI with
+      // modules still to place). They are rivals-in-waiting, so conquest must not
+      // fire while any non-eliminated player is still pending placement.
+      const pendingRivals = (gameState.players || []).some((pl) =>
+        pl && !pl.eliminated && !pl.placed && (pl.modules || 0) > 0);
+      // 1) Conquest — exactly one species remains and no rival is still landing.
+      // Only meaningful when the game actually had rivals (>1 player configured).
+      const multiPlayer = (gameState.players || []).length > 1;
+      if (cfg.conquest && multiPlayer && owners.length === 1 && !pendingRivals) {
+        declareVictory(owners[0], 'conquest');
+        return;
+      }
+      // 2) Domination — an owner controls >= landPercent of habitable land OR
+      //    >= colonyPercent of all colonies.
+      if (cfg.domination.enabled) {
+        for (const o of owners) {
+          const landPct = ownerLandControlFraction(o) * 100;
+          const colPct = ownerColonyFraction(o) * 100;
+          if (landPct >= cfg.domination.landPercent || colPct >= cfg.domination.colonyPercent) {
+            declareVictory(o, 'domination');
+            return;
+          }
+        }
+      }
+      // 3) Economic — an owner's Federation treasury reaches the threshold.
+      if (cfg.economic.enabled) {
+        for (const o of owners) {
+          if ((Number(federationOwnedOf(o).wealth) || 0) >= cfg.economic.treasuryThreshold) {
+            declareVictory(o, 'economic');
+            return;
+          }
+        }
+      }
+      // 4) Rating at the year limit — when the end year is reached, the
+      //    highest-rated surviving owner wins (ties -> first by owner order).
+      if (cfg.rating.enabled && currentYear() >= cfg.rating.endYear) {
+        let best = null, bestRating = -Infinity;
+        for (const o of owners) {
+          const r = ownerRating(o);
+          if (r > bestRating) { bestRating = r; best = o; }
+        }
+        if (best != null) { declareVictory(best, 'rating'); return; }
+      }
+    }
+    // End the game with a victory for `owner` by `type`, showing a win/defeat
+    // screen and logging it. Idempotent via the _victoryDeclared / _gameOver flags.
+    function declareVictory(owner, type) {
+      if (gameState._gameOver || gameState._victoryDeclared) return;
+      gameState._victoryDeclared = true;
+      gameState._gameOver = true;
+      const human = (owner === 'human');
+      const who = victoryOwnerName(owner);
+      const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const reason = {
+        conquest: 'by conquest — the last species standing on Zubrenn',
+        domination: 'by domination — commanding the lion\u2019s share of Zubrenn',
+        economic: 'by economic might — an unrivalled Federation treasury',
+        rating: 'with the highest standing when the age came to a close',
+      }[type] || 'by decree';
+      const title = human ? 'Victory — Zubrenn is Yours' : 'Defeat — The Age of Zubrenn Has Ended';
+      const body = human
+        ? `<p>You have won the battle for <strong>Zubrenn</strong> ${reason}.</p>`
+        : `<p><strong>${esc(who)}</strong> has won the battle for <strong>Zubrenn</strong> ${reason}.</p>` +
+          `<p class="hint">Your bid for the planet is over.</p>`;
+      const logMsg = human
+        ? `You have won the battle for Zubrenn ${reason}.`
+        : `${who} has won the battle for Zubrenn ${reason}.`;
+      try {
+        diploScreen(title, body, {
+          portraitOwner: human ? null : owner,
+          logMsg,
+          buttons: [{ value: 'ok', label: human ? 'Triumph!' : 'The End', kind: human ? 'positive' : 'danger' }],
+        });
+      } catch (e) { console.error('[victory] dialog failed:', e); }
     }
     // Shared presenter for the diplomacy "screens" (war declared, species
     // evicted, defeat). It (1) ALWAYS records the event in the Game Log and

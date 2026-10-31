@@ -2370,6 +2370,27 @@
     "razeMinAggression": 5
   },
 
+  // Victory conditions. Each type can be toggled independently; set
+  // victory.enabled=false to disable all win checks (play continues until only
+  // the usual defeat/elimination rules end it). Checked once per completed
+  // round, in this priority order:
+  //   conquest   - the last surviving species (all others evicted) wins.
+  //   domination - a species controls >= landPercent of the habitable land OR
+  //                >= colonyPercent of all colonies on the map.
+  //   economic   - a species' Federation treasury reaches treasuryThreshold.
+  //   rating     - when the game year reaches endYear, the highest-rated
+  //                surviving species wins. Rating is a weighted score of
+  //                population, treasury, colony count, and controlled habitable
+  //                land cells (ratingWeights).
+  "victory": {
+    "enabled": true,
+    "conquest": true,
+    "domination": { "enabled": true, "landPercent": 60, "colonyPercent": 70 },
+    "economic": { "enabled": true, "treasuryThreshold": 1000000 },
+    "rating": { "enabled": true, "endYear": 2700 },
+    "ratingWeights": { "population": 1, "treasury": 0.001, "colonies": 5000, "landCells": 100 }
+  },
+
   // Default Federation tax rate (happiness cost per colony that funds the
   // Federation treasury); the New Game/Federation UI can override per game.
   "federationTaxRate": 2,
