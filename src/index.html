@@ -1757,7 +1757,14 @@
       const dist = hexDistance(stagingCol.x, stagingCol.y, targetCol.x, targetCol.y);
       const e = (CONFIG && CONFIG.units && CONFIG.units[u.type]) || {};
       const range = Number(e.range) || 0;
-      if (cls === 'land') return true;
+      if (cls === 'land') {
+        // A land unit may only join if a real overland/route path exists from its
+        // staging colony to the target (findMovementPath honors roads, bridges,
+        // river/canal and Dock-enabled sea crossings). This stops the AI from
+        // committing land forces to colonies it can't actually march to (e.g.
+        // across open sea or impassable mountains).
+        return findMovementPath(stagingCol.x, stagingCol.y, targetCol.x, targetCol.y, u.owner) != null;
+      }
       if (cls === 'air') {
         return range > 0 && dist <= range;                    // target within strike radius of base
       }
@@ -12136,16 +12143,36 @@
       const targets = gameState.buildings
         .filter((b) => b.type === 1 && !b.inTransit && b.owner !== pi)
         .map((t) => {
-          let best = Infinity;
-          for (const c of myColonies) best = Math.min(best, hexDistance(c.x, c.y, t.x, t.y));
-          return { target: t, dist: best, def: colonyDefenseStrength(t), prio: targetPriority(pi, t.owner) };
+          // Rank by REAL travel cost (movement-path turns) from the nearest of
+          // this AI's colonies — not raw hex distance — so the AI prefers colonies
+          // it can actually march a land force to and doesn't send armies toward
+          // targets across sea/mountains with no route. hexDist is kept only as a
+          // cheap final tiebreak. `reachable` is true when SOME own colony has a
+          // land/sea route to the target; unreachable targets sort last.
+          // federationBuildRoute is MEMOIZED and returns the cheapest-reachable
+          // own colony's path cost to the target (honoring roads/bridges/river/
+          // Dock sea crossings), or null when no colony can reach it.
+          const route = federationBuildRoute(t.x, t.y, pi);
+          let bestHex = Infinity;
+          for (const c of myColonies) { const h = hexDistance(c.x, c.y, t.x, t.y); if (h < bestHex) bestHex = h; }
+          const reachable = route != null;
+          return {
+            target: t,
+            reachable,
+            cost: reachable ? (route.cost || 0) : Infinity,  // movement-path cost (lower = nearer by route)
+            hex: bestHex,                                     // hex-distance tiebreak
+            def: colonyDefenseStrength(t),
+            prio: targetPriority(pi, t.owner),
+          };
         })
         .sort((a, b) =>
-          // Grudge/coalition targets first (highest priority), then the usual
-          // weakest-or-nearest ordering as a tiebreak.
+          // Grudge/coalition targets first (highest priority), then REACHABLE
+          // targets before unreachable ones, then the usual weakest-or-nearest
+          // ordering using real path cost (hex distance only as a final tiebreak).
           (b.prio - a.prio)
-          || (preyOnWeak ? (a.def - b.def) || (a.dist - b.dist)   // weakest, then nearest
-                         : (a.dist - b.dist)));                    // nearest first
+          || ((a.reachable === b.reachable) ? 0 : (a.reachable ? -1 : 1))
+          || (preyOnWeak ? (a.def - b.def) || (a.cost - b.cost) || (a.hex - b.hex)   // weakest, then nearest by path
+                         : (a.cost - b.cost) || (a.hex - b.hex)));                   // nearest by path first
       // How much stronger than the defender the strike force must look before it
       // commits. The more aggressive the species, the smaller the margin it
       // demands (4-5 press attacks a merely-aggressive 3 would hold back from).
