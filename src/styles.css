@@ -1085,3 +1085,43 @@ body.dark #diplomacy-table tbody tr:nth-child(even) { background: rgba(255,255,2
 #trades-table button.icon-trash {
   width: 20px; height: 20px; padding: 0; border-radius: 4px; background: #c0392b; color: #fff;
 }
+
+/* Research dialog (mirrors the Diplomacy dialog styling). */
+#research-overlay {
+  position: fixed; z-index: 10004; inset: 0;
+  background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+}
+#research-overlay[hidden] { display: none; }
+#research-dialog {
+  background: #f5f5f5; color: #1e1e1e; border-radius: 10px; padding: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45); font: 13px -apple-system, sans-serif;
+  width: 720px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column;
+}
+body.dark #research-dialog { background: #2c2c2e; color: #e0e0e0; }
+#research-dialog h2 { font-size: 15px; margin-bottom: 6px; }
+#research-dialog .hint { font-size: 11px; color: #888; margin-bottom: 10px; }
+#research-current { margin-bottom: 10px; font-size: 13px; }
+.research-bar { margin-top: 4px; height: 8px; border-radius: 4px; background: rgba(0,0,0,0.12); overflow: hidden; }
+body.dark .research-bar { background: rgba(255,255,255,0.12); }
+.research-bar-fill { height: 100%; background: #0a84ff; }
+#research-table-wrap { overflow: auto; flex: 1 1 auto; min-height: 0; }
+#research-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+#research-table th, #research-table td { padding: 5px 9px; text-align: left; white-space: nowrap; }
+#research-table td.num, #research-table th.num { text-align: right; }
+#research-table thead th {
+  position: sticky; top: 0; background: #e6e6ea; border-bottom: 2px solid #bbb; user-select: none;
+}
+body.dark #research-table thead th { background: #3a3a3c; border-bottom-color: #555; }
+#research-table tbody tr:nth-child(even) { background: rgba(0,0,0,0.04); }
+body.dark #research-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.05); }
+#research-table .stat-note { color: #888; font-style: italic; }
+#research-table td.research-done { color: #2e9e5b; }
+#research-table td.research-inprog { color: #0a84ff; }
+#research-table td.research-locked { color: #999; }
+#research-table button {
+  padding: 3px 9px; border-radius: 6px; border: none; background: #0a84ff; color: #fff;
+  font-size: 11px; cursor: pointer;
+}
+#research-table button:hover { filter: brightness(1.12); }
+#research-table button:active { filter: brightness(0.85); transform: translateY(1px); }
+#research-close { background: #0a84ff; color: #fff; }

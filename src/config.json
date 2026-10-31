@@ -354,7 +354,8 @@
       "prerequisite": {
         "population": 18,
         "bonusType": [ "aluminum", "crystal", "uranium" ],
-        "other": [ "useOnce" ]
+        "other": [ "useOnce" ],
+        "tech": [ "nuclear_science", "rocketry" ]
       }
     }
   },
@@ -563,7 +564,8 @@
         "building": ["factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains","frozen"],
         "bonusType": ["uranium"],
-        "population": 15
+        "population": 15,
+        "tech": ["nuclear_science"]
       },
       "equivalentTo": "solar farm"
     },
@@ -824,7 +826,8 @@
         "other": [ "spaceport" ],
         "population": 12,
         "bonusType": ["aluminum", "titanium", "crystal"],
-        "upgrades": "launchpad"
+        "upgrades": "launchpad",
+        "tech": ["rocketry"]
       }
     },
     "barracks": {
@@ -1158,7 +1161,8 @@
         "building": ["nanofactory", "spaceport"],
         "other": [ "federation", "intelligence" ],
         "population": 15,
-        "bonusType": ["aluminum", "crystal", "lithium", "titanium"]
+        "bonusType": ["aluminum", "crystal", "lithium", "titanium"],
+        "tech": ["orbital_engineering"]
       },
       "visibility": "world"
     },
@@ -2406,6 +2410,25 @@
   //                surviving species wins. Rating is a weighted score of
   //                population, treasury, colony count, and controlled habitable
   //                land cells (ratingWeights).
+  // Research / tech tree. Research is pooled at the Federation level. Each year
+  // science is funded by all Federation wealth that cannot be stored PLUS the
+  // player's science-funding slider percent (0-100) of the stored treasury;
+  // that science advances the Federation's current research. Completing a tech
+  // unlocks any building/unit whose prerequisite.tech lists it. Set
+  // research.enabled=false to disable research (nothing is tech-gated).
+  //   defaultFundingPercent - starting science-funding slider value (0-100).
+  // techs: keyed tech defs { name, cost (science points), prerequisite:[techKeys], desc }.
+  "research": {
+    "enabled": true,
+    "defaultFundingPercent": 50
+  },
+  "techs": {
+    "applied_physics": { "name": "Applied Physics", "cost": 400, "prerequisite": [], "desc": "Foundational research enabling advanced energy and materials work." },
+    "advanced_materials": { "name": "Advanced Materials", "cost": 700, "prerequisite": ["applied_physics"], "desc": "High-strength alloys and composites for demanding structures." },
+    "rocketry": { "name": "Rocketry", "cost": 1000, "prerequisite": ["applied_physics"], "desc": "Heavy-lift propulsion — the basis of spaceflight and long-range missiles." },
+    "orbital_engineering": { "name": "Orbital Engineering", "cost": 1800, "prerequisite": ["advanced_materials", "rocketry"], "desc": "Building and operating structures in orbit." },
+    "nuclear_science": { "name": "Nuclear Science", "cost": 2000, "prerequisite": ["advanced_materials"], "desc": "Fission engineering for reactors and strategic weapons." }
+  },
   "victory": {
     "enabled": true,
     "conquest": true,

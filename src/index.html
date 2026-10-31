@@ -60,6 +60,21 @@
       </div>
     </div>
   </div>
+  <!-- Research dialog: pick the current tech, see progress, and the tech tree. -->
+  <div id="research-overlay" hidden>
+    <div id="research-dialog">
+      <h2>Research</h2>
+      <div class="hint">Your Federation funds science each year: all wealth it cannot store, plus the science-funding slider's share of its stored wealth (set it in the Federation dialog). Pick a technology to research; completing it unlocks the buildings and units that require it.</div>
+      <div id="research-current"></div>
+      <div id="research-table-wrap">
+        <table id="research-table">
+          <thead><tr><th>Technology</th><th>Cost</th><th>Requires</th><th>Status</th><th></th></tr></thead>
+          <tbody id="research-body"></tbody>
+        </table>
+      </div>
+      <div class="work-row"><button id="research-close">Done</button></div>
+    </div>
+  </div>
 
   <!-- Floating hover tooltip: coordinates, terrain, elevation. -->
   <div id="tooltip"></div>
@@ -298,6 +313,11 @@
         <label for="fed-roadcrews">Road crews: <span id="fed-roadcrews-val">3</span> working in parallel</label>
         <input id="fed-roadcrews" type="range" min="0" max="20" step="1" value="3">
         <div class="hint">Federation crews rebuild failed road/monorail segments (0 = off). Each repair costs the segment's normal build cost and takes its normal build time (longer on hard terrain). <span id="fed-roadcrews-cost"></span> <span id="fed-roadcrews-pending"></span></div>
+      </div>
+      <div class="fed-field" id="fed-science-field">
+        <label for="fed-science">Science funding: <span id="fed-science-val">50</span>% of stored wealth</label>
+        <input id="fed-science" type="range" min="0" max="100" step="5" value="50">
+        <div class="hint">Each year, science is funded by <b>all</b> Federation wealth that cannot be stored, <b>plus</b> this percent of the stored treasury. Science advances your current research (open the Research screen to choose it).</div>
       </div>
       <table id="federation-proj">
         <thead><tr><th>End of turn</th><th>Credits</th></tr></thead>
@@ -5724,6 +5744,9 @@
         // bonusType must be available from a worked terrain-bonus cell.
         const _uPre = (CONFIG && CONFIG.units && CONFIG.units[slotType] && CONFIG.units[slotType].prerequisite) || null;
         if (_uPre && !bonusTypesMet(_uPre.bonusType, col)) continue;
+        // Research gate: a unit type may require prerequisite.tech researched by
+        // the colony owner's Federation before it can be recruited.
+        if (_uPre && Array.isArray(_uPre.tech) && !_uPre.tech.every((t) => ownerHasTech(col.owner, t))) continue;
         const cap = unitMaxStrength(slotType);
         let unit = findUnitById(b.unitIds[i]);
         if (unit && unit.owner !== col.owner) unit = null;          // stale link
@@ -7153,6 +7176,10 @@
         // --- Step 5: overflow colony -> federation (capped), discard beyond. ---
         const fed = federationOwnedOf(owner);
         const fedMax = federationMaxStorage(owner);
+        // Wealth that cannot be stored (beyond the Federation pool's max, or from
+        // a colony not connected to the capital) is captured as SCIENCE funding
+        // instead of being discarded (Step 5c below spends it on research).
+        let sciFromOverflow = 0;
         for (const col of survivors) {
           const owned = ensureOwned(col);
           const max = maxByCol.get(col) || colonyMaxStorage(col);
@@ -7172,7 +7199,11 @@
               const room = Math.max(0, (fedMax[k] || 0) - (fed[k] || 0));
               const moved = Math.min(excess, room);
               fed[k] = (fed[k] || 0) + moved;
-              // any excess beyond federation max is discarded
+              // Wealth beyond the federation's max storage funds science.
+              if (k === "wealth") sciFromOverflow += Math.max(0, excess - moved);
+            } else if (k === "wealth") {
+              // Disconnected colony: its unstorable wealth still funds science.
+              sciFromOverflow += excess;
             }
           }
         }
@@ -7224,6 +7255,26 @@
           // Pay the affordable fleet's upkeep from the Federation pool.
           const need = totalNeed();
           for (const k of MAINT) fed[k] = Math.max(0, (fed[k] || 0) - need[k]);
+        }
+
+        // --- Step 5c: science funding -> research. Science = all wealth that
+        // could not be stored (captured above) PLUS the owner's funding-slider
+        // percent of the STORED Federation wealth. The funded stored wealth is
+        // withdrawn from the pool; the whole amount advances the current tech.
+        if (typeof researchEnabled === 'function' && researchEnabled()) {
+          const r = ownerResearch(owner);
+          if (r) {
+            const pct = Math.max(0, Math.min(100, Number(r.fundingPercent) || 0)) / 100;
+            const fromStored = Math.max(0, (fed.wealth || 0)) * pct;
+            fed.wealth = Math.max(0, (fed.wealth || 0) - fromStored);
+            const science = (sciFromOverflow || 0) + fromStored;
+            if (science > 0) {
+              // AIs that aren't researching anything pick a tech first so the
+              // points aren't wasted. The human must choose in the Research dialog.
+              if (!r.current && owner !== 'human') { try { aiPickResearch(ownerToIndex(owner)); } catch (e) {} }
+              addResearchPoints(owner, science);
+            }
+          }
         }
 
         const fedObj = federationOf(owner);
@@ -10359,6 +10410,9 @@
       // Strategic resources: every prerequisite.bonusType must be available from
       // a worked terrain-bonus cell somewhere in the owner's colonies.
       if (!bonusTypesMet(pre.bonusType, col)) return false;
+      // Research: every prerequisite.tech must be researched by the owner's
+      // Federation. (No-op when research is disabled.)
+      if (Array.isArray(pre.tech) && !pre.tech.every((t) => ownerHasTech(owner, t))) return false;
       return true;
     }
     // Human-readable list of unmet prerequisites (for the build-menu label):
@@ -10416,6 +10470,12 @@
       }
       for (const t of missingBonusTypes(pre.bonusType, col)) {
         missing.push(`a worked source of ${t}`);
+      }
+      // Unresearched prerequisite techs.
+      if (Array.isArray(pre.tech)) {
+        for (const t of pre.tech) {
+          if (!ownerHasTech(owner, t)) missing.push(`research: ${techName(t)}`);
+        }
       }
       return missing;
     }
@@ -10502,6 +10562,107 @@
       const v = CONFIG.federationTaxRate;
       return (typeof v === 'number' && isFinite(v)) ? Math.max(0, Math.min(20, v)) : 5;
     }
+    // ---- Research / tech tree ------------------------------------------------
+    // Config: CONFIG.research (enabled, defaultFundingPercent) and CONFIG.techs
+    // (keyed tech defs: { name, cost, prerequisite:[techKeys], desc }). Research
+    // is pooled at the Federation level (state lives on player.federation.research
+    // so it saves/loads with players[]).
+    function researchCfg() {
+      const r = (CONFIG && CONFIG.research) || {};
+      return {
+        enabled: (typeof r.enabled === 'boolean') ? r.enabled : true,
+        defaultFundingPercent: (typeof r.defaultFundingPercent === 'number' && Number.isFinite(r.defaultFundingPercent))
+          ? Math.max(0, Math.min(100, r.defaultFundingPercent)) : 50,
+      };
+    }
+    function researchEnabled() { return researchCfg().enabled; }
+    function researchDefaultFundingPercent() { return researchCfg().defaultFundingPercent; }
+    // The tech definitions map (keyed by tech id). Empty object when none.
+    function techDefs() { return (CONFIG && CONFIG.techs && typeof CONFIG.techs === 'object') ? CONFIG.techs : {}; }
+    function techDef(key) { const d = techDefs(); return (key != null && d[key]) ? d[key] : null; }
+    function techName(key) { const d = techDef(key); return (d && d.name) || String(key || ''); }
+    function techCost(key) { const d = techDef(key); const c = d && Number(d.cost); return (Number.isFinite(c) && c > 0) ? c : 0; }
+    function techPrereqs(key) { const d = techDef(key); return (d && Array.isArray(d.prerequisite)) ? d.prerequisite : []; }
+    // The research record for an owner ('human' or AI index), or null.
+    function ownerResearch(owner) { const f = federationOf(owner); return f ? ensureFederation(playerOf(owner)).research : null; }
+    // Whether `owner` has fully researched `techKey`.
+    function ownerHasTech(owner, techKey) {
+      if (!researchEnabled()) return true;       // research off => nothing is gated
+      if (techKey == null) return true;
+      const r = ownerResearch(owner);
+      return !!(r && r.done && r.done[techKey]);
+    }
+    // Whether every prerequisite tech of `techKey` is researched by `owner`.
+    function techPrereqsMet(owner, techKey) {
+      return techPrereqs(techKey).every((p) => ownerHasTech(owner, p));
+    }
+    // A tech is researchable now for `owner` when it exists, isn't already done,
+    // and all its prerequisite techs are done.
+    function techIsAvailable(owner, techKey) {
+      if (!techDef(techKey)) return false;
+      if (ownerHasTech(owner, techKey)) return false;
+      return techPrereqsMet(owner, techKey);
+    }
+    // Add `points` science to an owner's current research, completing techs and
+    // (for the human) announcing completion. Returns the number of techs that
+    // completed this call. Rolls leftover points into the next tech only if one
+    // is already queued (AIs auto-queue via aiPickResearch each year).
+    function addResearchPoints(owner, points) {
+      if (!researchEnabled() || !(points > 0)) return 0;
+      const r = ownerResearch(owner);
+      if (!r) return 0;
+      let completed = 0;
+      r.progress = Math.max(0, Number(r.progress) || 0) + points;
+      // Complete as many queued techs as the accumulated progress allows.
+      let guard = 64;
+      while (r.current && techDef(r.current) && guard-- > 0) {
+        const cost = techCost(r.current);
+        if (cost <= 0) { r.done[r.current] = true; r.current = null; completed++; continue; }
+        if (r.progress < cost) break;
+        r.progress -= cost;
+        r.done[r.current] = true;
+        const finishedName = techName(r.current);
+        const finishedOwner = owner;
+        r.current = null;
+        completed++;
+        if (finishedOwner === 'human') { try { notify(`Research complete: ${finishedName}.`); } catch (e) {} }
+        // AI immediately queues its next tech so leftover points keep flowing.
+        if (finishedOwner !== 'human') { try { aiPickResearch(ownerToIndex(finishedOwner)); } catch (e) {} }
+      }
+      // No current tech => hold the accumulated points (capped) until one is set.
+      if (!r.current) r.progress = Math.min(r.progress, _maxBankedScience());
+      // Invalidate build-eligibility caches: a new tech may have unlocked builds.
+      if (completed > 0) { try { bumpPlaceGen(); } catch (e) {} }
+      return completed;
+    }
+    // Cap on science banked with no active research (avoid runaway hoarding).
+    function _maxBankedScience() {
+      let maxCost = 0;
+      for (const k of Object.keys(techDefs())) maxCost = Math.max(maxCost, techCost(k));
+      return maxCost > 0 ? maxCost * 2 : 100000;
+    }
+    // Pick the next research for an AI: the cheapest available tech, biased by
+    // personality (aggressive species prefer techs whose name/desc reads military).
+    // No-op if it already has a current tech or none are available.
+    function aiPickResearch(pi) {
+      if (!researchEnabled()) return;
+      const owner = indexToOwner(pi);
+      const r = ownerResearch(owner);
+      if (!r || r.current) return;
+      const avail = Object.keys(techDefs()).filter((k) => techIsAvailable(owner, k));
+      if (!avail.length) return;
+      const aggr = (aiTraitsOf(pi) || {}).aggression || 3;
+      const militaryRe = /(weapon|military|armor|combat|war|missile|battle|defen|tank|fighter|bomber|artillery|strike)/i;
+      const score = (k) => {
+        const d = techDef(k) || {};
+        const txt = `${d.name || ''} ${d.desc || ''}`;
+        let s = -techCost(k);                         // prefer cheaper (closer) techs
+        if (aggr >= 4 && militaryRe.test(txt)) s += 1e6; // aggressive: rush military techs
+        return s;
+      };
+      avail.sort((a, b) => score(b) - score(a));
+      r.current = avail[0];
+    }
     function ensureFederation(player) {
       if (!player) return { treasury: 0, taxRate: federationDefaultTaxRate() };
       if (!player.federation || typeof player.federation !== 'object') {
@@ -10557,6 +10718,20 @@
       }
       // Keep legacy `treasury` mirrored to owned.wealth (transition shim).
       player.federation.treasury = player.federation.owned.wealth;
+      // Research state (Federation-pooled): techs researched, the tech currently
+      // being researched, accumulated science points toward it, and the player's
+      // science-funding slider (percent of STORED Federation wealth diverted to
+      // science each year; unstorable overflow wealth always funds science too).
+      const r = player.federation.research;
+      if (!r || typeof r !== 'object') {
+        player.federation.research = { done: {}, current: null, progress: 0, fundingPercent: researchDefaultFundingPercent() };
+      } else {
+        if (!r.done || typeof r.done !== 'object') r.done = {};
+        if (typeof r.progress !== 'number' || !Number.isFinite(r.progress) || r.progress < 0) r.progress = 0;
+        if (typeof r.fundingPercent !== 'number' || !Number.isFinite(r.fundingPercent)) r.fundingPercent = researchDefaultFundingPercent();
+        r.fundingPercent = Math.max(0, Math.min(100, r.fundingPercent));
+        if (r.current != null && !techDef(r.current)) r.current = null; // stale tech key
+      }
       return player.federation;
     }
     // Find the player object for a colony owner ('human' or an AI id).
@@ -17168,6 +17343,7 @@
     const federationOverlay = document.getElementById("federation-overlay");
     const fedTaxRate = document.getElementById("fed-taxrate");
     const fedRoadCrews = document.getElementById("fed-roadcrews");
+    const fedScience = document.getElementById("fed-science");
     const fedPayRate = document.getElementById("fed-payrate");
     function _humanPlayer() {
       return (gameState.players || []).find((p) => p && p.kind === 'human') || null;
@@ -17228,6 +17404,8 @@
 
       const rate = parseFloat(fedTaxRate.value) || 0;
       document.getElementById("fed-taxrate-val").textContent = String(rate);
+      // Science-funding slider value label.
+      { const sv = document.getElementById("fed-science-val"); if (sv && fedScience) sv.textContent = String(parseInt(fedScience.value, 10) || 0); }
       // Road-crews slider: value label, per-segment cost, and current backlog.
       {
         const crewsVal = document.getElementById("fed-roadcrews-val");
@@ -17354,6 +17532,13 @@
       const snapped = Math.max(0, Math.min(20, Math.round(fed.taxRate * 2) / 2));
       fedTaxRate.value = String(snapped);
       if (fedRoadCrews) fedRoadCrews.value = String(Math.max(0, Math.min(20, Math.round(fed.roadCrews != null ? fed.roadCrews : 0))));
+      if (fedScience) {
+        const rp = Math.max(0, Math.min(100, Math.round(((fed.research && fed.research.fundingPercent) != null ? fed.research.fundingPercent : researchDefaultFundingPercent()) / 5) * 5));
+        fedScience.value = String(rp);
+        // Hide the science control entirely when research is disabled.
+        const field = document.getElementById('fed-science-field');
+        if (field) field.style.display = researchEnabled() ? '' : 'none';
+      }
       if (fedPayRate) {
         const pr0 = (fed.payRate != null) ? fed.payRate : defaultPayRate();
         const snappedPay = Math.max(1, Math.min(100, Math.round(pr0 * 4) / 4)); // nearest 0.25
@@ -17379,6 +17564,15 @@
     if (fedRoadCrews) fedRoadCrews.addEventListener("input", () => {
       const player = _humanPlayer();
       if (player) ensureFederation(player).roadCrews = Math.max(0, Math.min(20, parseInt(fedRoadCrews.value, 10) || 0));
+      renderFederation();
+    });
+    // Moving the science-funding slider commits the percent of stored wealth
+    // diverted to research each year.
+    if (fedScience) fedScience.addEventListener("input", () => {
+      const player = _humanPlayer();
+      if (player) ensureFederation(player).research.fundingPercent = Math.max(0, Math.min(100, parseInt(fedScience.value, 10) || 0));
+      const val = document.getElementById("fed-science-val");
+      if (val) val.textContent = String(Math.max(0, Math.min(100, parseInt(fedScience.value, 10) || 0)));
       renderFederation();
     });
     // Changing the default manager commits it immediately. It applies ONLY to
@@ -18601,6 +18795,73 @@
     }
     function openDiplomacy() { renderDiplomacy(); const o = document.getElementById('diplomacy-overlay'); if (o) o.hidden = false; }
     function closeDiplomacy() { const o = document.getElementById('diplomacy-overlay'); if (o) o.hidden = true; }
+    // ---- Research dialog -----------------------------------------------------
+    function renderResearch() {
+      const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const r = ownerResearch('human');
+      const defs = techDefs();
+      const keys = Object.keys(defs);
+      // Current-research summary + progress bar.
+      const curWrap = document.getElementById('research-current');
+      if (curWrap) {
+        if (!researchEnabled()) {
+          curWrap.innerHTML = `<div class="hint">Research is disabled in this game.</div>`;
+        } else if (r && r.current && techDef(r.current)) {
+          const cost = techCost(r.current) || 1;
+          const prog = Math.max(0, Math.min(cost, Number(r.progress) || 0));
+          const pct = Math.round((prog / cost) * 100);
+          curWrap.innerHTML =
+            `<div class="research-cur"><b>Researching:</b> ${esc(techName(r.current))} — ${nf(prog, 0)} / ${nf(cost, 0)} (${pct}%)` +
+            `<div class="research-bar"><div class="research-bar-fill" style="width:${pct}%"></div></div></div>`;
+        } else {
+          const banked = Math.max(0, Number(r && r.progress) || 0);
+          curWrap.innerHTML = `<div class="research-cur"><b>Researching:</b> nothing selected${banked > 0 ? ` — ${nf(banked, 0)} science banked` : ''}. Choose a technology below.</div>`;
+        }
+      }
+      const body = document.getElementById('research-body');
+      if (!body) return;
+      body.innerHTML = '';
+      if (!keys.length) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td'); td.colSpan = 5; td.className = 'stat-note';
+        td.textContent = 'No technologies are defined for this game.';
+        tr.appendChild(td); body.appendChild(tr); return;
+      }
+      // Stable, dependency-friendly order: by cost then name.
+      keys.sort((a, b) => (techCost(a) - techCost(b)) || techName(a).localeCompare(techName(b)));
+      for (const k of keys) {
+        const tr = document.createElement('tr');
+        const nameTd = document.createElement('td');
+        nameTd.innerHTML = `<b>${esc(techName(k))}</b>`;
+        if (defs[k] && defs[k].desc) { nameTd.title = String(defs[k].desc); }
+        const costTd = document.createElement('td'); costTd.className = 'num'; costTd.textContent = nf(techCost(k), 0);
+        const reqTd = document.createElement('td');
+        const reqs = techPrereqs(k);
+        reqTd.textContent = reqs.length ? reqs.map((p) => techName(p)).join(', ') : '—';
+        const statusTd = document.createElement('td');
+        const actTd = document.createElement('td');
+        const done = ownerHasTech('human', k);
+        const isCurrent = r && r.current === k;
+        const available = techIsAvailable('human', k);
+        if (done) { statusTd.textContent = 'Researched'; statusTd.className = 'research-done'; }
+        else if (isCurrent) { statusTd.textContent = 'In progress'; statusTd.className = 'research-inprog'; }
+        else if (available) { statusTd.textContent = 'Available'; }
+        else { statusTd.textContent = 'Locked'; statusTd.className = 'research-locked'; }
+        if (!done && available && !isCurrent && researchEnabled()) {
+          const btn = document.createElement('button');
+          btn.textContent = 'Research';
+          btn.addEventListener('click', () => {
+            const rr = ownerResearch('human');
+            if (rr) { rr.current = k; renderResearch(); try { refreshAll(); } catch (e) {} }
+          });
+          actTd.appendChild(btn);
+        }
+        tr.appendChild(nameTd); tr.appendChild(costTd); tr.appendChild(reqTd); tr.appendChild(statusTd); tr.appendChild(actTd);
+        body.appendChild(tr);
+      }
+    }
+    function openResearch() { renderResearch(); const o = document.getElementById('research-overlay'); if (o) o.hidden = false; }
+    function closeResearch() { const o = document.getElementById('research-overlay'); if (o) o.hidden = true; }
     // ---- Diplomatic pact composer ------------------------------------------
     // A small modal to compose a peace / non-aggression / free-travel offer to
     // `owner`: choose the resource to pay, the amount (one-time TOTAL for peace;
@@ -19540,6 +19801,8 @@
     // Diplomacy screen (View menu + close + backdrop).
     ipcRenderer.on("view-diplomacy", openDiplomacy);
     document.getElementById("diplomacy-close").addEventListener("click", closeDiplomacy);
+    ipcRenderer.on("view-research", openResearch);
+    { const el = document.getElementById("research-close"); if (el) el.addEventListener("click", closeResearch); }
     ipcRenderer.on("view-trades", openTrades);
     { const el = document.getElementById("trades-close"); if (el) el.addEventListener("click", closeTrades); }
     { const el = document.getElementById("trades-buy"); if (el) el.addEventListener("click", openPropose); }
@@ -19604,6 +19867,7 @@
     const _ENTER_DIALOGS = [
       ['work-overlay', 'work-close'],           // colony detail
       ['diplomacy-overlay', 'diplomacy-close'],
+      ['research-overlay', 'research-close'],
       ['trades-overlay', 'trades-close'],
       ['colonies-overlay', 'colonies-close'],
       ['federation-overlay', 'federation-close'],
