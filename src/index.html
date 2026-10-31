@@ -13616,6 +13616,14 @@
       return out;
     }
 
+    // Config-driven AI expansion coefficients (CONFIG.aiExpansion) with faster
+    // defaults than the old hardcoded values; used by the launch knobs below.
+    function _aiExpCfg() { return (CONFIG && CONFIG.aiExpansion) || {}; }
+    function _aiExpNum(key, dflt) { const v = _aiExpCfg()[key]; return (typeof v === 'number' && Number.isFinite(v)) ? v : dflt; }
+    function _aiExpBase() { return _aiExpNum('launchPopFactorBase', 1.0); }
+    function _aiExpPerStep() { return _aiExpNum('launchPopFactorPerStep', 0.2); }
+    function _aiExpSkipPerStep() { return _aiExpNum('skipChancePerStep', 0.15); }
+    function _aiExpSearchPerStep() { return _aiExpNum('searchBonusPerRiskStep', 4); }
     // Numeric knobs derived from the traits, used by aiPlayTurn. Everything is
     // expressed so that a balanced (all-3) profile reproduces the previous
     // behavior as closely as possible.
@@ -13627,14 +13635,15 @@
         industrial: t.industry >= 4,
         naturalist: t.industry <= 2,
         // Expansion: scale the population surplus required before launching a
-        // new colony. Expansionist (5) launches at ~1.0x the threshold;
-        // settled (1) demands a large surplus before founding.
-        launchPopFactor: 1 + (5 - t.expansionism) * 0.35, // 1.0 (exp5) .. 2.4 (exp1)
-        // Settled low-expansionism species may skip launching entirely most turns.
-        launchSkipChance: Math.max(0, (3 - t.expansionism) * 0.3), // 0 (>=3) .. 0.6 (exp1)
+        // new colony. Expansionist (5) launches near the base threshold; settled
+        // species demand more surplus. Coefficients are config-driven
+        // (CONFIG.aiExpansion) so expansion speed can be tuned without code.
+        launchPopFactor: _aiExpBase() + (5 - t.expansionism) * _aiExpPerStep(), // base (exp5) .. base+4*perStep (exp1)
+        // Settled low-expansionism species may skip launching some turns.
+        launchSkipChance: Math.max(0, (3 - t.expansionism) * _aiExpSkipPerStep()),
         // Risk: how far afield to search for a launch site, and willingness to
         // spend reserves. Reckless searches wider; cautious stays local.
-        launchSearchBonus: (t.risk - 3) * 4,  // -8 (risk1) .. +8 (risk5)
+        launchSearchBonus: (t.risk - 3) * _aiExpSearchPerStep(),
         // Connectivity: traders/collectivists value Docks (sea links let
         // colonies share resources); isolationists seldom bother.
         wantsDock: (t.commerce >= 3 || t.cooperation >= 4),
