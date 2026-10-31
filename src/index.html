@@ -840,7 +840,7 @@
       } else if (kind === 'freeTravel') {
         w = 0.10 * cooperation + 0.08 * diplomacy;
       } else if (kind === 'alliance') {
-        // An alliance is a deep commitment (mutual defense + shared vision):
+        // An alliance is a deep commitment (mutual defense):
         // only cooperative, diplomatic, non-aggressive species seek one, and the
         // opinion term (added below) weighs heavily — hostiles won't ally.
         w = 0.09 * cooperation + 0.07 * diplomacy + 0.05 * (6 - aggression) - 0.15;
@@ -954,7 +954,7 @@
               const deal = { kind, a: aiOwner, b: 'human', payer: aiOwner, payee: 'human', resource: 'wealth', amountPerYear: pay, years };
               const text = (kind === 'alliance')
                 ? `<p><strong>${esc(ownerDisplayName(aiOwner))}</strong> proposes an <strong>alliance</strong> for <strong>${years} years</strong>, paying you <strong>¤${nf(pay, 0)}/yr</strong>.</p>` +
-                  `<p class="hint">Mutual defense (they join any war against you, and you against them) and shared vision.</p>`
+                  `<p class="hint">Mutual defense: they join any war against you, and you against them. Includes non-aggression and free travel.</p>`
                 : `<p><strong>${esc(ownerDisplayName(aiOwner))}</strong> proposes a <strong>${kind === 'freeTravel' ? 'free-travel' : 'non-aggression'} pact</strong> for <strong>${years} years</strong>, paying you <strong>¤${nf(pay, 0)}/yr</strong>.</p>`;
               queueTradeOffer({ diplo: true, provider: aiOwner, deal, text });
               rel.lastPactOfferTurn = turn;   // start the cooldown
@@ -15148,12 +15148,6 @@
           const ia = ownerToIndex(a), ib = ownerToIndex(b), d = opinionDelta('pactAgreed');
           if (ia >= 0 && ib >= 0 && d) { adjustOpinion(ia, ib, d); adjustOpinion(ib, ia, d); }
         }
-        // An alliance also grants SHARED VISION: reveal the ally's explored
-        // territory to the human (fog is human-only, so the reverse is a no-op).
-        if (kind === 'alliance') {
-          const other = (a === 'human') ? b : (b === 'human') ? a : null;
-          if (other != null) { try { revealOwnerTerritoryToHuman(other); } catch (e) {} }
-        }
         // Start the pact-offer cooldown so the other party doesn't immediately
         // propose a second (different-type) pact right after this one is agreed.
         { const rr = relationOf(a, b); if (rr) rr.lastPactOfferTurn = gameState.turn || 0; }
@@ -19131,7 +19125,7 @@
           ? 'A one-time payment to end the war.'
           : 'A per-year payment for the agreed term. ' + (
               kind === 'freeTravel' ? 'Allows routing and resource sharing through each other\u2019s territory.'
-              : kind === 'alliance' ? 'Mutual defense (each joins any war against the other), shared vision, plus free travel and non-aggression.'
+              : kind === 'alliance' ? 'Mutual defense (each joins any war against the other), plus free travel and non-aggression.'
               : 'Neither side may attack the other while it is active.')}</div>` +
         `<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;">` +
         `<label>Pay <select id="pact-res">${resOpts}</select></label>` +
