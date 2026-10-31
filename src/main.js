@@ -569,7 +569,7 @@ function buildMenu() {
         { label: "View Rankings…", accelerator: "CmdOrCtrl+R", click: () => sendToMain("view-rankings") },
         { label: "View Military…", accelerator: "CmdOrCtrl+Shift+M", enabled: ours.length > 0, click: () => sendToMain("view-military") },
         { label: "View Diplomacy…", accelerator: "CmdOrCtrl+Shift+D", click: () => sendToMain("view-diplomacy") },
-        { label: "View Research…", accelerator: "CmdOrCtrl+Shift+R", enabled: ours.length > 0, click: () => sendToMain("view-research") },
+        { label: "View Research…", accelerator: "CmdOrCtrl+Shift+R", enabled: ours.length >= 2, click: () => sendToMain("view-research") },
         { label: "View Trades…", accelerator: "CmdOrCtrl+Shift+T", click: () => sendToMain("view-trades") },
         { label: "View Communication Log", accelerator: "CmdOrCtrl+Shift+L", click: () => showGameLog() },
         { type: "separator" },

@@ -68,7 +68,7 @@
   <div id="research-overlay" hidden>
     <div id="research-dialog">
       <h2>Research</h2>
-      <div class="hint">Science is funded each year by all wealth that cannot be stored, plus the funding slider's share of stored wealth. Research works from your very first colony. Pick a technology below; completing it unlocks the buildings and units that require it.</div>
+      <div class="hint">Your Federation funds science each year: all wealth it cannot store, plus the funding slider's share of its stored wealth. Pick a technology below; completing it unlocks the buildings and units that require it.</div>
       <div id="research-current"></div>
       <div class="fed-field" id="research-funding-field">
         <label for="research-funding">Science funding: <span id="research-funding-val">50</span>% of stored wealth</label>
@@ -8767,10 +8767,11 @@
           else if (hostile) hints.push({ text: `${ownerDisplayName(owner)} is hostile and may attack.`, kind: 'threat' });
         }
       } catch (e) {}
-      // Research idle (research on, you have a colony, nothing selected). Works
-      // from the first colony — research isn't gated on having a Federation.
+      // Research idle (research on, a Federation exists, nothing selected).
+      // Research is a Federation-level programme — gated on two or more colonies.
       try {
-        if (typeof researchEnabled === 'function' && researchEnabled() && cols.length > 0) {
+        if (typeof researchEnabled === 'function' && researchEnabled()
+            && (typeof federationEstablished === 'function' && federationEstablished('human'))) {
           const r = ownerResearch('human');
           const anyTech = Object.keys(techDefs()).length > 0;
           if (r && !r.current && anyTech) {
@@ -19091,7 +19092,16 @@
         body.appendChild(tr);
       }
     }
-    function openResearch() { renderResearch(); const o = document.getElementById('research-overlay'); if (o) o.hidden = false; }
+    function openResearch() {
+      // Research is a Federation-level programme: it opens only once a Federation
+      // exists (two or more colonies), matching the Federation dialog.
+      if (playerColonies('human').length < 2) {
+        notify("Research becomes available once your Federation forms (two or more colonies).");
+        return;
+      }
+      renderResearch();
+      const o = document.getElementById('research-overlay'); if (o) o.hidden = false;
+    }
     function closeResearch() { const o = document.getElementById('research-overlay'); if (o) o.hidden = true; }
     // ---- Diplomatic pact composer ------------------------------------------
     // A small modal to compose a peace / non-aggression / free-travel offer to
