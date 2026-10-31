@@ -2433,7 +2433,7 @@
   },
   "victory": {
     "enabled": true,
-    "minYear": 2700,
+    "minYear": 3000,
     "conquest": true,
     "domination": { "enabled": true, "landPercent": 60, "colonyPercent": 70 },
     "economic": { "enabled": true, "treasuryThreshold": 1000000 },
