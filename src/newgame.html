@@ -152,6 +152,13 @@
     <div class="hint">Lower = harder: decreases bonuses and increases costs.</div>
   </div>
 
+  <div class="section-title">Natural Disasters</div>
+  <div class="field" id="disasters-field">
+    <div class="labelrow"><label for="disasters">Disaster frequency</label><span class="rangeval" id="disasters-val">Occasional</span></div>
+    <input id="disasters" type="range" min="0" max="1" step="0.05" value="0.5">
+    <div class="hint">How often meteor strikes, eruptions, droughts, and plagues befall colonies: Off &rarr; Frequent.</div>
+  </div>
+
     </div><!-- /settings-col (left) -->
     <div class="settings-col">
 
@@ -423,6 +430,25 @@
     difficulty.addEventListener("input", syncDifficulty);
     syncDifficulty();
 
+    // Natural-disaster frequency slider: a descriptive label (Off..Frequent).
+    (() => {
+      const input = document.getElementById("disasters");
+      const out = document.getElementById("disasters-val");
+      if (!input || !out) return;
+      const sync = () => {
+        const v = parseFloat(input.value);
+        let word = "Occasional";
+        if (v <= 0) word = "Off";
+        else if (v <= 0.25) word = "Rare";
+        else if (v <= 0.5) word = "Occasional";
+        else if (v <= 0.75) word = "Common";
+        else word = "Frequent";
+        out.textContent = word;
+      };
+      input.addEventListener("input", sync);
+      sync();
+    })();
+
     // Recompute the default when width, height, or water ratio change.
     ["width", "height"].forEach((id) => {
       const el = document.getElementById(id);
@@ -463,7 +489,8 @@
         minRiverLength: parseInt(document.getElementById("minRiverLength").value, 10),
         largestAreaWithoutRiver: parseFloat(document.getElementById("largestAreaWithoutRiver").value),
         aiOpponents: parseInt(document.getElementById("aiOpponents").value, 10),
-        difficulty: parseFloat(document.getElementById("difficulty").value)
+        difficulty: parseFloat(document.getElementById("difficulty").value),
+        disasterFrequency: parseFloat(document.getElementById("disasters").value)
       };
     }
 

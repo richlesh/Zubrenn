@@ -1476,6 +1476,9 @@ function generateMap(opts = {}) {
   // economy/costs when the renderer applies it to the config.
   let difficulty = numOr(o.difficulty, 1.0);
   difficulty = Math.max(0.5, Math.min(1.0, Math.round(difficulty * 10) / 10));
+  // Natural-disaster frequency: 0 (off) .. 1 (frequent). Multiplies each
+  // disaster type's configured per-colony yearly chance at runtime.
+  const disasterFrequency = Math.max(0, Math.min(1, numOr(o.disasterFrequency, 0.5)));
 
   const rng = makeRng(seed);
 
@@ -1589,6 +1592,7 @@ function generateMap(opts = {}) {
       roughness, erode, talus, mountains, biome, polar, jungle, bandJitter,
       rivers: doRivers, springElevation, maxRivers, cellsPerRiver, minRiverLength,
       largestAreaWithoutRiver, wrap, seaLevel, aiOpponents, difficulty, bonusAbundancy
+      , disasterFrequency
     }
   };
 }

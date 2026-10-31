@@ -4946,6 +4946,8 @@
         gameState.turn++;
         roundCompleted = true;
         growColonies(); // populations grow each year/turn
+        // Natural disasters: roll each colony for a meteor/eruption/drought/plague.
+        try { runNaturalDisasters(); } catch (e) { console.error('[disasters] step failed:', e); }
         // Per-turn profiler breakdown (opt-in): dump the aggregated section
         // timings for the round that just completed, then reset for the next.
         if (PROF.enabled) { PROF.report(`turn ${gameState.turn} (year ${currentYear()})`); PROF.reset(); }
@@ -18537,6 +18539,109 @@
       if (owner === 'human') return 'You';
       const idx = ownerToIndex(owner);
       return (idx >= 0 ? playerDisplayName(idx) : null) || 'A species';
+    }
+    // ---- Natural disasters ---------------------------------------------------
+    // Config from CONFIG.disasters, with the game's disaster-frequency setting
+    // (New Game slider, stored on map meta) scaling the per-colony chance.
+    function disastersCfg() {
+      const d = (CONFIG && CONFIG.disasters) || {};
+      const base = (typeof d.baseChancePerColony === 'number' && d.baseChancePerColony >= 0) ? d.baseChancePerColony : 0.06;
+      const types = (d.types && typeof d.types === 'object') ? d.types : {};
+      return { enabled: (typeof d.enabled === 'boolean') ? d.enabled : true, base, types };
+    }
+    // The game's disaster-frequency multiplier (0..1) from the New Game slider,
+    // defaulting to 0.5 for older saves that predate the setting.
+    function disasterFrequency() {
+      const m = gameState.map && gameState.map.meta;
+      const v = m && m.disasterFrequency;
+      return (typeof v === 'number' && Number.isFinite(v)) ? Math.max(0, Math.min(1, v)) : 0.5;
+    }
+    // Whether a colony has a mountain (Mountain-Low 7 / Mountain-High 8) cell in
+    // or adjacent to its zone of control — a prerequisite for eruptions.
+    function colonyNearMountain(col) {
+      if (!col) return false;
+      for (const c of colonyControlCells(col)) {
+        const t = terrainAt(c.x, c.y);
+        if (t === 7 || t === 8) return true;
+      }
+      return false;
+    }
+    // Apply one disaster `type` (a CONFIG.disasters.types entry) to `col`,
+    // returning a short human-readable summary of its effect.
+    function applyDisasterToColony(col, type) {
+      const owned = ensureOwned(col);
+      const parts = [];
+      const popLoss = Math.max(0, Number(type.populationLossPct) || 0);
+      if (popLoss > 0 && (owned.population || 0) > 0) {
+        const lost = Math.round((owned.population || 0) * popLoss);
+        owned.population = Math.max(0, (owned.population || 0) - lost);
+        col.population = owned.population;                 // keep legacy mirror
+        if (lost > 0) parts.push(`${nf(lost, 0)} lost`);
+      }
+      const waterLoss = Math.max(0, Number(type.waterLossPct) || 0);
+      if (waterLoss > 0 && (owned.water || 0) > 0) {
+        owned.water = Math.max(0, (owned.water || 0) * (1 - waterLoss));
+        parts.push('water drained');
+      }
+      const foodLoss = Math.max(0, Number(type.foodLossPct) || 0);
+      if (foodLoss > 0 && (owned.food || 0) > 0) {
+        owned.food = Math.max(0, (owned.food || 0) * (1 - foodLoss));
+        parts.push('food spoiled');
+      }
+      const happ = Number(type.happiness) || 0;
+      if (happ !== 0) { owned.happiness = (Number(owned.happiness) || 0) + happ; parts.push(`morale ${happ > 0 ? '+' : ''}${happ}`); }
+      if (type.destroysBuilding) {
+        // Raze one random non-biodome building in the colony's control radius.
+        const radius = colonyControlRadius(col);
+        const cands = (gameState.buildings || []).filter((b) =>
+          b.owner === col.owner && b.type !== 1 && !b.inTransit &&
+          hexDistance(col.x, col.y, b.x, b.y) <= radius);
+        if (cands.length) {
+          const victim = cands[Math.floor(Math.random() * cands.length)];
+          const vname = (typeof improvementName === 'function') ? improvementName(victim.type) : 'a building';
+          victim._delete = true;
+          gameState.buildings = gameState.buildings.filter((b) => !b._delete);
+          try { if (typeof bumpPlaceGen === 'function') bumpPlaceGen(); } catch (e) {}
+          parts.push(`destroyed the ${vname}`);
+        }
+      }
+      return parts.join(', ');
+    }
+    // Roll each standing colony once per year for a natural disaster. The human
+    // is notified about disasters at their own colonies; AI-only ones are logged.
+    function runNaturalDisasters() {
+      const cfg = disastersCfg();
+      if (!cfg.enabled) return;
+      const freq = disasterFrequency();
+      if (freq <= 0) return;
+      const chance = cfg.base * freq;
+      if (chance <= 0) return;
+      const typeKeys = Object.keys(cfg.types);
+      if (!typeKeys.length) return;
+      // Snapshot colonies up front (a disaster may destroy buildings/colonies).
+      const colonies = (gameState.buildings || []).filter((b) => b.type === 1 && !b.inTransit).slice();
+      let anyChange = false;
+      for (const col of colonies) {
+        // The colony may have been removed by an earlier disaster this pass.
+        if (!gameState.buildings.includes(col)) continue;
+        if (Math.random() >= chance) continue;
+        // Eligible types for this colony (eruptions need a mountain nearby).
+        const nearMtn = colonyNearMountain(col);
+        const eligible = typeKeys.filter((k) => !(cfg.types[k].requireMountain) || nearMtn);
+        if (!eligible.length) continue;
+        // Weighted pick.
+        let total = 0; for (const k of eligible) total += Math.max(0, Number(cfg.types[k].weight) || 1);
+        let roll = Math.random() * total, picked = eligible[0];
+        for (const k of eligible) { roll -= Math.max(0, Number(cfg.types[k].weight) || 1); if (roll <= 0) { picked = k; break; } }
+        const type = cfg.types[picked];
+        const summary = applyDisasterToColony(col, type);
+        anyChange = true;
+        const where = col.name || cellLatLonLabel(col.x, col.y);
+        const msg = `${type.name || 'Disaster'} struck ${where}${summary ? ` — ${summary}` : ''}.`;
+        if (col.owner === 'human') { try { notify(msg); } catch (e) {} }
+        else { try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(msg); } catch (e) {} }
+      }
+      if (anyChange) { try { if (hexMap && typeof hexMap.draw === 'function') hexMap.draw(); } catch (e) {} }
     }
     // Evaluate win conditions once per completed round. Picks the first winner
     // found across the enabled types (conquest, then domination, then economic,

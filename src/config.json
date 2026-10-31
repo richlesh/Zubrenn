@@ -2438,6 +2438,26 @@
     "ratingWeights": { "population": 1, "treasury": 0.001, "colonies": 5000, "landCells": 100 }
   },
 
+  // Natural disasters. Each year every standing colony is rolled: with
+  // probability baseChancePerColony x the game's disaster-frequency setting (the
+  // New Game slider, 0 = off .. 1 = frequent), one disaster strikes it. The type
+  // is chosen by weight among those eligible for the colony (eruptions need a
+  // mountain cell in/adjacent to the colony). Effects: populationLossPct and
+  // water/foodLossPct remove that fraction of the colony's population / stored
+  // water / stored food; happiness is added to the colony's morale;
+  // destroysBuilding razes one random non-biodome building in the colony.
+  // Set disasters.enabled=false (or the slider to 0) to turn disasters off.
+  "disasters": {
+    "enabled": true,
+    "baseChancePerColony": 0.06,
+    "types": {
+      "meteor":   { "name": "Meteor Strike",     "weight": 1, "populationLossPct": 0.15, "happiness": -3, "destroysBuilding": true },
+      "eruption": { "name": "Volcanic Eruption", "weight": 1, "requireMountain": true, "populationLossPct": 0.20, "happiness": -4, "destroysBuilding": true },
+      "drought":  { "name": "Drought",           "weight": 1, "waterLossPct": 0.60, "foodLossPct": 0.40, "happiness": -3 },
+      "plague":   { "name": "Plague",            "weight": 2, "populationLossPct": 0.12, "happiness": -5 }
+    }
+  },
+
   // Default Federation tax rate (happiness cost per colony that funds the
   // Federation treasury); the New Game/Federation UI can override per game.
   "federationTaxRate": 2,
