@@ -13110,7 +13110,21 @@
         for (const c of list) { const v = _prodVal(c, key); if (v > bv) { bv = v; best = c; } }
         return best; // null if none has a positive value
       };
-      const mineBest = bestBy(landCells, 'm');
+      // A Mine/Quarry is the colony's ONLY early source of material STORAGE
+      // (storage.material = 200) — a Farm stores none and the biodome only 25,
+      // so without a Mine a colony can never bank the material a new biodome
+      // costs and therefore never expands. Prefer the richest-material cell, but
+      // if NO control cell has base material, still reserve the best available
+      // land cell for the Mine so the +200 material storage (and the Factory it
+      // unlocks) is always placed. A Mine on a zero-material tile produces little
+      // material but still provides the storage that funds expansion.
+      let mineBest = bestBy(landCells, 'm');
+      if (!mineBest) {
+        // Fallback: the best land cell the Mine can legally sit on (its terrain
+        // whitelist), so strict-order building never stalls on an unplaceable Mine.
+        const mineLand = landCells.filter((c) => terrainAllowedForBuilding(mineCode, terrainAt(c.x, c.y)));
+        if (mineLand.length) mineBest = mineLand[0];
+      }
       const mineKey = mineBest ? cellKey(mineBest.x, mineBest.y) : null;
       const farmBest = bestBy(landCells.filter((c) => cellKey(c.x, c.y) !== mineKey), 'f');
       const poolFor = (type) => {
