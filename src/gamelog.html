@@ -60,7 +60,7 @@
     .log-jump:hover { color: #9cc3f0; }
     body.light .log-jump { color: #0a66c2; }
     /* Rows hidden by the category filter. */
-    .log-msg.filtered { display: none; }
+    .log-msg.filtered, .log-year.filtered { display: none; }
     #filter { font: inherit; }
     #empty { color: #777; padding: 10px; font-style: italic; }
   </style>
@@ -145,16 +145,35 @@
       }
     }
 
-    // Category filter: show only entries matching the chosen category ("all"
-    // shows everything). Year headers are always shown.
+    // Category filter: show only message entries matching the chosen category
+    // ("all" shows everything). A year header is hidden when none of its
+    // messages are visible under the current filter.
     let currentFilter = "all";
     function applyFilterTo(el) {
       if (!el || !el.classList || !el.classList.contains("log-msg")) return;
       const cat = el.dataset.category || "general";
       el.classList.toggle("filtered", currentFilter !== "all" && cat !== currentFilter);
     }
+    // Walk the body in order; hide each year header that has no visible message
+    // between it and the next header (so filtered-out years disappear entirely).
+    function updateYearHeaders() {
+      let header = null;      // current year header element
+      let hasVisible = false; // any un-filtered message seen under it
+      const flush = () => { if (header) header.classList.toggle("filtered", !hasVisible); };
+      for (const el of bodyEl.children) {
+        if (!el.classList) continue;
+        if (el.classList.contains("log-year")) {
+          flush();                 // finalize the previous section
+          header = el; hasVisible = false;
+        } else if (el.classList.contains("log-msg")) {
+          if (!el.classList.contains("filtered")) hasVisible = true;
+        }
+      }
+      flush();                      // finalize the last section
+    }
     function applyFilterAll() {
       bodyEl.querySelectorAll(".log-msg").forEach(applyFilterTo);
+      updateYearHeaders();
     }
     {
       const sel = document.getElementById("filter");
@@ -166,10 +185,12 @@
     ipcRenderer.on("game-log-history", (_e, entries) => {
       clearLog();
       if (Array.isArray(entries)) for (const en of entries) render(en);
+      updateYearHeaders();
     });
-    ipcRenderer.on("game-log-entry", (_e, entry) => render(entry));
+    ipcRenderer.on("game-log-entry", (_e, entry) => { render(entry); updateYearHeaders(); });
     ipcRenderer.on("game-log-entries", (_e, entries) => {
       if (Array.isArray(entries)) for (const en of entries) render(en);
+      updateYearHeaders();
     });
     ipcRenderer.on("game-log-clear", () => clearLog());
 
