@@ -130,7 +130,7 @@
       "icon": "Dense Pine Forest.png",
       "color": { "h": 120, "s": 0.818, "l": 0.275 },
       "movement": [4, 0.5, 0.75, 0.2, 0.1],
-      "bonus": { "material": 4, "wealth": 2 },
+      "bonus": { "food": 0.5, "material": 4, "wealth": 2 },
       "roadCostPerTile": { "energy": 10, "material": 150, "water": 0.3, "wealth": 10, "turns": 1.5 },
       "monorailCostPerTile": { "energy": 5, "material": 50, "water": 0.1, "wealth": 10, "turns": 1.5 }
       // canals are disallowed
@@ -552,7 +552,7 @@
     // access to the strategic material uranium.
     "nuclear reactor": {
       "code": 39,
-      "name": "Nuclear Reactor",
+      "name": "Fission Reactor",
       "icon": "buildings/128/nuclear_reactor.png",
       "symbol": "buildings/icons/bolt.png",
       "buildCost": { "energy": 500, "material": 250, "wealth": 700, "water": 0.5, "turns": 5 },
@@ -566,6 +566,26 @@
         "bonusType": ["uranium"],
         "population": 15,
         "tech": ["nuclear_science"]
+      },
+      "equivalentTo": "solar farm"
+    },
+    "fusion reactor": {
+      "code": 47,
+      "name": "Fusion Reactor",
+      "icon": "buildings/128/fusion_reactor.png",
+      "symbol": "buildings/icons/bolt.png",
+      "buildCost": { "energy": 1000, "material": 500, "wealth": 1400, "water": 1, "turns": 10 },
+      "costPerYear": { "wealth": 50 },
+      "bonus": { "energy": 10000 },
+      "storage": { "energy": 1000 },
+      "federationStorage": { "energy": 1000 },
+      "prerequisite": {
+        "building": ["nanofactory"],
+        "terrain": ["grassland","hills","forest","jungle","desert","plains","frozen"],
+        "bonusType": [],
+        "population": 15,
+        "tech": ["nuclear_science"],
+        "upgrades": "nuclear reactor"
       },
       "equivalentTo": "solar farm"
     },
@@ -583,7 +603,8 @@
       "federationStorage": { "material": 200 },
       "prerequisite": {
         "building": ["solar panel"],
-        "terrain":  ["grassland", "hills", "forest", "jungle", "plains", "mountain-low", "mountain-high"],
+        "terrain":  ["grassland", "hills", "forest", "jungle", "plains", "mountain-low"],
+        "population": 2,
         "other":    []
       },
       "equivalentTo": "mine"
@@ -596,12 +617,12 @@
       "buildCost":   { "energy": 5, "material": 5, "wealth": 15, "water": 0.5, "turns": 3 },
       "costPerYear": { "energy": 50, "goods": 5, "wealth": 5, "water": 0.2 },
       "bonus":       { "material": "30x", "wealth": "5x", "happiness": -0.25 },
-      "storage":     { "energy": 50, "material": 100 },
-      "federationStorage": { "material": 100 },
+      "storage":     { "energy": 50, "material": 200 },
+      "federationStorage": { "material": 200 },
       "prerequisite": {
         "building": ["solar panel"],
-        "terrain":  ["grassland", "hills", "forest", "jungle", "plains", "mountain-low", "mountain-high"],
-        "population": 5,
+        "terrain":  ["mountain-low", "mountain-high"],
+        "population": 2,
         "other":    []
       }
     },
@@ -618,13 +639,13 @@
       "buildCost":   { "energy": 5, "material": 10, "wealth": 15, "water": 1, "turns": 3 },
       "costPerYear": { "energy": 20, "goods": 3, "wealth": 5, "water": 0.3 },
       "bonus":       { "material": "10x", "wealth": "8x" },
-      "storage":     { "material": 150 },
-      "federationStorage": { "material": 150 },
+      "storage":     { "material": 175 },
+      "federationStorage": { "material": 175 },
       "prerequisite": {
         "building": ["solar panel"],
         "terrain":  ["desert"],
         "climate":  ["tropical", "temperate"],
-        "population": 3,
+        "population": 2,
         "bonusType": ["lithium"]
       },
       "equivalentTo": "mine"
@@ -632,7 +653,7 @@
     // Megamine
     "megamine": {
       "code": 34,
-      "name": "Megamine",
+      "name": "Megaquary",
       "icon": "buildings/128/megamine.png",
       "symbol": "buildings/icons/crystal.png",
       "buildCost":   { "energy": 25, "material": 25, "wealth": 50, "water": 1.5, "turns": 5 },
@@ -642,7 +663,7 @@
       "federationStorage": { "material": 400 },
       "prerequisite": {
         "building": ["solar farm"],
-        "terrain":  ["grassland", "hills", "forest", "jungle", "plains", "mountain-low", "mountain-high"],
+        "terrain":  ["grassland", "hills", "forest", "jungle", "plains", "mountain-low"],
         "other":    [],
         "population": 7,
         "upgrades": "quarry"
@@ -2425,15 +2446,15 @@
     "defaultFundingPercent": 50
   },
   "techs": {
-    "applied_physics": { "name": "Applied Physics", "cost": 400, "prerequisite": [], "desc": "Foundational research enabling advanced energy and materials work." },
-    "advanced_materials": { "name": "Advanced Materials", "cost": 700, "prerequisite": ["applied_physics"], "desc": "High-strength alloys and composites for demanding structures." },
-    "rocketry": { "name": "Rocketry", "cost": 1000, "prerequisite": ["applied_physics"], "desc": "Heavy-lift propulsion — the basis of spaceflight and long-range missiles." },
-    "orbital_engineering": { "name": "Orbital Engineering", "cost": 1800, "prerequisite": ["advanced_materials", "rocketry"], "desc": "Building and operating structures in orbit." },
-    "nuclear_science": { "name": "Nuclear Science", "cost": 2000, "prerequisite": ["advanced_materials"], "desc": "Fission engineering for reactors and strategic weapons." }
+    "applied_physics": { "name": "Applied Physics", "cost": 4000, "prerequisite": [], "desc": "Foundational research enabling advanced energy and materials work." },
+    "advanced_materials": { "name": "Advanced Materials", "cost": 7000, "prerequisite": ["applied_physics"], "desc": "High-strength alloys and composites for demanding structures." },
+    "rocketry": { "name": "Rocketry", "cost": 10000, "prerequisite": ["applied_physics"], "desc": "Heavy-lift propulsion — the basis of spaceflight and long-range missiles." },
+    "orbital_engineering": { "name": "Orbital Engineering", "cost": 18000, "prerequisite": ["advanced_materials", "rocketry"], "desc": "Building and operating structures in orbit." },
+    "nuclear_science": { "name": "Nuclear Science", "cost": 20000, "prerequisite": ["advanced_materials"], "desc": "Fission engineering for reactors and strategic weapons." }
   },
   "victory": {
     "enabled": true,
-    "minYear": 3000,
+    "minYear": 3500,
     "conquest": true,
     "domination": { "enabled": true, "landPercent": 60, "colonyPercent": 70 },
     "economic": { "enabled": true, "treasuryThreshold": 1000000 },

@@ -27,17 +27,23 @@ Solar Panels are advanced energy collectors — a cheap, quick build with almost
 
 The Solar Farm is the Solar Panel's big sibling — a sprawling array that drinks in far more of the twin stars' light. It is built as an **upgrade of an existing Solar Panel**, raised in its place, and still counts as a Solar Panel for anything that depends on one. A larger, costlier structure than a single panel, it is a powerful source of energy and greatly expands the colony's energy storage. When a colony's industry outgrows what its panels can supply, upgrading a key panel to a Solar Farm keeps the lights on.
 
-### Nuclear Reactor
-
-<img align="right" width="128" src="src/resources/buildings/128/nuclear_reactor.png">
-
-The Nuclear Reactor is the pinnacle of power generation — a hardened fission plant that dwarfs any field of solar panels, pouring out a torrent of energy day or night, in any climate (it may even be raised on the frozen poles). It is a demanding, late‑game build: it requires a **Factory** in the colony, a sizable population, a heavy investment of energy, material, and wealth to construct, and — crucially — a worked source of the strategic resource **uranium** to fuel it. In return a worked Reactor is by far the largest single energy source in the game and adds a vast reserve of energy storage, enough to run the most power‑hungry industry, defenses, and launch facilities a colony can field. For an advanced, uranium‑rich colony, it is what finally lifts the ceiling on everything energy can buy.
-
 ### Wind Farm
 
 <img align="right" width="128" src="src/resources/buildings/128/wind_farm.png">
 
 The Wind Farm is a utility‑scale field of turbines — a standalone power source (not an upgrade of anything) whose annual output rivals a Solar Farm's, but with its own character. Where the Solar Farm wants sun‑drenched ground, the Wind Farm wants open, exposed terrain: it may be raised on grassland, plains, hills, and the low mountains — and, uniquely among energy buildings, **offshore** on a colony's shallow‑sea tiles. It requires a **Factory** in the colony and a population of at least 5,000. Its construction is steel‑heavy (a large material cost), but once standing it runs on almost nothing — a light wealth upkeep for its moving parts. A worked Wind Farm is a strong, steady source of energy and adds energy storage for the colony and the Federation besides. For a windswept coast, plain, or ridge, it is the renewable complement to the Solar Farm.
+
+### Fission Reactor
+
+<img align="right" width="128" src="src/resources/buildings/128/nuclear_reactor.png">
+
+The Fission Reactor is the pinnacle of early power generation — a hardened fission plant that dwarfs any field of solar panels, pouring out a torrent of energy day or night, in any climate (it may even be raised on the frozen poles). It is a demanding, late‑game build: it requires a **Factory** in the colony, a sizable population, a heavy investment of energy, material, and wealth to construct, and — crucially — a worked source of the strategic resource **uranium** to fuel it. In return a worked Reactor is by far the largest single energy source available at its tier and adds a vast reserve of energy storage, enough to run the most power‑hungry industry, defenses, and launch facilities a colony can field. For an advanced, uranium‑rich colony, it is what finally lifts the ceiling on everything energy can buy — and later serves as the foundation for the **Fusion Reactor**.
+
+### Fusion Reactor
+
+<img align="right" width="128" src="src/resources/buildings/128/fusion_reactor.png">
+
+The Fusion Reactor is the ultimate power source on Zubrenn — a star tamed in a bottle, built as an **upgrade of an existing Fission Reactor**, raised in its place, and still counting as a reactor for anything that depends on one. Where fission splits heavy atoms and demands a worked vein of **uranium**, fusion fuses light ones and needs **no strategic fuel at all**: it is clean, self‑sustaining, and unbound by any ore deposit. In exchange it is the most expensive and slowest build in the game, gated behind the full industrial chain — it requires a **Nanofactory** in the colony, a large population, and the **nuclear science** advance — and it draws on the tile's existing Fission Reactor to bootstrap its own ignition. A worked Fusion Reactor produces roughly double the energy of the plant it replaces and doubles its energy reserve, enough to power an entire Federation's heaviest industry, planetary defenses, and launch facilities without a single gram of fuel. It is the final word on energy: once a colony lights its first fusion flame, power is effectively limitless.
 
 ### Farm
  
@@ -67,7 +73,7 @@ The Aquafarm is the sea's answer to the Farm — a floating lattice of pens, kel
 
 <img align="right" width="128" src="src/resources/buildings/128/quarry.png">
 
-The Quarry is the colony's first dedicated source of stone and raw material — an open working of pits and cutting faces that pulls building‑grade rock straight out of the ground. It is cheap and quick to raise, requires only a **Solar Panel** first, and may be worked on the same high, cold, and broken terrain as the Mine, where the rock is richest (the most forbidding mountain summits remain off‑limits to everyone). Its output *scales with how mineral‑rich the cell beneath it is*, so site it on the best ground you can reach. It yields less than a full Mine and carries a lighter energy appetite, and the scarred ground weighs only a little on morale. Crucially, the Quarry is the groundwork of a colony's construction effort: it is **ideal for extracting the stone and material needed to raise buildings and to lay roads and monorails** — in fact a Quarry is now **required before a colony can build roads or monorails**. It counts as a Mine for anything that depends on one, and it is the building a Megamine is later raised from.
+The Quarry is the colony's first dedicated source of stone and raw material — an open working of pits and cutting faces that pulls building‑grade rock straight out of the ground. It is cheap and quick to raise, requires only a **Solar Panel** first, and may be worked on the same high, cold, and broken terrain as the Mine, where the rock is richest (the most forbidding mountain summits remain off‑limits to everyone). Its output *scales with how mineral‑rich the cell beneath it is*, so site it on the best ground you can reach. It yields less than a full Mine and carries a lighter energy appetite, and the scarred ground weighs only a little on morale. Crucially, the Quarry is the groundwork of a colony's construction effort: it is **ideal for extracting the stone and material needed to raise buildings and to lay roads and monorails** — in fact a Quarry is now **required before a colony can build roads or monorails**. It counts as a Mine for anything that depends on one, and it is the building a Megaquarry is later raised from.
 
 ### Mine
 
@@ -75,11 +81,11 @@ The Quarry is the colony's first dedicated source of stone and raw material — 
 
 The Mine is the colony's dedicated material producer, carving ore and stone straight out of the ground. Its output *scales with how mineral‑rich the ground beneath it is*, so a Mine on rugged, ore‑laden terrain hauls up a tremendous amount — plant them on the richest ground you can reach. It requires a **Solar Panel** first and, uniquely, may be worked on the high, cold, and broken terrain other buildings avoid, where ore is richest — though the most forbidding mountain summits remain off‑limits to everyone. It is a modestly priced build with a steady energy appetite to run its machinery, and it adds a good deal of material storage. A single well‑sited Mine can single‑handedly feed a colony's Factories and keep its road network supplied with material.
 
-### Megamine
+### Megaquarry
 
 <img align="right" width="128" src="src/resources/buildings/128/megamine.png">
 
-The Megamine is the Quarry scaled up to heavy extraction — a vast open‑pit and deep‑shaft complex that tears material from the ground on a scale no single Quarry or Mine can match. It is built as an **upgrade of an existing Quarry**, raised in its place, and still counts as a Mine for anything that depends on one. It requires a **Solar Farm** in the colony. Its yield *scales with how mineral‑rich the cell beneath it is* — on the richest ground it multiplies that tile's material enormously — and it brings a healthy stream of wealth besides, with large material storage to match. It is a costly build with a voracious appetite for energy and goods to keep its machinery and crews running, and the scarred land weighs a little on morale. When a colony's Factories outgrow what its Quarries can supply, upgrading a key Quarry to a Megamine is how its material output takes off.
+The Megaquarry is the Quarry scaled up to heavy extraction — a vast open‑pit and deep‑shaft complex that tears material from the ground on a scale no single Quarry or Mine can match. It is built as an **upgrade of an existing Quarry**, raised in its place, and still counts as a Mine for anything that depends on one. It requires a **Solar Farm** in the colony. Its yield *scales with how mineral‑rich the cell beneath it is* — on the richest ground it multiplies that tile's material enormously — and it brings a healthy stream of wealth besides, with large material storage to match. It is a costly build with a voracious appetite for energy and goods to keep its machinery and crews running, and the scarred land weighs a little on morale. When a colony's Factories outgrow what its Quarries can supply, upgrading a key Quarry to a Megaquarry is how its material output takes off.
 
 ### Solar Salt Works
 
@@ -147,7 +153,7 @@ The Spaceport is the **upgrade of a Launchpad**, raised in its place as the full
 
 <img align="right" width="128" src="src/resources/buildings/128/icbm_factory.png">
 
-The ICBM Factory is where a colony builds its strategic missile arsenal — the **only** structure that can construct **ICBMs**, the long‑range, single‑use nuclear weapons. It is a top‑tier build gated behind the full space‑age chain: the colony must already have a **Launchpad** (to loft the missiles) and a **Nuclear Reactor** (to supply both the power and the uranium‑fueled infrastructure its warheads demand), a transport link to another of your colonies, and a large population, with a heavy, broad construction cost and upkeep. It holds a modest reserve of energy, goods, and material, and can field up to **five ICBM silos**, each steadily arming a missile over time. Once armed, those ICBMs can be launched at any colony on the planet — and are spent in the strike. For a mature, uranium‑rich civilization, the ICBM Factory is the key that unlocks planet‑spanning nuclear reach.
+The ICBM Factory is where a colony builds its strategic missile arsenal — the **only** structure that can construct **ICBMs**, the long‑range, single‑use nuclear weapons. It is a top‑tier build gated behind the full space‑age chain: the colony must already have a **Launchpad** (to loft the missiles) and a **Fission Reactor** (to supply both the power and the uranium‑fueled infrastructure its warheads demand), a transport link to another of your colonies, and a large population, with a heavy, broad construction cost and upkeep. It holds a modest reserve of energy, goods, and material, and can field up to **five ICBM silos**, each steadily arming a missile over time. Once armed, those ICBMs can be launched at any colony on the planet — and are spent in the strike. For a mature, uranium‑rich civilization, the ICBM Factory is the key that unlocks planet‑spanning nuclear reach.
 
 ### Granary
 
