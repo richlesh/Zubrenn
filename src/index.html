@@ -5854,6 +5854,22 @@
       if (!route) return null;
       return travelTurnsForSpeed(route.cost || 0, speed != null ? speed : 1);
     }
+    // Travel turns for a STRIKE-FORCE leg. Unlike battalionTravelTurns this never
+    // returns null and never collapses a long/blocked route to a trivial ETA:
+    // when no movement path exists (e.g. the target is across sea/mountains the
+    // unit can't cross on foot), it falls back to a straight-line HEX-DISTANCE
+    // estimate at an open-terrain cost, so a distant colony still takes a
+    // realistic number of turns to reach instead of ~1. (Fixes strike forces
+    // appearing to reach any colony on the map in a couple of turns.)
+    function strikeTravelTurns(sx, sy, tx, ty, owner, speed) {
+      const real = battalionTravelTurns(sx, sy, tx, ty, owner, speed);
+      if (real != null) return real;
+      // Fallback: hex distance x a representative unimproved per-tile cost
+      // (STRIKE_FALLBACK_TILE_COST), divided by speed — same units as a real path.
+      const STRIKE_FALLBACK_TILE_COST = 3; // ~plains unimproved movement[0]
+      const dist = hexDistance(sx, sy, tx, ty);
+      return travelTurnsForSpeed(dist * STRIKE_FALLBACK_TILE_COST, speed != null ? speed : 1);
+    }
     // The player's own colonies (operational biodomes) a unit could deploy to.
     function deployableColonies(owner) {
       return (gameState.buildings || []).filter((b) => b.type === 1 && b.owner === owner && !b.inTransit);
@@ -18168,7 +18184,7 @@
         // Rally leg: travel from the unit's colony to the rally colony (0 if already there).
         const t = (u.x === rally.x && u.y === rally.y)
           ? 0
-          : (battalionTravelTurns(u.x, u.y, rally.x, rally.y, u.owner, unitSpeed(u.type)) || 0);
+          : strikeTravelTurns(u.x, u.y, rally.x, rally.y, u.owner, unitSpeed(u.type));
         u.inTransit = t > 0;
         u.destX = rally.x; u.destY = rally.y;
         u.turnsRemaining = t;
@@ -18211,8 +18227,8 @@
             // SLOWEST member's time.
             let legTurns = 0;
             for (const u of members) {
-              const t = battalionTravelTurns(sf.rallyX, sf.rallyY, sf.targetX, sf.targetY, u.owner, unitSpeed(u.type));
-              if (t == null) { legTurns = Math.max(legTurns, 1); } else { legTurns = Math.max(legTurns, t); }
+              const t = strikeTravelTurns(sf.rallyX, sf.rallyY, sf.targetX, sf.targetY, u.owner, unitSpeed(u.type));
+              legTurns = Math.max(legTurns, t || 0);
             }
             if (legTurns <= 0) legTurns = 1;
             for (const u of members) { u.strikeForce.phase = 'strike'; u.inTransit = true; u.destX = sf.targetX; u.destY = sf.targetY; u.turnsRemaining = legTurns; }
