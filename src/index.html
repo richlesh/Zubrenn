@@ -17219,6 +17219,7 @@
       { key: "population", label: "Population", num: true },
       { key: "colonies", label: "Colonies", num: true },
       { key: "buildings", label: "Buildings", num: true },
+      { key: "military", label: "Military", num: true },
       { key: "energy", label: "Energy", num: true },
       { key: "food", label: "Food", num: true },
       { key: "material", label: "Material", num: true },
@@ -17238,7 +17239,7 @@
         owner: (p.kind === "human") ? "human" : i,
         me: p.kind === "human",
         name: p.name || (p.kind === "human" ? "You" : "AI " + i),
-        colonies: 0, buildings: 0,
+        colonies: 0, buildings: 0, military: 0,
         energy: 0, food: 0, material: 0, wealth: 0, happiness: 0,
         _pop: 0,
       }));
@@ -17282,11 +17283,21 @@
           r.buildings += 1;
         }
       }
-      // Power = 1e-6 * population + 0.1 * (number of colonies). Happiness is the
-      // AVERAGE across the species' colonies (each colony's is already ±100).
+      // Military units per player, gated by the same per-rival intel rule used
+      // for colonies/buildings: a rival's units count only once the human can see
+      // at least one of that rival's colonies (the human always counts their own).
+      for (const u of (gameState.units || [])) {
+        const r = byOwner.get(u.owner);
+        if (!r) continue;
+        if (!r.me && !knownRival.get(u.owner)) continue;
+        r.military += 1;
+      }
+      // Power = 1e-5 * population + 0.1 * (number of colonies) + 0.5 * (number of
+      // military units). Happiness is the AVERAGE across the species' colonies
+      // (each colony's is already ±100).
       for (const r of rows) {
         r.population = r._pop;
-        r.power = 1e-5 * r._pop + 0.1 * r.colonies;
+        r.power = 1e-5 * r._pop + 0.1 * r.colonies + 0.5 * r.military;
         r.happiness = r.colonies ? (r.happiness / r.colonies) : 0;
       }
       return rows;
