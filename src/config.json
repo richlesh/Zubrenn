@@ -2367,7 +2367,31 @@
     "commitRatioDefault": 0.6,
     "recaptureCommitRatio": 0.6,
     "minColonyDefense": 1,
-    "razeMinAggression": 5
+    "razeMinAggression": 5,
+    // GRUDGE targeting (opinion-driven vendetta): when an AI's opinion of
+    // another owner is at/below grudgeOpinionThreshold, it prefers to attack
+    // them (e.g. the species that took its colony). grudgePriority is the base
+    // targeting-priority bonus for a grudge target (scaled by how deep the
+    // hostility runs).
+    "grudgeOpinionThreshold": -40,
+    "grudgePriority": 100,
+    // COALITION: weaker species gang up on the runaway leader. An owner counts
+    // as the leader-to-pile-on when its rating is >= coalitionLeaderRatingFactor
+    // times the attacking AI's rating; coalitionPriority is the targeting bonus
+    // for the leader. Even non-aggressive species will strike a coalition or
+    // grudge target (but won't otherwise start a war of conquest).
+    "coalitionLeaderRatingFactor": 1.5,
+    "coalitionPriority": 60
+  },
+
+  // Opinion deltas for diplomatic/military acts (-100..100 scale). Larger
+  // negative = a harsher, longer-lasting grudge. colonyLost is applied to a
+  // defender's opinion of whoever captures/razes one of its colonies.
+  "opinion": {
+    "pactAgreed": 10,
+    "pactBroken": -20,
+    "attack": -50,
+    "colonyLost": -60
   },
 
   // Victory conditions. Each type can be toggled independently; set

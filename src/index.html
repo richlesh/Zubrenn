@@ -11601,6 +11601,17 @@
         // Aggression at/above which a colony with no land survivors to hold a
         // conquered colony RAZES it (others leave it neutral).
         razeMinAggression: num(c.razeMinAggression, 5),
+        // GRUDGE targeting: opinion at/below this (toward an owner) marks that
+        // owner as a grudge target the AI prefers to attack; grudgePriority is
+        // the targeting-priority bonus added for such a target.
+        grudgeOpinionThreshold: num(c.grudgeOpinionThreshold, -40),
+        grudgePriority: num(c.grudgePriority, 100),
+        // COALITION: weaker species gang up on the runaway leader. An owner is a
+        // coalition target when its rating is >= coalitionLeaderRatingFactor x
+        // this AI's rating (the leader clearly outclasses it); coalitionPriority
+        // is the targeting-priority bonus added for the leader.
+        coalitionLeaderRatingFactor: num(c.coalitionLeaderRatingFactor, 1.5),
+        coalitionPriority: num(c.coalitionPriority, 60),
       };
     }
     function aiMilitaryStep(pi) {
@@ -11698,14 +11709,68 @@
       // human). Aggression 4-5 prey on the WEAKEST reachable enemy to capture
       // it; 3 hits the nearest. Higher aggression commits more readily.
       if (!struck && aggressive) {
-        if (aiLaunchStrike(pi)) acted = true;
+        if (aiLaunchStrike(pi)) { acted = true; struck = true; }
+      }
+      // --- (6) EVERY AI (incl. peaceful species): join a COALITION against the
+      // runaway leader or act on a persistent GRUDGE — but only against such a
+      // priority target (requirePriority), so a timid species won't otherwise
+      // start a war. One strike per turn, so skip if already striking above.
+      if (!struck) {
+        if (aiLaunchStrike(pi, true)) acted = true;
       }
       return acted;
     }
     // For an aggressive AI, find the nearest reachable enemy/human colony that it
     // has eligible full-strength units to attack, assemble those units, and
     // launch a strike force (one per turn). Returns true if a strike launched.
-    function aiLaunchStrike(pi) {
+    // The current "runaway leader" among living owners — the one with the
+    // highest rating (same composite used for the rating victory). null if there
+    // are no living owners. Cached per turn so repeated calls are cheap.
+    function runawayLeaderOwner() {
+      const turn = gameState.turn || 0;
+      if (gameState._leaderCacheTurn === turn && gameState._leaderCacheOwner !== undefined) {
+        return gameState._leaderCacheOwner;
+      }
+      let best = null, bestR = -Infinity;
+      for (const o of (typeof livingOwners === 'function' ? livingOwners() : activeOwners())) {
+        const r = (typeof ownerRating === 'function') ? ownerRating(o) : 0;
+        if (r > bestR) { bestR = r; best = o; }
+      }
+      gameState._leaderCacheTurn = turn;
+      gameState._leaderCacheOwner = best;
+      return best;
+    }
+    // Targeting-priority bonus `pi` feels toward attacking `targetOwner`,
+    // combining a persistent GRUDGE (low opinion toward the conqueror) and
+    // COALITION behavior (weaker species gang up on the runaway leader). Higher
+    // = more eager to strike that owner. Neutral/own targets score 0.
+    function targetPriority(pi, targetOwner) {
+      if (targetOwner == null || targetOwner === indexToOwner(pi)) return 0;
+      const cfg = aiMilCfg();
+      let score = 0;
+      // Grudge: very low opinion of the target => prefer attacking them, scaled
+      // by how far below the threshold the opinion sits.
+      const toIdx = ownerToIndex(targetOwner);
+      if (toIdx >= 0) {
+        const op = getOpinion(pi, toIdx);
+        if (op <= cfg.grudgeOpinionThreshold) {
+          const depth = (cfg.grudgeOpinionThreshold - op) / 100; // 0..~1.6
+          score += cfg.grudgePriority * (1 + depth);
+        }
+      }
+      // Coalition: if the target is the runaway leader and clearly outclasses
+      // this AI, pile on.
+      const leader = runawayLeaderOwner();
+      if (leader != null && leader === targetOwner) {
+        const myRating = ownerRating(indexToOwner(pi));
+        const leaderRating = ownerRating(leader);
+        if (myRating > 0 ? leaderRating >= myRating * cfg.coalitionLeaderRatingFactor : leaderRating > 0) {
+          score += cfg.coalitionPriority;
+        }
+      }
+      return score;
+    }
+    function aiLaunchStrike(pi, requirePriority) {
       const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi && !b.inTransit);
       if (!myColonies.length) return false;
       const aggression = aiTraitsOf(pi).aggression;
@@ -11722,18 +11787,25 @@
         .map((t) => {
           let best = Infinity;
           for (const c of myColonies) best = Math.min(best, hexDistance(c.x, c.y, t.x, t.y));
-          return { target: t, dist: best, def: colonyDefenseStrength(t) };
+          return { target: t, dist: best, def: colonyDefenseStrength(t), prio: targetPriority(pi, t.owner) };
         })
-        .sort((a, b) => preyOnWeak
-          ? (a.def - b.def) || (a.dist - b.dist)   // weakest first, then nearest
-          : (a.dist - b.dist));                     // nearest first
+        .sort((a, b) =>
+          // Grudge/coalition targets first (highest priority), then the usual
+          // weakest-or-nearest ordering as a tiebreak.
+          (b.prio - a.prio)
+          || (preyOnWeak ? (a.def - b.def) || (a.dist - b.dist)   // weakest, then nearest
+                         : (a.dist - b.dist)));                    // nearest first
       // How much stronger than the defender the strike force must look before it
       // commits. The more aggressive the species, the smaller the margin it
       // demands (4-5 press attacks a merely-aggressive 3 would hold back from).
       const commitRatio = aggression >= 5 ? milCfg.commitRatioAgg5
         : aggression >= 4 ? milCfg.commitRatioAgg4
         : milCfg.commitRatioDefault;
-      for (const { target } of targets) {
+      for (const { target, prio } of targets) {
+        // In requirePriority mode (a non-aggressive AI joining a coalition or
+        // acting on a grudge) only strike targets with a positive motive — don't
+        // start an ordinary war of conquest.
+        if (requirePriority && !(prio > 0)) continue;
         // Gather this AI's eligible, idle, full-strength units from each colony.
         const members = [];
         for (const col of myColonies) {
@@ -13954,7 +14026,7 @@
     }
     // Named opinion deltas for diplomatic acts, from CONFIG.opinion with safe
     // fallbacks (so older configs/saves still behave sensibly).
-    const _OPINION_DEFAULTS = { pactAgreed: 10, pactBroken: -20, attack: -50 };
+    const _OPINION_DEFAULTS = { pactAgreed: 10, pactBroken: -20, attack: -50, colonyLost: -60 };
     function opinionDelta(name) {
       const o = (CONFIG && CONFIG.opinion) || {};
       const v = o[name];
@@ -17894,6 +17966,15 @@
       const humanInvolved = attackerOwner === 'human' || defenderOwner === 'human';
       // Apply a chosen outcome (shared by human + AI paths).
       const apply = (choice) => {
+        // Losing a colony breeds a lasting grudge: the defender's opinion of the
+        // attacker plummets (on top of the per-attack penalty), making them
+        // persistently hostile and biasing their military AI to target the
+        // conqueror (see targetPriority). Opinion is saved, so the grudge sticks.
+        if ((choice === 'capture' || choice === 'raze') && defenderOwner != null
+            && attackerOwner != null && defenderOwner !== attackerOwner) {
+          const dIdx = ownerToIndex(defenderOwner), aIdx = ownerToIndex(attackerOwner);
+          if (dIdx >= 0 && aIdx >= 0) adjustOpinion(dIdx, aIdx, opinionDelta('colonyLost'));
+        }
         if (choice === 'capture' && landSurvivors.length) {
           captureColony(targetBio, attackerOwner, cfg);
           if (humanInvolved) notify(`${playerDisplayName(playerIndexOf(attackerOwner))} captured ${targetName}.`);
@@ -18185,12 +18266,22 @@
     }
     // A composite rating/score for an owner (config-weighted).
     function ownerRating(owner) {
+      // Per-turn memo: targeting (targetPriority) and the leader scan call this
+      // repeatedly; ratings only drift slowly, so a per-turn snapshot is fine.
+      const turn = gameState.turn || 0;
+      if (!gameState._ratingCache || gameState._ratingCacheTurn !== turn) {
+        gameState._ratingCache = {}; gameState._ratingCacheTurn = turn;
+      }
+      const ck = String(owner);
+      if (Object.prototype.hasOwnProperty.call(gameState._ratingCache, ck)) return gameState._ratingCache[ck];
       const w = victoryCfg().ratingWeights;
       const pop = ownerPopulation(owner);
       const treasury = Math.max(0, Number(federationOwnedOf(owner).wealth) || 0);
       const colonies = ownerColonyCount(owner);
       const landCells = Math.round(ownerLandControlFraction(owner) * totalHabitableLandCells());
-      return pop * w.population + treasury * w.treasury + colonies * w.colonies + landCells * w.landCells;
+      const rating = pop * w.population + treasury * w.treasury + colonies * w.colonies + landCells * w.landCells;
+      gameState._ratingCache[ck] = rating;
+      return rating;
     }
     // Display name for an owner in victory text (the human reads as "You").
     function victoryOwnerName(owner) {
