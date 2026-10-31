@@ -2340,6 +2340,36 @@
     "razeOpinionPenalty": 10
   },
 
+  // Built-in AI military tuning. Controls how the computer players build up,
+  // attack, defend, and reclaim colonies. Aggression is each species' 1-5 trait.
+  //   aggressiveMinAggression - minimum aggression to build up forces and launch
+  //                             offensive strikes (3-5 are "aggressive").
+  //   preyOnWeakMinAggression - at/above this aggression the AI targets the
+  //                             WEAKEST reachable enemy colony (lowest defense)
+  //                             instead of the nearest — preying on weak
+  //                             neighbours and a weakly-defended player.
+  //   commitRatioAgg5/Agg4/Default - a strike is only launched when the force's
+  //                             attack strength >= defender defense x this ratio
+  //                             (by aggression 5 / 4 / everyone else). Lower =
+  //                             more willing to attack with a smaller edge.
+  //   recaptureCommitRatio    - same margin for a strike that RECLAIMS a colony
+  //                             the AI recently lost.
+  //   minColonyDefense        - a colony is reinforced from elsewhere until it
+  //                             has at least this much worked/stationed defense.
+  //   razeMinAggression       - when a conquering AI has no land units to hold a
+  //                             colony, species at/above this aggression raze it;
+  //                             others leave it neutral.
+  "aiMilitary": {
+    "aggressiveMinAggression": 3,
+    "preyOnWeakMinAggression": 4,
+    "commitRatioAgg5": 0.4,
+    "commitRatioAgg4": 0.5,
+    "commitRatioDefault": 0.6,
+    "recaptureCommitRatio": 0.6,
+    "minColonyDefense": 1,
+    "razeMinAggression": 5
+  },
+
   // Default Federation tax rate (happiness cost per colony that funds the
   // Federation treasury); the New Game/Federation UI can override per game.
   "federationTaxRate": 2,

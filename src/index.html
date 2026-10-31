@@ -11568,11 +11568,37 @@
     //      force at the nearest reachable enemy/human colony (reusing the same
     //      launchStrikeForce + battle resolver the human uses). Returns true if
     //      it took any military action.
+    // Tunable AI-military knobs, from CONFIG.aiMilitary with safe fallbacks that
+    // preserve the previous hardcoded behavior.
+    function aiMilCfg() {
+      const c = (CONFIG && CONFIG.aiMilitary) || {};
+      const num = (v, d) => (typeof v === 'number' && Number.isFinite(v)) ? v : d;
+      return {
+        // Minimum aggression to build up and launch offensive strikes.
+        aggressiveMinAggression: num(c.aggressiveMinAggression, 3),
+        // Minimum aggression to prey on the WEAKEST enemy (vs. the nearest).
+        preyOnWeakMinAggression: num(c.preyOnWeakMinAggression, 4),
+        // Strike commit margins: force attack-strength must be >= defender
+        // defense x ratio before the AI commits. Lower = more willing.
+        commitRatioAgg5: num(c.commitRatioAgg5, 0.4),
+        commitRatioAgg4: num(c.commitRatioAgg4, 0.5),
+        commitRatioDefault: num(c.commitRatioDefault, 0.6),
+        // Commit margin for a recapture (reclaim-lost-colony) strike.
+        recaptureCommitRatio: num(c.recaptureCommitRatio, 0.6),
+        // A colony wants at least this much stationed/worked defense strength
+        // before the AI stops reinforcing it from elsewhere.
+        minColonyDefense: num(c.minColonyDefense, 1),
+        // Aggression at/above which a colony with no land survivors to hold a
+        // conquered colony RAZES it (others leave it neutral).
+        razeMinAggression: num(c.razeMinAggression, 5),
+      };
+    }
     function aiMilitaryStep(pi) {
       const p = gameState.players && gameState.players[pi];
       if (!p || p.kind !== 'ai' || !p.placed) return false;
+      const milCfg = aiMilCfg();
       const aggression = aiTraitsOf(pi).aggression;
-      const aggressive = aggression >= 3;          // 3-5: build up & attack
+      const aggressive = aggression >= milCfg.aggressiveMinAggression;   // build up & attack
       let acted = false;
       const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi && !b.inTransit);
       if (!myColonies.length) return false;
@@ -11634,7 +11660,7 @@
       // --- (3) EVERY AI: station defenders in weakly-defended colonies by
       // deploying an idle, full-strength unit from a better-defended colony.
       // "At least station military there from another colony."
-      const MIN_DEF = 1;                                        // a colony wants >=1 defensive strength
+      const MIN_DEF = milCfg.minColonyDefense;                  // a colony wants >= this defensive strength
       for (const col of myColonies) {
         if (colonyDefenseStrength(col) >= MIN_DEF) continue;    // already defended
         // Find an idle full-strength unit elsewhere whose home colony keeps some
@@ -11673,13 +11699,14 @@
       const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi && !b.inTransit);
       if (!myColonies.length) return false;
       const aggression = aiTraitsOf(pi).aggression;
+      const milCfg = aiMilCfg();
       // Candidate targets: any colony NOT owned by this AI (other AIs, the human,
       // or neutral biodomes). Highly aggressive species (4-5) go after the
       // WEAKEST reachable enemy colony (lowest defense) to capture it — picking
       // on weaker neighbours and a weakly-defended player — with distance as a
       // tie-breaker. Merely aggressive species (3) stay opportunistic and hit
       // the NEAREST target.
-      const preyOnWeak = aggression >= 4;
+      const preyOnWeak = aggression >= milCfg.preyOnWeakMinAggression;
       const targets = gameState.buildings
         .filter((b) => b.type === 1 && !b.inTransit && b.owner !== pi)
         .map((t) => {
@@ -11693,7 +11720,9 @@
       // How much stronger than the defender the strike force must look before it
       // commits. The more aggressive the species, the smaller the margin it
       // demands (4-5 press attacks a merely-aggressive 3 would hold back from).
-      const commitRatio = aggression >= 5 ? 0.4 : aggression >= 4 ? 0.5 : 0.6;
+      const commitRatio = aggression >= 5 ? milCfg.commitRatioAgg5
+        : aggression >= 4 ? milCfg.commitRatioAgg4
+        : milCfg.commitRatioDefault;
       for (const { target } of targets) {
         // Gather this AI's eligible, idle, full-strength units from each colony.
         const members = [];
@@ -11724,6 +11753,7 @@
     function aiRecaptureStrike(pi) {
       const myColonies = gameState.buildings.filter((b) => b.type === 1 && b.owner === pi && !b.inTransit);
       if (!myColonies.length) return false;
+      const recaptureRatio = aiMilCfg().recaptureCommitRatio;
       // Colonies formerly ours, now held by someone else, nearest first.
       const targets = gameState.buildings
         .filter((b) => b.type === 1 && !b.inTransit && b.owner !== pi && b._priorOwner === pi)
@@ -11744,7 +11774,7 @@
         if (!members.length) continue;
         const atkTotal = members.reduce((s, m) => s + unitEffAttack(m.unit), 0);
         const defTotal = colonyDefenseStrength(target);
-        if (atkTotal < Math.max(1, defTotal * 0.6)) continue;   // wait until strong enough
+        if (atkTotal < Math.max(1, defTotal * recaptureRatio)) continue;   // wait until strong enough
         _strikeForceSeq++;
         const name = `${(gameState.players[pi] && gameState.players[pi].name) || 'AI'} Reclamation Force ${_strikeForceSeq}`;
         launchStrikeForce(name, target, members);
@@ -17844,7 +17874,7 @@
         // no land survivors the colony can't be held: the most aggressive
         // species (5) raze it to deny it to the enemy; others leave it neutral.
         if (landSurvivors.length) { apply('capture'); return; }
-        const veryAggressive = aiTraitsOf(playerIndexOf(attackerOwner)).aggression >= 5;
+        const veryAggressive = aiTraitsOf(playerIndexOf(attackerOwner)).aggression >= aiMilCfg().razeMinAggression;
         apply(veryAggressive ? 'raze' : 'leave');
         return;
       }
