@@ -13091,11 +13091,41 @@
       // Multiplier buildings are useless on a zero-base tile: a Farm multiplies
       // the cell's food (base + terrain-bonus), a Mine multiplies its material —
       // so a Farm needs food>0 and a Mine needs material>0 at that cell.
-      const farmCode = _bldgCode('farm'), mineCode = _bldgCode('mine');
+      const farmCode = _bldgCode('farm');
+      const mineBaseCode = _bldgCode('mine');
+      // The "mine family": the Mine plus every building declared equivalentTo the
+      // Mine (Quarry, Solar Salt Works). The early plan reserves ONE material-
+      // storage building and builds whichever family member is actually
+      // buildable on the reserved cell — so a colony with no mountain (can't
+      // build the Mine) still gets a Quarry/Salt Works and its material storage.
+      // Ordered by material storage (desc) so the richest store is preferred.
+      const mineFamily = (function () {
+        const fam = [];
+        for (const t of buildingTypeCodes()) {
+          if (t === mineBaseCode || buildingEquivalentCode(t) === mineBaseCode) fam.push(t);
+        }
+        if (mineBaseCode != null && !fam.includes(mineBaseCode)) fam.push(mineBaseCode);
+        const matStore = (t) => (((buildingType(t) || {}).storage || {}).material || 0);
+        fam.sort((a, b) => matStore(b) - matStore(a));
+        return fam;
+      })();
+      const isMineFamily = (t) => mineFamily.includes(t);
+      // The best buildable mine-family variant for a cell (terrain/other/prereq/
+      // afford all checked via canPlaceTypeAt + hasPrerequisitesAt), or null.
+      const mineVariantFor = (c) => {
+        for (const t of mineFamily) {
+          if (canPlaceTypeAt(t, c.x, c.y, col.owner).ok && hasPrerequisitesAt(t, c.x, c.y, col.owner)) return t;
+        }
+        return null;
+      };
+      // Legacy alias: `mineCode` now means "any mine-family member" in the
+      // suitability/order checks below; the actual placed type is resolved
+      // per-cell via mineVariantFor.
+      const mineCode = mineBaseCode;
       const cellSuitable = (type, c) => {
         const prod = cellProduction(c.x, c.y, false, col.owner); // { f, m, e, h }
         if (type === farmCode) return (prod.f || 0) > 0;
-        if (type === mineCode) return (prod.m || 0) > 0;
+        if (isMineFamily(type)) return (prod.m || 0) > 0;
         return true;
       };
       // A Mine must go on the cell with the HIGHEST material, and a Farm on the
@@ -13118,17 +13148,21 @@
       // land cell for the Mine so the +200 material storage (and the Factory it
       // unlocks) is always placed. A Mine on a zero-material tile produces little
       // material but still provides the storage that funds expansion.
-      let mineBest = bestBy(landCells, 'm');
-      if (!mineBest) {
-        // Fallback: the best land cell the Mine can legally sit on (its terrain
-        // whitelist), so strict-order building never stalls on an unplaceable Mine.
-        const mineLand = landCells.filter((c) => terrainAllowedForBuilding(mineCode, terrainAt(c.x, c.y)));
-        if (mineLand.length) mineBest = mineLand[0];
-      }
+      // Reserve the cell for the material-storage building. Prefer the richest-
+      // material cell on which SOME mine-family variant (Mine/Quarry/Salt Works)
+      // can actually be built; if no cell has base material, fall back to any
+      // land cell where a family variant is buildable — so strict-order building
+      // never stalls on an unplaceable Mine and the colony always gets its +200
+      // material storage.
+      const mineCandidates = landCells.filter((c) => mineVariantFor(c) != null);
+      let mineBest = bestBy(mineCandidates, 'm');
+      if (!mineBest && mineCandidates.length) mineBest = mineCandidates[0];
       const mineKey = mineBest ? cellKey(mineBest.x, mineBest.y) : null;
+      // The specific family variant to place on the reserved cell (resolved once).
+      const mineVariantCode = mineBest ? mineVariantFor(mineBest) : null;
       const farmBest = bestBy(landCells.filter((c) => cellKey(c.x, c.y) !== mineKey), 'f');
       const poolFor = (type) => {
-        if (type === mineCode) return mineBest ? [mineBest] : [];
+        if (isMineFamily(type)) return mineBest ? [mineBest] : [];
         if (type === farmCode) return farmBest ? [farmBest] : [];
         if (type === dockCode) return seaCells.filter((c) => cellSuitable(type, c));
         // Solar/Factory: any suitable land cell EXCEPT the reserved Mine/Farm cells.
@@ -13147,6 +13181,13 @@
       // Order is preserved: solar, farm, mine, factory, then dock.
       const factoryCode = _bldgCode('factory');
       const placeableSeq = [];
+      // Substitute the resolved mine-family variant (Mine/Quarry/Salt Works) for
+      // the base Mine code in the sequence, so strict-order building places the
+      // variant that is actually buildable on the reserved cell. If none is
+      // buildable anywhere, drop the mine step (and, below, the Factory with it).
+      for (let i = 0; i < buildSeq.length; i++) {
+        if (buildSeq[i] === mineBaseCode) buildSeq[i] = (mineVariantCode != null) ? mineVariantCode : mineBaseCode;
+      }
       let landLeft = landCells.length, seaLeft = seaCells.length;
       let mineIncluded = false;
       for (const type of buildSeq) {
@@ -13159,7 +13200,7 @@
         // Suitable cell for this building must exist (Farm->food>0, Mine->material>0).
         if (!poolFor(type).length) continue;
         placeableSeq.push(type); landLeft--;
-        if (type === mineCode) mineIncluded = true;
+        if (isMineFamily(type)) mineIncluded = true;
       }
       if (!placeableSeq.length) return null;
       const need = placeableSeq.length;
