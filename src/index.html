@@ -1342,12 +1342,12 @@
       if (!aiPhaseActive()) _notifyTimer = setTimeout(_notifyShowNext, item.ms);
     }
     function dismissNotify() { _notifyShowNext(); } // advance / dismiss current
-    function notify(message, ms, key) {
+    function notify(message, ms, key, logOpts) {
       // Coalesce consecutive identical messages (avoids year-tick spam).
       const last = _notifyQueue[_notifyQueue.length - 1];
       if (last && last.message === message) return;
       // Record every user-facing message in the separate Game Log window.
-      try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(message); } catch (e) {}
+      try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(message, logOpts); } catch (e) {}
       // If a key is given, replace any QUEUED (not currently showing) message
       // with the same key so e.g. rapid "Year begins" ticks collapse to the
       // latest while important one-off messages (AI colonies) stay queued.
@@ -4209,18 +4209,28 @@
           _lastYear = y;
           _enqueue({ kind: "year", year: y });
         },
-        message(text) {
+        // Log a message. opts may include:
+        //   category: 'battle'|'diplomacy'|'economy'|'disaster'|'general' (for the
+        //             Game Log filter; default 'general').
+        //   jump: a target the Game Log can jump to — { x, y } to center the map,
+        //         or { species: <ownerIndex> } to open that species' Nexus page.
+        message(text, opts) {
           if (text == null) return;
           // Make sure the current year heads the log before the first message of
           // the turn, even if year() wasn't called yet.
           try { if (typeof currentYear === "function") this.year(currentYear()); } catch (e) {}
-          _enqueue({ kind: "message", text: String(text) });
+          const e = { kind: "message", text: String(text) };
+          if (opts && opts.category) e.category = String(opts.category);
+          if (opts && opts.jump) e.jump = opts.jump;
+          _enqueue(e);
         },
         // A military-battle message — styled red in the Game Log window.
-        battle(text) {
+        battle(text, opts) {
           if (text == null) return;
           try { if (typeof currentYear === "function") this.year(currentYear()); } catch (e) {}
-          _enqueue({ kind: "message", text: String(text), style: "battle" });
+          const e = { kind: "message", text: String(text), style: "battle", category: "battle" };
+          if (opts && opts.jump) e.jump = opts.jump;
+          _enqueue(e);
         },
         // Clear flushes immediately (and drops any queued entries) so the buffer
         // resets right away on a new game/load.
@@ -4513,7 +4523,7 @@
         gameState.buildings = gameState.buildings.filter((b) => !b._disbanded);
         for (const g of disbanded) {
           gameState.colonies = (gameState.colonies || []).filter((c) => !(c.x === g.x && c.y === g.y && c.owner === g.owner));
-          if (g.owner === 'human') notify(`${g.name || 'A colony'} was lost — its population reached zero.`);
+          if (g.owner === 'human') notify(`${g.name || 'A colony'} was lost — its population reached zero.`, undefined, undefined, { category: 'economy', jump: { x: g.x, y: g.y } });
         }
         badgeChanged = true;
         invalidateColonyConnectivity();
@@ -14320,8 +14330,8 @@
     // popup (used for "begin" events). "End" events and battle results use
     // notify() instead, which both pops a dialog and logs. Only events involving
     // the human are recorded (the Game Log is the player's record).
-    function diploLog(msg) {
-      try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(msg); } catch (e) {}
+    function diploLog(msg, jump) {
+      try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(msg, { category: 'diplomacy', jump: jump || null }); } catch (e) {}
     }
     // Whether an owner pair involves the human (so it is worth logging/popping).
     function pairInvolvesHuman(a, b) { return a === 'human' || b === 'human'; }
@@ -18189,7 +18199,7 @@
         const atkNm = ownerDisplayName(attackerOwner);
         const tgtNm = targetBio.name || 'a colony';
         const outcome = attackerWon ? 'succeeded' : 'was repelled';
-        try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.battle(`Battle: ${atkNm}'s ${sf.name} attacked ${tgtNm} — the attack ${outcome} (attacker lost ${atkLost}, defender lost ${defUnitLost} unit${defUnitLost === 1 ? '' : 's'} + ${defBldgLost} defense${defBldgLost === 1 ? '' : 's'}).`); } catch (e) {}
+        try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.battle(`Battle: ${atkNm}'s ${sf.name} attacked ${tgtNm} — the attack ${outcome} (attacker lost ${atkLost}, defender lost ${defUnitLost} unit${defUnitLost === 1 ? '' : 's'} + ${defBldgLost} defense${defBldgLost === 1 ? '' : 's'}).`, { jump: (targetBio ? { x: targetBio.x, y: targetBio.y } : null) }); } catch (e) {}
       }
       if (attackerWon) {
         finishWonBattle(targetBio, survivors, sf, lines, attackerOwner);
@@ -18228,10 +18238,10 @@
         }
         if (choice === 'capture' && landSurvivors.length) {
           captureColony(targetBio, attackerOwner, cfg);
-          if (humanInvolved) notify(`${playerDisplayName(playerIndexOf(attackerOwner))} captured ${targetName}.`);
+          if (humanInvolved) notify(`${playerDisplayName(playerIndexOf(attackerOwner))} captured ${targetName}.`, undefined, undefined, { category: 'battle', jump: { x: targetBio.x, y: targetBio.y } });
         } else if (choice === 'raze') {
           razeColony(targetBio, attackerOwner, cfg);
-          if (humanInvolved) notify(`${playerDisplayName(playerIndexOf(attackerOwner))} razed ${targetName}.`);
+          if (humanInvolved) notify(`${playerDisplayName(playerIndexOf(attackerOwner))} razed ${targetName}.`, undefined, undefined, { category: 'battle', jump: { x: targetBio.x, y: targetBio.y } });
           for (const u of survivors) recallUnit(u);
         } else {
           targetBio.owner = null; targetBio.ownerName = 'Neutral';
@@ -18638,8 +18648,9 @@
         anyChange = true;
         const where = col.name || cellLatLonLabel(col.x, col.y);
         const msg = `${type.name || 'Disaster'} struck ${where}${summary ? ` — ${summary}` : ''}.`;
-        if (col.owner === 'human') { try { notify(msg); } catch (e) {} }
-        else { try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(msg); } catch (e) {} }
+        const jump = { x: col.x, y: col.y };
+        if (col.owner === 'human') { try { notify(msg, undefined, undefined, { category: 'disaster', jump }); } catch (e) {} }
+        else { try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(msg, { category: 'disaster', jump }); } catch (e) {} }
       }
       if (anyChange) { try { if (hexMap && typeof hexMap.draw === 'function') hexMap.draw(); } catch (e) {} }
     }
@@ -18737,7 +18748,11 @@
       const o = opts || {};
       // Log every diplomacy-screen message (regardless of whether the human is
       // involved), so the Game Log is a complete diplomatic record.
-      if (o.logMsg) { try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(o.logMsg); } catch (e) {} }
+      if (o.logMsg) {
+        const jump = (o.portraitOwner != null && o.portraitOwner !== 'human')
+          ? { species: ownerToIndex(o.portraitOwner) } : null;
+        try { if (typeof gameLog !== 'undefined' && gameLog) gameLog.message(o.logMsg, { category: 'diplomacy', jump }); } catch (e) {}
+      }
       const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
       let body = bodyHtml;
       // Prefix a species portrait when requested and available.
@@ -19907,6 +19922,20 @@
     ipcRenderer.on("view-diplomacy", openDiplomacy);
     document.getElementById("diplomacy-close").addEventListener("click", closeDiplomacy);
     ipcRenderer.on("view-research", openResearch);
+    // A Game Log "jump to": center the map on a cell, or open a species' Nexus
+    // page, depending on the target the log entry carried.
+    ipcRenderer.on("log-jump", (_e, target) => {
+      try {
+        if (!target) return;
+        if (typeof target.x === 'number' && typeof target.y === 'number') {
+          if (hexMap && typeof hexMap.centerOnCell === 'function') hexMap.centerOnCell(target.x, target.y);
+        } else if (target.species != null) {
+          const owner = indexToOwner(target.species);
+          const doc = (typeof speciesNexusDoc === 'function') ? speciesNexusDoc(owner) : null;
+          if (doc) ipcRenderer.invoke('open-nexus', { doc });
+        }
+      } catch (err) { console.error('[log-jump] failed:', err); }
+    });
     { const el = document.getElementById("research-close"); if (el) el.addEventListener("click", closeResearch); }
     ipcRenderer.on("view-trades", openTrades);
     { const el = document.getElementById("trades-close"); if (el) el.addEventListener("click", closeTrades); }

@@ -440,6 +440,16 @@ ipcMain.handle("game-log-clear-request", () => {
   if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send("game-log-reset");
 });
 
+// A Game Log "jump to" request from the log window: forward the target to the
+// main game window (centers the map or opens a species' Nexus page) and focus
+// the game window so the result is visible.
+ipcMain.handle("game-log-jump", (_e, target) => {
+  if (mainWin && !mainWin.isDestroyed()) {
+    mainWin.webContents.send("log-jump", target || null);
+    try { mainWin.show(); mainWin.focus(); } catch (e) {}
+  }
+});
+
 function buildViewMenu() {
   const isMac = process.platform === "darwin";
   const ours = gameColonies.filter((c) => c.kind === "human");

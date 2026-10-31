@@ -52,12 +52,32 @@
     /* Military-battle messages stand out in red. */
     .log-msg.log-battle { color: #ff5a4d; font-weight: 600; }
     body.light .log-msg.log-battle { color: #c0392b; }
+    /* Clickable "jump to" link inside a log message (center map / open Nexus). */
+    .log-jump {
+      color: #6a9bd8; text-decoration: underline; cursor: pointer;
+      background: none; border: none; font: inherit; padding: 0;
+    }
+    .log-jump:hover { color: #9cc3f0; }
+    body.light .log-jump { color: #0a66c2; }
+    /* Rows hidden by the category filter. */
+    .log-msg.filtered { display: none; }
+    #filter { font: inherit; }
     #empty { color: #777; padding: 10px; font-style: italic; }
   </style>
 </head>
 <body>
   <div id="head">
     <span>Game Log</span>
+    <label style="font-weight:400; display:flex; align-items:center; gap:4px;">Filter:
+      <select id="filter" title="Show only entries of this category">
+        <option value="all">All</option>
+        <option value="battle">Battle</option>
+        <option value="diplomacy">Diplomacy</option>
+        <option value="disaster">Disasters</option>
+        <option value="economy">Economy</option>
+        <option value="general">Other</option>
+      </select>
+    </label>
     <button id="clear" type="button" title="Clear the log">Clear</button>
   </div>
   <div id="body"><div id="empty">No messages yet.</div></div>
@@ -103,9 +123,42 @@
         const d = document.createElement("div");
         d.className = "log-msg";
         if (entry.style === "battle") d.classList.add("log-battle");
+        const cat = entry.category || "general";
+        d.dataset.category = cat;
         d.textContent = String(entry.text == null ? "" : entry.text);
+        // A "jump to" affordance when the entry carries a target (map cell or
+        // species). Clicking asks the main process to focus the game window and
+        // center the map / open the species' Nexus page.
+        if (entry.jump && (typeof entry.jump.x === "number" || entry.jump.species != null)) {
+          const jump = entry.jump;
+          d.appendChild(document.createTextNode(" "));
+          const a = document.createElement("button");
+          a.type = "button";
+          a.className = "log-jump";
+          a.textContent = (jump.species != null) ? "↪ view" : "↪ jump";
+          a.title = (jump.species != null) ? "Open this species in the Nexus" : "Center the map here";
+          a.addEventListener("click", () => { try { ipcRenderer.invoke("game-log-jump", jump); } catch (e) {} });
+          d.appendChild(a);
+        }
+        applyFilterTo(d);
         append(d);
       }
+    }
+
+    // Category filter: show only entries matching the chosen category ("all"
+    // shows everything). Year headers are always shown.
+    let currentFilter = "all";
+    function applyFilterTo(el) {
+      if (!el || !el.classList || !el.classList.contains("log-msg")) return;
+      const cat = el.dataset.category || "general";
+      el.classList.toggle("filtered", currentFilter !== "all" && cat !== currentFilter);
+    }
+    function applyFilterAll() {
+      bodyEl.querySelectorAll(".log-msg").forEach(applyFilterTo);
+    }
+    {
+      const sel = document.getElementById("filter");
+      if (sel) sel.addEventListener("change", () => { currentFilter = sel.value || "all"; applyFilterAll(); });
     }
 
     // On open, the main process replays the buffered history as an array, then
