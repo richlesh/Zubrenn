@@ -18835,11 +18835,20 @@
         ? `You have won the battle for Zubrenn ${reason}.`
         : `${who} has won the battle for Zubrenn ${reason}.`;
       try {
-        diploScreen(title, body, {
+        const result = diploScreen(title, body, {
           portraitOwner: human ? null : owner,
           logMsg,
-          buttons: [{ value: 'ok', label: human ? 'Triumph!' : 'Onward', kind: human ? 'positive' : 'primary' }],
+          // "Continue" keeps playing; "End Game" stops the game here (sets
+          // _gameOver, which halts advanceTurn) for players who want to finish.
+          buttons: [
+            { value: 'ok', label: human ? 'Triumph!' : 'Onward', kind: human ? 'positive' : 'primary' },
+            { value: 'end', label: 'End Game', kind: 'danger' },
+          ],
         });
+        if (result && typeof result.then === 'function') {
+          result.then((val) => { if (val === 'end') gameState._gameOver = true; })
+            .catch(() => {});
+        }
       } catch (e) { console.error('[victory] dialog failed:', e); }
     }
     // Shared presenter for the diplomacy "screens" (war declared, species
@@ -18868,7 +18877,7 @@
         }
       }
       const buttons = o.buttons || [{ value: 'ok', label: 'OK', kind: 'primary' }];
-      try { showChoiceDialog(title, body, buttons); } catch (e) { console.error('[diploScreen] failed:', e); }
+      try { return showChoiceDialog(title, body, buttons); } catch (e) { console.error('[diploScreen] failed:', e); return Promise.resolve(null); }
     }
     // Diplomacy screen announcing that `attacker` has started a war with
     // `defender`. The displayed portrait is the ATTACKING species.
