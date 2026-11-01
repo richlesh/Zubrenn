@@ -9144,18 +9144,18 @@
       if (!host) return;
       _foundMode = true; _foundHost = host; _foundHoverPath = null;
       notify(`Founding a new colony from ${host.name || 'colony'} — click a land cell to plant it (Esc to cancel).`);
-      if (hexMap) hexMap.setOverlay(foundOverlayDraw);
+      refreshMapOverlay();
     }
     function cancelFoundColony() {
       _foundMode = false; _foundHost = null; _foundHoverPath = null;
-      if (hexMap) hexMap.setOverlay(null);
+      refreshMapOverlay();
     }
     // Recompute the previewed path to the hovered cell and redraw the overlay.
     function updateFoundPreview(hex) {
-      if (!_foundMode || !_foundHost || !hex) { _foundHoverPath = null; if (hexMap) hexMap.setOverlay(foundOverlayDraw); return; }
+      if (!_foundMode || !_foundHost || !hex) { _foundHoverPath = null; refreshMapOverlay(); return; }
       const pf = findMovementPath(_foundHost.x, _foundHost.y, hex.x, hex.y, _foundHost.owner);
       _foundHoverPath = pf ? pf.path : null;
-      if (hexMap) hexMap.setOverlay(foundOverlayDraw); // triggers redraw
+      refreshMapOverlay(); // triggers redraw (composite: shading/path + any attack swords)
     }
     // Overlay: draw a blue line connecting the midpoints of the path cells.
     function foundOverlayDraw(ctx, spacing, hexCenter, visible) {
@@ -9203,12 +9203,34 @@
       }
       ctx.restore();
     }
+    // Composite map overlay: draws whatever mode overlay is active (colony-launch
+    // placement shading/path, transport/canal planning) AND, on top, the pulsing
+    // "under attack" crossed-swords. Each sub-overlay self-guards on its mode, so
+    // calling all of them is safe. This is the SINGLE overlay installed on the
+    // renderer — previously the attack-overlay animation's 120ms setInterval kept
+    // calling setOverlay(_attackOverlay), which REPLACED the colony-launch overlay
+    // every tick and made the gray "unsuitable cell" shading flash on and off.
+    function _mapOverlayComposite(ctx, spacing, hexCenter, visible) {
+      try { foundOverlayDraw(ctx, spacing, hexCenter, visible); } catch (e) {}
+      try { transportOverlayDraw(ctx, spacing, hexCenter); } catch (e) {}
+      try { if (_coloniesUnderAttack().length) _attackOverlay(ctx, spacing, hexCenter); } catch (e) {}
+    }
+    // Install the composite overlay when ANY of its layers is active, else clear
+    // it. Idempotent — safe to call from mode changes or the attack-pulse timer.
+    function refreshMapOverlay() {
+      if (!hexMap || typeof hexMap.setOverlay !== 'function') return;
+      const anyTransport = (typeof _transportMode !== 'undefined' && _transportMode) || (typeof _canalMode !== 'undefined' && _canalMode)
+        || (typeof _transportPlannedPaths !== 'undefined' && _transportPlannedPaths && _transportPlannedPaths.length)
+        || (typeof _canalPlannedEdges !== 'undefined' && _canalPlannedEdges && _canalPlannedEdges.length);
+      const active = _foundMode || anyTransport || _coloniesUnderAttack().length > 0;
+      hexMap.setOverlay(active ? _mapOverlayComposite : null);
+    }
     async function confirmFoundColony(tx, ty) {
       const host = _foundHost;
       const v = foundColonyTargetValid(host, tx, ty);
       if (!v.ok) { notify(`Can't found a colony there: ${v.reason}.`); return; }
       // Clear the preview line immediately on click.
-      _foundHoverPath = null; if (hexMap) hexMap.setOverlay(null);
+      _foundHoverPath = null; refreshMapOverlay();
       const name = await openLaunchNameDialog();
       if (name == null) { cancelFoundColony(); return; } // cancelled
       // Warn before launching onto a PRISTINE feature — when the colony arrives
@@ -18385,15 +18407,17 @@
     function ensureAttackOverlay() {
       if (!hexMap || typeof hexMap.setOverlay !== 'function') return;
       if (!_coloniesUnderAttack().length) return;       // nothing to show yet
-      hexMap.setOverlay(_attackOverlay);
+      // Install the COMPOSITE overlay (mode overlays + attack swords) so the
+      // animation pulse never erases an active colony-launch / transport overlay.
+      refreshMapOverlay();
       if (_attackOverlayTimer == null) {
         _attackOverlayTimer = setInterval(() => {
           if (!hexMap || typeof hexMap.setOverlay !== 'function') { clearInterval(_attackOverlayTimer); _attackOverlayTimer = null; return; }
           if (!_coloniesUnderAttack().length) {
             clearInterval(_attackOverlayTimer); _attackOverlayTimer = null;
-            hexMap.setOverlay(null);                     // battle over -> remove the swords
+            refreshMapOverlay();                         // battle over -> drop swords, keep any mode overlay
           } else {
-            hexMap.setOverlay(_attackOverlay);           // redraw for the slow pulse
+            refreshMapOverlay();                         // redraw for the slow pulse (composite)
           }
         }, 120);                                         // ~8 fps is plenty for a slow pulse
       }
