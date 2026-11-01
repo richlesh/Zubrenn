@@ -1,7 +1,7 @@
 {
   // When true, after creating a new map show two debug dialogs: a terrain-type
   // breakdown and a terrain-bonus placement count. Set false to disable.
-  "debug": true,
+  "debug": false,
 
   // "terrain" restrictions on placement can be a list of specific terrains:
   //    "sea", "grassland", "hills", "forest", "jungle", "desert", "mountain-low",
@@ -2363,7 +2363,12 @@
     "maxRounds": 20,
     "captureDestroyMin": 0.1,
     "captureDestroyMax": 0.3,
-    "razeOpinionPenalty": 10
+    "razeOpinionPenalty": 10,
+    // Home-field advantage: the DEFENDING side's effective attack AND defense are
+    // multiplied by this in battle (units and defense buildings alike). 1.0 = no
+    // bonus; 1.2 = defenders fight at 120% (the default). Raising it makes
+    // colonies harder to take and makes attackers pay more to win.
+    "defenderBonus": 1.2
   },
 
   // Built-in AI military tuning. Controls how the computer players build up,

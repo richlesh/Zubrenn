@@ -18028,6 +18028,8 @@
         captureDestroyMin: Number.isFinite(+c.captureDestroyMin) ? +c.captureDestroyMin : 0.1,
         captureDestroyMax: Number.isFinite(+c.captureDestroyMax) ? +c.captureDestroyMax : 0.3,
         razeOpinionPenalty: Number.isFinite(+c.razeOpinionPenalty) ? +c.razeOpinionPenalty : 10,
+        // Defender home-field multiplier on effective attack & defense (>=0).
+        defenderBonus: (Number.isFinite(+c.defenderBonus) && +c.defenderBonus >= 0) ? +c.defenderBonus : 1.2,
       };
     }
     // Human colonies (operational biodomes), sorted by hex distance to a target.
@@ -18423,8 +18425,13 @@
       // remaining HP fraction back to manpower. HP/def are full each battle (no
       // cross-turn tracking).
       const atkC = attackers.map((u) => { const h = unitEffHp(u) || 0.0001; return { unit: u, hp: h, hp0: h, atk: unitEffAttack(u), def: unitEffDefense(u), building: false }; });
-      const defUnitC = defenderUnits.map((u) => { const h = unitEffHp(u) || 0.0001; return { unit: u, hp: h, hp0: h, atk: unitEffAttack(u), def: unitEffDefense(u), building: false }; });
-      const defBldgC = defenseBuildings.map((b) => { const h = buildingHp(b.type) || 0.0001; return { building: b, hp: h, hp0: h, atk: buildingAttack(b.type), def: buildingDefense(b.type) }; });
+      // The DEFENDER fights with a home-field advantage: its effective attack and
+      // defense are scaled by combat.defenderBonus (config-driven, default 1.2).
+      // Applied to both stationed defending units and defense buildings. HP is
+      // NOT scaled (the bonus represents fighting prowess, not extra manpower).
+      const defBonus = cfg.defenderBonus;
+      const defUnitC = defenderUnits.map((u) => { const h = unitEffHp(u) || 0.0001; return { unit: u, hp: h, hp0: h, atk: unitEffAttack(u) * defBonus, def: unitEffDefense(u) * defBonus, building: false }; });
+      const defBldgC = defenseBuildings.map((b) => { const h = buildingHp(b.type) || 0.0001; return { building: b, hp: h, hp0: h, atk: buildingAttack(b.type) * defBonus, def: buildingDefense(b.type) * defBonus }; });
       const defenders = defUnitC.concat(defBldgC);
       const rnd = () => 1 + (Math.random() * 2 - 1) * cfg.randomness; // [1-r, 1+r]
       const report = [];
