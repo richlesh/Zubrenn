@@ -5241,6 +5241,9 @@
       // click/Enter-dismissable). aiPhaseActive() is false now (pane hidden),
       // so _notifyShowNext arms the auto-advance timer as usual.
       if (!_notifyShowing && _notifyQueue.length > 0) _notifyShowNext();
+      // Show any queued "launch a new colony or convert to goods?" prompts for the
+      // human's managed colonies whose material filled during the AI/economy phase.
+      flushLaunchPrompts();
       _clearTurnStartTimers();
       stopIdleWatch();
       // Pre-plan every alien AI's upcoming turn now, in the background, from the
@@ -12846,6 +12849,38 @@
       }
       // B) Material full: work factory(ies); free a mine worker if needed.
       if (matCap > 0 && matStored >= matCap - EPS) {
+        // AI colony with a LAUNCH AVAILABLE: don't convert the banked material to
+        // goods — preserve it so the AI's own launch gate (aiPlayTurn / early
+        // planner) can spend it on a new biodome. Without this, Rule B would drain
+        // material below the 200 a launch needs and starve AI expansion.
+        if (col.owner !== 'human') {
+          const _pi = ownerToIndex(col.owner);
+          if (_pi >= 0) {
+            const _k = aiTraitKnobs(_pi);
+            if ((col.population || 0) >= _k.launchPop && canAffordBuildingAt(1, col.x, col.y, _pi)) {
+              return; // keep material banked for the AI launch gate
+            }
+          }
+        }
+        // HUMAN colony with a LAUNCH AVAILABLE: material is maxed, so the colony
+        // could either found a new colony (spend the material on a biodome) or
+        // convert that material into goods via the Factory. Ask the player which —
+        // ONCE — rather than silently converting. We queue the prompt (shown at
+        // the start of the human's turn, not mid-economy) and, until they choose,
+        // do NOT convert to goods (so the banked material is preserved for a
+        // possible launch). A standing "convert" choice (_prefConvertGoods) skips
+        // the prompt on later turns.
+        if (col.owner === 'human' && !col._prefConvertGoods) {
+          const minPop = ((CONFIG && CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3) * popUnitSize();
+          const launchAvailable = (col.population || 0) >= minPop && canAffordBuildingAt(1, col.x, col.y, 'human');
+          if (launchAvailable) {
+            if (!col._launchPromptQueued) {
+              col._launchPromptQueued = true;
+              _launchPromptQueue.push(cellKey(col.x, col.y));
+            }
+            return; // await the player's choice; keep material banked
+          }
+        }
         for (const k of factoryKeys) {
           if (isWorked(k)) continue;
           if (spare() <= 0) {
@@ -12857,6 +12892,42 @@
           if (spare() > 0) work(k);
         }
       }
+    }
+    // Queue of colony cell-keys (home key) for which a "launch vs convert" prompt
+    // is pending for the human player. Populated by balanceMineFactory during turn
+    // processing; drained by flushLaunchPrompts at the start of the human's turn
+    // (so the modal never interrupts mid-economy).
+    let _launchPromptQueue = [];
+    // Show the queued "Launch a new colony or convert material to goods?" dialogs,
+    // one at a time, at the start of the human's turn. For each pending colony that
+    // is still human-owned and still has a launch available:
+    //  - "Launch Colony" starts the normal found-colony targeting (beginFoundColony).
+    //  - "Convert to Goods" sets a standing preference so the manager converts the
+    //    surplus material to goods from now on without asking again.
+    function flushLaunchPrompts() {
+      if (!_launchPromptQueue.length) return;
+      const keys = _launchPromptQueue.slice();
+      _launchPromptQueue = [];
+      const minPop = ((CONFIG && CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3) * popUnitSize();
+      const showNext = (i) => {
+        if (i >= keys.length) return;
+        const [cx, cy] = String(keys[i]).split(',').map(Number);
+        const col = gameState.buildings.find((b) => b.type === 1 && b.owner === 'human' && b.x === cx && b.y === cy);
+        const next = () => showNext(i + 1);
+        if (!col) { next(); return; }
+        col._launchPromptQueued = false;
+        const launchAvailable = (col.population || 0) >= minPop && canAffordBuildingAt(1, col.x, col.y, 'human');
+        if (!launchAvailable) { next(); return; }   // state changed; skip
+        showConfirm(
+          `${col.name || 'Your colony'} has banked enough material and population to found a NEW colony. ` +
+          `Launch a new colony now, or keep the Factory running to convert the material into goods?`,
+          () => { beginFoundColony(col.x, col.y); next(); },
+          { title: 'Launch a new colony?',
+            okLabel: 'Launch Colony',
+            cancelLabel: 'Convert to Goods',
+            onCancel: () => { col._prefConvertGoods = true; next(); } });
+      };
+      showNext(0);
     }
     function managerAssignWorkers(col, manager, needs) {
       ensureWorked(col);
