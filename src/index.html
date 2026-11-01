@@ -6032,6 +6032,36 @@
       try { ensureAttackOverlay(); } catch (e) {}
       return true;
     }
+    // Stop and recall every in-progress strike force BETWEEN owners `a` and `b`
+    // (in either direction) — used when they agree peace or an alliance. Each
+    // participating unit stands down and returns to its origin. Returns the
+    // number of distinct strike forces canceled, and notifies the human if one
+    // of their own attacks (or an incoming attack on them) was called off.
+    function recallStrikeForcesBetween(a, b) {
+      if (a == null || b == null || a === b) return 0;
+      const canceledSfIds = new Set();
+      let humanAttackStopped = false, humanIncomingStopped = false;
+      // Snapshot first — cancelStrikeForUnit mutates unit state as we go.
+      const units = (gameState.units || []).filter((u) => u && u.strikeForce).slice();
+      for (const u of units) {
+        const sf = u.strikeForce; if (!sf) continue;
+        const attacker = u.owner;
+        const tgtBio = (gameState.buildings || []).find((bb) => bb.type === 1 && !bb.inTransit && bb.x === sf.targetX && bb.y === sf.targetY);
+        const defender = tgtBio ? tgtBio.owner : null;
+        const betweenAB = (attacker === a && defender === b) || (attacker === b && defender === a);
+        if (!betweenAB) continue;
+        if (attacker === 'human') humanAttackStopped = true;
+        if (defender === 'human') humanIncomingStopped = true;
+        if (cancelStrikeForUnit(u)) canceledSfIds.add(sf.id);
+      }
+      if (canceledSfIds.size) {
+        const other = (a === 'human') ? b : (b === 'human') ? a : null;
+        if (humanAttackStopped) { try { notify(`Your attack on ${ownerDisplayName(other)} was called off by the agreement — your forces are returning home.`); } catch (e) {} }
+        else if (humanIncomingStopped) { try { notify(`${ownerDisplayName(other)} has called off their attack — their forces are withdrawing.`); } catch (e) {} }
+        try { refreshMapOverlay(); } catch (e) {}
+      }
+      return canceledSfIds.size;
+    }
     // Remove a unit from the game (strength reached 0 or otherwise destroyed) and
     // clear any barracks link that points at it.
     function destroyUnit(u) {
@@ -14727,6 +14757,9 @@
       if (!r) return;
       const wasWar = !!r.war;
       r.war = false; r.warStartTurn = 0;
+      // Peace stops any attack in progress between the two parties — all inbound
+      // strike forces (either direction) stand down and return to their origin.
+      try { recallStrikeForcesBetween(a, b); } catch (e) {}
       // Peace ends a war (a diplomatic agreement) — log AND pop a dialog.
       if (wasWar && pairInvolvesHuman(a, b)) {
         const other = (a === 'human') ? b : a;
@@ -14741,6 +14774,9 @@
       if (kind === 'nonAggression') r.nonAggressionUntil = t;
       else if (kind === 'freeTravel') r.freeTravelUntil = t;
       else if (kind === 'alliance') r.allianceUntil = t;
+      // An alliance (like peace) halts any attack in progress between the two
+      // parties: all inbound strike forces stand down and return to origin.
+      if (kind === 'alliance') { try { recallStrikeForcesBetween(a, b); } catch (e) {} }
     }
     // Whether `owner` is at war with ANY other owner (used by war weariness).
     function ownerAtWarWithAny(owner) {
