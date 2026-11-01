@@ -12027,6 +12027,10 @@
       for (const r of (plan.remove || [])) {
         if (!Array.isArray(r)) continue;
         const [x, y] = r;
+        // Never demolish a foundational building (Solar/Farm/Factory/Mine/
+        // Barracks/Bank and their upgrades), even if the plan asks to.
+        const _rb = ownerBuildingAt(x, y, pi);
+        if (_rb && isFoundationBuildingType(_rb.type)) continue;
         if (!canAffordRemovalAt(x, y, pi)) continue;
         if (removeImprovement(x, y, pi)) acted = true;
       }
@@ -13070,6 +13074,10 @@
         if (b.type === 1) continue;                           // never the biodome
         if (b.removeTurns != null && b.removeTurns > 0) continue;
         if (buildingIsFederation(b.type)) continue;           // not colony-owned
+        // Never tear down a FOUNDATIONAL building (Solar/Farm/Factory/Mine/
+        // Barracks/Bank, incl. their upgrades) — these anchor the colony's
+        // storage and economy and must survive for it to grow and found again.
+        if (isFoundationBuildingType(b.type)) continue;
         // Current usefulness of this building to the manager. A building whose
         // output is all surplus (no current need) scores ~0 under the near-zero
         // weighting — that is the "excessive, unwarranted production" case.
@@ -13118,6 +13126,36 @@
     const EARLY_SEQUENCE_KEYS = ['solar panel', 'farm', 'factory', 'mine', 'barracks', 'bank'];
     function earlyPlanSequence() {
       return EARLY_SEQUENCE_KEYS.map((k) => _bldgCode(k)).filter((c) => c != null);
+    }
+    // The six FOUNDATIONAL building roles every colony keeps around its biodome
+    // (Solar Panel, Farm, Factory, Mine-family, Barracks, Bank) — resolved to
+    // their upgrade-family ROOT codes so upgrades count as the same role (a Solar
+    // Farm is still the "solar" foundation, a Megafactory still the "factory"
+    // one, an Agridome/Megafarm still the "farm" one, a Quarry/Salt Works still
+    // the "mine" one). These must NEVER be torn down by the manager's repurpose
+    // step, or the colony loses its storage/economy and can never found again.
+    function foundationRootCodes() {
+      const set = new Set();
+      for (const k of EARLY_SEQUENCE_KEYS) {
+        const c = _bldgCode(k);
+        if (c != null) set.add(c);
+      }
+      return set;
+    }
+    // True if `type` is one of the six foundational roles (following upgrade
+    // chains and `equivalentTo`, e.g. mine-family members). Used to protect the
+    // foundation from teardown.
+    function isFoundationBuildingType(type) {
+      if (type == null || type === 1) return false;
+      const roots = foundationRootCodes();
+      const root = buildingFamilyRoot(type);
+      if (roots.has(root)) return true;
+      // mine family (Quarry / Solar Salt Works) declare equivalentTo "mine".
+      const eq = buildingEquivalentCode(type);
+      if (eq != null && roots.has(eq)) return true;
+      const eqRoot = (eq != null) ? buildingEquivalentCode(root) : null;
+      if (eqRoot != null && roots.has(eqRoot)) return true;
+      return false;
     }
     const EARLY_RES = ['energy', 'food', 'goods', 'material', 'water', 'wealth', 'happiness'];
     // Project a colony's net per-year rates (all 7 panel resources) UNDER a
