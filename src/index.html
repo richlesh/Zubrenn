@@ -14325,6 +14325,10 @@
         description: "Demolish one of your own non-colony buildings at a cell (costs resources, takes a few turns).",
         parameters: { type: "object", properties: { x: { type: "integer" }, y: { type: "integer" } }, required: ["x", "y"] },
         run: (pi, { x, y }) => {
+          // Never demolish a foundational building (Solar/Farm/Factory/Mine/
+          // Barracks/Bank and their upgrades), even if asked.
+          const _fb = ownerBuildingAt(x, y, pi);
+          if (_fb && isFoundationBuildingType(_fb.type)) return { ok: false, error: "foundational buildings cannot be demolished" };
           if (!canAffordRemovalAt(x, y, pi)) return { ok: false, error: "cannot afford removal / nothing to remove" };
           return removeImprovement(x, y, pi) ? { ok: true } : { ok: false, error: "no removable building here" };
         },
