@@ -18,8 +18,8 @@ to the right.
 
 - [Zubrenn Story](zubrenn_story.md) — the history of colonization on Zubrenn
 - [How to Play](how_to_play.md) — turn flow, founding colonies, and controls
-- [Resources](resource_types.md) — the eight resources and the colony economy
 - [Terrain](terrain.md) — the eleven terrain types and what they yield
+- [Resources](resource_types.md) — the eight resources and the colony economy
 - [Terrain Bonus](terrain_bonus.md) — special resource deposits across the land
 - [Buildings](buildings.md) — every structure, its costs, upkeep, and output
 - [Technology](technology.md) — the tech tree and the buildings each tech unlocks
