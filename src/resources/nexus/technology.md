@@ -48,8 +48,8 @@ that far outproduces a single Solar Panel), the **Compressed‑Air Energy Store
 
 <span class="float-right">![plasma_physics](../techs/plasma_physics.png)</span>
 
-The study of plasma — a state of matter of ions and free electrons. An
-independent branch with no prerequisites, it opens the path to advanced
+The study of plasma — a state of matter of ions and free electrons. **Requires
+Applied Physics.** It opens the path to advanced
 energy‑field defenses. **Unlocks the Electro‑Magnetic
 Shield** — a colony point‑defense screen (which also requires Advanced
 Materials). The Shield's own upgrade, the Plasma Bubble, comes from Unified Field
