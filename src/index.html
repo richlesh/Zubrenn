@@ -12767,6 +12767,41 @@
       const rest = col.worked.filter((k) => k !== homeKey && !habSet.has(k));
       col.worked = [homeKey, ...habKeys.filter((k) => col.worked.includes(k)), ...rest];
     }
+    // Force-work the colony's MINE-FAMILY building(s) (Mine / Quarry / Solar Salt
+    // Works). A mine is the colony's only early source of MATERIAL STORAGE (+200)
+    // and material production; while UNWORKED it provides neither, so the colony
+    // stores 0 material and can never afford the Factory (75) or a new biodome
+    // (200) — which is exactly why an otherwise-complete colony failed to expand.
+    // Same shape as ensureHabitatsWorked: ensure each mine cell is worked, and if
+    // that exceeds capacity, evict the lowest-value non-home, non-mine worked cell.
+    function ensureMineWorked(col, manager, needs) {
+      ensureWorked(col);
+      const homeKey = cellKey(col.x, col.y);
+      const mineBaseCode = _bldgCode('mine');
+      if (mineBaseCode == null) return;
+      const isMineFam = (t) => t === mineBaseCode || buildingEquivalentCode(t) === mineBaseCode;
+      const mineKeys = colonyBuildings(col)
+        .filter((b) => isMineFam(b.type) && isOperational(b))
+        .map((b) => cellKey(b.x, b.y));
+      if (!mineKeys.length) return;
+      const mineSet = new Set(mineKeys);
+      for (const k of mineKeys) {
+        if (!col.worked.includes(k)) col.worked.push(k);
+      }
+      const cap = workCap(col);
+      const extrasCount = () => col.worked.filter((k) => k !== homeKey).length;
+      while (extrasCount() > cap) {
+        let worst = null, worstScore = Infinity;
+        for (const k of col.worked) {
+          if (k === homeKey || mineSet.has(k)) continue;       // never evict home or a mine
+          const [cx, cy] = k.split(',').map(Number);
+          const sc = managerCellScore(col, { x: cx, y: cy }, manager || 'growth', needs);
+          if (sc < worstScore) { worstScore = sc; worst = k; }
+        }
+        if (worst == null) break;                              // only home + mines left
+        col.worked = col.worked.filter((k) => k !== worst);
+      }
+    }
     function managerAssignWorkers(col, manager, needs) {
       ensureWorked(col);
       const homeKey = cellKey(col.x, col.y);
@@ -13680,6 +13715,9 @@
       // A Habitat only provides population storage when worked, and must always
       // be worked — force it here too (freeing a lower-value worker if needed).
       ensureHabitatsWorked(col, (col.manager && col.manager !== 'none') ? col.manager : 'growth', null);
+      // The Mine/Quarry must also always be worked — it is the colony's only
+      // material storage + production, needed to fund the Factory and expansion.
+      ensureMineWorked(col, (col.manager && col.manager !== 'none') ? col.manager : 'growth', null);
       // 1b) HEAL THE FOUNDATION. An early colony that is CELL-CONSTRAINED (no empty
       // control cell) but still lacks a material-storage building (Mine/Quarry/
       // Salt Works) or a Factory can never reach the full foundation on its own —
@@ -13974,6 +14012,9 @@
       // A Habitat only provides population storage when worked, and must always
       // be worked — force it (freeing a lower-value worker if at capacity).
       ensureHabitatsWorked(col, manager, needs);
+      // The Mine/Quarry must also always be worked — it is the colony's only
+      // material storage + production, needed to fund the Factory and expansion.
+      ensureMineWorked(col, manager, needs);
       // Recompute needs after assigning workers (production changed).
       const needs2 = colonyNeeds(col);
       const built = managerAutoBuild(col, manager, needs2);
