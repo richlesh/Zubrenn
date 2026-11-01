@@ -12802,6 +12802,62 @@
         col.worked = col.worked.filter((k) => k !== worst);
       }
     }
+    // Dynamically balance the MINE (material producer) against the FACTORY
+    // (material CONSUMER / goods producer) by storage state, for built-in managed
+    // colonies (AI and human). Runs after ensureMineWorked so it has the final
+    // say. Rules (per design):
+    //  A) If stored MATERIAL is 0, OR the Factory's GOODS storage is full, then
+    //     WORK the Mine/Quarry and UNWORK the Factory — stop consuming material we
+    //     don't have / making goods we can't store, and refill material instead.
+    //  B) Else if stored MATERIAL is at MAX, WORK the Factory (convert the surplus
+    //     material into goods); if there is no spare worker to staff it, UNWORK the
+    //     Mine to free one.
+    //  Otherwise leave the worker set as ensureMineWorked arranged it (mine worked).
+    function balanceMineFactory(col) {
+      if (!col) return;
+      ensureWorked(col);
+      const homeKey = cellKey(col.x, col.y);
+      const mineBaseCode = _bldgCode('mine');
+      const factoryCode = _bldgCode('factory');
+      if (mineBaseCode == null || factoryCode == null) return;
+      const isMineFam = (t) => t === mineBaseCode || buildingEquivalentCode(t) === mineBaseCode;
+      const mines = colonyBuildings(col).filter((b) => isMineFam(b.type) && isOperational(b));
+      const factories = colonyBuildings(col).filter((b) => b.type === factoryCode && isOperational(b));
+      if (!mines.length || !factories.length) return;   // need both to balance
+      const mineKeys = mines.map((b) => cellKey(b.x, b.y));
+      const factoryKeys = factories.map((b) => cellKey(b.x, b.y));
+      const isWorked = (k) => col.worked.includes(k);
+      const work = (k) => { if (!col.worked.includes(k)) col.worked.push(k); };
+      const unwork = (k) => { col.worked = col.worked.filter((w) => w !== k); };
+      const stored = ensureStored(col);
+      const cap = colonyMaxStorage(col);
+      const EPS = 1e-6;
+      const matStored = Number(stored.material) || 0;
+      const matCap = Number(cap.material) || 0;
+      const goodsStored = Number(stored.goods) || 0;
+      const goodsCap = Number(cap.goods) || 0;
+      const capUsed = () => col.worked.filter((k) => k !== homeKey).length;
+      const spare = () => Math.max(0, workCap(col) - capUsed());
+      // A) Refill material: work mine(s), stop factory(ies).
+      if (matStored <= EPS || (goodsCap > 0 && goodsStored >= goodsCap - EPS)) {
+        for (const k of factoryKeys) unwork(k);
+        for (const k of mineKeys) work(k);
+        return;
+      }
+      // B) Material full: work factory(ies); free a mine worker if needed.
+      if (matCap > 0 && matStored >= matCap - EPS) {
+        for (const k of factoryKeys) {
+          if (isWorked(k)) continue;
+          if (spare() <= 0) {
+            // Free a worker by unworking a mine (material is already maxed, so the
+            // mine's production is wasted right now). Unwork one mine per factory.
+            const victim = mineKeys.find((mk) => isWorked(mk));
+            if (victim != null) unwork(victim);
+          }
+          if (spare() > 0) work(k);
+        }
+      }
+    }
     function managerAssignWorkers(col, manager, needs) {
       ensureWorked(col);
       const homeKey = cellKey(col.x, col.y);
@@ -13718,6 +13774,8 @@
       // The Mine/Quarry must also always be worked — it is the colony's only
       // material storage + production, needed to fund the Factory and expansion.
       ensureMineWorked(col, (col.manager && col.manager !== 'none') ? col.manager : 'growth', null);
+      // Then balance mine vs factory workers by material/goods storage state.
+      balanceMineFactory(col);
       // 1b) HEAL THE FOUNDATION. An early colony that is CELL-CONSTRAINED (no empty
       // control cell) but still lacks a material-storage building (Mine/Quarry/
       // Salt Works) or a Factory can never reach the full foundation on its own —
@@ -14015,6 +14073,8 @@
       // The Mine/Quarry must also always be worked — it is the colony's only
       // material storage + production, needed to fund the Factory and expansion.
       ensureMineWorked(col, manager, needs);
+      // Then balance mine vs factory workers by material/goods storage state.
+      balanceMineFactory(col);
       // Recompute needs after assigning workers (production changed).
       const needs2 = colonyNeeds(col);
       const built = managerAutoBuild(col, manager, needs2);
