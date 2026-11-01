@@ -10709,10 +10709,12 @@
       for (const t of missingBonusTypes(pre.bonusType, col)) {
         missing.push(`a worked source of ${t}`);
       }
-      // Unresearched prerequisite techs.
+      // Unresearched prerequisite technologies — list each missing one by name
+      // so the player knows exactly what to research. (ownerHasTech is a no-op
+      // when research is disabled, so nothing is listed then.)
       if (Array.isArray(pre.tech)) {
         for (const t of pre.tech) {
-          if (!ownerHasTech(owner, t)) missing.push(`research: ${techName(t)}`);
+          if (!ownerHasTech(owner, t)) missing.push(`the ${techName(t)} technology (research it)`);
         }
       }
       return missing;
