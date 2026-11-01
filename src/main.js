@@ -942,7 +942,9 @@ function buildSaveObject(gameState) {
     transport: (gameState && gameState.transport) || null,
     // Military units (battalions) and the monotonic creation counter.
     units: (gameState && gameState.units) || [],
-    unitsCreated: (gameState && gameState.unitsCreated) || 0
+    unitsCreated: (gameState && gameState.unitsCreated) || 0,
+    // Per-owner creation counters (each player numbers its own units 1st, 2nd…).
+    unitsCreatedBy: (gameState && gameState.unitsCreatedBy) || {}
   };
 }
 
@@ -1134,7 +1136,8 @@ async function loadGame() {
     playerName: parsed.playerName || (parsed.players && parsed.players[0] && parsed.players[0].kind === 'human' && parsed.players[0].name) || "Human",
     transport: parsed.transport || null,
     units: parsed.units || [],
-    unitsCreated: parsed.unitsCreated || 0
+    unitsCreated: parsed.unitsCreated || 0,
+    unitsCreatedBy: parsed.unitsCreatedBy || {}
   };
   const send = () => {
     if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send("load-game", payload);

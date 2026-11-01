@@ -1270,7 +1270,8 @@
         playerName: gameState.playerName || "Human",
         transport: serializeTransport(),
         units: gameState.units || [],
-        unitsCreated: gameState.unitsCreated || 0
+        unitsCreated: gameState.unitsCreated || 0,
+        unitsCreatedBy: gameState.unitsCreatedBy || {}
       };
     };
 
@@ -5719,10 +5720,19 @@
       if (!gameState.units) gameState.units = [];
       const order = (gameState.unitsCreated || 0) + 1;
       gameState.unitsCreated = order;
+      // Per-OWNER creation ordinal: each player numbers its OWN units 1st, 2nd,
+      // 3rd… independently (the global `order` above is kept only for stable
+      // sorting and the unit id). Monotonic per owner, so numbers are not reused
+      // when a unit is lost.
+      if (!gameState.unitsCreatedBy || typeof gameState.unitsCreatedBy !== 'object') gameState.unitsCreatedBy = {};
+      const ownerKey = String(owner);
+      const ownerOrder = (gameState.unitsCreatedBy[ownerKey] || 0) + 1;
+      gameState.unitsCreatedBy[ownerKey] = ownerOrder;
       const u = {
         id: `u${order}-${Date.now()}`,
         order,
-        name: unitName(order, type),
+        ownerOrder,
+        name: unitName(ownerOrder, type),
         type: type,
         owner: owner,
         strength: 0,
@@ -20881,7 +20891,8 @@
         playerName: (extra && (extra.playerName || (extra.players && extra.players[0] && extra.players[0].kind === 'human' && extra.players[0].name))) || gameState.playerName || "Human",
         transport: (extra && extra.transport) || null,
         units: (extra && extra.units) || [],
-        unitsCreated: (extra && extra.unitsCreated != null) ? extra.unitsCreated : 0
+        unitsCreated: (extra && extra.unitsCreated != null) ? extra.unitsCreated : 0,
+        unitsCreatedBy: (extra && extra.unitsCreatedBy && typeof extra.unitsCreatedBy === 'object') ? extra.unitsCreatedBy : {}
       };
       if (gameState.players && gameState.players[0] && gameState.players[0].kind === 'human') {
         gameState.players[0].name = gameState.playerName;
@@ -21352,7 +21363,8 @@
             playerName: payload.playerName,
             transport: payload.transport || null,
             units: payload.units || [],
-            unitsCreated: payload.unitsCreated || 0
+            unitsCreated: payload.unitsCreated || 0,
+            unitsCreatedBy: payload.unitsCreatedBy || {}
           }
         );
       } catch (err) {
