@@ -1152,46 +1152,48 @@
     // game's difficulty (see applyGameDifficulty).
     let BASE_CONFIG = CONFIG;
 
-    // Difficulty factor d (1.0 easy .. 0.5 hard): MULTIPLY economy outputs
-    // (terrain base yields, building bonuses, river/water food & wealth bonuses,
-    // happinessGrowthPerUnit) by d; DIVIDE costs/efforts (movement, transport
-    // per-tile/edge costs, building buildCost, remove*Cost, units.population.costPerYear)
-    // by d. Returns a deep-scaled copy of `raw`; leaves `raw` untouched.
+    // Difficulty factor d (1.0 easy .. 0.5 hard). Difficulty scales ONLY the
+    // "bonus" maps in config.json — every "bonus" object, anywhere in the config
+    // (terrain types, buildings, terrain bonuses, units, etc.) — multiplying each
+    // of its values by d. Nothing else is touched (movement, costs, storage,
+    // adjacency bonuses, growth constants, etc. are left exactly as configured).
+    // Value handling within a bonus map:
+    //   - numbers         -> value * d
+    //   - "Nx" multiplier -> "(N*d)x" (the per-cell yield multipliers used by
+    //                        Farm/Mine/etc. scale proportionally)
+    //   - "worker"        -> left unchanged (a structural worker COUNT, not an
+    //                        economic yield; scaling it to a fraction would be wrong)
+    // Returns a deep-scaled copy of `raw`; leaves `raw` untouched.
     function applyDifficulty(raw, d) {
       const cfg = JSON.parse(JSON.stringify(raw || {}));
       if (!(d > 0) || d === 1) return cfg;        // easy / invalid -> no scaling
-      const mul = (o, keys) => { if (o) for (const k of keys) if (typeof o[k] === 'number') o[k] *= d; };
-      const divAll = (o) => { if (o) for (const k of Object.keys(o)) if (typeof o[k] === 'number') o[k] /= d; };
-      const RES = ['food', 'material', 'goods', 'energy', 'wealth', 'happiness', 'growth'];
-      // Terrain: ×base yields; ÷movement; ÷transport per-tile/edge costs.
-      for (const k of Object.keys(cfg.terrainTypes || {})) {
-        const t = cfg.terrainTypes[k];
-        mul(t.bonus, ['food', 'material']);
-        if (Array.isArray(t.movement)) t.movement = t.movement.map((v) => (typeof v === 'number' ? v / d : v));
-        divAll(t.roadCostPerTile); divAll(t.monorailCostPerTile); divAll(t.canalCostPerEdge);
-      }
-      // Buildings: ×bonus; ÷buildCost; (costPerYear/storage left as-is).
-      for (const k of Object.keys(cfg.buildingTypes || {})) {
-        const b = cfg.buildingTypes[k];
-        mul(b.bonus, RES);
-        divAll(b.buildCost);
-      }
-      // Global economy constants.
-      divAll(cfg.road && cfg.road.removeCost);
-      divAll(cfg.canal && cfg.canal.removeCost);
-      divAll(cfg.removeImprovementCost);
-      divAll(cfg.bridge && cfg.bridge.buildCost);
-      // Per-1,000-colonist population costs (now under
-      // units.population.costPerYear) are efforts/costs: DIVIDE them by d (harder
-      // difficulty -> higher costs). Leave `unitSize`/`speed` untouched.
-      if (cfg.units && cfg.units.population && cfg.units.population.costPerYear) {
-        divAll(cfg.units.population.costPerYear);
-      }
-      // Adjacency bonuses are economy outputs: scale their food/water/wealth by d.
-      mul(cfg.river && cfg.river.adjacentBonus, ['food', 'water', 'wealth']);
-      mul(cfg.canal && cfg.canal.adjacentBonus, ['food', 'water', 'wealth']);
-      mul(cfg.seaAdjacentBonus, ['food', 'water', 'wealth']);
-      if (typeof cfg.happinessGrowthPerUnit === 'number') cfg.happinessGrowthPerUnit *= d;
+      const scaleBonusMap = (bonus) => {
+        if (!bonus || typeof bonus !== 'object') return;
+        for (const k of Object.keys(bonus)) {
+          if (k === 'worker') continue;           // worker count, not a yield
+          const v = bonus[k];
+          if (typeof v === 'number') {
+            bonus[k] = v * d;
+          } else if (typeof v === 'string') {
+            const m = /^(-?\d*\.?\d+)x$/.exec(v.trim());   // "3x", "4.5x", "-0.25x"? (suffix multiplier)
+            if (m) bonus[k] = (parseFloat(m[1]) * d) + 'x';
+          }
+        }
+      };
+      // Recursively find every property named "bonus" (an object) and scale it.
+      const walk = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (Array.isArray(node)) { for (const el of node) walk(el); return; }
+        for (const key of Object.keys(node)) {
+          const val = node[key];
+          if (key === 'bonus' && val && typeof val === 'object' && !Array.isArray(val)) {
+            scaleBonusMap(val);
+          } else {
+            walk(val);
+          }
+        }
+      };
+      walk(cfg);
       return cfg;
     }
     // Re-derive CONFIG from BASE_CONFIG using the current game's difficulty
