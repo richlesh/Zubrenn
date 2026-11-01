@@ -398,8 +398,8 @@
       <!-- Per-pact auto accept/reject/ask policy. Four pacts down the left, each
            with three radios. Populated by renderDiplomacy(). -->
       <div id="diplomacy-policy-wrap">
-        <div class="section-title">Incoming pact requests</div>
-        <div class="hint">Choose how to handle each type of pact an alien proposes to you: automatically accept it, automatically reject it, or be asked each time (the current behavior).</div>
+        <div class="section-title">Auto Diplomat (Incoming pact requests)</div>
+        <div class="hint">Choose how to handle each type of pact an alien proposes to you: automatically accept it, automatically reject it, or be asked each time.</div>
         <table id="diplomacy-policy-table">
           <thead><tr><th>Pact</th><th>Auto accept</th><th>Auto reject</th><th>Ask always</th></tr></thead>
           <tbody id="diplomacy-policy-body"></tbody>
@@ -19504,6 +19504,7 @@
       { kind: 'nonAggression', label: 'Non-aggression' },
       { kind: 'freeTravel',    label: 'Free travel' },
       { kind: 'alliance',      label: 'Alliance' },
+      { kind: 'mapSwap',       label: 'Swap Maps' },
     ];
     function ensureDiploPolicy() {
       if (!gameState.diploPolicy || typeof gameState.diploPolicy !== 'object') gameState.diploPolicy = {};
@@ -20337,8 +20338,9 @@
     let _offerShowing = false;
     function queueTradeOffer(offer) {
       // Auto-handle incoming PACT offers per the human's per-pact policy set in
-      // the Diplomacy Screen. Only the four configurable pacts are auto-handled;
-      // anything else (trades, map swaps) always goes to the dialog.
+      // the Diplomacy Screen (Peace, Non-aggression, Free travel, Alliance, and
+      // Swap Maps). Resource TRADE offers are not a pact type and always go to
+      // the dialog.
       if (offer && offer.diplo && offer.deal && offer.deal.kind) {
         const policy = diploPolicyFor(offer.deal.kind);
         if (policy === 'accept') {
@@ -20363,7 +20365,7 @@
     }
     // Human-readable name for a pact kind (used in auto-accept notifications).
     function _pactLabel(kind) {
-      const m = { peace: 'peace', nonAggression: 'non-aggression', freeTravel: 'free-travel', alliance: 'alliance' };
+      const m = { peace: 'peace', nonAggression: 'non-aggression', freeTravel: 'free-travel', alliance: 'alliance', mapSwap: 'map-swap' };
       return m[kind] || String(kind || 'pact');
     }
     function showNextOffer() {
