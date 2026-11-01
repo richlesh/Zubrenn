@@ -13518,6 +13518,38 @@
     // building when the build queue is low. Returns true if it acted.
     function runEarlyPlanner(col) {
       ensureWorked(col);
+      // EXPANSION from within the early phase. A small colony is driven entirely
+      // by this planner (aiPlayTurn skips early colonies), so without this an AI
+      // colony parked at the EARLY_SIZE boundary would never found a new one. For
+      // an AI owner, if the colony has reached its expansionism-based launch
+      // population (knobs.launchPop = _aiLaunchPopLevel(exp) x popUnitSize, i.e.
+      // 8 - expansionism levels: exp5 -> level 3 ... exp1 -> level 7) AND can
+      // afford a biodome, scan for a site and launch — exactly like aiPlayTurn.
+      // The scan is throttled (aiLaunchSearchInterval) to keep AI turns cheap.
+      if (col.owner !== 'human') {
+        const _pi = ownerToIndex(col.owner);
+        if (_pi >= 0) {
+          const _knobs = aiTraitKnobs(_pi);
+          if ((col.population || 0) >= _knobs.launchPop && canAffordBuildingAt(1, col.x, col.y, _pi)) {
+            const _iv = Math.max(1, (CONFIG.aiLaunchSearchInterval != null) ? CONFIG.aiLaunchSearchInterval : 4);
+            const _tn = gameState.turn || 0;
+            const _ph = _iv > 1 ? (((col.x + col.y) % _iv) + _iv) % _iv : 0;
+            const _due = _iv <= 1 || (_tn % _iv) === _ph || (col._nextLaunchScanTurn != null && _tn >= col._nextLaunchScanTurn);
+            if (_due) {
+              col._nextLaunchScanTurn = _tn + _iv;
+              const _site = aiChooseLaunchSite(col, _pi, _knobs.launchSearchBonus);
+              if (_site) {
+                const _nm = (gameState.players[_pi] && gameState.players[_pi].name || 'Colony') + ' ' +
+                  (gameState.colonies.filter((c) => c.owner === _pi).length + 1);
+                if (launchColony(col, _site.x, _site.y, _pi, _nm)) {
+                  if (hexMap) hexMap.setBuildings(gameState.buildings);
+                  return true;   // founded a colony this turn — done with this colony
+                }
+              }
+            }
+          }
+        }
+      }
       // (Re)compute the plan if missing or stale (a planned cell got occupied by
       // something not in the plan, or a planned building was lost).
       let plan = col.earlyPlan;
