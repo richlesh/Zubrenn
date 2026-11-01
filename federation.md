@@ -16,7 +16,7 @@ Each alien species runs its own independent Federation on exactly the same rules
 
 ### The capital
 
-<img align="right" width="128" src="src/resources/128/federation.png">
+<img align="right" width="128" src="src/resources/256/federation.png">
 
 The **capital** is your **earliest-founded surviving colony**. It anchors the
 Federation: only colonies that are **network-connected to the capital** — by road

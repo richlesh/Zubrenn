@@ -39,7 +39,7 @@ still reach it by road, monorail, or river/canal.
   
 #### Roads
 
-<img align="right" width="128" src="src/resources/transportation/128/road.png">
+<img align="right" width="128" src="src/resources/transportation/256/road.png">
 
 Roads are the first and most accessible network, available to any settled
 colony. They are laid across the land along the most direct route, and the land
@@ -54,7 +54,7 @@ tile to **Remove Transportation**.
 
 #### River
 
-<img align="right" width="128" src="src/resources/transportation/128/river.png">
+<img align="right" width="128" src="src/resources/transportation/256/river.png">
 
 Rivers are nature's own highways, flowing from the mountains to the sea along
 the land's edges. Where a river doesn't reach, you can dig **Canals** to extend
@@ -68,7 +68,7 @@ time at a modest cost to the nearest colony.
 
 #### Sea
 
-<img align="right" width="128" src="src/resources/transportation/128/sea.png">
+<img align="right" width="128" src="src/resources/transportation/256/sea.png">
 
 The Sea opens the longest-reaching surface routes of all, letting colonies trade
 across open water and reach islands and far shores no road could span. A sea
@@ -83,7 +83,7 @@ building and maintaining the harbors at each end.
 
 #### Monorail
 
-<img align="right" width="128" src="src/resources/transportation/128/monorail.png">
+<img align="right" width="128" src="src/resources/transportation/256/monorail.png">
 
 The Monorail is the premium overland network: swifter to traverse than a road
 and far more resilient, but more expensive to lay and reserved for a
@@ -96,7 +96,7 @@ monorails weather the lean years far better than roads.
 
 #### Air
 
-<img align="right" width="128" src="src/resources/transportation/128/air.png">
+<img align="right" width="128" src="src/resources/transportation/256/air.png">
 
 The Air network needs no path laid across the map at all — only an **Air Field**
 at each colony. Any two of your colonies with Air Fields close enough to reach
@@ -109,7 +109,7 @@ that joins colonies with no continuous ground, water, or sea route between them.
 
 #### Space
 
-<img align="right" width="128" src="src/resources/transportation/128/space.png">
+<img align="right" width="128" src="src/resources/transportation/256/space.png">
 
 The Space network is the ultimate link, binding colonies together across the
 whole planet with **no limit on distance whatsoever**. It requires a

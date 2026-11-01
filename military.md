@@ -18,25 +18,25 @@ Bases are where military units are trained and military assets are built.  Units
 
 #### Barracks
 
-<img align="right" width="128" src="src/resources/buildings/128/barracks.png">
+<img align="right" width="128" src="src/resources/buildings/256/barracks.png">
 
 The Barracks trains military battalions for defense and offense, drawing recruits from the colony's own population. It requires a **Factory** before it can be built. A modest build with light upkeep, it also lifts morale a little. Each Barracks supports and rebuilds a single battalion, so a would‑be military power raises them across its colonies.
  
 #### Army Base
 
-<img align="right" width="128" src="src/resources/buildings/128/army_base.png">
+<img align="right" width="128" src="src/resources/buildings/256/army_base.png">
 
 The Army Base is the Barracks writ large — a full garrison that trains and fields several battalions at once. It is built as an **upgrade of an existing Barracks**, raised in its place, and still counts as a Barracks for anything that depends on one. It requires a **Solar Farm**, a **Farm**, and a **Factory** in the colony, a transport link to another of your colonies, and a colony population of at least 8,000. Where a Barracks supports a single infantry battalion, an Army Base fields **three infantry battalions and one armored (tank) battalion**, each recruited from the colony's population and rebuilt here when destroyed. A substantial build with heavier upkeep, it is the backbone of any colony meant to project real military force.
 
 #### Joint Base
 
-<img align="right" width="128" src="src/resources/buildings/128/joint_base.png">
+<img align="right" width="128" src="src/resources/buildings/256/joint_base.png">
 
 The Joint Base is the Army Base elevated to a combined‑arms command — a sprawling installation that trains ground and air forces side by side. It is built as an **upgrade of an existing Army Base**, raised in its place, and still counts as a Barracks (and Army Base) for anything that depends on one. It is a top‑tier capstone, requiring a **Solar Farm**, an **Agridome**, a **Megafactory**, and a **Bank** in the colony, a transport link to another of your colonies, and a colony population of at least 12,000. It fields the largest garrison in the game — **five infantry battalions, three armored (tank) battalions, and two fighter squadrons** — each recruited from the colony's population and rebuilt here when destroyed. A major build with substantial upkeep, it is the heart of a true military superpower.
 
 #### Naval Shipyard
 
-<img align="right" width="128" src="src/resources/buildings/128/naval_shipyard.png">
+<img align="right" width="128" src="src/resources/buildings/256/naval_shipyard.png">
 
 The Naval Shipyard is the colony's gateway to the sea — the **only** building that can construct **Escort** groups and **Carrier** battle groups. It is raised on a shallow‑sea tile within a colony that already has a **Port**, and is a demanding late‑game build: it also requires a **Solar Farm**, an **Agridome**, a **Nanofactory**, and a **Bank**, a transport link to another of your colonies, and a colony population of at least 15,000, with a heavy, broad upkeep to keep its slipways running. It builds up to two Escorts and one Carrier, drawn from the colony's population. A shipyard is also each naval unit's **home base**: a damaged ship is **repaired** (rebuilt toward full strength) only when it returns to the shipyard that built it. Escorts and Carriers may be **stationed at any colony with a Port**, but they can only be constructed and repaired at a Naval Shipyard.
  
@@ -162,7 +162,7 @@ units defend it together.
 
 #### Missile Battery
 
-<img align="right" width="128" src="src/resources/buildings/128/missile_battery.png">
+<img align="right" width="128" src="src/resources/buildings/256/missile_battery.png">
 
 The Missile Battery is the entry‑level colony defense — racks of guided
 interceptors that pepper an incoming strike force. Cheap and quick to raise with
@@ -172,7 +172,7 @@ defenses or a relief force are brought up.
 
 #### Laser Battery
 
-<img align="right" width="128" src="src/resources/buildings/128/laser_battery.png">
+<img align="right" width="128" src="src/resources/buildings/256/laser_battery.png">
 
 The Laser Battery trades missiles for directed‑energy weapons — banks of
 high‑powered lasers that burn through attackers at the speed of light. A little
@@ -182,7 +182,7 @@ is the natural step up for a colony expecting more than a token assault.
 
 #### Electro-Magnetic Shield
 
-<img align="right" width="128" src="src/resources/buildings/128/shield.png">
+<img align="right" width="128" src="src/resources/buildings/256/shield.png">
 
 The Electro‑Magnetic Shield throws a crackling energy barrier over the colony,
 soaking up tremendous punishment before it fails. A major build with a heavy,
@@ -192,7 +192,7 @@ before anything behind it can be touched.
 
 #### Plasma Bubble
 
-<img align="right" width="128" src="src/resources/buildings/128/plasma_bubble.png">
+<img align="right" width="128" src="src/resources/buildings/256/plasma_bubble.png">
 
 The Plasma Bubble is the ultimate colony defense — a seething dome of contained
 plasma that all but encases the settlement. It is built as an **upgrade of an
@@ -208,13 +208,13 @@ What you know about rival species depends on your **intelligence coverage**. Wit
 
 #### Drone Base
 
-<img align="right" width="128" src="src/resources/buildings/128/drone_base.png">
+<img align="right" width="128" src="src/resources/buildings/256/drone_base.png">
 
 The Drone Base is a self‑contained forward reconnaissance outpost that can be placed on almost any explored cell, even far outside a colony's borders, peeling back the fog of war over a wide area and giving real‑time intelligence on neighboring colonies. Powered by its own solar panels and linked wirelessly to the nearest colony, it is funded — in both construction and upkeep — by the Federation rather than any single colony. Deployment relies on route planning: the base travels overland from the nearest colony, so rougher, farther sites take longer to come online, with roads and monorails speeding the journey; it can cross shallow sea only when a Dock is present. It produces nothing and stores nothing — its sole purpose is sight.
 
 #### Satellite Network
 
-<img align="right" width="128" src="src/resources/buildings/128/satellite_network.png">
+<img align="right" width="128" src="src/resources/buildings/256/satellite_network.png">
 
 The Satellite Network lifts the limits of ground‑based reconnaissance entirely — a Federation‑funded orbital array that watches the whole planet at once. It requires a **Nanofactory** and a **Spaceport** in the colony and a population of at least 15,000, and it is an expensive late‑game build with a steady upkeep. While it stands it grants **whole‑map intelligence**: the fog of war is lifted across the entire world, every rival colony can be inspected, and **every** species appears with full statistics in the Rankings. If you lose your last Satellite Network, already‑explored terrain stays charted, but your intelligence on rivals **reverts** to what your Biodomes and Drone Bases can see — distant enemies drop back out of your Rankings and can no longer be inspected. Build more than one for redundancy.
 

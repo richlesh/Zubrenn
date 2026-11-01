@@ -13,7 +13,7 @@ choose what to study next.
 
 ### Advanced Agricultural Science
 
-<img align="right" width="128" src="src/resources/techs/128/agricultural_science.png">
+<img align="right" width="128" src="src/resources/techs/256/agricultural_science.png">
 
 Advanced techniques and technologies for farming and food production. A
 foundational civic science with no prerequisites, it lifts the ceiling on how
@@ -25,7 +25,7 @@ works that feeds a large, growing population where open farmland is scarce.
 
 ### Applied Physics
 
-<img align="right" width="128" src="src/resources/techs/128/applied_physics.png">
+<img align="right" width="128" src="src/resources/techs/256/applied_physics.png">
 
 Foundational research enabling advanced energy and materials work. A root science
 with no prerequisites, Applied Physics is the gateway to most of the tree — the
@@ -37,7 +37,7 @@ that far outproduces a single Solar Panel), the **Compressed‑Air Energy Store
 
 ### Plasma Physics
 
-<img align="right" width="128" src="src/resources/techs/128/plasma_physics.png">
+<img align="right" width="128" src="src/resources/techs/256/plasma_physics.png">
 
 The study of plasma — a state of matter of ions and free electrons. **Requires
 Applied Physics.** It opens the path to advanced
@@ -48,7 +48,7 @@ Theory.
 
 ### Unified Field Theory
 
-<img align="right" width="128" src="src/resources/techs/128/unified_field_theory.png">
+<img align="right" width="128" src="src/resources/techs/256/unified_field_theory.png">
 
 A theory that unifies the fundamental forces of nature. **Requires Applied
 Physics.** A deep theoretical advance whose practical payoff is the most powerful
@@ -58,7 +58,7 @@ Bubble** — the top‑tier energy shield, an upgrade of the Electro‑Magnetic 
 
 ### Advanced Materials
 
-<img align="right" width="128" src="src/resources/techs/128/advanced_materials.png">
+<img align="right" width="128" src="src/resources/techs/256/advanced_materials.png">
 
 High‑strength alloys and composites for demanding structures. **Requires Applied
 Physics.** This is the central mid‑tree science — a prerequisite for
@@ -72,7 +72,7 @@ Shield**, and **Plasma Bubble**. It also unlocks the **Armored**, **Fighter**,
 
 ### Advanced Economic Theory
 
-<img align="right" width="128" src="src/resources/techs/128/economic_theory.png">
+<img align="right" width="128" src="src/resources/techs/256/economic_theory.png">
 
 Theories and models for understanding and predicting economic behavior. An
 independent civic science with no prerequisites. **Unlocks the Global Bank** — the Bank elevated to a world financial center,
@@ -80,7 +80,7 @@ pouring out wealth and holding vast reserves for the whole Federation.
 
 ### Nanotechnology
 
-<img align="right" width="128" src="src/resources/techs/128/nanotechnology.png">
+<img align="right" width="128" src="src/resources/techs/256/nanotechnology.png">
 
 Technologies for manipulating matter at the atomic scale. **Requires Applied
 Physics and Advanced Materials.** **Unlocks the
@@ -90,7 +90,7 @@ Fusion Reactor).
 
 ### Supersonic Flight
 
-<img align="right" width="128" src="src/resources/techs/128/supersonic_flight.png">
+<img align="right" width="128" src="src/resources/techs/256/supersonic_flight.png">
 
 Technologies for aircraft to travel faster than sound. **Requires Applied Physics
 and Advanced Materials.** **Unlocks the Airport** (the
@@ -100,7 +100,7 @@ combined‑arms base; also requires Rocketry), and contributes to unlocking the
 
 ### Rocketry
 
-<img align="right" width="128" src="src/resources/techs/128/rocketry.png">
+<img align="right" width="128" src="src/resources/techs/256/rocketry.png">
 
 Heavy‑lift propulsion — the basis of spaceflight and long‑range missiles.
 **Requires Applied Physics, Advanced Materials, and Supersonic Flight.** The
@@ -110,7 +110,7 @@ threshold of the space age and of strategic weaponry. **Unlocks** the **Launchpa
 
 ### Orbital Engineering
 
-<img align="right" width="128" src="src/resources/techs/128/orbital_engineering.png">
+<img align="right" width="128" src="src/resources/techs/256/orbital_engineering.png">
 
 Building and operating structures in orbit. **Requires Advanced Materials and
 Rocketry.** **Unlocks the Satellite Network** — orbital
@@ -119,7 +119,7 @@ across the planet (also requires Rocketry and Advanced Materials).
 
 ### Nuclear Science
 
-<img align="right" width="128" src="src/resources/techs/128/nuclear_science.png">
+<img align="right" width="128" src="src/resources/techs/256/nuclear_science.png">
 
 Fission engineering for reactors and strategic weapons. **Requires Advanced
 Materials.** **Unlocks the Fission Reactor** — the
@@ -128,7 +128,7 @@ the **Carrier** (nuclear‑propelled) and the **ICBM** warhead.
 
 ### Fusion Science
 
-<img align="right" width="128" src="src/resources/techs/128/fusion_science.png">
+<img align="right" width="128" src="src/resources/techs/256/fusion_science.png">
 
 Fusion engineering for peaceful power generation. **Requires Nuclear Science** —
 the deepest and most expensive technology on Zubrenn. **Unlocks the Fusion Reactor** — a star tamed in a bottle, the ultimate power
