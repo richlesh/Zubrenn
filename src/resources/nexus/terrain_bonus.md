@@ -465,7 +465,7 @@ Lumen Coral Shallows glow in the warm, sheltered seas near shore, where colonies
 
 #### Memory Opals
 
-<span class="float-right">![memory_opals](../terrain_bonus/Memory_opals.png)</span>
+<span class="float-right">![memory_opals](../terrain_bonus/memory_opals.png)</span>
 
 Memory Opals are layered crystals found in the hills and low mountains of the temperate zones, each capable of retaining intricate optical patterns within its strata. Prized as both jewelry and archival media, they hold the colony's stories as readily as its wealth. A worked seam is a rich source of wealth that also lifts morale, uniting beauty, utility, and profit.
 

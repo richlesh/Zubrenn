@@ -217,7 +217,7 @@ The Reservoir is a vast impounded water store — a dammed basin that banks enor
 
 ### Desalination Plant
 
-<img align="right" width="128" src="src/resources/buildings/256/Desalination.png">
+<img align="right" width="128" src="src/resources/buildings/256/desalination.png">
 
 The Desalination Plant turns the limitless sea into drinkable water, built on the shallows within a colony's reach. It requires a **Solar Farm** first. Construction is a major undertaking, reflecting the vast reverse‑osmosis works it entails, and its hallmark is a voracious appetite for power. In return it is a reliable source of water with water storage to match. Where a river‑fed Water Treatment Plant isn't an option, desalination keeps coastal and island colonies alive — provided they can feed its enormous energy demand.
 

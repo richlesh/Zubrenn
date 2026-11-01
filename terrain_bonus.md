@@ -144,9 +144,9 @@ Clustered around geothermal seeps in the low and high mountains, Chemosynthetic 
 
 Cloudkelp Beds drift in the coastal seas near land, where buoyant fronds spread into dense floating canopies above nutritious underwater bulbs. Both the surface growth and the submerged tubers are harvested in turn. A worked bed is a modest source of food, giving seaside colonies another reason to look to the water.
 
-<img align="right" width="128" src="src/resources/terrain_bonus/256/cragwing_flock.png">
-
 #### Cragwing Flock
+
+<img align="right" width="128" src="src/resources/terrain_bonus/256/cragwing_flock.png">
 
 Cragwing flocks roost on sheer, sun-baked crags — the rocky cliffs of the high mountains and the broken bluffs of the highland hills. These lizards show a vivid colour gradient with altitude: the  lowland-hill variety is a deep, rusty **red**, while the high-mountain variant is a brighter **orange**, and locals read a crag's elevation from the hue of its flock. They bask for hours in direct sunlight and will not tolerate forest or shade, so you will never find them beneath the canopy. Thrive in any climate but the polar ice.
 
@@ -300,9 +300,9 @@ A Veilsong Lagoon lies in the warm tropical shallows behind a sheltering reef, i
 
 Aero-Silk Nests are spun by alien arachnoid creatures that thrive in the low-humidity air of the deserts, where they draw out high-tensile fiber across the dunes. The harvested silk is both a construction marvel and a luxury export. A worked nest is a good source of material and a little wealth, letting arid colonies turn emptiness into advantage.
 
-<img align="right" width="128" src="src/resources/terrain_bonus/256/bauxite_seam.png">
-
 #### Bauxite Seam
+
+<img align="right" width="128" src="src/resources/terrain_bonus/256/bauxite_seam.png">
 
 Bauxite Seams are broad beds of aluminium-rich ore exposed across the hills and the low and high mountains — aluminum is the most abundant metal in Zubrenn's crust, just as on Earth, so the seams are common. Smelted into light, corrosion-resistant metal, their output is the backbone of aircraft, launch vehicles, and orbital works. A worked seam is a rich source of material and, crucially, the Federation's supply of **aluminum** — the strategic resource that unlocks Air Fields, Airports, Missile Batteries, and (with titanium and crystal) the Spaceport and Satellite Network.
 
@@ -456,7 +456,7 @@ Lumen Coral Shallows glow in the warm, sheltered seas near shore, where colonies
 
 #### Memory Opals
 
-<img align="right" width="128" src="src/resources/terrain_bonus/256/Memory_opals.png">
+<img align="right" width="128" src="src/resources/terrain_bonus/256/memory_opals.png">
 
 Memory Opals are layered crystals found in the hills and low mountains of the temperate zones, each capable of retaining intricate optical patterns within its strata. Prized as both jewelry and archival media, they hold the colony's stories as readily as its wealth. A worked seam is a rich source of wealth that also lifts morale, uniting beauty, utility, and profit.
 
