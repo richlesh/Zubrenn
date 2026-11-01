@@ -1,7 +1,7 @@
 {
   // When true, after creating a new map show two debug dialogs: a terrain-type
   // breakdown and a terrain-bonus placement count. Set false to disable.
-  "debug": true,
+  "debug": false,
 
   // "terrain" restrictions on placement can be a list of specific terrains:
   //    "sea", "grassland", "hills", "forest", "jungle", "desert", "mountain-low",
@@ -259,7 +259,8 @@
         "strength": { "attack":  15, "defense": 25, "hp": 50 },
         "prerequisite": {
           "population": 6,
-          "bonusType": [ "iron" ]
+          "bonusType": [ "iron" ],
+          "tech": ["advanced_materials"]
         }
     },
     // Fighter squadron 300 service men, 20 aircraft, cost is per squadron
@@ -274,7 +275,8 @@
         "range": 20,
         "prerequisite": {
           "population": 10,
-          "bonusType": [ "aluminum", "crystal", "titanium" ]
+          "bonusType": [ "aluminum", "crystal", "titanium" ],
+          "tech": ["advanced_materials", "supersonic_flight", "rocketry"]
         }
     },
     // Bomber squadron 300 service men, 10 bombers, cost is per squadron
@@ -290,7 +292,8 @@
         "range": 40,
         "prerequisite": {
           "population": 12,
-          "bonusType": [ "aluminum", "crystal", "titanium" ]
+          "bonusType": [ "aluminum", "crystal", "titanium" ],
+          "tech": ["advanced_materials", "supersonic_flight", "rocketry"]
         }
     },
     // Single cruiser/destroyer 300 service men, 10 ballistic missiles
@@ -337,7 +340,8 @@
         "range": 30,
         "prerequisite": {
           "population": 15,
-          "bonusType": [ "iron", "aluminum", "crystal" ]
+          "bonusType": [ "iron", "aluminum", "crystal", "titanium", "uranium" ],
+          "tech": ["advanced_materials", "supersonic_flight", "rocketry", "nuclear_science"]
         }
     },
     // ICBM flight 300 service men, 10 missiles, cost is per flight
@@ -420,7 +424,7 @@
       "startPopulation": 1,
       "buildCost": { "material": 200, "wealth": 100, "water": 2, "turns": 3 },
       "costPerYear": { },
-      "bonus": { "energy": 10, "food": 2, "goods": 10, "material": 10, "water": 1, "wealth": 20, "happiness": 0.5, "population": 1 },
+      "bonus": { "energy": 10, "food": 2, "goods": 10, "material": 10, "water": 1, "wealth": 20, "happiness": 0.5, "population": 2 },
       "storage": { "energy": 100, "food": 10, "goods": 25, "material": 25, "water": 2, "wealth": 250, "happiness": 25, "population": 10 },
       "federationStorage": { "energy": 50, "food": 10, "goods": 25, "material": 25, "water":  2, "wealth": 250 },
       "prerequisite": {
@@ -471,7 +475,8 @@
         "building": ["biodome","solar panel"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
         "upgrades": "farm",
-        "population": 3
+        "population": 3,
+        "tech": ["agricultural_science"]
       }
     },
     "megafarm": {
@@ -487,7 +492,8 @@
         "building": ["biodome","solar farm"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
         "upgrades": "agridome",
-        "population": 7
+        "population": 7,
+        "tech": ["agricultural_science"]
       }
     },
     "solar panel": {
@@ -523,7 +529,8 @@
         "building": ["factory"],
         "terrain": ["grassland","hills","forest","jungle","desert","plains"],
         "upgrades": "solar panel",
-        "population": 5
+        "population": 5,
+        "tech": ["applied_physics"]
       }
     },
     // The Wind Farm is a standalone utility-scale power source (not an upgrade):
@@ -545,7 +552,8 @@
         "building": ["factory"],
         "terrain": ["sea","grassland","hills","plains","mountain-low"],
         "population": 5,
-        "other": [ "shallow" ]
+        "other": [ "shallow" ],
+        "tech": ["advanced_materials"]
       }
     },
     // The Fission Reactor is an advanced power generation building. It requires
@@ -566,7 +574,7 @@
         "terrain": ["grassland","hills","forest","jungle","desert","plains","frozen"],
         "bonusType": ["uranium"],
         "population": 15,
-        "tech": ["nuclear_science"]
+        "tech": ["advanced_materials", "nuclear_science"]
       },
       "equivalentTo": "solar farm"
     },
@@ -585,7 +593,7 @@
         "terrain": ["grassland","hills","forest","jungle","desert","plains","frozen"],
         "bonusType": [],
         "population": 15,
-        "tech": ["nuclear_science"],
+        "tech": ["fusion_science"],
         "upgrades": "nuclear reactor"
       },
       "equivalentTo": "solar farm"
@@ -667,7 +675,8 @@
         "terrain":  ["grassland", "hills", "forest", "jungle", "plains", "mountain-low"],
         "other":    [],
         "population": 7,
-        "upgrades": "quarry"
+        "upgrades": "quarry",
+        "tech": ["advanced_materials"]
       }
     },
     
@@ -702,7 +711,8 @@
         "building": ["solar farm"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
         "upgrades": "factory",
-        "population": 10
+        "population": 10,
+        "tech": ["advanced_materials"]
       }
     },
     "nanofactory": {
@@ -721,7 +731,8 @@
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
         "upgrades": "megafactory",
         "population": 15,
-        "bonusType": ["crystal"]
+        "bonusType": ["crystal"],
+        "tech": ["nanotechnology"]
       }
     },
     "dock": {
@@ -806,7 +817,8 @@
         "upgrades": "air field",
         "network":  ["inland"],
         "population": 9,
-        "bonusType": ["aluminum"]
+        "bonusType": ["aluminum"],
+        "tech": ["supersonic_flight"]
       },
       "range": 30
     },
@@ -827,7 +839,8 @@
         "network":  ["any"],
         "other": [ "spaceport" ],
         "population": 8,
-        "bonusType": ["aluminum", "titanium", "crystal"]
+        "bonusType": ["aluminum", "titanium", "crystal"],
+        "tech": ["rocketry"]
       }
     },
     "spaceport": {
@@ -904,7 +917,8 @@
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
         "network":  ["any"],
         "upgrades": "army base",
-        "population": 12
+        "population": 12,
+        "tech": ["supersonic_flight", "rocketry"]
       }
     },
     "naval shipyard": {
@@ -924,7 +938,8 @@
         "other":  ["land"],
         "network":  ["any"],
         "upgrades": "",
-        "population": 15
+        "population": 15,
+        "tech": ["advanced_materials"]
       }
     },
     "icbm factory": {
@@ -943,7 +958,8 @@
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
         "network":  ["any"],
         "upgrades": "",
-        "population": 18
+        "population": 18,
+        "tech": ["rocketry"]
       }
     },
     "granary": {
@@ -1028,7 +1044,8 @@
         "network": ["any"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
         "population": 15,
-        "upgrades": "bank"
+        "upgrades": "bank",
+        "tech": ["economic_theory"]
       }
     },
     // Compressed-Air Storage — entry-tier grid energy store (compressed air in
@@ -1047,7 +1064,8 @@
         "building": ["solar panel", "bank"],
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains","wetlands"],
         "network":  ["any"],
-        "population": 3
+        "population": 3,
+        "tech": ["applied_physics"]
       }
     },
     // Pumped-Hydro Storage — UPGRADE of CAES: pumps water to an elevated or
@@ -1069,7 +1087,8 @@
         "terrain": ["grassland","hills","forest","jungle","desert","mountain-low","plains"],
         "other": [ "river" ],
         "network":  ["any"],
-        "population": 10
+        "population": 10,
+        "tech": ["applied_physics"]
       },
       "equivalentTo": "caes"
     },
@@ -1090,7 +1109,8 @@
         "other": [ ],
         "network":  ["any"],
         "bonusType": ["lithium"],
-        "population": 10
+        "population": 10,
+        "tech": ["advanced_materials"]
       },
       "equivalentTo": "caes"
     },
@@ -1129,7 +1149,8 @@
         "terrain":  ["land"],
         "other":    ["sea"],
         "network":  ["any"],
-        "population": 5
+        "population": 5,
+        "tech": ["advanced_materials"]
       },
       "equivalentTo": "wtp"
     },
@@ -1184,7 +1205,7 @@
         "other": [ "federation", "intelligence" ],
         "population": 15,
         "bonusType": ["aluminum", "crystal", "lithium", "titanium"],
-        "tech": ["orbital_engineering"]
+        "tech": ["rocketry", "advanced_materials", "orbital_engineering"]
       },
       "visibility": "world"
     },
@@ -1216,7 +1237,8 @@
       "storage": { "food": 25 },
       "prerequisite": {
         "building": ["dock"],
-        "terrain": ["sea"]
+        "terrain": ["sea"],
+        "tech": ["agricultural_science"]
       }
     },
     "missile battery": {
@@ -1231,7 +1253,9 @@
         "building": ["factory"],
         "terrain": ["land"],
         "population": 3,
-        "bonusType": ["aluminum"]
+        "bonusType": ["aluminum"],
+        "tech": ["rocketry"]
+
       }
     },
     "laser battery": {
@@ -1247,7 +1271,8 @@
         "terrain": ["land"],
         "population": 6,
         "upgrades": "missile battery",
-        "bonusType": ["crystal"]
+        "bonusType": ["crystal"],
+        "tech": ["applied_physics", "advanced_materials"]
       }
     },
     "shield": {
@@ -1262,7 +1287,8 @@
         "building": ["factory"],
         "terrain": ["land"],
         "population": 10,
-        "bonusType": ["crystal"]
+        "bonusType": ["crystal"],
+        "tech": ["plasma_physics", "advanced_materials"]
       }
     },
     "plasma bubble": {
@@ -1278,7 +1304,8 @@
         "terrain": ["land"],
         "upgrades": "shield",
         "population": 15,
-        "bonusType": ["crystal"]
+        "bonusType": ["crystal"],
+        "tech": ["unified_field_theory", "advanced_materials"]
       }
     }
   },
@@ -2463,11 +2490,18 @@
     "defaultFundingPercent": 50
   },
   "techs": {
+    "agricultural_science": { "name": "Advanced Agricultural Science", "cost": 4000, "prerequisite": [], "desc": "Advanced techniques and technologies for farming and food production." },
     "applied_physics": { "name": "Applied Physics", "cost": 4000, "prerequisite": [], "desc": "Foundational research enabling advanced energy and materials work." },
+    "plasma_physics": { "name": "Plasma Physics", "cost": 10000, "prerequisite": ["applied_physics"], "desc": "The study of plasma, a state of matter consisting of ions and free electrons." },
+    "unified_field_theory": { "name": "Unified Field Theory", "cost": 10000, "prerequisite": ["applied_physics"], "desc": "A theory that unifies the fundamental forces of nature." },
     "advanced_materials": { "name": "Advanced Materials", "cost": 7000, "prerequisite": ["applied_physics"], "desc": "High-strength alloys and composites for demanding structures." },
-    "rocketry": { "name": "Rocketry", "cost": 10000, "prerequisite": ["applied_physics"], "desc": "Heavy-lift propulsion — the basis of spaceflight and long-range missiles." },
-    "orbital_engineering": { "name": "Orbital Engineering", "cost": 18000, "prerequisite": ["advanced_materials", "rocketry"], "desc": "Building and operating structures in orbit." },
-    "nuclear_science": { "name": "Nuclear Science", "cost": 20000, "prerequisite": ["advanced_materials"], "desc": "Fission engineering for reactors and strategic weapons." }
+    "economic_theory": { "name": "Advanced Economic Theory", "cost": 7000, "prerequisite": [], "desc": "Theories and models for understanding and predicting economic behavior." },
+    "nanotechnology": { "name": "Nanotechnology", "cost": 10000, "prerequisite": ["applied_physics", "advanced_materials"], "desc": "Technologies for manipulating matter at the atomic scale." },
+    "supersonic_flight": { "name": "Supersonic Flight", "cost": 10000, "prerequisite": ["applied_physics", "advanced_materials"], "desc": "Technologies for aircraft to travel faster than sound." },
+    "rocketry": { "name": "Rocketry", "cost": 10000, "prerequisite": ["applied_physics", "advanced_materials", "supersonic_flight"], "desc": "Heavy-lift propulsion — the basis of spaceflight and long-range missiles." },
+    "orbital_engineering": { "name": "Orbital Engineering", "cost": 20000, "prerequisite": ["advanced_materials", "rocketry"], "desc": "Building and operating structures in orbit." },
+    "nuclear_science": { "name": "Nuclear Science", "cost": 20000, "prerequisite": ["advanced_materials"], "desc": "Fission engineering for reactors and strategic weapons." },
+    "fusion_science": { "name": "Fusion Science", "cost": 40000, "prerequisite": ["nuclear_science"], "desc": "Fusion engineering for peaceful power generation." }
   },
   "victory": {
     "enabled": true,
