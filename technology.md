@@ -7,8 +7,9 @@ share of your stored wealth — spent only while a technology is actually
 selected). Completing a technology **unlocks** the buildings and units that
 require it, so research is how a civilization grows beyond its starting
 capabilities. Technologies are researched one at a time; some require earlier
-technologies as **prerequisites**. Open the **Research** screen (View ▸ Research)
-to choose what to study next.
+technologies as **prerequisites**, and some advanced buildings and units require
+**more than one** technology. Open the **Research** screen (View ▸ Research) to
+choose what to study next.
 
 ### Advanced Agricultural Science
 
@@ -29,9 +30,46 @@ works that feeds a large, growing population where open farmland is scarce.
 Foundational research enabling advanced energy and materials work. A root science
 with no prerequisites, Applied Physics is the gateway to most of the tree — the
 bedrock on which advanced materials, nanotechnology, flight, and field theory are
-built. **Cost: 4,000 science.** **Unlocks the Solar Farm** (a sprawling array
-that far outproduces a single Solar Panel) and the **Laser Battery** (a rapid
-energy‑weapon colony defense).
+built. **Cost: 4,000 science.** **Unlocks** the **Solar Farm** (a sprawling array
+that far outproduces a single Solar Panel), the **Compressed‑Air Energy Store
+(CAES)** and **Pumped Hydro** (energy‑storage works), and the **Laser Battery**
+(a rapid energy‑weapon colony defense — also requires Advanced Materials).
+
+### Plasma Physics
+
+<img align="right" width="128" src="src/resources/techs/128/plasma_physics.png">
+
+The study of plasma — a state of matter of ions and free electrons. An
+independent branch with no prerequisites, it opens the path to advanced
+energy‑field defenses. **Cost: 10,000 science.** **Unlocks the Electro‑Magnetic
+Shield** — a colony point‑defense screen (which also requires Advanced
+Materials). The Shield's own upgrade, the Plasma Bubble, comes from Unified Field
+Theory.
+
+### Unified Field Theory
+
+<img align="right" width="128" src="src/resources/techs/128/unified_field_theory.png">
+
+A theory that unifies the fundamental forces of nature. **Requires Applied
+Physics.** A deep theoretical advance whose practical payoff is the most powerful
+point defense the colony can field. **Cost: 10,000 science.** **Unlocks the Plasma
+Bubble** — the top‑tier energy shield, an upgrade of the Electro‑Magnetic Shield
+(and also requires Advanced Materials).
+
+### Advanced Materials
+
+<img align="right" width="128" src="src/resources/techs/128/advanced_materials.png">
+
+High‑strength alloys and composites for demanding structures. **Requires Applied
+Physics.** This is the central mid‑tree science — a prerequisite for
+nanotechnology, flight, rocketry, orbital engineering, and nuclear science, and a
+direct enabler of a broad slate of advanced works and front‑line forces. **Cost:
+7,000 science.** **Unlocks** the **Wind Farm**, **Megaquarry** (the Quarry's apex
+upgrade), **Megafactory** (the Factory's advanced upgrade), **Naval Shipyard**,
+**Grid Storage**, **Desalination Plant**, and (together with their other
+technologies) the **Satellite Network**, **Laser Battery**, **Electro‑Magnetic
+Shield**, and **Plasma Bubble**. It also unlocks the **Armored**, **Fighter**,
+**Bomber**, and **Carrier** units (the latter three alongside further techs).
 
 ### Advanced Economic Theory
 
@@ -42,34 +80,15 @@ independent civic science with no prerequisites. **Cost: 7,000 science.**
 **Unlocks the Global Bank** — the Bank elevated to a world financial center,
 pouring out wealth and holding vast reserves for the whole Federation.
 
-### Advanced Materials
-
-<img align="right" width="128" src="src/resources/techs/128/advanced_materials.png">
-
-High‑strength alloys and composites for demanding structures. **Requires Applied
-Physics.** This is the central mid‑tree science — a prerequisite for
-nanotechnology, flight, rocketry, orbital engineering, and nuclear science, and a
-direct enabler of a broad slate of advanced works. **Cost: 7,000 science.**
-**Unlocks** the **Wind Farm**, **Naval Shipyard**, **Grid Storage**, **Satellite
-Network**, **Laser Battery**, **Electro‑Magnetic Shield**, and **Plasma Bubble**.
-
-### Unified Field Theory
-
-<img align="right" width="128" src="src/resources/techs/128/unified_field_theory.png">
-
-A theory that unifies the fundamental forces of nature. **Requires Applied
-Physics.** A deep theoretical advance whose practical payoff is the most powerful
-point defense the colony can field. **Cost: 10,000 science.** **Unlocks the Plasma
-Bubble** — a top‑tier energy shield/defense.
-
 ### Nanotechnology
 
 <img align="right" width="128" src="src/resources/techs/128/nanotechnology.png">
 
 Technologies for manipulating matter at the atomic scale. **Requires Applied
 Physics and Advanced Materials.** **Cost: 10,000 science.** **Unlocks the
-Nanofactory** — the Factory's apex upgrade, producing goods and wealth on a scale
-no ordinary factory can match (and the prerequisite for the Fusion Reactor).
+Nanofactory** — the Factory/Megafactory's apex upgrade, producing goods and
+wealth on a scale no ordinary factory can match (and the prerequisite for the
+Fusion Reactor).
 
 ### Supersonic Flight
 
@@ -78,7 +97,8 @@ no ordinary factory can match (and the prerequisite for the Fusion Reactor).
 Technologies for aircraft to travel faster than sound. **Requires Applied Physics
 and Advanced Materials.** **Cost: 10,000 science.** **Unlocks the Airport** (the
 Air Field's upgrade, extending air‑network reach) and the **Joint Base** (a
-combined‑arms base that stations air and land forces together).
+combined‑arms base; also requires Rocketry), and contributes to unlocking the
+**Fighter**, **Bomber**, and **Carrier** units.
 
 ### Rocketry
 
@@ -88,7 +108,8 @@ Heavy‑lift propulsion — the basis of spaceflight and long‑range missiles.
 **Requires Applied Physics, Advanced Materials, and Supersonic Flight.** The
 threshold of the space age and of strategic weaponry. **Cost: 10,000 science.**
 **Unlocks** the **Launchpad**, **Spaceport**, **Joint Base**, **ICBM Factory**,
-**Satellite Network**, and **Missile Battery**, and the **ICBM** unit itself.
+**Satellite Network**, and **Missile Battery**, and contributes to the
+**Fighter**, **Bomber**, **Carrier**, and **ICBM** units.
 
 ### Orbital Engineering
 
@@ -97,7 +118,7 @@ threshold of the space age and of strategic weaponry. **Cost: 10,000 science.**
 Building and operating structures in orbit. **Requires Advanced Materials and
 Rocketry.** **Cost: 20,000 science.** **Unlocks the Satellite Network** — orbital
 infrastructure that, once operational, reveals the world and extends your reach
-across the planet.
+across the planet (also requires Rocketry and Advanced Materials).
 
 ### Nuclear Science
 
@@ -105,8 +126,8 @@ across the planet.
 
 Fission engineering for reactors and strategic weapons. **Requires Advanced
 Materials.** **Cost: 20,000 science.** **Unlocks the Fission Reactor** — the
-pinnacle of pre‑fusion power, fueled by worked **uranium** — and (with Rocketry)
-the **ICBM** warhead.
+pinnacle of pre‑fusion power, fueled by worked **uranium** — and contributes to
+the **Carrier** (nuclear‑propelled) and the **ICBM** warhead.
 
 ### Fusion Science
 
