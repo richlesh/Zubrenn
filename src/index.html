@@ -18320,6 +18320,38 @@
       }
       return out;
     }
+    // HTML snippet (red) describing the incoming attack(s) on the colony at
+    // (x,y) for the hover tooltip: the attacker's name, the attacking unit types
+    // and counts, and the ETA (turns until the force arrives). Returns '' when no
+    // active strike force targets this cell. Multiple attackers (a coalition) are
+    // each listed on their own line.
+    function buildAttackTooltipHtml(x, y) {
+      const inbound = (gameState.units || []).filter((u) =>
+        u.strikeForce && u.strikeForce.targetX === x && u.strikeForce.targetY === y);
+      if (!inbound.length) return '';
+      const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      // Group by attacking owner; within each owner, count units by type and take
+      // the force's ETA = the MAX turnsRemaining across its units (it arrives when
+      // the slowest member does).
+      const byOwner = new Map();
+      for (const u of inbound) {
+        const o = u.owner;
+        let g = byOwner.get(o);
+        if (!g) { g = { types: new Map(), eta: 0 }; byOwner.set(o, g); }
+        g.types.set(u.type, (g.types.get(u.type) || 0) + 1);
+        g.eta = Math.max(g.eta, Math.max(0, Number(u.turnsRemaining) || 0));
+      }
+      const rows = [];
+      for (const [owner, g] of byOwner) {
+        const who = (typeof ownerDisplayName === 'function') ? ownerDisplayName(owner) : 'An enemy';
+        const typeParts = [];
+        for (const [t, n] of g.types) typeParts.push(`${n}\u00d7 ${esc(typeLabel(t))}`);
+        const etaTxt = g.eta > 0 ? `ETA ${g.eta} turn${g.eta === 1 ? '' : 's'}` : 'attacking now';
+        rows.push(`&#9876; <strong>${esc(who)}</strong> attacking: ${typeParts.join(', ')} &mdash; ${etaTxt}`);
+      }
+      // Wrap in a red span so the whole attack block stands out in the tooltip.
+      return `<span style="color:#e4121b">${rows.join('<br>')}</span>`;
+    }
     function _attackOverlay(ctx, spacing, hexCenter) {
       const targets = _coloniesUnderAttack();
       if (!targets.length) return;
@@ -18418,13 +18450,31 @@
       // Apply results. Each surviving unit keeps the fraction of manpower equal
       // to its remaining effective-hp fraction; a unit at hp<=0 is destroyed.
       let atkLost = 0, defUnitLost = 0, defBldgLost = 0;
-      const applyUnit = (c) => {
+      // Detailed per-side loss tallies for the battle report / Game Log:
+      //   byType: Map<unitType, { destroyed, soldiers }> — units destroyed and
+      //           TOTAL soldiers (strength) lost of that type (dead units + the
+      //           manpower attrition of survivors).
+      //   soldiers: total soldiers lost on that side across all unit types.
+      const makeTally = () => ({ byType: new Map(), soldiers: 0, unitsLost: 0 });
+      const atkTally = makeTally(), defTally = makeTally();
+      const applyUnit = (c, tally) => {
+        const start = Math.max(0, Number(c.unit.strength) || 0);
         const frac = c.hp0 > 0 ? Math.max(0, c.hp / c.hp0) : 0;
-        c.unit.strength = (c.hp <= 0) ? 0 : Math.max(0, Math.round((Number(c.unit.strength) || 0) * frac));
-        return c.unit.strength <= 0;
+        const end = (c.hp <= 0) ? 0 : Math.max(0, Math.round(start * frac));
+        c.unit.strength = end;
+        const soldiersLost = Math.max(0, start - end);
+        const destroyed = end <= 0;
+        const t = c.unit.type;
+        const rec = tally.byType.get(t) || { destroyed: 0, soldiers: 0 };
+        if (destroyed) rec.destroyed += 1;
+        rec.soldiers += soldiersLost;
+        tally.byType.set(t, rec);
+        tally.soldiers += soldiersLost;
+        if (destroyed) tally.unitsLost += 1;
+        return destroyed;
       };
-      for (const c of atkC) { if (applyUnit(c)) atkLost++; }
-      for (const c of defUnitC) { if (applyUnit(c)) defUnitLost++; }
+      for (const c of atkC) { if (applyUnit(c, atkTally)) atkLost++; }
+      for (const c of defUnitC) { if (applyUnit(c, defTally)) defUnitLost++; }
       // Determine the battle OUTCOME from the rounds (did the attackers clear
       // every defender while at least one attacker was still alive at the end?).
       // Computed BEFORE expending single-use units below, so an ICBM that wipes
@@ -18461,8 +18511,13 @@
       awardBattleExperience(combatWon ? atkC.map((c) => c.unit) : defUnitC.map((c) => c.unit));
       removeDeadUnits();
       // Defense buildings whose pool fell to <= 0 are destroyed/removed.
+      const defBldgLostByType = new Map();   // buildingType -> count destroyed
       for (const c of defBldgC) {
-        if (c.hp <= 0) { c.building._delete = true; defBldgLost++; }
+        if (c.hp <= 0) {
+          c.building._delete = true; defBldgLost++;
+          const bt = c.building.type;
+          defBldgLostByType.set(bt, (defBldgLostByType.get(bt) || 0) + 1);
+        }
       }
       gameState.buildings = gameState.buildings.filter((b) => !b._delete);
       const attackerWon = combatWon;
@@ -18485,13 +18540,45 @@
         }
       }
       const humanInvolved = attackerOwner === 'human' || defenderOwner === 'human';
-      // Compose a battle report.
+      const atkNmFull = ownerDisplayName(attackerOwner);
+      const defNmFull = ownerDisplayName(defenderOwner);
+      // ---- Detailed battle report (per-side unit TYPES lost + soldier casualties).
+      // "Units lost" = units destroyed of each type; "soldiers" = total strength
+      // (manpower) lost of that type, including attrition to surviving units.
+      // breakdownParts(tally) -> ["2 Infantry (1,800 soldiers)", ...] for destroyed
+      // types, plus any pure-attrition soldier losses folded into a trailing note.
+      const unitLossParts = (tally) => {
+        const parts = [];
+        for (const [t, rec] of tally.byType) {
+          if (rec.destroyed > 0) parts.push(`${rec.destroyed}\u00d7 ${esc(typeLabel(t))}`);
+        }
+        return parts;
+      };
+      const sideLossLine = (label, tally, expended, bldgByType) => {
+        const destroyedParts = unitLossParts(tally);
+        let s = `${label} losses: `;
+        s += destroyedParts.length ? `${tally.unitsLost} unit${tally.unitsLost === 1 ? '' : 's'} (${destroyedParts.join(', ')})`
+                                   : `no units destroyed`;
+        s += ` — ${nf(tally.soldiers, 0)} soldier${tally.soldiers === 1 ? '' : 's'} lost`;
+        if (expended > 0) s += `; ${expended} single-use unit${expended === 1 ? '' : 's'} expended`;
+        if (bldgByType && bldgByType.size) {
+          const bparts = [];
+          for (const [bt, n] of bldgByType) bparts.push(`${n}\u00d7 ${esc(improvementName(bt))}`);
+          s += `; ${bparts.join(', ')} destroyed`;
+        }
+        s += '.';
+        return s;
+      };
+      // Compose the battle report shown to the human + logged for every battle.
       const lines = [];
-      lines.push(`<strong>${esc(sf.name)}</strong> attacked <strong>${esc(targetBio.name || 'the enemy colony')}</strong>.`);
+      lines.push(`<strong>${esc(atkNmFull)}'s ${esc(sf.name)}</strong> attacked <strong>${esc(targetBio.name || 'the enemy colony')}</strong> (defended by <strong>${esc(defNmFull)}</strong>).`);
       lines.push(`Rounds fought: ${round}.`);
-      lines.push(`Attacker losses: ${atkLost} unit${atkLost === 1 ? '' : 's'}.`);
-      if (atkExpended > 0) lines.push(`Single-use units expended: ${atkExpended}.`);
-      lines.push(`Defender losses: ${defUnitLost} unit${defUnitLost === 1 ? '' : 's'}, ${defBldgLost} defense building${defBldgLost === 1 ? '' : 's'}.`);
+      lines.push(sideLossLine('Attacker', atkTally, atkExpended, null));
+      lines.push(sideLossLine('Defender', defTally, 0, defBldgLostByType));
+      // Plain-text one-line-ish summaries (stripped of HTML) for the Game Log.
+      const stripTags = (s) => String(s).replace(/<[^>]+>/g, '');
+      const logAtk = stripTags(sideLossLine('Attacker', atkTally, atkExpended, null));
+      const logDef = stripTags(sideLossLine('Defender', defTally, 0, defBldgLostByType));
       // Game Log (one-line) record of EVERY battle result — win or loss, and
       // including alien-vs-alien battles — so the communication log is a complete
       // record of the war across Zubrenn (not just battles the human fought).
@@ -18502,7 +18589,9 @@
         const jump = targetBio ? { x: targetBio.x, y: targetBio.y } : null;
         try {
           if (typeof gameLog !== 'undefined' && gameLog) {
-            gameLog.battle(`Battle: ${atkNm}'s ${sf.name} attacked ${tgtNm} — the attack ${outcome} (attacker lost ${atkLost}, defender lost ${defUnitLost} unit${defUnitLost === 1 ? '' : 's'} + ${defBldgLost} defense${defBldgLost === 1 ? '' : 's'}).`, { jump });
+            // Detailed record: outcome + per-side unit types lost and soldier
+            // casualties (same info as the battle-report dialog), on one entry.
+            gameLog.battle(`Battle: ${atkNm}'s ${sf.name} attacked ${tgtNm} — the attack ${outcome} (${round} round${round === 1 ? '' : 's'}). ${logAtk} ${logDef}`, { jump });
           }
         } catch (e) {}
         // Announce alien-vs-alien battles with a notification too, but only when
@@ -18521,13 +18610,26 @@
         }
       }
       if (attackerWon) {
+        // A human DEFENDER who just lost this battle gets the full report too
+        // (the human ATTACKER sees it via the Capture/Raze prompt in
+        // finishWonBattle). Shown before ownership changes are presented.
+        if (defenderOwner === 'human' && attackerOwner !== 'human') {
+          const defLines = lines.concat([`<strong>Your colony ${esc(targetBio.name || '')} has fallen.</strong>`]);
+          try { showChoiceDialog('Battle Report — Defeat', defLines.map((l) => `<div>${l}</div>`).join(''), [{ value: 'ok', label: 'OK' }]); } catch (e) {}
+        }
         finishWonBattle(targetBio, survivors, sf, lines, attackerOwner);
       } else {
         lines.push(`The attack was repelled; surviving units withdraw.`);
         // Retreat survivors to their home base.
         for (const u of survivors) { recallUnit(u); }
+        // Show the full Battle Report to whichever side is the human — the
+        // ATTACKER (whose assault failed) OR the DEFENDER (who held). Both see
+        // the per-side unit losses and casualties.
         if (attackerOwner === 'human') {
-          showChoiceDialog('Battle Report', lines.map((l) => `<div>${l}</div>`).join(''), [{ value: 'ok', label: 'OK' }]);
+          try { showChoiceDialog('Battle Report — Attack Repelled', lines.map((l) => `<div>${l}</div>`).join(''), [{ value: 'ok', label: 'OK' }]); } catch (e) {}
+        } else if (defenderOwner === 'human') {
+          const defLines = lines.concat([`<strong>Your colony ${esc(targetBio.name || '')} held.</strong>`]);
+          try { showChoiceDialog('Battle Report — Defended', defLines.map((l) => `<div>${l}</div>`).join(''), [{ value: 'ok', label: 'OK' }]); } catch (e) {}
         }
         // Notify the human whenever they're attacker or defender.
         if (humanInvolved) notify(`${sf.name}'s attack on ${targetBio.name || 'the enemy colony'} was repelled.`);
@@ -20797,6 +20899,9 @@
           const tb = bonusDefAt(x, y);
           return tb ? { name: tb.name, desc: tb.desc || '' } : null;
         },
+        // Incoming-attack info for a colony under attack (attacker, unit
+        // types/counts, ETA) — shown in red in the hover tooltip.
+        attackInfo: (x, y) => buildAttackTooltipHtml(x, y),
         // Extra text appended to the hovered tile's BUILDING line, e.g. a
         // Factory's current throttle " (67%)" / " (idle)".
         buildingSuffix: (x, y) => {

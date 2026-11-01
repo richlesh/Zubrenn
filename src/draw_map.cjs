@@ -387,6 +387,11 @@ class HexMap {
     this.onColonyDblClick = opts.onColonyDblClick || null; // (building) => void
     this.cellInfo = opts.cellInfo || null;    // (x,y) => "E:.. F:.. M:.. W:.. H:.." string
     this.cellBonus = opts.cellBonus || null;  // (x,y) => { name, desc } | null for the hover tooltip
+    // (x,y) => HTML string (already styled) describing an incoming attack on the
+    // colony at this cell (attacker name, attacking unit types/counts, ETA), or
+    // null/"" when the cell is not a colony under attack. Shown in the hover
+    // tooltip in red.
+    this.attackInfo = opts.attackInfo || null;
     this.buildingSuffix = opts.buildingSuffix || null; // (x,y) => extra text appended to the building line (e.g. factory throttle %)
     this.throttleFrac = opts.throttleFrac || null; // (x,y) => 0..1 capacity fraction for a throttleable building, or null
     this.freshwaterAt = opts.freshwaterAt || null; // (x,y) => bool: a freshwater-lake SEA tile (display only)
@@ -1945,6 +1950,13 @@ class HexMap {
         if (transportKind) building += ", " + transportKind;
         lines.push(species);   // species controlling
         lines.push(building);  // building (+ road/monorail)
+        // Incoming-attack info (attacker name, attacking unit types/counts, ETA),
+        // shown in RED directly under the colony identity when under attack.
+        if (this.attackInfo) {
+          let atkHtml = '';
+          try { atkHtml = this.attackInfo(hex.x, hex.y) || ''; } catch (e) { atkHtml = ''; }
+          if (atkHtml) lines.push(atkHtml);
+        }
       } else if (transportKind) {
         // No building, but the tile has a road/monorail — surface it on its own.
         lines.push(transportKind.charAt(0).toUpperCase() + transportKind.slice(1));
