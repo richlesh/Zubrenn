@@ -20496,13 +20496,19 @@
     // checked unit there. The picker lists colonies reachable by at least one
     // checked unit; on pick, each checked unit that can reach it is deployed.
     function bulkTransferChecked(anchorEl) {
-      const units = _checkedMilitaryUnits();
+      // Dedupe by id defensively so a unit is never processed twice.
+      const seenIds = new Set();
+      const units = _checkedMilitaryUnits().filter((u) => {
+        if (!u || seenIds.has(u.id)) return false; seenIds.add(u.id); return true;
+      });
       if (!units.length) { notify("Check one or more units first."); return; }
       // Union of reachable destination colonies across the checked units, keyed
       // by colony cell; keep the max ETA seen so the label is representative.
       const byCell = new Map(); // "x,y" -> { colony, turns }
       for (const u of units) {
-        for (const d of rebaseDestinations(u)) {
+        let ds = [];
+        try { ds = rebaseDestinations(u) || []; } catch (e) { ds = []; }  // one bad unit must not abort the union
+        for (const d of ds) {
           const k = d.colony.x + "," + d.colony.y;
           const prev = byCell.get(k);
           if (!prev || d.turns > prev.turns) byCell.set(k, { colony: d.colony, turns: d.turns });
@@ -20540,12 +20546,18 @@
           item.appendChild(name); item.appendChild(eta);
           item.addEventListener("click", (e) => {
             e.stopPropagation();
+            // Order EVERY checked unit that can reach/station there. A unit that
+            // can't (not full strength, in transit, out of range, or the colony
+            // can't base that unit type) is simply skipped and counted so the
+            // result is transparent rather than silently moving only some.
             let moved = 0;
             for (const u of units) { if (deployUnit(u, d.colony) != null) moved++; }
+            const failed = units.length - moved;
             closeColonyPicker();
             renderMilitary();
-            notify(moved ? `${moved} unit${moved === 1 ? '' : 's'} transferring to ${d.colony.name || 'the colony'}.`
-                         : "No checked unit could transfer there (out of range / not full strength / in transit).");
+            notify(moved
+              ? `${moved} unit${moved === 1 ? '' : 's'} transferring to ${d.colony.name || 'the colony'}${failed ? ` (${failed} couldn't: out of range / not full strength / in transit / can't be based there)` : ''}.`
+              : "No checked unit could transfer there (out of range / not full strength / in transit / the colony can't base that unit type).");
           });
           el.appendChild(item);
         }
