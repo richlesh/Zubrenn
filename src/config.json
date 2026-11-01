@@ -1,7 +1,7 @@
 {
   // When true, after creating a new map show two debug dialogs: a terrain-type
   // breakdown and a terrain-bonus placement count. Set false to disable.
-  "debug": false,
+  "debug": true,
 
   // "terrain" restrictions on placement can be a list of specific terrains:
   //    "sea", "grassland", "hills", "forest", "jungle", "desert", "mountain-low",
@@ -2368,7 +2368,18 @@
     // multiplied by this in battle (units and defense buildings alike). 1.0 = no
     // bonus; 1.2 = defenders fight at 120% (the default). Raising it makes
     // colonies harder to take and makes attackers pay more to win.
-    "defenderBonus": 1.2
+    "defenderBonus": 1.2,
+    // Per-hit damage model:
+    //   "ratio"       - damage = attackScale * (attacker.atk * random / defender.def).
+    //                   Always > 0, so even a weak unit inflicts PROPORTIONAL
+    //                   casualties on a tough target (just a small fraction).
+    //   "subtractive" - legacy: damage = max(0, attacker.atk * random - defender.def).
+    //                   A hit does nothing unless attack exceeds defense.
+    "damageModel": "ratio",
+    // Scales per-hit damage in the "ratio" model (unused by "subtractive").
+    // ~1.0 means an evenly-matched hit (atk == def) deals about 1 HP; tune up for
+    // faster, bloodier battles or down for grindier ones.
+    "attackScale": 1.0
   },
 
   // Built-in AI military tuning. Controls how the computer players build up,

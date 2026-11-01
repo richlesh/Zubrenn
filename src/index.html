@@ -18030,6 +18030,10 @@
         razeOpinionPenalty: Number.isFinite(+c.razeOpinionPenalty) ? +c.razeOpinionPenalty : 10,
         // Defender home-field multiplier on effective attack & defense (>=0).
         defenderBonus: (Number.isFinite(+c.defenderBonus) && +c.defenderBonus >= 0) ? +c.defenderBonus : 1.2,
+        // Per-hit damage model: 'ratio' (atk/def, always > 0) or 'subtractive'
+        // (legacy max(0, atk - def)). attackScale scales the ratio model.
+        damageModel: (c.damageModel === 'subtractive') ? 'subtractive' : 'ratio',
+        attackScale: (Number.isFinite(+c.attackScale) && +c.attackScale > 0) ? +c.attackScale : 1.0,
       };
     }
     // Human colonies (operational biodomes), sorted by hex distance to a target.
@@ -18434,6 +18438,18 @@
       const defBldgC = defenseBuildings.map((b) => { const h = buildingHp(b.type) || 0.0001; return { building: b, hp: h, hp0: h, atk: buildingAttack(b.type) * defBonus, def: buildingDefense(b.type) * defBonus }; });
       const defenders = defUnitC.concat(defBldgC);
       const rnd = () => 1 + (Math.random() * 2 - 1) * cfg.randomness; // [1-r, 1+r]
+      // Per-hit damage for an attack of `atk` against a defender's `def`.
+      //   ratio:       attackScale * (atk * rnd / def) — always > 0, so even a
+      //                weak unit vs heavy armor inflicts a small, proportional
+      //                amount (it just takes many rounds to matter).
+      //   subtractive: max(0, atk * rnd - def) — legacy; no damage unless atk>def.
+      // def is floored at a tiny epsilon so the ratio model never divides by zero.
+      const dmgOf = (atk, def) => {
+        const a = Math.max(0, Number(atk) || 0);
+        if (cfg.damageModel === 'subtractive') return Math.max(0, a * rnd() - Math.max(0, Number(def) || 0));
+        const d = Math.max(1e-6, Number(def) || 0);
+        return cfg.attackScale * (a * rnd()) / d;
+      };
       const report = [];
       let round = 0;
       while (round < cfg.maxRounds && atkC.some((c) => c.hp > 0) && defenders.some((c) => c.hp > 0)) {
@@ -18448,8 +18464,8 @@
           // Damage mitigated by the defender's DEFENSE: a hit must beat the armor
           // to wound. Attacker -> defender always applies; the defender strikes
           // back only if it is a UNIT (defensive buildings deal no damage).
-          const dmgToDef = Math.max(0, a.atk * rnd() - d.def);
-          const dmgToAtk = d.building ? 0 : Math.max(0, d.atk * rnd() - a.def);
+          const dmgToDef = dmgOf(a.atk, d.def);
+          const dmgToAtk = d.building ? 0 : dmgOf(d.atk, a.def);
           d.hp -= dmgToDef;
           a.hp -= dmgToAtk;
         }
