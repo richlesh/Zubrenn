@@ -6023,13 +6023,20 @@
     function cancelStrikeForUnit(u) {
       if (!u || !u.strikeForce) return false;
       u.strikeForce = null;
-      // Settle the unit at its current staging cell (legs only move position on
-      // completion, so u.x/u.y is the last colony it actually reached), then
-      // recall it home. If it is already home, stand it down in place.
+      // Stand the unit down at its current staging cell. Strike legs only move a
+      // unit's position on completion, so u.x/u.y is a colony the unit actually
+      // reached — the rally colony (strike phase) or its home colony (rally
+      // phase). If that cell is one of the owner's operational colonies, leave the
+      // unit STATIONED there (not in transit): it is then immediately available to
+      // re-launch an attack (previously it was sent all the way home, so the
+      // right-click "Launch Attack" vanished until it arrived). Only if the unit is
+      // somehow NOT standing on a friendly colony do we recall it home.
       u.inTransit = false;
       u.destX = u.x; u.destY = u.y; u.turnsRemaining = 0;
-      recallUnit(u);
-      try { ensureAttackOverlay(); } catch (e) {}
+      const onFriendlyColony = (gameState.buildings || []).some((b) =>
+        b.type === 1 && !b.inTransit && b.owner === u.owner && b.x === u.x && b.y === u.y);
+      if (!onFriendlyColony) recallUnit(u);
+      try { refreshMapOverlay(); } catch (e) {}
       return true;
     }
     // Stop and recall every in-progress strike force BETWEEN owners `a` and `b`
