@@ -944,7 +944,9 @@ function buildSaveObject(gameState) {
     units: (gameState && gameState.units) || [],
     unitsCreated: (gameState && gameState.unitsCreated) || 0,
     // Per-owner creation counters (each player numbers its own units 1st, 2nd…).
-    unitsCreatedBy: (gameState && gameState.unitsCreatedBy) || {}
+    unitsCreatedBy: (gameState && gameState.unitsCreatedBy) || {},
+    // Per-pact incoming-request auto policy (accept/reject/ask).
+    diploPolicy: (gameState && gameState.diploPolicy) || {}
   };
 }
 
@@ -1137,7 +1139,8 @@ async function loadGame() {
     transport: parsed.transport || null,
     units: parsed.units || [],
     unitsCreated: parsed.unitsCreated || 0,
-    unitsCreatedBy: parsed.unitsCreatedBy || {}
+    unitsCreatedBy: parsed.unitsCreatedBy || {},
+    diploPolicy: parsed.diploPolicy || {}
   };
   const send = () => {
     if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send("load-game", payload);

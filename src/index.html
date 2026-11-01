@@ -395,6 +395,16 @@
           <tbody id="diplomacy-body"></tbody>
         </table>
       </div>
+      <!-- Per-pact auto accept/reject/ask policy. Four pacts down the left, each
+           with three radios. Populated by renderDiplomacy(). -->
+      <div id="diplomacy-policy-wrap">
+        <div class="section-title">Incoming pact requests</div>
+        <div class="hint">Choose how to handle each type of pact an alien proposes to you: automatically accept it, automatically reject it, or be asked each time (the current behavior).</div>
+        <table id="diplomacy-policy-table">
+          <thead><tr><th>Pact</th><th>Auto accept</th><th>Auto reject</th><th>Ask always</th></tr></thead>
+          <tbody id="diplomacy-policy-body"></tbody>
+        </table>
+      </div>
       <div class="work-row"><button id="diplomacy-close">Done</button></div>
     </div>
   </div>
@@ -1273,7 +1283,8 @@
         transport: serializeTransport(),
         units: gameState.units || [],
         unitsCreated: gameState.unitsCreated || 0,
-        unitsCreatedBy: gameState.unitsCreatedBy || {}
+        unitsCreatedBy: gameState.unitsCreatedBy || {},
+        diploPolicy: gameState.diploPolicy || {}
       };
     };
 
@@ -19484,6 +19495,57 @@
       if (onClick) btn.addEventListener('click', onClick);
       return btn;
     }
+    // --- Incoming-pact auto policy -------------------------------------------
+    // The human can set how each of the four pact types an alien may propose is
+    // handled: 'accept' (auto-accept silently), 'reject' (auto-reject silently),
+    // or 'ask' (show the offer dialog — the default / original behavior).
+    const DIPLO_PACTS = [
+      { kind: 'peace',         label: 'Peace' },
+      { kind: 'nonAggression', label: 'Non-aggression' },
+      { kind: 'freeTravel',    label: 'Free travel' },
+      { kind: 'alliance',      label: 'Alliance' },
+    ];
+    function ensureDiploPolicy() {
+      if (!gameState.diploPolicy || typeof gameState.diploPolicy !== 'object') gameState.diploPolicy = {};
+      for (const p of DIPLO_PACTS) {
+        const v = gameState.diploPolicy[p.kind];
+        if (v !== 'accept' && v !== 'reject' && v !== 'ask') gameState.diploPolicy[p.kind] = 'ask';
+      }
+      return gameState.diploPolicy;
+    }
+    // Policy for a pact kind ('accept'|'reject'|'ask'). Anything not one of the
+    // four configurable pacts (e.g. mapSwap) always 'ask'.
+    function diploPolicyFor(kind) {
+      const pol = ensureDiploPolicy();
+      return (Object.prototype.hasOwnProperty.call(pol, kind)) ? pol[kind] : 'ask';
+    }
+    // Build the four pact rows, each with three radios (accept / reject / ask).
+    function renderDiplomacyPolicy() {
+      const body = document.getElementById('diplomacy-policy-body');
+      if (!body) return;
+      const pol = ensureDiploPolicy();
+      body.innerHTML = '';
+      for (const p of DIPLO_PACTS) {
+        const tr = document.createElement('tr');
+        const nameTd = document.createElement('td');
+        nameTd.textContent = p.label;
+        tr.appendChild(nameTd);
+        for (const choice of ['accept', 'reject', 'ask']) {
+          const td = document.createElement('td');
+          td.style.textAlign = 'center';
+          const radio = document.createElement('input');
+          radio.type = 'radio';
+          radio.name = 'diplo-policy-' + p.kind;
+          radio.value = choice;
+          radio.checked = (pol[p.kind] === choice);
+          radio.setAttribute('aria-label', `${p.label}: ${choice === 'accept' ? 'auto accept' : choice === 'reject' ? 'auto reject' : 'ask always'}`);
+          radio.addEventListener('change', () => { if (radio.checked) { ensureDiploPolicy()[p.kind] = choice; } });
+          td.appendChild(radio);
+          tr.appendChild(td);
+        }
+        body.appendChild(tr);
+      }
+    }
     function renderDiplomacy() {
       const body = document.getElementById('diplomacy-body');
       if (!body) return;
@@ -19584,6 +19646,7 @@
         td.colSpan = 4; td.className = 'stat-note'; td.textContent = 'No other species yet.';
         tr.appendChild(td); body.appendChild(tr);
       }
+      renderDiplomacyPolicy();
     }
     function openDiplomacy() { renderDiplomacy(); const o = document.getElementById('diplomacy-overlay'); if (o) o.hidden = false; }
     function closeDiplomacy() { const o = document.getElementById('diplomacy-overlay'); if (o) o.hidden = true; }
@@ -20272,7 +20335,37 @@
     // Pending AI offers to the human, shown one at a time.
     let _offerQueue = [];
     let _offerShowing = false;
-    function queueTradeOffer(offer) { _offerQueue.push(offer); showNextOffer(); }
+    function queueTradeOffer(offer) {
+      // Auto-handle incoming PACT offers per the human's per-pact policy set in
+      // the Diplomacy Screen. Only the four configurable pacts are auto-handled;
+      // anything else (trades, map swaps) always goes to the dialog.
+      if (offer && offer.diplo && offer.deal && offer.deal.kind) {
+        const policy = diploPolicyFor(offer.deal.kind);
+        if (policy === 'accept') {
+          // Accept silently: apply the deal exactly as the Accept button would.
+          try { applyPactDeal(offer.deal); } catch (e) {}
+          try { renderDiplomacy(); } catch (e) {}
+          try { refreshAll(); } catch (e) {}
+          try { notify(`Auto-accepted a ${_pactLabel(offer.deal.kind)} pact with ${ownerDisplayName(offer.provider)}.`); } catch (e) {}
+          return;
+        }
+        if (policy === 'reject') {
+          // Reject silently: mirror the Decline path's small opinion penalty.
+          try {
+            const fIdx = ownerToIndex(offer.provider), hIdx = ownerToIndex('human');
+            if (fIdx >= 0 && hIdx >= 0) adjustOpinion(fIdx, hIdx, -3);
+          } catch (e) {}
+          return;
+        }
+        // 'ask' -> fall through to the normal queued dialog.
+      }
+      _offerQueue.push(offer); showNextOffer();
+    }
+    // Human-readable name for a pact kind (used in auto-accept notifications).
+    function _pactLabel(kind) {
+      const m = { peace: 'peace', nonAggression: 'non-aggression', freeTravel: 'free-travel', alliance: 'alliance' };
+      return m[kind] || String(kind || 'pact');
+    }
     function showNextOffer() {
       if (_offerShowing) return;
       const offer = _offerQueue.shift();
@@ -20894,7 +20987,8 @@
         transport: (extra && extra.transport) || null,
         units: (extra && extra.units) || [],
         unitsCreated: (extra && extra.unitsCreated != null) ? extra.unitsCreated : 0,
-        unitsCreatedBy: (extra && extra.unitsCreatedBy && typeof extra.unitsCreatedBy === 'object') ? extra.unitsCreatedBy : {}
+        unitsCreatedBy: (extra && extra.unitsCreatedBy && typeof extra.unitsCreatedBy === 'object') ? extra.unitsCreatedBy : {},
+        diploPolicy: (extra && extra.diploPolicy && typeof extra.diploPolicy === 'object') ? extra.diploPolicy : {}
       };
       if (gameState.players && gameState.players[0] && gameState.players[0].kind === 'human') {
         gameState.players[0].name = gameState.playerName;
@@ -21366,7 +21460,8 @@
             transport: payload.transport || null,
             units: payload.units || [],
             unitsCreated: payload.unitsCreated || 0,
-            unitsCreatedBy: payload.unitsCreatedBy || {}
+            unitsCreatedBy: payload.unitsCreatedBy || {},
+            diploPolicy: payload.diploPolicy || {}
           }
         );
       } catch (err) {
