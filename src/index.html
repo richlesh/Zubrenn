@@ -13121,9 +13121,15 @@
     // Foundation build order for a new colony. ('solar panel' is the base panel;
     // its Solar Farm UPGRADE comes later via the manager.) The 'mine' step is a
     // mine FAMILY — whichever of Mine / Quarry / Solar Salt Works is buildable on
-    // the reserved cell. Dependency notes honored by prerequisites: Factory needs
+    // the reserved cell. The MINE IS BUILT THIRD (before the Factory) on purpose:
+    // a mine-family building is the colony's only early source of MATERIAL STORAGE
+    // (+200), and without it the colony is capped at the biodome's 25 material —
+    // too little to afford the Factory (75 material) OR a new biodome (200). So
+    // building the cheap Mine/Quarry (5 material) third lifts the storage cap,
+    // which then lets the colony bank material for the Factory and for founding
+    // new colonies. Dependency notes honored by prerequisites: Mine/Factory need
     // a Solar Panel; Barracks needs a Farm + Factory; Bank needs a Solar Panel.
-    const EARLY_SEQUENCE_KEYS = ['solar panel', 'farm', 'factory', 'mine', 'barracks', 'bank'];
+    const EARLY_SEQUENCE_KEYS = ['solar panel', 'farm', 'mine', 'factory', 'barracks', 'bank'];
     function earlyPlanSequence() {
       return EARLY_SEQUENCE_KEYS.map((k) => _bldgCode(k)).filter((c) => c != null);
     }
