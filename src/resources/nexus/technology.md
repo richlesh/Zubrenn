@@ -25,9 +25,11 @@ to choose what to study next.
 
 Advanced techniques and technologies for farming and food production. A
 foundational civic science with no prerequisites, it lifts the ceiling on how
-much food the land can be coaxed to yield. **Cost: 4,000 science.** **Unlocks the
-Aquafarm** — a high‑output coastal food works that feeds a large, growing
-population where open farmland is scarce.
+much food the land can be coaxed to yield. **Cost: 4,000 science.** **Unlocks**
+the **Agridome** (the Farm's upgrade — a climate‑controlled dome that greatly
+raises a colony's food output), the **Megafarm** (the Agridome's apex upgrade,
+for the largest food yields), and the **Aquafarm** — a high‑output coastal food
+works that feeds a large, growing population where open farmland is scarce.
 
 ### Applied Physics
 
