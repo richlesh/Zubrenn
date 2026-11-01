@@ -18464,18 +18464,24 @@
         const A = atkC.filter((c) => c.hp > 0).sort((a, b) => b.atk - a.atk);
         const D = defenders.filter((c) => c.hp > 0).sort((a, b) => b.hp0 - a.hp0);
         const n = Math.max(A.length, D.length);
+        // SIMULTANEOUS resolution: every combatant alive at the START of the
+        // round deals its damage; casualties are applied only after all pairings
+        // are computed. This ensures a defender that is destroyed this round
+        // STILL gets to fire back first (previously a lone defender died in the
+        // first pairing and dealt no return damage, so attackers lost nobody even
+        // when heavily outnumbering a defender). Damage is accumulated here and
+        // subtracted after the loop. The defender also strikes back only if it is
+        // a UNIT (defensive buildings deal no return damage).
+        const dmgA = new Map(), dmgD = new Map();
         for (let i = 0; i < n; i++) {
           const a = A[i % A.length];           // extra attackers pile onto top defenders
           const d = D[i % D.length];
-          if (!a || !d || a.hp <= 0 || d.hp <= 0) continue;
-          // Damage mitigated by the defender's DEFENSE: a hit must beat the armor
-          // to wound. Attacker -> defender always applies; the defender strikes
-          // back only if it is a UNIT (defensive buildings deal no damage).
-          const dmgToDef = dmgOf(a.atk, d.def);
-          const dmgToAtk = d.building ? 0 : dmgOf(d.atk, a.def);
-          d.hp -= dmgToDef;
-          a.hp -= dmgToAtk;
+          if (!a || !d) continue;
+          dmgD.set(d, (dmgD.get(d) || 0) + dmgOf(a.atk, d.def));
+          if (!d.building) dmgA.set(a, (dmgA.get(a) || 0) + dmgOf(d.atk, a.def));
         }
+        for (const [d, dmg] of dmgD) d.hp -= dmg;
+        for (const [a, dmg] of dmgA) a.hp -= dmg;
       }
       // Apply results. Each surviving unit keeps the fraction of manpower equal
       // to its remaining effective-hp fraction; a unit at hp<=0 is destroyed.
