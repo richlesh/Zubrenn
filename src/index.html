@@ -11291,7 +11291,15 @@
 
       // 1) Collect taxes.
       const tax = federationTaxFor(owner, fed.taxRate);
-      fed.treasury += tax;
+      // Taxes must go into the AUTHORITATIVE owned.wealth pool, which is what
+      // maintenance (spendMaint) spends from and what fed.treasury mirrors. The
+      // old code added the tax to fed.treasury only — but spendMaint reads
+      // owned.wealth, and later `fed.treasury = owned.wealth` overwrote the
+      // mirror, DISCARDING the tax every turn. That made the treasury never grow
+      // and starved road maintenance (chronic "Short: N Wealth" disrepair) even
+      // though the Federation panel projected a healthy positive net.
+      fed.owned.wealth = (Number(fed.owned.wealth) || 0) + tax;
+      fed.treasury = fed.owned.wealth;   // keep the legacy mirror in sync
 
       // 2) Pay maintenance (roads + monorails + canals + bridges) from the
       //    Federation OWNED pool, per resource (energy/material/water/wealth).
