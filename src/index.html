@@ -12841,6 +12841,16 @@
       const goodsCap = Number(cap.goods) || 0;
       const capUsed = () => col.worked.filter((k) => k !== homeKey).length;
       const spare = () => Math.max(0, workCap(col) - capUsed());
+      // HUMAN colony with a PENDING launch-vs-convert choice: freeze material by
+      // stopping the Factory (it consumes material) and working the Mine, so the
+      // banked material isn't eaten before the player answers the prompt. Applies
+      // until they choose Convert (_convertThisWindow) or Stop Asking.
+      if (col.owner === 'human' && col._launchPromptActive
+          && !col._convertThisWindow && !col._launchPromptStopped) {
+        for (const k of factoryKeys) unwork(k);
+        for (const k of mineKeys) work(k);
+        return;
+      }
       // A) Refill material: work mine(s), stop factory(ies).
       if (matStored <= EPS || (goodsCap > 0 && goodsStored >= goodsCap - EPS)) {
         for (const k of factoryKeys) unwork(k);
@@ -12862,24 +12872,17 @@
             }
           }
         }
-        // HUMAN colony with a LAUNCH AVAILABLE: material is maxed, so the colony
-        // could either found a new colony (spend the material on a biodome) or
-        // convert that material into goods via the Factory. Ask the player which —
-        // ONCE — rather than silently converting. We queue the prompt (shown at
-        // the start of the human's turn, not mid-economy) and, until they choose,
-        // do NOT convert to goods (so the banked material is preserved for a
-        // possible launch). A standing "convert" choice (_prefConvertGoods) skips
-        // the prompt on later turns.
-        if (col.owner === 'human' && !col._prefConvertGoods) {
+        // HUMAN colony with a LAUNCH AVAILABLE: don't convert the banked material
+        // to goods while the player still has an open "launch vs convert" choice —
+        // preserve it for a possible launch. The prompt itself is driven by
+        // maybeQueueLaunchPrompt (fires when a launch first becomes available).
+        // Only convert once the player has chosen "Convert to Goods" for this
+        // availability window (_convertThisWindow) or has turned prompts off
+        // (_launchPromptStopped).
+        if (col.owner === 'human' && !col._launchPromptStopped && !col._convertThisWindow) {
           const minPop = ((CONFIG && CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3) * popUnitSize();
           const launchAvailable = (col.population || 0) >= minPop && canAffordBuildingAt(1, col.x, col.y, 'human');
-          if (launchAvailable) {
-            if (!col._launchPromptQueued) {
-              col._launchPromptQueued = true;
-              _launchPromptQueue.push(cellKey(col.x, col.y));
-            }
-            return; // await the player's choice; keep material banked
-          }
+          if (launchAvailable) return; // await the player's choice; keep material banked
         }
         for (const k of factoryKeys) {
           if (isWorked(k)) continue;
@@ -12893,39 +12896,69 @@
         }
       }
     }
-    // Queue of colony cell-keys (home key) for which a "launch vs convert" prompt
-    // is pending for the human player. Populated by balanceMineFactory during turn
-    // processing; drained by flushLaunchPrompts at the start of the human's turn
-    // (so the modal never interrupts mid-economy).
+    // Whether a HUMAN-owned colony can found a new colony right now (enough
+    // population and can afford a biodome).
+    function colonyLaunchAvailable(col) {
+      if (!col || col.owner !== 'human') return false;
+      const minPop = ((CONFIG && CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3) * popUnitSize();
+      return (col.population || 0) >= minPop && canAffordBuildingAt(1, col.x, col.y, 'human');
+    }
+    // Queue of colony cell-keys for which a "launch vs convert" prompt is pending
+    // for the human player. Populated (edge-triggered) by maybeQueueLaunchPrompt
+    // and drained by flushLaunchPrompts at the start of the human's turn (so the
+    // modal never interrupts mid-economy).
     let _launchPromptQueue = [];
+    // Edge-trigger a launch prompt for a human colony: queue it the moment a launch
+    // FIRST becomes available (not every turn while it stays available), and re-arm
+    // once a launch is spent/unaffordable so it asks again next time it becomes
+    // available. "Stop Asking" (col._launchPromptStopped) suppresses it for this
+    // colony only.
+    function maybeQueueLaunchPrompt(col) {
+      if (!col || col.owner !== 'human') return;
+      // Only meaningful when the colony has an operational Factory — otherwise
+      // there is no "convert to goods" alternative to launching.
+      const _facCode = _bldgCode('factory');
+      if (_facCode == null || !colonyBuildings(col).some((b) => b.type === _facCode && isOperational(b))) return;
+      const avail = colonyLaunchAvailable(col);
+      if (!avail) {
+        // Launch no longer available: reset the per-window flags so the next time
+        // it becomes available we ask again.
+        col._launchPromptActive = false;
+        col._convertThisWindow = false;
+        return;
+      }
+      if (col._launchPromptStopped) return;        // user turned prompts off here
+      if (col._launchPromptActive) return;         // already asked this window
+      col._launchPromptActive = true;              // edge: becomes-available
+      _launchPromptQueue.push(cellKey(col.x, col.y));
+    }
     // Show the queued "Launch a new colony or convert material to goods?" dialogs,
-    // one at a time, at the start of the human's turn. For each pending colony that
-    // is still human-owned and still has a launch available:
+    // one at a time, at the start of the human's turn. Three choices:
     //  - "Launch Colony" starts the normal found-colony targeting (beginFoundColony).
-    //  - "Convert to Goods" sets a standing preference so the manager converts the
-    //    surplus material to goods from now on without asking again.
+    //  - "Convert to Goods" lets the Factory consume the material this availability
+    //    window; the prompt re-arms the next time a launch becomes available.
+    //  - "Stop Asking" suppresses the prompt for THIS colony only (persists).
     function flushLaunchPrompts() {
       if (!_launchPromptQueue.length) return;
       const keys = _launchPromptQueue.slice();
       _launchPromptQueue = [];
-      const minPop = ((CONFIG && CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3) * popUnitSize();
       const showNext = (i) => {
         if (i >= keys.length) return;
         const [cx, cy] = String(keys[i]).split(',').map(Number);
         const col = gameState.buildings.find((b) => b.type === 1 && b.owner === 'human' && b.x === cx && b.y === cy);
         const next = () => showNext(i + 1);
         if (!col) { next(); return; }
-        col._launchPromptQueued = false;
-        const launchAvailable = (col.population || 0) >= minPop && canAffordBuildingAt(1, col.x, col.y, 'human');
-        if (!launchAvailable) { next(); return; }   // state changed; skip
+        if (!colonyLaunchAvailable(col)) { col._launchPromptActive = false; next(); return; } // state changed; skip
         showConfirm(
-          `${col.name || 'Your colony'} has banked enough material and population to found a NEW colony. ` +
+          `${col.name || 'Your colony'} has enough material and population to found a NEW colony. ` +
           `Launch a new colony now, or keep the Factory running to convert the material into goods?`,
           () => { beginFoundColony(col.x, col.y); next(); },
           { title: 'Launch a new colony?',
             okLabel: 'Launch Colony',
             cancelLabel: 'Convert to Goods',
-            onCancel: () => { col._prefConvertGoods = true; next(); } });
+            onCancel: () => { col._convertThisWindow = true; next(); },
+            thirdLabel: 'Stop Asking',
+            onThird: () => { col._launchPromptStopped = true; col._convertThisWindow = true; next(); } });
       };
       showNext(0);
     }
@@ -13847,6 +13880,9 @@
       ensureMineWorked(col, (col.manager && col.manager !== 'none') ? col.manager : 'growth', null);
       // Then balance mine vs factory workers by material/goods storage state.
       balanceMineFactory(col);
+      // Edge-trigger the human "launch vs convert to goods" prompt when a launch
+      // first becomes available for this managed colony.
+      maybeQueueLaunchPrompt(col);
       // 1b) HEAL THE FOUNDATION. An early colony that is CELL-CONSTRAINED (no empty
       // control cell) but still lacks a material-storage building (Mine/Quarry/
       // Salt Works) or a Factory can never reach the full foundation on its own —
@@ -14146,6 +14182,9 @@
       ensureMineWorked(col, manager, needs);
       // Then balance mine vs factory workers by material/goods storage state.
       balanceMineFactory(col);
+      // Edge-trigger the human "launch vs convert to goods" prompt when a launch
+      // first becomes available for this managed colony.
+      maybeQueueLaunchPrompt(col);
       // Recompute needs after assigning workers (production changed).
       const needs2 = colonyNeeds(col);
       const built = managerAutoBuild(col, manager, needs2);
@@ -17336,15 +17375,26 @@
       textEl.textContent = message || "";
       okBtn.textContent = (opts && opts.okLabel) || "Continue";
       cancelBtn.textContent = (opts && opts.cancelLabel) || "Cancel";
+      // Optional THIRD button (e.g. "Stop Asking"). Created on demand, inserted
+      // into the button row, and removed on close. opts.onThird() runs on click.
+      let thirdBtn = null;
+      if (opts && opts.thirdLabel) {
+        thirdBtn = document.createElement("button");
+        thirdBtn.id = "confirm-third";
+        thirdBtn.textContent = opts.thirdLabel;
+        if (cancelBtn.parentNode) cancelBtn.parentNode.insertBefore(thirdBtn, cancelBtn);
+      }
 
       const close = () => {
         overlay.hidden = true;
         document.removeEventListener("keydown", onKey, true);
         overlay.removeEventListener("mousedown", onBackdrop);
         okBtn.onclick = null; cancelBtn.onclick = null;
+        if (thirdBtn) { thirdBtn.onclick = null; if (thirdBtn.parentNode) thirdBtn.parentNode.removeChild(thirdBtn); thirdBtn = null; }
       };
       const doContinue = () => { close(); if (typeof onContinue === "function") onContinue(); };
       const doCancel = () => { close(); if (opts && typeof opts.onCancel === "function") opts.onCancel(); };
+      const doThird = () => { close(); if (opts && typeof opts.onThird === "function") opts.onThird(); };
       const onKey = (e) => {
         if (e.key === "Enter") { e.preventDefault(); doContinue(); }
         else if (e.key === "Escape") { e.preventDefault(); doCancel(); }
@@ -17352,6 +17402,7 @@
       const onBackdrop = (e) => { if (e.target === overlay) doCancel(); };
       okBtn.onclick = doContinue;
       cancelBtn.onclick = doCancel;
+      if (thirdBtn) thirdBtn.onclick = doThird;
       overlay.addEventListener("mousedown", onBackdrop);
       document.addEventListener("keydown", onKey, true);
       overlay.hidden = false;
