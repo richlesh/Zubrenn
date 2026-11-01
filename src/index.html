@@ -7378,23 +7378,21 @@
           for (const k of MAINT) fed[k] = Math.max(0, (fed[k] || 0) - need[k]);
         }
 
-        // --- Step 5c: science funding -> research. Science = all wealth that
-        // could not be stored (captured above) PLUS part of the STORED Federation
-        // wealth governed by the funding slider. Two rules:
-        //  1) If NO tech is currently being researched, deduct NOTHING from stored
-        //     wealth for research (the slider spend is skipped entirely).
-        //  2) The slider percent is a MAXIMUM, not a fixed charge: the stored
-        //     wealth withdrawn is capped so the funded science never exceeds what
-        //     the current tech still needs — surplus stored wealth is kept, not
-        //     drained. (Unstorable overflow wealth still fully funds science.)
+        // --- Step 5c: science funding -> research. Science is NOT banked: it
+        // only accrues when a technology is actually selected for research.
+        //  - If NO tech is being researched, science funding is 0% for the turn:
+        //    no science accrues (not even unstorable overflow) and no wealth is
+        //    spent. (It resumes the moment a tech is chosen.)
+        //  - When a tech IS selected, fund it from the unstorable overflow wealth
+        //    PLUS up to the slider percent of stored wealth — the slider is a
+        //    MAXIMUM and the spend never exceeds what the tech still needs.
         if (typeof researchEnabled === 'function' && researchEnabled()) {
           const r = ownerResearch(owner);
           if (r) {
-            // AIs with nothing queued auto-pick a tech so funding isn't wasted;
-            // the human must choose in the Research dialog (and until they do, no
-            // stored wealth is spent on research).
+            // AIs with nothing queued auto-pick a tech so they keep researching;
+            // the human must choose in the Research dialog (until they do, this
+            // turn's science funding for them is simply 0%).
             if (!r.current && owner !== 'human') { try { aiPickResearch(ownerToIndex(owner)); } catch (e) {} }
-            let fromStored = 0;
             if (r.current && techDef(r.current)) {
               // Remaining science the current tech still needs this turn.
               const remainingNeed = Math.max(0, techCost(r.current) - (Math.max(0, Number(r.progress) || 0)));
@@ -7402,15 +7400,13 @@
               const sliderMax = Math.max(0, (fed.wealth || 0)) * pct;   // slider cap on stored-wealth spend
               // Stored-wealth spend = min(slider cap, what's still needed after the
               // free overflow science). Never withdraw more than the tech needs.
-              fromStored = Math.max(0, Math.min(sliderMax, remainingNeed - (sciFromOverflow || 0)));
+              const fromStored = Math.max(0, Math.min(sliderMax, remainingNeed - (sciFromOverflow || 0)));
               fed.wealth = Math.max(0, (fed.wealth || 0) - fromStored);
+              const science = (sciFromOverflow || 0) + fromStored;
+              if (science > 0) addResearchPoints(owner, science);
             }
-            // Apply overflow science always (it's unstorable wealth) plus any
-            // stored wealth spent. When no tech is queued, overflow science simply
-            // banks (capped by _maxBankedScience in addResearchPoints) and no
-            // stored wealth is touched.
-            const science = (sciFromOverflow || 0) + fromStored;
-            if (science > 0) addResearchPoints(owner, science);
+            // else: no tech selected -> no science this turn, no wealth spent, and
+            // the overflow wealth is simply discarded (not banked).
           }
         }
 
@@ -10871,8 +10867,11 @@
         // AI immediately queues its next tech so leftover points keep flowing.
         if (finishedOwner !== 'human') { try { aiPickResearch(ownerToIndex(finishedOwner)); } catch (e) {} }
       }
-      // No current tech => hold the accumulated points (capped) until one is set.
-      if (!r.current) r.progress = Math.min(r.progress, _maxBankedScience());
+      // No current tech => science is NOT banked: discard any leftover progress.
+      // (Leftover can occur when a tech completes this call and no next tech is
+      // queued. Funding only runs while a tech is selected, so progress starts
+      // fresh at 0 the next time research is chosen.)
+      if (!r.current) r.progress = 0;
       // Invalidate build-eligibility caches: a new tech may have unlocked builds.
       if (completed > 0) { try { bumpPlaceGen(); } catch (e) {} }
       return completed;
