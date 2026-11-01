@@ -16965,29 +16965,9 @@
         const cap = workCap(col);
         const extras = worked.filter((w) => w !== homeKey).length;
         if (extras >= cap) { notify(`This colony can work at most ${cap} extra cell${cap === 1 ? "" : "s"} (need more population).`); return; }
-        // Working a cell that holds a PRISTINE terrain bonus will place a worker
-        // (and ultimately a building) there, destroying the bonus. Warn first and
-        // only proceed — destroying the bonus — if the player confirms.
-        const [cx, cy] = k.split(",").map(Number);
-        const tb = bonusDefAt(cx, cy);
-        if (bonusIsPristine(tb)) {
-          const bonusName = (tb && tb.name) || "pristine resource";
-          showConfirm(
-            `${bonusName} is a pristine resource. Working this cell and building on it will destroy ${bonusName} permanently. Continue?`,
-            () => {
-              // Re-validate: the dialog may still be open but state could change.
-              if (!workColony || workColony !== col) return;
-              if (worked.indexOf(k) >= 0) return;              // already worked
-              if (worked.filter((w) => w !== homeKey).length >= workCap(col)) return; // cap hit meanwhile
-              const destroyed = destroyPristineBonusAt(cx, cy);
-              if (destroyed) notify(`${destroyed} was destroyed.`);
-              worked.push(k);
-              _applyWorkedChange(col);
-            },
-            { title: "Destroy pristine resource?" }
-          );
-          return; // wait for the user's choice; do not mark worked yet
-        }
+        // A PRISTINE terrain bonus may now be WORKED freely — the colony reaps
+        // its yield and the feature is left intact. (Only BUILDING on the cell
+        // destroys a pristine bonus; see destroyPristineBonusAt in placeBuilding.)
         worked.push(k);
       }
       _applyWorkedChange(col);
