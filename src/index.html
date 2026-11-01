@@ -8915,6 +8915,15 @@
         const _newSlots = buildingUnitSlots(type);              // ordered slot unit-types
         rec.unitIds = new Array(_newSlots.length).fill(null);
         const _used = new Array(_newSlots.length).fill(false);
+        // A unit's HOME BASE is resolved (unitHomeColony) as the biodome at its
+        // homeX/homeY — i.e. the controlling COLONY, not the recruiting building's
+        // own tile. So re-home carried-over units to the colony that controls this
+        // (upgraded) building's cell. Previously they were homed at the building
+        // tile (x,y), which has no biodome, so after a Barracks -> Army Base ->
+        // Joint Base upgrade the units reported "home base no longer exists".
+        const _homeCol = colonyControlling(x, y, owner);
+        const _homeX = _homeCol ? _homeCol.x : x;
+        const _homeY = _homeCol ? _homeCol.y : y;
         for (const uid of _carriedUnitIds) {
           const u = findUnitById(uid);
           if (!u) continue;
@@ -8923,13 +8932,13 @@
           for (let s = 0; s < _newSlots.length; s++) {
             if (_used[s] || _newSlots[s] !== u.type) continue;
             rec.unitIds[s] = uid; _used[s] = true; placed = true;
-            // Keep the unit homed at this (same) cell as its base.
-            u.homeX = x; u.homeY = y;
+            // Home the unit at its controlling colony (see note above).
+            u.homeX = _homeX; u.homeY = _homeY;
             break;
           }
           // If no matching slot exists in the new layout (shouldn't happen for a
-          // superset upgrade), the unit simply keeps its current home coords.
-          if (!placed) { u.homeX = x; u.homeY = y; }
+          // superset upgrade), still re-home it to the controlling colony.
+          if (!placed) { u.homeX = _homeX; u.homeY = _homeY; }
         }
       }
       bumpControlGen();   // a new building can change which cells are controlled
