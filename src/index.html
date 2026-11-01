@@ -16001,9 +16001,23 @@
         item.addEventListener("click", () => {
           if (!ctxTarget) return;
           const h = ctxTarget; const fromColony = _ctxFromColonyView; hideContextMenu();
-          placeBuilding(h.x, h.y, 'human', type);
-          if (fromColony) refreshWorkModalAfterBuild();
-          maybeAutoEndHumanTurn();
+          const doBuild = () => {
+            placeBuilding(h.x, h.y, 'human', type);
+            if (fromColony) refreshWorkModalAfterBuild();
+            maybeAutoEndHumanTurn();
+          };
+          // If the cell holds a PRISTINE terrain feature, building anything here
+          // (Outpost, Drone Base, or any other building) destroys it. Warn first
+          // and only build on confirm.
+          const _pristine = pristineBonusNameAt(h.x, h.y);
+          if (_pristine) {
+            showConfirm(
+              `This cell holds ${_pristine}, a pristine natural feature. Building ${name} here will DESTROY it permanently. Continue?`,
+              doBuild,
+              { title: 'Destroy pristine feature?', okLabel: 'Build & Destroy', cancelLabel: 'Leave it Pristine' });
+          } else {
+            doBuild();
+          }
         });
         ctxBuildItems.appendChild(item);
       }
