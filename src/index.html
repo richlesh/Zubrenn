@@ -3641,7 +3641,7 @@
           if (!isSea && !isPassableCell(nx, ny, false)) continue;
           const nph = routePhaseNext(cur.ph, nx, ny, owner);
           if (nph == null) continue;                        // sea rule blocks this step
-          if (foreign.has(cellKey(nx, ny))) continue;       // skip foreign-controlled cells
+          if (foreign.has(cellKey(nx, ny)) && !allowForeign.has(cellKey(nx, ny))) continue; // skip foreign cells (except the target colony's own zone for a strike)
           const nk = key(nx, ny, nph);
           if (done.has(nk)) continue;
           const nd = cur.d + enterCost(nx, ny, cur.x, cur.y);
@@ -3662,7 +3662,7 @@
     // Dijkstra over the hex grid from (sx,sy) to (tx,ty), summing enterCost for
     // each stepped-into cell. Returns { cost, path:[{x,y}...] } or null if the
     // target is unreachable by land. The start cell contributes no enter cost.
-    function findMovementPath(sx, sy, tx, ty, owner) {
+    function findMovementPath(sx, sy, tx, ty, owner, opts) {
       const map = gameState.map; if (!map) return null;
       const W = map.terrain[0].length, H = map.terrain.length;
       const wrap = !!(map.meta && map.meta.wrap);
@@ -3675,8 +3675,20 @@
       // target is only legal if routing can legally arrive there (phase machine).
       if (terrainAt(tx, ty) !== 1 && !isPassableCell(tx, ty, false)) return null;
       // Never route through (or into) the area of control of a foreign colony.
+      // EXCEPTION for strike-force routing (opts.toEnemyColony): the TARGET is an
+      // enemy colony, which by definition sits in foreign territory. Build a set
+      // of cells that are allowed despite being foreign — the target colony's own
+      // zone of control — so a force can march up to and onto the colony it is
+      // attacking (honoring roads along the way). Every OTHER foreign colony's
+      // zone is still off-limits.
       const foreign = foreignControlCellSet(owner);
-      if (foreign.has(cellKey(tx, ty))) return null;
+      const allowForeign = new Set();
+      if (opts && opts.toEnemyColony) {
+        const tgtCol = (gameState.buildings || []).find((b) => b.type === 1 && !b.inTransit && b.x === tx && b.y === ty);
+        if (tgtCol) { for (const c of colonyControlCells(tgtCol)) allowForeign.add(cellKey(c.x, c.y)); }
+        allowForeign.add(cellKey(tx, ty));   // always allow the target cell itself
+      }
+      if (foreign.has(cellKey(tx, ty)) && !allowForeign.has(cellKey(tx, ty))) return null;
       const targetCell = cellKey(tx, ty);
       const startPhase = (terrainAt(sx, sy) === 1) ? ROUTE_SEA_PORT : ROUTE_LAND_PRE;
       const startK = key(sx, sy, startPhase);
@@ -5854,8 +5866,8 @@
     // Dock, shallow sea). Returns a positive integer, or null if unreachable.
     // Turns for a unit of movement `speed` to travel from (sx,sy) to colony
     // (tx,ty): ceil(shortest-path cost / speed). Null if unreachable.
-    function battalionTravelTurns(sx, sy, tx, ty, owner, speed) {
-      const route = findMovementPath(sx, sy, tx, ty, owner);
+    function battalionTravelTurns(sx, sy, tx, ty, owner, speed, opts) {
+      const route = findMovementPath(sx, sy, tx, ty, owner, opts);
       if (!route) return null;
       return travelTurnsForSpeed(route.cost || 0, speed != null ? speed : 1);
     }
@@ -5866,8 +5878,8 @@
     // estimate at an open-terrain cost, so a distant colony still takes a
     // realistic number of turns to reach instead of ~1. (Fixes strike forces
     // appearing to reach any colony on the map in a couple of turns.)
-    function strikeTravelTurns(sx, sy, tx, ty, owner, speed) {
-      const real = battalionTravelTurns(sx, sy, tx, ty, owner, speed);
+    function strikeTravelTurns(sx, sy, tx, ty, owner, speed, opts) {
+      const real = battalionTravelTurns(sx, sy, tx, ty, owner, speed, opts);
       if (real != null) return real;
       // Fallback: hex distance x a representative unimproved per-tile cost
       // (STRIKE_FALLBACK_TILE_COST), divided by speed — same units as a real path.
@@ -18265,7 +18277,7 @@
             // SLOWEST member's time.
             let legTurns = 0;
             for (const u of members) {
-              const t = strikeTravelTurns(sf.rallyX, sf.rallyY, sf.targetX, sf.targetY, u.owner, unitSpeed(u.type));
+              const t = strikeTravelTurns(sf.rallyX, sf.rallyY, sf.targetX, sf.targetY, u.owner, unitSpeed(u.type), { toEnemyColony: true });
               legTurns = Math.max(legTurns, t || 0);
             }
             if (legTurns <= 0) legTurns = 1;
