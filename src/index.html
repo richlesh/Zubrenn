@@ -13321,7 +13321,18 @@
       // afford all checked via canPlaceTypeAt + hasPrerequisitesAt), or null.
       const mineVariantFor = (c) => {
         for (const t of mineFamily) {
-          if (canPlaceTypeAt(t, c.x, c.y, col.owner).ok && hasPrerequisitesAt(t, c.x, c.y, col.owner)) return t;
+          // PLAN-TIME eligibility: a mine-family building is placed LATER in the
+          // sequence (after the Solar Panel it requires), so we must NOT gate it
+          // on hasPrerequisitesAt — that checks the building/population prereqs
+          // which aren't satisfied yet on a fresh colony and would wrongly drop
+          // the whole mine step (the bug: plan showed only 5 of 6 foundation
+          // buildings). Check cell placement (terrain/climate/control via
+          // canPlaceTypeAt) and the strategic-resource gate (bonusType, e.g. Salt
+          // Works needs lithium) so an unbuildable variant still falls through to
+          // Mine/Quarry — but leave the solar/population prereqs to the strict
+          // build step, which waits for them.
+          if (canPlaceTypeAt(t, c.x, c.y, col.owner).ok &&
+              bonusTypesMet(btPrereq(t).bonusType, col)) return t;
         }
         return null;
       };
