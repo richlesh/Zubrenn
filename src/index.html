@@ -4508,8 +4508,6 @@
         // Only the storable commodities start empty; happiness is a computed
         // population-weighted average (Step 6) and population isn't a fed store.
         for (const k of ['energy', 'food', 'material', 'goods', 'water', 'wealth']) fed[k] = 0;
-        const _hp = _humanPlayer();
-        if (_hp && _hp.federation) _hp.federation.treasury = 0; // treasury mirrors owned.wealth
       }
 
       // Infantry recruitment: after the economy has settled each colony's
@@ -7329,7 +7327,6 @@
         }
 
         const fedObj = federationOf(owner);
-        if (fedObj) fedObj.treasury = fed.wealth;
 
         // --- Step 6: federation happiness = population-weighted average. -------
         let popSum = 0, hpSum = 0;
@@ -8957,7 +8954,6 @@
         const cost = buildingCost(type);
         for (const res of _resourceKeysOf(cost)) fed[res] = Math.max(0, (fed[res] || 0) - (cost[res] || 0));
         const fedObj = federationOf(owner);
-        if (fedObj) fedObj.treasury = fed.wealth;
         if (owner === 'human') { recomputeHumanResourcePanel(); updatePlayerPanel(); }
       } else if (col) {
         payColonyCost(col, ensureStored(col), buildingCost(type));
@@ -9023,11 +9019,6 @@
       const c = removalCost();
       for (const r of _resourceKeysOf(c)) {
         if (pool[r] != null) pool[r] = Math.max(0, pool[r] - c[r]);
-      }
-      // If the Federation pool funded this removal, keep its treasury mirror.
-      if (buildingIsFederation(b.type)) {
-        const fedObj = federationOf(owner);
-        if (fedObj) fedObj.treasury = federationOwnedOf(owner).wealth;
       }
       b.removeTurns = _turnsOf(c, 2);
       // Idle its cell in every colony that was working it (it no longer produces).
@@ -10827,11 +10818,10 @@
       r.current = avail[0];
     }
     function ensureFederation(player) {
-      if (!player) return { treasury: 0, taxRate: federationDefaultTaxRate() };
+      if (!player) return { taxRate: federationDefaultTaxRate() };
       if (!player.federation || typeof player.federation !== 'object') {
-        player.federation = { treasury: 0, taxRate: federationDefaultTaxRate() };
+        player.federation = { taxRate: federationDefaultTaxRate() };
       }
-      if (typeof player.federation.treasury !== 'number' || !isFinite(player.federation.treasury)) player.federation.treasury = 0;
       if (typeof player.federation.taxRate !== 'number' || !isFinite(player.federation.taxRate)) player.federation.taxRate = federationDefaultTaxRate();
       player.federation.taxRate = Math.max(0, Math.min(20, player.federation.taxRate));
       // Pay rate: wealth per population unit per year paid to colonists AND the
@@ -10866,21 +10856,24 @@
       // to existing colonies). Valid values match the Colony Detail dropdown.
       const _MGRS = ['none', 'growth', 'production', 'energy', 'wealth', 'military'];
       if (!_MGRS.includes(player.federation.defaultManager)) player.federation.defaultManager = 'none';
-      // Federation OWNED pool (7 resources). Treasury is federationOwned.wealth.
-      // Migrate a legacy numeric `treasury` into owned.wealth on first access.
+      // Federation OWNED pool (7 resources). The Federation's wealth (its
+      // "treasury") is simply owned.wealth — there is no separate treasury field.
+      // Migrate a legacy save's numeric `treasury` into owned.wealth on first
+      // access, then drop the obsolete field.
       if (!player.federation.owned || typeof player.federation.owned !== 'object') {
         player.federation.owned = {
           energy: 0, food: 0, material: 0, goods: 0, water: 0,
-          wealth: player.federation.treasury || 0, happiness: 0, population: 0,
+          wealth: (typeof player.federation.treasury === 'number' && isFinite(player.federation.treasury)) ? player.federation.treasury : 0,
+          happiness: 0, population: 0,
         };
       }
+      // Remove the legacy mirror so it is no longer stored in saves.
+      if ('treasury' in player.federation) delete player.federation.treasury;
       for (const k of RESOURCE_KEYS) {
         if (typeof player.federation.owned[k] !== 'number' || !Number.isFinite(player.federation.owned[k])) {
           player.federation.owned[k] = 0;
         }
       }
-      // Keep legacy `treasury` mirrored to owned.wealth (transition shim).
-      player.federation.treasury = player.federation.owned.wealth;
       // Research state (Federation-pooled): techs researched, the tech currently
       // being researched, accumulated science points toward it, and the player's
       // science-funding slider (percent of STORED Federation wealth diverted to
@@ -11291,15 +11284,11 @@
 
       // 1) Collect taxes.
       const tax = federationTaxFor(owner, fed.taxRate);
-      // Taxes must go into the AUTHORITATIVE owned.wealth pool, which is what
-      // maintenance (spendMaint) spends from and what fed.treasury mirrors. The
-      // old code added the tax to fed.treasury only — but spendMaint reads
-      // owned.wealth, and later `fed.treasury = owned.wealth` overwrote the
-      // mirror, DISCARDING the tax every turn. That made the treasury never grow
-      // and starved road maintenance (chronic "Short: N Wealth" disrepair) even
-      // though the Federation panel projected a healthy positive net.
+      // Taxes go into the Federation's wealth pool (owned.wealth) — the single
+      // source of truth that maintenance (spendMaint) spends from. (Previously a
+      // separate fed.treasury mirror was added to here and then overwritten,
+      // discarding the tax every turn.)
       fed.owned.wealth = (Number(fed.owned.wealth) || 0) + tax;
-      fed.treasury = fed.owned.wealth;   // keep the legacy mirror in sync
 
       // 2) Pay maintenance (roads + monorails + canals + bridges) from the
       //    Federation OWNED pool, per resource (energy/material/water/wealth).
@@ -11362,9 +11351,6 @@
         const short = networkDue[k] - startOwned[k];
         if (short > 1e-9) shortfalls[k] = short;
       }
-      // Keep the legacy mirror in sync (treasury === owned.wealth).
-      fed.treasury = owned.wealth;
-
       const unfundedRoad = Math.max(0, counts.roads - fundedRoad);
       const unfundedMono = Math.max(0, counts.monorails - fundedMono);
       const roadDecay = (CONFIG.road && typeof CONFIG.road.decayRate === 'number') ? CONFIG.road.decayRate : 0.01;
@@ -11450,7 +11436,6 @@
             }
           }
           tr.pendingRepairs = keep;
-          fed.treasury = owned.wealth; // keep the legacy mirror in sync after spending
           if (repaired > 0) {
             if (typeof invalidateColonyConnectivity === 'function') invalidateColonyConnectivity();
             if (hexMap && typeof hexMap.setTransport === 'function') hexMap.setTransport(ensureTransport());
@@ -11459,7 +11444,7 @@
       }
       const inProgress = (tr.pendingRepairs || []).filter((r) => r && r._started).length;
       const maintObj = federationMaintenance(owner);
-      return { tax, maintenance: maintObj.total, treasury: fed.treasury, destroyedRoads, destroyedMono, repaired, inProgress, pendingRepairs: (tr.pendingRepairs || []).length, shortfalls };
+      return { tax, maintenance: maintObj.total, destroyedRoads, destroyedMono, repaired, inProgress, pendingRepairs: (tr.pendingRepairs || []).length, shortfalls };
     }
 
     // ---- AI turn -----------------------------------------------------------
@@ -15332,11 +15317,6 @@
         const pay = Math.min(amt, Math.max(0, from[res] || 0));
         from[res] = Math.max(0, (from[res] || 0) - pay);
         to[res] = (to[res] || 0) + pay;
-        // Keep legacy treasury mirror current when paying in wealth.
-        if (res === 'wealth') {
-          const fp = federationOf(payer), tp = federationOf(payee);
-          if (fp) fp.treasury = from.wealth; if (tp) tp.treasury = to.wealth;
-        }
       };
       if (kind === 'peace') {
         payOnce(Math.max(0, Number(deal.amountTotal) || 0));
@@ -15445,7 +15425,6 @@
         if (amt > 0 && (from[res] || 0) >= amt - 1e-9) {
           from[res] = Math.max(0, (from[res] || 0) - amt);
           to[res] = (to[res] || 0) + amt;
-          if (res === 'wealth') { const fp = federationOf(p.payer), tp = federationOf(p.payee); if (fp) fp.treasury = from.wealth; if (tp) tp.treasury = to.wealth; }
         }
         p.remaining -= 1;
         // Keep the relation's pact expiry aligned with the remaining term.
@@ -17741,7 +17720,7 @@
       let pop = 0; for (const c of cols) pop += (c.population || 0);
       document.getElementById("fed-colonies").textContent = cols.length.toLocaleString();
       document.getElementById("fed-population").textContent = _fmtCredits(Math.round(pop));
-      document.getElementById("fed-treasury").textContent = _fmtCredits(fed.treasury);
+      document.getElementById("fed-treasury").textContent = _fmtCredits((fed.owned && fed.owned.wealth) || 0);
       // Per-resource stored / max (Federation owned pool vs its pooled storage).
       {
         const owned = federationOwnedOf('human');
@@ -17828,7 +17807,7 @@
       const netEl = document.getElementById("fed-net");
       netEl.textContent = (net >= 0 ? "+" : "") + _fmtCredits(net);
       netEl.style.color = net >= 0 ? "#1a9e1a" : "#d23b3b";
-      const projected = fed.treasury + net;
+      const projected = ((fed.owned && fed.owned.wealth) || 0) + net;
       document.getElementById("fed-proj-treasury").textContent = _fmtCredits(projected);
 
       // Warn if the owned pool can't cover road/monorail maintenance (those
