@@ -16154,9 +16154,29 @@
     ctxRemove.addEventListener("click", () => {
       if (ctxRemove.classList.contains("disabled") || !ctxTarget) return;
       const hex = ctxTarget; const fromColony = _ctxFromColonyView; hideContextMenu();
-      removeImprovement(hex.x, hex.y, 'human');
-      if (fromColony) refreshWorkModalAfterBuild();
-      maybeAutoEndHumanTurn();
+      const doRemove = () => {
+        removeImprovement(hex.x, hex.y, 'human');
+        if (fromColony) refreshWorkModalAfterBuild();
+        maybeAutoEndHumanTurn();
+      };
+      // If this is a MILITARY BASE with units stationed/recruiting there (Barracks,
+      // Army Base, Joint Base, ICBM Factory, etc. — any building with unitIds),
+      // removing it disbands those units. Warn first and only proceed on confirm.
+      const _b = ownerBuildingAt(hex.x, hex.y, 'human');
+      const _units = (_b && Array.isArray(_b.unitIds))
+        ? _b.unitIds.map((id) => findUnitById(id)).filter((u) => u && (Number(u.strength) || 0) > 0)
+        : [];
+      if (_units.length) {
+        const _bName = (_b && improvementName(_b.type)) || 'this base';
+        const _n = _units.length;
+        const _soldiers = _units.reduce((s, u) => s + Math.max(0, Number(u.strength) || 0), 0);
+        showConfirm(
+          `${_bName} has ${_n} unit${_n === 1 ? '' : 's'} (${nf(_soldiers, 0)} soldier${_soldiers === 1 ? '' : 's'}) stationed here. Removing it will DISBAND them — the units are destroyed and their personnel return to the colony's population. Remove it anyway?`,
+          doRemove,
+          { title: 'Disband stationed units?', okLabel: 'Remove & Disband', cancelLabel: 'Keep the Base' });
+      } else {
+        doRemove();
+      }
     });
     ctxRoad.addEventListener("click", () => {
       if (!ctxTarget) return; const h = ctxTarget; hideContextMenu(); beginTransport('road', h.x, h.y);
