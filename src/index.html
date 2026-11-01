@@ -13109,7 +13109,12 @@
     // plan drives both worker assignment and build order while the colony is
     // small; it REPLACES the generic manager for colonies under EARLY_SIZE.
     const EARLY_SIZE = 7;                                   // size (pop units) below which the planner runs
-    const EARLY_SEQUENCE_KEYS = ['solar panel', 'farm', 'mine', 'factory'];
+    // Foundation build order for a new colony. ('solar panel' is the base panel;
+    // its Solar Farm UPGRADE comes later via the manager.) The 'mine' step is a
+    // mine FAMILY — whichever of Mine / Quarry / Solar Salt Works is buildable on
+    // the reserved cell. Dependency notes honored by prerequisites: Factory needs
+    // a Solar Panel; Barracks needs a Farm + Factory; Bank needs a Solar Panel.
+    const EARLY_SEQUENCE_KEYS = ['solar panel', 'farm', 'factory', 'mine', 'barracks', 'bank'];
     function earlyPlanSequence() {
       return EARLY_SEQUENCE_KEYS.map((k) => _bldgCode(k)).filter((c) => c != null);
     }
@@ -13341,7 +13346,8 @@
       //    (land buildings share the land cells; Farm/Mine also need base yield);
       //  - a FACTORY is only included when a MINE is also placed — a factory with
       //    no local material supply is useless (and must not be built first).
-      // Order is preserved: solar, farm, mine, factory, then dock.
+      // Order is preserved from EARLY_SEQUENCE_KEYS (solar, farm, factory, mine,
+      // barracks, bank), with a Dock appended for a coastal colony.
       const factoryCode = _bldgCode('factory');
       const placeableSeq = [];
       // Substitute the resolved mine-family variant (Mine/Quarry/Salt Works) for
@@ -13366,6 +13372,11 @@
         if (isMineFamily(type)) return _builtFound.some((b) => isMineFamily(b.type));
         return _builtFound.some((b) => b.type === type);
       };
+      // Whether a mine-family building will be part of this foundation (planned in
+      // buildSeq) or already exists. The Factory may now be ordered BEFORE the
+      // mine in EARLY_SEQUENCE_KEYS, so the Factory is allowed as long as a mine
+      // family member is coming (or present) — not only once one is already placed.
+      const planHasMine = buildSeq.some((t) => isMineFamily(t)) || _builtFound.some((b) => isMineFamily(b.type));
       for (const type of buildSeq) {
         if (type === dockCode) {
           if (seaLeft > 0) { placeableSeq.push(type); seaLeft--; }
@@ -13378,7 +13389,7 @@
           continue;
         }
         if (type === factoryCode && _hasRole(factoryCode)) continue; // factory already built
-        if (type === factoryCode && !mineIncluded) continue;  // factory requires a mine
+        if (type === factoryCode && !planHasMine) continue;  // factory needs a mine-family building in the plan
         if (landLeft <= 0) continue;                          // no land cell left
         // Suitable cell for this building must exist (Farm->food>0, Mine->material>0).
         if (!poolFor(type).length) continue;
