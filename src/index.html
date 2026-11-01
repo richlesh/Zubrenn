@@ -12425,9 +12425,8 @@
           }
         }
         // (3) Launch a new colony (personality-gated), from a large-enough host.
-        const minPop = ((CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3) * popUnitSize();
-        const launchPop = minPop * knobs.launchPopFactor;
-        if ((col.population || 0) > launchPop && Math.random() >= knobs.launchSkipChance && canAffordBuildingAt(1, col.x, col.y, pi)) {
+        const launchPop = knobs.launchPop;   // deterministic level by expansionism (see _aiLaunchPopLevel)
+        if ((col.population || 0) >= launchPop && canAffordBuildingAt(1, col.x, col.y, pi)) {
           const site = aiChooseLaunchSite(col, pi, knobs.launchSearchBonus);
           if (site) launch.push({ from: [col.x, col.y], to: [site.x, site.y] });
         }
@@ -13827,10 +13826,21 @@
     // defaults than the old hardcoded values; used by the launch knobs below.
     function _aiExpCfg() { return (CONFIG && CONFIG.aiExpansion) || {}; }
     function _aiExpNum(key, dflt) { const v = _aiExpCfg()[key]; return (typeof v === 'number' && Number.isFinite(v)) ? v : dflt; }
-    function _aiExpBase() { return _aiExpNum('launchPopFactorBase', 1.0); }
-    function _aiExpPerStep() { return _aiExpNum('launchPopFactorPerStep', 0.2); }
-    function _aiExpSkipPerStep() { return _aiExpNum('skipChancePerStep', 0.15); }
     function _aiExpSearchPerStep() { return _aiExpNum('searchBonusPerRiskStep', 4); }
+    // The POPULATION LEVEL (in 1,000-colonist units) a colony must reach before
+    // this species will found a new colony, as a function of its expansionism
+    // trait (1..5). Config-driven (CONFIG.aiExpansion.launchPopLevelBase/PerStep)
+    // and defaults to level = 8 - expansionism:
+    //   exp 5 -> level 3, exp 4 -> 4, exp 3 -> 5, exp 2 -> 6, exp 1 -> 7.
+    // The level is clamped to at least foundColonyMinPopulation (you can never
+    // launch below the engine's hard minimum).
+    function _aiLaunchPopLevel(exp) {
+      const base = _aiExpNum('launchPopLevelBase', 3);         // level at expansionism 5
+      const perStep = _aiExpNum('launchPopLevelPerStep', 1);   // added per step below 5
+      const minLevel = (CONFIG && CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3;
+      const e = Math.max(1, Math.min(5, Number(exp) || 3));
+      return Math.max(minLevel, base + (5 - e) * perStep);
+    }
     // Numeric knobs derived from the traits, used by aiPlayTurn. Everything is
     // expressed so that a balanced (all-3) profile reproduces the previous
     // behavior as closely as possible.
@@ -13841,13 +13851,12 @@
         // over Farm/Solar. 1 => never prioritize Factory, 5 => Factory-first.
         industrial: t.industry >= 4,
         naturalist: t.industry <= 2,
-        // Expansion: scale the population surplus required before launching a
-        // new colony. Expansionist (5) launches near the base threshold; settled
-        // species demand more surplus. Coefficients are config-driven
-        // (CONFIG.aiExpansion) so expansion speed can be tuned without code.
-        launchPopFactor: _aiExpBase() + (5 - t.expansionism) * _aiExpPerStep(), // base (exp5) .. base+4*perStep (exp1)
-        // Settled low-expansionism species may skip launching some turns.
-        launchSkipChance: Math.max(0, (3 - t.expansionism) * _aiExpSkipPerStep()),
+        // Expansion: the ABSOLUTE population (in colonists) a colony must reach
+        // before this species founds a new colony, derived deterministically from
+        // expansionism (exp5 -> level 3, exp4 -> 4, exp3 -> 5, exp2 -> 6, exp1 ->
+        // 7, i.e. 8 - expansionism levels). As soon as a colony hits this
+        // population AND can afford a biodome, it launches — no random skipping.
+        launchPop: _aiLaunchPopLevel(t.expansionism) * popUnitSize(),
         // Risk: how far afield to search for a launch site, and willingness to
         // spend reserves. Reckless searches wider; cautious stays local.
         launchSearchBonus: (t.risk - 3) * _aiExpSearchPerStep(),
@@ -14320,13 +14329,11 @@
             acted = true;
           }
         }
-        const minPop = ((CONFIG.foundColonyMinPopulation != null) ? CONFIG.foundColonyMinPopulation : 3) * popUnitSize();
-        // Personality: expansionists found colonies readily just past the
-        // threshold; settled species demand a large surplus and often skip
-        // founding entirely. Reckless species also range farther for a site.
-        const launchPop = minPop * knobs.launchPopFactor;
-        if ((col.population || 0) > launchPop &&
-            Math.random() >= knobs.launchSkipChance &&
+        // Deterministic launch threshold by expansionism: a colony founds a new
+        // one as soon as it REACHES knobs.launchPop (8 - expansionism levels; see
+        // _aiLaunchPopLevel) AND can afford a biodome. No random skipping.
+        const launchPop = knobs.launchPop;
+        if ((col.population || 0) >= launchPop &&
             canAffordBuildingAt(1, col.x, col.y, pi)) {
           // Throttle the (expensive) launch-site flood-fill search: a colony
           // only scans for a new site every N turns instead of every turn.

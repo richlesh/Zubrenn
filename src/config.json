@@ -2512,19 +2512,20 @@
   // minor change to how quickly colonies expand. Set to 1 to scan every turn.
   "aiLaunchSearchInterval": 2,
   // AI expansion tuning: how readily the built-in AI founds new colonies.
-  //   launchPopFactorBase    - population threshold multiplier at expansionism 5
-  //                            (the required pop is foundColonyMinPopulation x this).
-  //   launchPopFactorPerStep - added to that multiplier per expansionism step
-  //                            below 5 (lower = settled species expand sooner).
-  //   skipChancePerStep      - per-turn chance an eligible but low-expansionism
-  //                            species skips founding, per step below expansionism 3.
+  // A colony founds a new one DETERMINISTICALLY as soon as it reaches a
+  // population LEVEL (in 1,000-colonist units) set by its expansionism trait and
+  // it can afford a biodome — there is no random skipping.
+  //   launchPopLevelBase    - the launch population level at expansionism 5.
+  //   launchPopLevelPerStep - added to that level per expansionism step below 5.
+  // Defaults give level = 8 - expansionism:
+  //     exp 5 -> level 3, exp 4 -> 4, exp 3 -> 5, exp 2 -> 6, exp 1 -> 7.
+  // (The level is clamped to at least foundColonyMinPopulation.)
   //   searchBonusPerRiskStep - how much farther a risk-taking species ranges for
   //                            a launch site, per risk step away from 3.
-  // Lower launchPopFactor*/skipChance* and aiLaunchSearchInterval => faster expansion.
+  // Lower launchPopLevel* and aiLaunchSearchInterval => faster expansion.
   "aiExpansion": {
-    "launchPopFactorBase": 1.0,
-    "launchPopFactorPerStep": 0.2,
-    "skipChancePerStep": 0.15,
+    "launchPopLevelBase": 3,
+    "launchPopLevelPerStep": 1,
     "searchBonusPerRiskStep": 4
   },
   // Hit-test fraction (of cell size) treated as the border region when picking a
