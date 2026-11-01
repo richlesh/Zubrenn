@@ -68,10 +68,10 @@
   <div id="research-overlay" hidden>
     <div id="research-dialog">
       <h2>Research</h2>
-      <div class="hint">Your Federation funds science each year: all wealth it cannot store, plus the funding slider's share of its stored wealth. Pick a technology below; completing it unlocks the buildings and units that require it.</div>
+      <div class="hint">Your Federation funds science each year: all wealth it cannot store, plus <b>up to</b> the funding slider's share of its stored wealth — but only while a technology is being researched, and never more than that tech still needs. Pick a technology below; completing it unlocks the buildings and units that require it.</div>
       <div id="research-current"></div>
       <div class="fed-field" id="research-funding-field">
-        <label for="research-funding">Science funding: <span id="research-funding-val">50</span>% of stored wealth</label>
+        <label for="research-funding">Science funding: up to <span id="research-funding-val">50</span>% of stored wealth</label>
         <input id="research-funding" type="range" min="0" max="100" step="5" value="50">
       </div>
       <div id="research-table-wrap">
@@ -323,9 +323,9 @@
         <div class="hint">Federation crews rebuild failed road/monorail segments (0 = off). Each repair costs the segment's normal build cost and takes its normal build time (longer on hard terrain). <span id="fed-roadcrews-cost"></span> <span id="fed-roadcrews-pending"></span></div>
       </div>
       <div class="fed-field" id="fed-science-field">
-        <label for="fed-science">Science funding: <span id="fed-science-val">50</span>% of stored wealth</label>
+        <label for="fed-science">Science funding: up to <span id="fed-science-val">50</span>% of stored wealth</label>
         <input id="fed-science" type="range" min="0" max="100" step="5" value="50">
-        <div class="hint">Each year, science is funded by <b>all</b> Federation wealth that cannot be stored, <b>plus</b> this percent of the stored treasury. Science advances your current research (open the Research screen to choose it).</div>
+        <div class="hint">Each year, science is funded by <b>all</b> Federation wealth that cannot be stored, <b>plus up to</b> this percent of the stored treasury — spent only while a technology is being researched, and capped at what that tech still needs. Science advances your current research (open the Research screen to choose it).</div>
       </div>
       <table id="federation-proj">
         <thead><tr><th>End of turn</th><th>Credits</th></tr></thead>
@@ -7356,22 +7356,38 @@
         }
 
         // --- Step 5c: science funding -> research. Science = all wealth that
-        // could not be stored (captured above) PLUS the owner's funding-slider
-        // percent of the STORED Federation wealth. The funded stored wealth is
-        // withdrawn from the pool; the whole amount advances the current tech.
+        // could not be stored (captured above) PLUS part of the STORED Federation
+        // wealth governed by the funding slider. Two rules:
+        //  1) If NO tech is currently being researched, deduct NOTHING from stored
+        //     wealth for research (the slider spend is skipped entirely).
+        //  2) The slider percent is a MAXIMUM, not a fixed charge: the stored
+        //     wealth withdrawn is capped so the funded science never exceeds what
+        //     the current tech still needs — surplus stored wealth is kept, not
+        //     drained. (Unstorable overflow wealth still fully funds science.)
         if (typeof researchEnabled === 'function' && researchEnabled()) {
           const r = ownerResearch(owner);
           if (r) {
-            const pct = Math.max(0, Math.min(100, Number(r.fundingPercent) || 0)) / 100;
-            const fromStored = Math.max(0, (fed.wealth || 0)) * pct;
-            fed.wealth = Math.max(0, (fed.wealth || 0) - fromStored);
-            const science = (sciFromOverflow || 0) + fromStored;
-            if (science > 0) {
-              // AIs that aren't researching anything pick a tech first so the
-              // points aren't wasted. The human must choose in the Research dialog.
-              if (!r.current && owner !== 'human') { try { aiPickResearch(ownerToIndex(owner)); } catch (e) {} }
-              addResearchPoints(owner, science);
+            // AIs with nothing queued auto-pick a tech so funding isn't wasted;
+            // the human must choose in the Research dialog (and until they do, no
+            // stored wealth is spent on research).
+            if (!r.current && owner !== 'human') { try { aiPickResearch(ownerToIndex(owner)); } catch (e) {} }
+            let fromStored = 0;
+            if (r.current && techDef(r.current)) {
+              // Remaining science the current tech still needs this turn.
+              const remainingNeed = Math.max(0, techCost(r.current) - (Math.max(0, Number(r.progress) || 0)));
+              const pct = Math.max(0, Math.min(100, Number(r.fundingPercent) || 0)) / 100;
+              const sliderMax = Math.max(0, (fed.wealth || 0)) * pct;   // slider cap on stored-wealth spend
+              // Stored-wealth spend = min(slider cap, what's still needed after the
+              // free overflow science). Never withdraw more than the tech needs.
+              fromStored = Math.max(0, Math.min(sliderMax, remainingNeed - (sciFromOverflow || 0)));
+              fed.wealth = Math.max(0, (fed.wealth || 0) - fromStored);
             }
+            // Apply overflow science always (it's unstorable wealth) plus any
+            // stored wealth spent. When no tech is queued, overflow science simply
+            // banks (capped by _maxBankedScience in addResearchPoints) and no
+            // stored wealth is touched.
+            const science = (sciFromOverflow || 0) + fromStored;
+            if (science > 0) addResearchPoints(owner, science);
           }
         }
 
