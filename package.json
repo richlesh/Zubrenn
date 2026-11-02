@@ -38,7 +38,7 @@
       "target": "nsis"
     },
     "linux": {
-      "icon": "src/resources/app_icon_256.png",
+      "icon": "src/resources/256/app_icon.png",
       "category": "Game",
       "target": [
         {
