@@ -1,3 +1,6 @@
+<p align="center">
+  <img src="src/resources/256/federation_flag.png" width="256">
+</p>
 
 ## Technology
 
