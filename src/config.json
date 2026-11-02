@@ -1,7 +1,7 @@
 {
   // When true, after creating a new map show two debug dialogs: a terrain-type
   // breakdown and a terrain-bonus placement count. Set false to disable.
-  "debug": false,
+  "debug": true,
 
   // "terrain" restrictions on placement can be a list of specific terrains:
   //    "sea", "grassland", "hills", "forest", "jungle", "desert", "mountain-low",
