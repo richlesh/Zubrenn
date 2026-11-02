@@ -4,7 +4,6 @@
   <img src="src/resources/federation_flag.png" width="75%">
 </p>
 
-
 ## The Federation
 
 
@@ -15,8 +14,6 @@ infrastructure, and lets your colonies prop one another up through lean years.
 Each alien species runs its own independent Federation on exactly the same rules.
 
 ### The capital
-
-<img align="right" width="128" src="src/resources/256/federation.png">
 
 The **capital** is your **earliest-founded surviving colony**. It anchors the
 Federation: only colonies that are **network-connected to the capital** — by road
@@ -106,3 +103,7 @@ treasury, pooled storage, a tax rate to tune, and the ability to raise
 Federation-funded infrastructure. Grow your network, keep your colonies linked to
 the capital, and balance taxation against morale, and the Federation becomes the
 backbone that carries your civilization across the whole of Zubrenn.
+
+<p align="center">
+  <img src="src/resources/federation.png" width="75%">
+</p>
