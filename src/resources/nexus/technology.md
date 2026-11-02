@@ -7,7 +7,18 @@ img {
 body {
     font-size: 16pt;
 }
+.center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.center img {
+  width: 100%;
+}
 </style>
+
+<span class="center">![federation_flag](../science_flag.png)</span>
+
 ## Technology
 
 Your Federation advances through a shared **technology tree**. Each year, science

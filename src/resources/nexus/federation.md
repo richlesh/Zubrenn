@@ -19,7 +19,6 @@ body {
 
 <span class="center">![federation_flag](../federation_flag.png)</span>
 
-
 ## The Federation
 
 
